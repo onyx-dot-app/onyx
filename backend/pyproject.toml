@@ -34,6 +34,11 @@ module = "generated.*"
 follow_imports = "silent"
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = "transformers.*"
+follow_imports = "skip"
+ignore_errors = true
+
 [tool.ruff]
 line-length = 130
 target-version = "py311"

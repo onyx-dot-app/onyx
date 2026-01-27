@@ -73,6 +73,7 @@
     "lowlight": "^3.3.0",
     "lucide-react": "^0.454.0",
     "mdast-util-find-and-replace": "^3.0.1",
+    "motion": "^12.29.0",
     "next": "^16.0.10",
     "next-themes": "^0.4.4",
     "postcss": "^8.5.6",

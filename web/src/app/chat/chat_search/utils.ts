@@ -40,6 +40,7 @@ export async function fetchChatSessions(
     headers: {
       "Content-Type": "application/json",
     },
+    signal: params.signal,
   });
 
   if (!response.ok) {

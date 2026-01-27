@@ -207,6 +207,9 @@ OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
+USING_AWS_MANAGED_OPENSEARCH = (
+    os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
+)
 
 # This is the "base" config for now, the idea is that at least for our dev
 # environments we always want to be dual indexing into both OpenSearch and Vespa
@@ -1042,3 +1045,14 @@ STRIPE_PUBLISHABLE_KEY_URL = (
 )
 # Override for local testing with Stripe test keys (pk_test_*)
 STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")
+# Persistent Document Storage Configuration
+# When enabled, indexed documents are written to local filesystem with hierarchical structure
+PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
+    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
+)
+
+# Base directory path for persistent document storage (local filesystem)
+# Example: /var/onyx/indexed-docs or /app/indexed-docs
+PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
+    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/indexed-docs"
+)
