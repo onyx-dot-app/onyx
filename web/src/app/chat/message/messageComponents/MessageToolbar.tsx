@@ -1,4 +1,4 @@
-import React, { RefObject, useState, useCallback } from "react";
+import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { Packet, StreamingCitation } from "@/app/chat/services/streamingModels";
 import { FeedbackType } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -15,7 +15,8 @@ import {
 import { getTextContent } from "@/app/chat/services/packetUtils";
 import { removeThinkingTokens } from "@/app/chat/services/thinkingTokens";
 import MessageSwitcher from "@/app/chat/message/MessageSwitcher";
-import CitedSourcesToggle from "@/app/chat/message/messageComponents/CitedSourcesToggle";
+import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
+import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
@@ -30,6 +31,59 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
+
+// Wrapper component for SourceTag in toolbar to handle memoization
+const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
+  citations,
+  documentMap,
+  nodeId,
+  selectedMessageForDocDisplay,
+  documentSidebarVisible,
+  updateCurrentDocumentSidebarVisible,
+  updateCurrentSelectedNodeForDocDisplay,
+}: {
+  citations: StreamingCitation[];
+  documentMap: Map<string, OnyxDocument>;
+  nodeId: number;
+  selectedMessageForDocDisplay: number | null;
+  documentSidebarVisible: boolean;
+  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
+  updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
+}) {
+  // Convert citations to SourceInfo array
+  const sources = useMemo(
+    () => citationsToSourceInfoArray(citations, documentMap),
+    [citations, documentMap]
+  );
+
+  // Handle click to toggle sidebar
+  const handleSourceClick = useCallback(() => {
+    if (selectedMessageForDocDisplay === nodeId && documentSidebarVisible) {
+      updateCurrentDocumentSidebarVisible(false);
+      updateCurrentSelectedNodeForDocDisplay(null);
+    } else {
+      updateCurrentSelectedNodeForDocDisplay(nodeId);
+      updateCurrentDocumentSidebarVisible(true);
+    }
+  }, [
+    nodeId,
+    selectedMessageForDocDisplay,
+    documentSidebarVisible,
+    updateCurrentDocumentSidebarVisible,
+    updateCurrentSelectedNodeForDocDisplay,
+  ]);
+
+  if (sources.length === 0) return null;
+
+  return (
+    <SourceTag
+      displayName="Sources"
+      sources={sources}
+      onSourceClick={handleSourceClick}
+      showDetailsCard
+    />
+  );
+});
 
 export interface MessageToolbarProps {
   // Message identification
@@ -247,23 +301,18 @@ export default function MessageToolbar({
               )}
 
             {nodeId && (citations.length > 0 || documentMap.size > 0) && (
-              <CitedSourcesToggle
+              <SourcesTagWrapper
                 citations={citations}
                 documentMap={documentMap}
                 nodeId={nodeId}
-                onToggle={(toggledNodeId) => {
-                  // Toggle sidebar if clicking on the same message
-                  if (
-                    selectedMessageForDocDisplay === toggledNodeId &&
-                    documentSidebarVisible
-                  ) {
-                    updateCurrentDocumentSidebarVisible(false);
-                    updateCurrentSelectedNodeForDocDisplay(null);
-                  } else {
-                    updateCurrentSelectedNodeForDocDisplay(toggledNodeId);
-                    updateCurrentDocumentSidebarVisible(true);
-                  }
-                }}
+                selectedMessageForDocDisplay={selectedMessageForDocDisplay}
+                documentSidebarVisible={documentSidebarVisible}
+                updateCurrentDocumentSidebarVisible={
+                  updateCurrentDocumentSidebarVisible
+                }
+                updateCurrentSelectedNodeForDocDisplay={
+                  updateCurrentSelectedNodeForDocDisplay
+                }
               />
             )}
           </div>

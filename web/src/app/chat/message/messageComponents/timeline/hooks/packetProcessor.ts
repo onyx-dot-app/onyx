@@ -52,6 +52,9 @@ export interface ProcessorState {
   // Unique tool names tracking (populated during packet processing)
   uniqueToolNames: Set<string>;
 
+  // Image generation status
+  isGeneratingImage: boolean;
+
   // Streaming status
   finalAnswerComing: boolean;
   stopPacketSeen: boolean;
@@ -88,6 +91,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     uniqueToolNames: new Set(),
+    isGeneratingImage: false,
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
@@ -371,6 +375,12 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     }
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
+    }
+
+    // Track image generation for header display + collapsed tag
+    if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
+      state.isGeneratingImage = true;
+      state.uniqueToolNames.add("Image Generation");
     }
   }
 

@@ -20,11 +20,17 @@ export interface TimelineHeaderResult {
  */
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
-  stopReason?: StopReason
+  stopReason?: StopReason,
+  isGeneratingImage?: boolean
 ): TimelineHeaderResult {
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
+
+    // If generating image with no tool packets, show image generation header
+    if (isGeneratingImage && !hasPackets) {
+      return { headerText: "Generating image...", hasPackets, userStopped };
+    }
 
     if (!hasPackets) {
       return { headerText: "Thinking...", hasPackets, userStopped };
@@ -93,5 +99,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };
-  }, [turnGroups, stopReason]);
+  }, [turnGroups, stopReason, isGeneratingImage]);
 }
