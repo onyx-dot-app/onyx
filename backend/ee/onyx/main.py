@@ -85,10 +85,11 @@ def get_application() -> FastAPI:
 
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
-
-    # Add license enforcement middleware (runs after tenant tracking)
-    # This blocks access when license is expired/gated
-    add_license_enforcement_middleware(application, logger)
+    else:
+        # License enforcement middleware for self-hosted deployments only
+        # This blocks access when license is expired/gated
+        # MT deployments use control plane gating via is_tenant_gated() instead
+        add_license_enforcement_middleware(application, logger)
 
     if AUTH_TYPE == AuthType.CLOUD:
         # For Google OAuth, refresh tokens are requested by:

@@ -1,4 +1,8 @@
-"""Middleware to enforce license status application-wide.
+"""Middleware to enforce license status for SELF-HOSTED deployments only.
+
+NOTE: This middleware is NOT used for multi-tenant (cloud) deployments.
+Multi-tenant gating is handled separately by the control plane via the
+/tenants/product-gating endpoint and is_tenant_gated() checks.
 
 IMPORTANT: Mutual Exclusivity with ENTERPRISE_EDITION_ENABLED
 ============================================================
@@ -24,7 +28,7 @@ For self-hosted deployments, there are three states:
    - Allow community features (basic connectors, search, chat)
    - Block EE-only features (analytics, user groups, etc.)
 
-2. Expired license (GATED_ACCESS):
+2. Gated license (GATED_ACCESS, GRACE_PERIOD, PAYMENT_REMINDER):
    - Block all routes except billing/auth/license
    - User must renew subscription to continue
 
@@ -47,10 +51,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
-from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 # Paths that are ALWAYS accessible, even when license is expired/gated.
@@ -144,105 +146,94 @@ def add_license_enforcement_middleware(
         is_gated = False
         tenant_id = get_current_tenant_id()
 
-        if MULTI_TENANT:
-            try:
-                is_gated = is_tenant_gated(tenant_id)
-            except RedisError as e:
-                logger.warning(f"Failed to check tenant gating status: {e}")
-                # Fail open - don't block users due to Redis connectivity issues
-                is_gated = False
-        else:
-            try:
-                metadata = get_cached_license_metadata(tenant_id)
+        try:
+            metadata = get_cached_license_metadata(tenant_id)
 
-                # If no cached metadata, check database (cache may have been cleared)
-                if not metadata:
-                    logger.debug(
-                        f"[license_enforcement] No cached license for tenant {tenant_id}, "
-                        "checking database..."
-                    )
-                    try:
-                        with get_session_with_current_tenant() as db_session:
-                            metadata = refresh_license_cache(db_session, tenant_id)
-                            if metadata:
-                                logger.info(
-                                    f"[license_enforcement] Loaded license from DB for tenant {tenant_id}"
-                                )
-                    except SQLAlchemyError as db_error:
-                        logger.warning(
-                            f"[license_enforcement] Failed to check database for license: {db_error}"
-                        )
-
-                if metadata:
-                    # User HAS a license (current or expired)
-                    if metadata.status in {
-                        ApplicationStatus.GATED_ACCESS,
-                        ApplicationStatus.GRACE_PERIOD,
-                        ApplicationStatus.PAYMENT_REMINDER,
-                    }:
-                        # License expired or has billing issues - gate the user
-                        is_gated = True
-                    else:
-                        # License is active - check seat limit
-                        # used_seats in cache is kept accurate via invalidation
-                        # when users are added/removed
-                        if metadata.used_seats > metadata.seats:
+            # If no cached metadata, check database (cache may have been cleared)
+            if not metadata:
+                logger.debug(
+                    f"[license_enforcement] No cached license for tenant {tenant_id}, "
+                    "checking database..."
+                )
+                try:
+                    with get_session_with_current_tenant() as db_session:
+                        metadata = refresh_license_cache(db_session, tenant_id)
+                        if metadata:
                             logger.info(
-                                f"Blocking request for tenant {tenant_id}: "
-                                f"seat limit exceeded ({metadata.used_seats}/{metadata.seats})"
+                                f"[license_enforcement] Loaded license from DB for tenant {tenant_id}"
                             )
-                            return JSONResponse(
-                                status_code=402,
-                                content={
-                                    "detail": f"Seat limit exceeded: {metadata.used_seats} of {metadata.seats} seats used."
-                                },
-                            )
+                except SQLAlchemyError as db_error:
+                    logger.warning(
+                        f"[license_enforcement] Failed to check database for license: {db_error}"
+                    )
+
+            if metadata:
+                # User HAS a license (current or expired)
+                if metadata.status in {
+                    ApplicationStatus.GATED_ACCESS,
+                    ApplicationStatus.GRACE_PERIOD,
+                    ApplicationStatus.PAYMENT_REMINDER,
+                }:
+                    # License expired or has billing issues - gate the user
+                    is_gated = True
                 else:
-                    # No license in cache OR database = never subscribed
-                    # Allow community features, but block EE-only features
-                    if _is_ee_only_path(path):
+                    # License is active - check seat limit
+                    # used_seats in cache is kept accurate via invalidation
+                    # when users are added/removed
+                    if metadata.used_seats > metadata.seats:
                         logger.info(
-                            f"[license_enforcement] Blocking EE-only path for unlicensed tenant {tenant_id}: {path}"
+                            f"Blocking request for tenant {tenant_id}: "
+                            f"seat limit exceeded ({metadata.used_seats}/{metadata.seats})"
                         )
                         return JSONResponse(
                             status_code=402,
                             content={
-                                "detail": "This feature requires an Enterprise license. "
-                                "Please upgrade to access this functionality.",
+                                "detail": f"Seat limit exceeded: {metadata.used_seats} of {metadata.seats} seats used."
                             },
                         )
-                    logger.debug(
-                        f"[license_enforcement] No license for tenant {tenant_id}, "
-                        "allowing community features"
+            else:
+                # No license in cache OR database = never subscribed
+                # Allow community features, but block EE-only features
+                if _is_ee_only_path(path):
+                    logger.info(
+                        f"[license_enforcement] Blocking EE-only path for unlicensed tenant {tenant_id}: {path}"
                     )
-                    is_gated = False
-            except RedisError as e:
-                logger.warning(f"Failed to check license metadata: {e}")
-                # Fail open - don't block users due to Redis connectivity issues
+                    return JSONResponse(
+                        status_code=402,
+                        content={
+                            "detail": "This feature requires an Enterprise license. "
+                            "Please upgrade to access this functionality.",
+                        },
+                    )
+                logger.debug(
+                    f"[license_enforcement] No license for tenant {tenant_id}, "
+                    "allowing community features"
+                )
                 is_gated = False
+        except RedisError as e:
+            logger.warning(f"Failed to check license metadata: {e}")
+            # Fail open - don't block users due to Redis connectivity issues
+            is_gated = False
 
         if is_gated:
             logger.info(f"Blocking request for gated tenant: {tenant_id}, path={path}")
 
-            if MULTI_TENANT:
-                message = "Access restricted. Please check your subscription status."
-            else:
-                # Determine if this is "no license" vs "expired license"
-                try:
-                    cached = get_cached_license_metadata(tenant_id)
-                    if cached and cached.status in {
-                        ApplicationStatus.GATED_ACCESS,
-                        ApplicationStatus.GRACE_PERIOD,
-                        ApplicationStatus.PAYMENT_REMINDER,
-                    }:
-                        message = (
-                            "Your subscription has expired. Please update your billing."
-                        )
-                    else:
-                        message = "A valid license is required to access this feature."
-                except RedisError:
-                    # Redis down - use generic message
+            # Determine if this is "no license" vs "expired license"
+            try:
+                cached = get_cached_license_metadata(tenant_id)
+                if cached and cached.status in {
+                    ApplicationStatus.GATED_ACCESS,
+                    ApplicationStatus.GRACE_PERIOD,
+                    ApplicationStatus.PAYMENT_REMINDER,
+                }:
+                    message = (
+                        "Your subscription has expired. Please update your billing."
+                    )
+                else:
                     message = "A valid license is required to access this feature."
+            except RedisError:
+                # Redis down - use generic message
+                message = "A valid license is required to access this feature."
 
             return JSONResponse(
                 status_code=402,
