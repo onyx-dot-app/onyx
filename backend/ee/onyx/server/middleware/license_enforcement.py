@@ -22,19 +22,20 @@ enforcement will be the only mechanism for gating EE features.
 
 License Enforcement States (when enabled)
 =========================================
-For self-hosted deployments, there are three states:
+For self-hosted deployments:
 
 1. No license (never subscribed):
    - Allow community features (basic connectors, search, chat)
    - Block EE-only features (analytics, user groups, etc.)
 
-2. Gated license (GATED_ACCESS, GRACE_PERIOD, PAYMENT_REMINDER):
+2. GATED_ACCESS (fully expired):
    - Block all routes except billing/auth/license
    - User must renew subscription to continue
 
-3. Valid license (ACTIVE):
+3. Valid license (ACTIVE, GRACE_PERIOD, PAYMENT_REMINDER):
    - Full access to all EE features
    - Seat limits enforced
+   - GRACE_PERIOD/PAYMENT_REMINDER are for notifications only, not blocking
 """
 
 import logging
@@ -169,12 +170,10 @@ def add_license_enforcement_middleware(
 
             if metadata:
                 # User HAS a license (current or expired)
-                if metadata.status in {
-                    ApplicationStatus.GATED_ACCESS,
-                    ApplicationStatus.GRACE_PERIOD,
-                    ApplicationStatus.PAYMENT_REMINDER,
-                }:
-                    # License expired or has billing issues - gate the user
+                if metadata.status == ApplicationStatus.GATED_ACCESS:
+                    # License fully expired - gate the user
+                    # Note: GRACE_PERIOD and PAYMENT_REMINDER are for notifications only,
+                    # they don't block access
                     is_gated = True
                 else:
                     # License is active - check seat limit
@@ -218,22 +217,8 @@ def add_license_enforcement_middleware(
         if is_gated:
             logger.info(f"Blocking request for gated tenant: {tenant_id}, path={path}")
 
-            # Determine if this is "no license" vs "expired license"
-            try:
-                cached = get_cached_license_metadata(tenant_id)
-                if cached and cached.status in {
-                    ApplicationStatus.GATED_ACCESS,
-                    ApplicationStatus.GRACE_PERIOD,
-                    ApplicationStatus.PAYMENT_REMINDER,
-                }:
-                    message = (
-                        "Your subscription has expired. Please update your billing."
-                    )
-                else:
-                    message = "A valid license is required to access this feature."
-            except RedisError:
-                # Redis down - use generic message
-                message = "A valid license is required to access this feature."
+            # At this point, is_gated=True means GATED_ACCESS status
+            message = "Your subscription has expired. Please update your billing."
 
             return JSONResponse(
                 status_code=402,

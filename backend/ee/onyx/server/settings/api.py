@@ -12,14 +12,8 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# Statuses that indicate a billing/license problem - propagate these to settings
-_GATED_STATUSES = frozenset(
-    {
-        ApplicationStatus.GATED_ACCESS,
-        ApplicationStatus.GRACE_PERIOD,
-        ApplicationStatus.PAYMENT_REMINDER,
-    }
-)
+# Only GATED_ACCESS actually blocks access - other statuses are for notifications
+_BLOCKING_STATUS = ApplicationStatus.GATED_ACCESS
 
 
 def check_ee_features_enabled() -> bool:
@@ -46,15 +40,15 @@ def check_ee_features_enabled() -> bool:
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
-        if metadata and metadata.status not in _GATED_STATUSES:
-            # Has a valid (non-expired) license
+        if metadata and metadata.status != _BLOCKING_STATUS:
+            # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
             return True
     except RedisError as e:
         logger.warning(f"Failed to check license for EE features: {e}")
         # Fail open - don't break the UI if Redis is down
         return True
 
-    # No license or expired license - no EE features
+    # No license or GATED_ACCESS - no EE features
     return False
 
 
@@ -62,7 +56,7 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     """EE version: checks license status for self-hosted deployments.
 
     For self-hosted, looks up license metadata and overrides application_status
-    if the license is missing or indicates a problem (expired, grace period, etc.).
+    if the license indicates GATED_ACCESS (fully expired).
 
     For multi-tenant (cloud), the settings already have the correct status
     from the control plane, so no override is needed.
@@ -79,10 +73,10 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
-        if metadata and metadata.status in _GATED_STATUSES:
+        if metadata and metadata.status == _BLOCKING_STATUS:
             settings.application_status = metadata.status
         # No license = user hasn't purchased yet, allow access for upgrade flow
-        # This is different from an expired license - community features should work
+        # GRACE_PERIOD/PAYMENT_REMINDER don't block - they're for notifications
     except RedisError as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
 
