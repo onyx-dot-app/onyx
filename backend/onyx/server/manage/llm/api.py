@@ -410,7 +410,7 @@ def list_llm_provider_basics(
 
     all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = fetch_user_group_ids(db_session, user) if user else set()
-    is_admin = user and user.role == UserRole.ADMIN
+    is_admin = user is not None and user.role == UserRole.ADMIN
 
     accessible_providers = []
 
