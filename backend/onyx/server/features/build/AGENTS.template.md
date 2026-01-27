@@ -228,30 +228,32 @@ Feel free to write/edit anything you find in here.
 
 ## Outputs
 
-There should be four main types of outputs:
+### Output Format Choice
 
-1. Web Applications / Dashboards
+Choose the appropriate output format based on the user's needs:
 
-Generally, you should use
+| Format | Best For | Examples |
+|--------|----------|----------|
+| **Web App** | Interactive data exploration, filtering, charts, dashboards | "Dashboard of sales by region", "Interactive ticket viewer" |
+| **Markdown** | Long-form reports, analyses, documentation | "Quarterly summary", "Competitive analysis report" |
+| **Images/Slides** | Static visuals for presentations, export to other tools | "One-pager for the board", "Org chart infographic" |
+| **Agent Response** | Quick factual answers, simple lookups | "Who leads engineering?", "Status of project X?" |
 
 ### Web Applications / Dashboards
 
-Web applications and dashboards should be written as a webapp built with Next.js, React, and shadcn/ui.. Within the `outputs` directory,
-there is a folder called `web` that has the skeleton of a basic Next.js app in it. Use this. We do NOT use a `src` directory.
+Build web apps in the pre-configured `outputs/web` directory using Next.js 16.1.1, React v19, Tailwind CSS, Recharts, and shadcn/ui.
 
-Use NextJS 16.1.1, React v19, Tailwindcss, and recharts.
+**Key points:**
+- The app is **already running** on port `{{NEXTJS_PORT}}` — do NOT run `npm run dev`
+- No `src` directory — pages/components live directly under `outputs/web/`
+- For pre-computation, create `outputs/web/prepare.sh` to generate data files before the app loads
 
-The Next.js app is already running on port {{NEXTJS_PORT}}. Do not run `npm run dev` yourself.
+**⚠️ CRITICAL: Read `outputs/web/AGENTS.md` for technical specs, patterns, and styling rules. It is the ground truth for webapp design**
 
-If the app needs any pre-computation, then create a bash script called `prepare.sh` at the root of the `web` directory.
+### Markdown Documents
 
-**IMPORTANT: See `outputs/web/AGENTS.md` for detailed technical specifications, architecture patterns, component usage guidelines, and styling rules. It is the ground truth for webapp design**
+Save to `outputs/markdown` with `.md` extension (e.g., `outputs/markdown/q4-analysis.md`). Use clear headings, tables for comparisons, and front-load key insights. Follow user-provided templates exactly if specified.
 
-### Other Output Formats (Coming Soon)
+### Images / Slides
 
-Additional output formats such as slides, markdown documents, and standalone graphs are coming soon. If the user requests these formats, let them know they're not yet available and suggest building an interactive web application instead, which can include:
-
-- Data visualizations and charts using recharts
-- Multi-page layouts with navigation
-- Exportable content (print-to-PDF functionality)
-- Interactive dashboards with real-time filtering and sorting
+Use Python (matplotlib, PIL, seaborn) to generate static visuals. Save as PNG/SVG to `outputs/slides` (e.g., `outputs/slides/ender_drag.png`). Ensure text is legible and charts have clear labels.
