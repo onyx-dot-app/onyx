@@ -63,7 +63,7 @@ export type ProjectDetails = {
 };
 
 export async function fetchProjects(): Promise<Project[]> {
-  const response = await fetch("/api/user/projects/");
+  const response = await fetch("/api/user/projects");
   if (!response.ok) {
     handleRequestError("Fetch projects", response);
   }
