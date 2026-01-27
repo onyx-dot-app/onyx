@@ -4,8 +4,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
+from onyx.db.models import FlowMapping
 from onyx.db.models import ImageGenerationConfig
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
@@ -20,6 +22,7 @@ from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
+from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from shared_configs.enums import EmbeddingProvider
@@ -229,16 +232,26 @@ def upsert_llm_provider(
         custom_config = custom_config if custom_config else None
 
     existing_llm_provider.provider = llm_provider_upsert_request.provider
-    existing_llm_provider.api_key = llm_provider_upsert_request.api_key
-    existing_llm_provider.api_base = llm_provider_upsert_request.api_base
-    existing_llm_provider.api_version = llm_provider_upsert_request.api_version
-    existing_llm_provider.custom_config = custom_config
-    existing_llm_provider.default_model_name = (
-        llm_provider_upsert_request.default_model_name
-    )
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
     existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
-    existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
+
+    credential_keys = [
+        "api_key",
+        "api_base",
+        "api_version",
+        "deployment_name",
+        "deployment_name",
+    ]
+
+    for key in credential_keys:
+        val = getattr(llm_provider_upsert_request, key)
+        if val is not None:
+            existing_llm_provider.credentials[key] = val
+
+    if custom_config := llm_provider_upsert_request.custom_config:
+        existing_llm_provider.credentials.update(
+            {k: v for k, v in custom_config.items() if v is not None and v.strip()}
+        )
 
     if not existing_llm_provider.id:
         # If its not already in the db, we need to generate an ID by flushing
@@ -429,26 +442,38 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
-    provider_model = db_session.scalar(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.is_default_provider == True)  # noqa: E712
-        .options(selectinload(LLMProviderModel.model_configurations))
+def fetch_default_provider(db_session: Session) -> DefaultModel | None:
+    flow_mapping = db_session.scalar(
+        select(FlowMapping).where(
+            FlowMapping.flow_type == ModelFlowType.TEXT,
+            FlowMapping.is_default == True,  # noqa: E712
+        )
     )
-    if not provider_model:
+
+    if not flow_mapping:
         return None
-    return LLMProviderView.from_model(provider_model)
+
+    return DefaultModel(
+        provider_id=flow_mapping.model_configuration.llm_provider.id,
+        model_name=flow_mapping.model_configuration.name,
+    )
 
 
-def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
-    provider_model = db_session.scalar(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.is_default_vision_provider == True)  # noqa: E712
-        .options(selectinload(LLMProviderModel.model_configurations))
+def fetch_default_vision_provider(db_session: Session) -> DefaultModel | None:
+    flow_mapping = db_session.scalar(
+        select(FlowMapping).where(
+            FlowMapping.flow_type == ModelFlowType.VISION,
+            FlowMapping.is_default == True,  # noqa: E712
+        )
     )
-    if not provider_model:
+
+    if not flow_mapping:
         return None
-    return LLMProviderView.from_model(provider_model)
+
+    return DefaultModel(
+        provider_id=flow_mapping.model_configuration.llm_provider.id,
+        model_name=flow_mapping.model_configuration.name,
+    )
 
 
 def fetch_llm_provider_view(
@@ -526,60 +551,94 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     db_session.flush()
 
 
-def update_default_provider(provider_id: int, db_session: Session) -> None:
-    new_default = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.id == provider_id)
-    )
-    if not new_default:
-        raise ValueError(f"LLM Provider with id {provider_id} does not exist")
-
-    existing_default = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.is_default_provider == True  # noqa: E712
+def update_default_provider(provider_id: int, model: str, db_session: Session) -> None:
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == provider_id,
+            ModelConfiguration.name == model,
         )
     )
+
+    if not model_config:
+        raise ValueError(
+            f"Model '{model}' is not a valid model for provider '{provider_id}'"
+        )
+
+    existing_default = db_session.scalar(
+        select(FlowMapping).where(
+            FlowMapping.flow_type == ModelFlowType.TEXT,
+            FlowMapping.is_default == True,  # noqa: E712
+        )
+    )
+
+    new_default = db_session.scalar(
+        select(FlowMapping).where(FlowMapping.model_configuration_id == model_config.id)
+    )
+
+    if not new_default:
+        raise ValueError(
+            f"Model '{model}' is not a valid model for provider '{provider_id}'"
+        )
+
     if existing_default:
-        existing_default.is_default_provider = None
+        existing_default.is_default = False
         # required to ensure that the below does not cause a unique constraint violation
         db_session.flush()
 
-    new_default.is_default_provider = True
+    new_default.is_default = True
     db_session.commit()
 
 
 def update_default_vision_provider(
-    provider_id: int, vision_model: str | None, db_session: Session
+    provider_id: int, vision_model: str, db_session: Session
 ) -> None:
-    new_default = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.id == provider_id)
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == provider_id,
+            ModelConfiguration.name == vision_model,
+        )
     )
-    if not new_default:
-        raise ValueError(f"LLM Provider with id {provider_id} does not exist")
+
+    if not model_config:
+        raise ValueError(
+            f"Model '{vision_model}' is not a valid model for provider '{provider_id}'"
+        )
 
     # Validate that the specified vision model supports image input
-    model_to_validate = vision_model or new_default.default_model_name
+    model_to_validate = vision_model
     if model_to_validate:
-        if not model_supports_image_input(model_to_validate, new_default.provider):
+        if not model_supports_image_input(
+            model_to_validate, model_config.llm_provider.provider
+        ):
             raise ValueError(
-                f"Model '{model_to_validate}' for provider '{new_default.provider}' does not support image input"
+                f"Model '{model_to_validate}' for provider '{model_config.llm_provider.provider}' does not support image input"
             )
     else:
         raise ValueError(
-            f"Model '{vision_model}' is not a valid model for provider '{new_default.provider}'"
+            f"Model '{vision_model}' is not a valid model for provider '{model_config.llm_provider.provider}'"
+        )
+
+    new_default = db_session.scalar(
+        select(FlowMapping).where(FlowMapping.model_configuration_id == model_config.id)
+    )
+
+    if not new_default:
+        raise ValueError(
+            f"Model '{vision_model}' is not a valid model for provider '{model_config.llm_provider.provider}'"
         )
 
     existing_default = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.is_default_vision_provider == True  # noqa: E712
+        select(FlowMapping).where(
+            FlowMapping.flow_type == ModelFlowType.VISION,
+            FlowMapping.is_default == True,  # noqa: E712
         )
     )
     if existing_default:
-        existing_default.is_default_vision_provider = None
+        existing_default.is_default = False
         # required to ensure that the below does not cause a unique constraint violation
         db_session.flush()
 
-    new_default.is_default_vision_provider = True
-    new_default.default_vision_model = vision_model
+    new_default.is_default = True
     db_session.commit()
 
 
@@ -671,10 +730,16 @@ def sync_auto_mode_models(
             changes += 1
 
     # In Auto mode, default model is always set from GitHub config
-    default_model = llm_recommendations.get_default_model(provider.provider)
-    if default_model and provider.default_model_name != default_model.name:
-        provider.default_model_name = default_model.name
-        changes += 1
+    # Check if this provider is the set default provider
+    default_model = fetch_default_provider(db_session)
+    if not default_model or default_model.provider_id != provider.id:
+        return changes
 
+    recommended = llm_recommendations.get_default_model(provider.provider)
+    if not recommended or recommended.name == default_model.model_name:
+        return changes
+
+    update_default_provider(provider.id, recommended.name, db_session)
+    changes += 1
     db_session.commit()
     return changes

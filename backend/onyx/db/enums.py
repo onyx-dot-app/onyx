@@ -194,3 +194,9 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
+
+
+class ModelFlowType(str, PyEnum):
+    TEXT = "text"
+    VISION = "vision"
+    EMBEDDING = "embedding"

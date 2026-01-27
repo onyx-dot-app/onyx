@@ -75,6 +75,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.enums import ModelFlowType
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -2407,22 +2408,12 @@ class LLMProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
     provider: Mapped[str] = mapped_column(String)
-    api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
-    api_base: Mapped[str | None] = mapped_column(String, nullable=True)
-    api_version: Mapped[str | None] = mapped_column(String, nullable=True)
-    # custom configs that should be passed to the LLM provider at inference time
-    # (e.g. `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc. for bedrock)
-    custom_config: Mapped[dict[str, str] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
+
+    # Accesses an API via key-value pairs
+    credentials: Mapped[dict[str, str]] = mapped_column(
+        postgresql.JSONB(), nullable=False, default={}
     )
-    default_model_name: Mapped[str] = mapped_column(String)
 
-    deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # should only be set for a single provider
-    is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
-    is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
-    default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Auto mode: models, visibility, and defaults are managed by GitHub config
@@ -2472,8 +2463,6 @@ class ModelConfiguration(Base):
     # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-
     # Human-readable display name for the model.
     # For dynamic providers (OpenRouter, Bedrock, Ollama), this comes from the source API.
     # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
@@ -2482,6 +2471,33 @@ class ModelConfiguration(Base):
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
+    )
+
+
+class FlowMapping(Base):
+    __tablename__ = "flow_mapping"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    flow_type: Mapped[ModelFlowType] = mapped_column(Enum(ModelFlowType))
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration",
+        back_populates="flow_mappings",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_one_default_per_flow",
+            "flow_type",
+            unique=True,
+            postgresql_where=text("is_default = true"),
+        ),
     )
 
 

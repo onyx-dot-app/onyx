@@ -144,19 +144,21 @@ class LLMProviderView(LLMProvider):
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
-            api_key=llm_provider_model.api_key,
-            api_base=llm_provider_model.api_base,
-            api_version=llm_provider_model.api_version,
-            custom_config=llm_provider_model.custom_config,
+            api_key=llm_provider_model.credentials.get("api_key"),
+            api_base=llm_provider_model.credentials.get("api_base"),
+            api_version=llm_provider_model.credentials.get("api_version"),
+            custom_config=llm_provider_model.credentials,
             default_model_name=llm_provider_model.default_model_name,
-            is_default_provider=llm_provider_model.is_default_provider,
+            is_default_provider=llm_provider_model.credentials.at(
+                "is_default_provider"
+            ),
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
             is_public=llm_provider_model.is_public,
             is_auto_mode=llm_provider_model.is_auto_mode,
             groups=groups,
             personas=personas,
-            deployment_name=llm_provider_model.deployment_name,
+            deployment_name=llm_provider_model.credentials.get("deployment_name"),
             model_configurations=filter_model_configurations(
                 llm_provider_model.model_configurations, provider
             ),
@@ -369,3 +371,8 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+
+
+class DefaultModel(BaseModel):
+    provider_id: int
+    model_name: str
