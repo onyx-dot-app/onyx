@@ -144,7 +144,7 @@ export type ValidStatuses =
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
 export type AccessType = "public" | "private" | "sync";
-export type ProcessingMode = "regular" | "file_system";
+export type ProcessingMode = "REGULAR" | "FILE_SYSTEM";
 export type SessionType = "Chat" | "Search" | "Slack";
 
 export interface DocumentBoostStatus {

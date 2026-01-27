@@ -621,7 +621,7 @@ class ConnectorCredentialPair(Base):
         Enum(ProcessingMode, native_enum=False),
         nullable=False,
         default=ProcessingMode.REGULAR,
-        server_default="regular",
+        server_default="REGULAR",
     )
 
     connector: Mapped["Connector"] = relationship(

@@ -105,7 +105,7 @@ export function linkCredential(
         access_type: accessType !== undefined ? accessType : "public",
         groups: groups || null,
         auto_sync_options: autoSyncOptions || null,
-        processing_mode: processingMode || "regular",
+        processing_mode: processingMode || "REGULAR",
       }),
     }
   );

@@ -59,8 +59,8 @@ class IndexingMode(str, PyEnum):
 class ProcessingMode(str, PyEnum):
     """Determines how documents are processed after fetching."""
 
-    REGULAR = "regular"  # Full pipeline: chunk → embed → Vespa
-    FILE_SYSTEM = "file_system"  # Write to file system only
+    REGULAR = "REGULAR"  # Full pipeline: chunk → embed → Vespa
+    FILE_SYSTEM = "FILE_SYSTEM"  # Write to file system only
 
 
 class SyncType(str, PyEnum):
