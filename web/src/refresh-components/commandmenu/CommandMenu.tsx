@@ -17,10 +17,9 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import EditableTag from "@/refresh-components/buttons/EditableTag";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-import Separator from "@/refresh-components/Separator";
 import Divider from "@/refresh-components/Divider";
 import { Section } from "@/layouts/general-layouts";
-import { SvgChevronRight, SvgSearch, SvgX } from "@opal/icons";
+import { SvgSearch, SvgX } from "@opal/icons";
 import type {
   CommandMenuProps,
   CommandMenuContentProps,
