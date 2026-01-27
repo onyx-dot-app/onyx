@@ -23,8 +23,6 @@ from botocore.exceptions import ClientError
 from mypy_boto3_s3.client import S3Client
 
 from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
-from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
 from onyx.connectors.models import Document
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
@@ -299,17 +297,11 @@ class S3PersistentDocumentWriter:
         IAM role credential resolution works properly.
         """
         if self._s3_client is None:
+            # Use IAM role credential resolution rather than keys
             client_kwargs: dict[str, Any] = {
                 "service_name": "s3",
                 "region_name": AWS_REGION_NAME,
             }
-
-            # Use explicit credentials if provided, otherwise rely on
-            # boto3's credential chain (env vars, config files, IAM roles)
-            if S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
-                client_kwargs["aws_access_key_id"] = S3_AWS_ACCESS_KEY_ID
-                client_kwargs["aws_secret_access_key"] = S3_AWS_SECRET_ACCESS_KEY
-
             self._s3_client = boto3.client(**client_kwargs)
         return self._s3_client
 
