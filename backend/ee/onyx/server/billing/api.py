@@ -1,4 +1,4 @@
-"""Billing API endpoints.
+"""Unified Billing API endpoints.
 
 These endpoints provide Stripe billing functionality for both cloud and
 self-hosted deployments. The service layer routes requests appropriately:
@@ -10,6 +10,14 @@ self-hosted deployments. The service layer routes requests appropriately:
   Flow: Backend /admin/billing/* → Control plane
 
 License claiming is handled separately by /license/claim endpoint (self-hosted only).
+
+Migration Note (ENG-3533):
+This /admin/billing/* API replaces the older /tenants/* billing endpoints:
+- /tenants/billing-information          -> /admin/billing/information
+- /tenants/create-customer-portal-session -> /admin/billing/portal-session
+- /tenants/create-subscription-session  -> /admin/billing/checkout-session
+
+See: https://linear.app/onyx-app/issue/ENG-3533/migrate-tenantsbilling-adminbilling
 """
 
 from fastapi import APIRouter

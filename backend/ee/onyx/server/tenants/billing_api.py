@@ -1,3 +1,21 @@
+"""Billing API endpoints for cloud multi-tenant deployments.
+
+DEPRECATED: These /tenants/* billing endpoints are being replaced by /admin/billing/*
+which provides a unified API for both self-hosted and cloud deployments.
+
+TODO(ENG-3533): Migrate frontend to use /admin/billing/* endpoints and remove this file.
+https://linear.app/onyx-app/issue/ENG-3533/migrate-tenantsbilling-adminbilling
+
+Current endpoints to migrate:
+- GET  /tenants/billing-information     -> GET  /admin/billing/information
+- POST /tenants/create-customer-portal-session -> POST /admin/billing/portal-session
+- POST /tenants/create-subscription-session    -> POST /admin/billing/checkout-session
+- GET  /tenants/stripe-publishable-key  -> (keep as-is, shared endpoint)
+
+Note: /tenants/product-gating/* endpoints are control-plane-to-data-plane calls
+and are NOT part of this migration - they stay here.
+"""
+
 import asyncio
 
 import httpx
@@ -77,20 +95,24 @@ def gate_product_full_sync(
         return ProductGatingResponse(updated=False, error=str(e))
 
 
+# TODO(ENG-3533): Migrate to /admin/billing/information
 @router.get("/billing-information")
 async def billing_information(
     _: User = Depends(current_admin_user),
 ) -> BillingInformation | SubscriptionStatusResponse:
+    """DEPRECATED: Use /admin/billing/information instead."""
     logger.info("Fetching billing information")
     tenant_id = get_current_tenant_id()
     return fetch_billing_information(tenant_id)
 
 
+# TODO(ENG-3533): Migrate to /admin/billing/portal-session
 @router.post("/create-customer-portal-session")
 async def create_customer_portal_session(
     _: User = Depends(current_admin_user),
 ) -> dict:
-    """
+    """DEPRECATED: Use /admin/billing/portal-session instead.
+
     Create a Stripe customer portal session via the control plane.
     NOTE: This is currently only used for multi-tenant (cloud) deployments.
     Self-hosted proxy endpoints will be added in a future phase.
@@ -106,11 +128,13 @@ async def create_customer_portal_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# TODO(ENG-3533): Migrate to /admin/billing/checkout-session
 @router.post("/create-subscription-session")
 async def create_subscription_session(
     request: CreateSubscriptionSessionRequest | None = None,
     _: User = Depends(current_admin_user),
 ) -> SubscriptionSessionResponse:
+    """DEPRECATED: Use /admin/billing/checkout-session instead."""
     try:
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
         if not tenant_id:
