@@ -108,6 +108,10 @@ def get_used_seats(tenant_id: str | None = None) -> int:
 
     For multi-tenant: counts users in UserTenantMapping for this tenant.
     For self-hosted: counts all active users (excludes EXT_PERM_USER role).
+
+    TODO: Exclude API key dummy users from seat counting. API keys create
+    users with emails like `__DANSWER_API_KEY_*` that should not count toward
+    seat limits. See: https://linear.app/onyx-app/issue/ENG-3518
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count

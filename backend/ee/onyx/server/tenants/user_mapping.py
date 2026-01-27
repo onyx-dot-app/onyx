@@ -320,6 +320,10 @@ def get_tenant_count(tenant_id: str) -> int:
     A user counts toward the seat count if:
     1. They have an active mapping to this tenant (UserTenantMapping.active == True)
     2. AND the User is active (User.is_active == True)
+
+    TODO: Exclude API key dummy users from seat counting. API keys create
+    users with emails like `__DANSWER_API_KEY_*` that should not count toward
+    seat limits. See: https://linear.app/onyx-app/issue/ENG-3518
     """
     from onyx.db.models import User
 
