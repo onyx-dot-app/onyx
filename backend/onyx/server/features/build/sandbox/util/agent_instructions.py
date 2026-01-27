@@ -312,6 +312,7 @@ def generate_agent_instructions(
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
     user_role: str | None = None,
+    use_demo_data: bool = False,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
 
@@ -325,6 +326,7 @@ def generate_agent_instructions(
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
         user_role: User's role/title for personalization
+        use_demo_data: If True, exclude user context from AGENTS.md
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -336,8 +338,8 @@ def generate_agent_instructions(
     # Read template content
     template_content = template_path.read_text()
 
-    # Build user context section
-    user_context = build_user_context(user_name, user_role)
+    # Build user context section - only include when NOT using demo data
+    user_context = "" if use_demo_data else build_user_context(user_name, user_role)
 
     # Build LLM configuration section
     provider_display = get_provider_display_name(provider)

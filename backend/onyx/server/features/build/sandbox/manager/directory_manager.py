@@ -271,6 +271,7 @@ class DirectoryManager:
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
+        use_demo_data: bool = False,
     ) -> None:
         """Generate AGENTS.md with dynamic configuration.
 
@@ -286,6 +287,7 @@ class DirectoryManager:
             disabled_tools: List of disabled tools
             user_name: User's name for personalization
             user_role: User's role/title for personalization
+            use_demo_data: If True, exclude user context from AGENTS.md
         """
         agent_md_path = sandbox_path / "AGENTS.md"
         if agent_md_path.exists():
@@ -305,6 +307,7 @@ class DirectoryManager:
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
+            use_demo_data=use_demo_data,
         )
 
         # Write the generated content

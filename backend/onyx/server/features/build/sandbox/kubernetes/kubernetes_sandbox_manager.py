@@ -277,6 +277,7 @@ class KubernetesSandboxManager(SandboxManager):
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
+        use_demo_data: bool = False,
     ) -> str:
         """Load and populate agent instructions from template file.
 
@@ -287,6 +288,7 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools: List of disabled tools
             user_name: User's name for personalization
             user_role: User's role/title for personalization
+            use_demo_data: If True, exclude user context from AGENTS.md
 
         Returns:
             Populated agent instructions content
@@ -306,6 +308,7 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
+            use_demo_data=use_demo_data,
         )
 
     def _create_sandbox_pod(
@@ -937,6 +940,7 @@ sleep infinity
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
+            use_demo_data=use_demo_data,
         )
 
         # Build opencode config JSON using shared config builder
