@@ -51,8 +51,11 @@ from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode
 from fastapi_users.router.common import ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from httpx_oauth.clients.openid import OpenID
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
+from httpx_oauth.oauth2 import GetIdEmailError
+from httpx_oauth.oauth2 import GetProfileError
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy import nulls_last
@@ -88,6 +91,7 @@ from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
+from onyx.configs.app_configs import USE_UPN_AS_EMAIL_FALLBACK
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -1206,6 +1210,51 @@ optional_fastapi_current_user = fastapi_users.current_user(active=True, optional
 
 
 _JWT_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
+
+# Claim keys to check for email in OIDC userinfo responses (in priority order)
+_OIDC_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
+
+
+class OpenIDWithUPNFallback(OpenID):
+    """
+    Custom OpenID client that supports falling back to UPN (User Principal Name)
+    when the standard email claim is not present in the userinfo response.
+
+    This is useful for Microsoft Entra ID / Azure AD configurations where
+    the UPN contains a valid email address but the email claim may not be set.
+    """
+
+    async def get_id_email(self, token: str) -> tuple[str, Optional[str]]:
+        """
+        Override get_id_email to check for UPN fallback when email is missing.
+
+        If USE_UPN_AS_EMAIL_FALLBACK is enabled, this will check the following
+        claims in order: email, preferred_username, upn.
+        """
+        try:
+            profile = await self.get_profile(token)
+        except GetProfileError as e:
+            raise GetIdEmailError(response=e.response) from e
+
+        account_id = str(profile["sub"])
+
+        # If UPN fallback is not enabled, use standard behavior
+        if not USE_UPN_AS_EMAIL_FALLBACK:
+            return account_id, profile.get("email")
+
+        # Try each claim key in priority order
+        for key in _OIDC_EMAIL_CLAIM_KEYS:
+            value = profile.get(key)
+            if isinstance(value, str) and value:
+                try:
+                    email_info = validate_email(value, check_deliverability=False)
+                    normalized_email = email_info.normalized or email_info.email
+                    return account_id, normalized_email.lower()
+                except EmailNotValidError:
+                    continue
+
+        # No valid email found in any claim
+        return account_id, None
 
 
 def _extract_email_from_jwt(payload: dict[str, Any]) -> str | None:

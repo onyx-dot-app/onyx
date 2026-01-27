@@ -162,6 +162,13 @@ if _OIDC_SCOPE_OVERRIDE:
     except Exception:
         pass
 
+# When enabled, OIDC and SAML auth will fall back to using the User Principal Name (UPN)
+# claim as the email if the standard email claim is not present. This is useful for
+# Microsoft Entra ID / Azure AD configurations where UPN contains the email address.
+USE_UPN_AS_EMAIL_FALLBACK = (
+    os.environ.get("USE_UPN_AS_EMAIL_FALLBACK", "").lower() == "true"
+)
+
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
 

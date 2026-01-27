@@ -20,7 +20,6 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
-from httpx_oauth.clients.openid import OpenID
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -33,6 +32,7 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
+from onyx.auth.users import OpenIDWithUPNFallback
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
@@ -498,7 +498,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
-                OpenID(
+                OpenIDWithUPNFallback(
                     OAUTH_CLIENT_ID,
                     OAUTH_CLIENT_SECRET,
                     OPENID_CONFIG_URL,
