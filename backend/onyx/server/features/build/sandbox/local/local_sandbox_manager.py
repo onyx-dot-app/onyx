@@ -506,49 +506,52 @@ class LocalSandboxManager(SandboxManager):
             port: The port number where Next.js is running
             session_id: The session ID (for logging)
         """
+        # Try lsof first - it's the most reliable cross-platform way
         try:
-            import psutil
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                # lsof can return multiple PIDs, get the first one
+                pid = int(result.stdout.strip().split("\n")[0])
+                logger.info(
+                    f"Stopping Next.js server (PID {pid}) on port {port} "
+                    f"for session {session_id}"
+                )
+                self._process_manager.terminate_process(pid)
+                return
+            else:
+                logger.debug(
+                    f"No process found on port {port} for session {session_id}"
+                )
+        except FileNotFoundError:
+            # lsof not available, try psutil
+            try:
+                import psutil
 
-            for proc in psutil.process_iter(["pid", "name", "connections"]):
-                try:
-                    connections = proc.info.get("connections") or []
-                    for conn in connections:
-                        if conn.laddr.port == port:
+                # Use net_connections to find process by port
+                for conn in psutil.net_connections(kind="inet"):
+                    # laddr can be empty tuple for some connection states
+                    if conn.laddr and hasattr(conn.laddr, "port"):
+                        if conn.laddr.port == port and conn.pid:
                             logger.info(
-                                f"Stopping Next.js server (PID {proc.pid}) on port {port} "
+                                f"Stopping Next.js server (PID {conn.pid}) on port {port} "
                                 f"for session {session_id}"
                             )
-                            self._process_manager.terminate_process(proc.pid)
+                            self._process_manager.terminate_process(conn.pid)
                             return
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
 
-            logger.debug(f"No process found on port {port} for session {session_id}")
-        except ImportError:
-            # psutil not available, try lsof as fallback
-            try:
-                import subprocess
-
-                result = subprocess.run(
-                    ["lsof", "-ti", f":{port}"],
-                    capture_output=True,
-                    text=True,
+                logger.debug(
+                    f"No process found on port {port} for session {session_id}"
                 )
-                if result.returncode == 0 and result.stdout.strip():
-                    pid = int(result.stdout.strip().split("\n")[0])
-                    logger.info(
-                        f"Stopping Next.js server (PID {pid}) on port {port} "
-                        f"for session {session_id}"
-                    )
-                    self._process_manager.terminate_process(pid)
-                else:
-                    logger.debug(
-                        f"No process found on port {port} for session {session_id}"
-                    )
-            except Exception as e:
+            except ImportError:
                 logger.warning(
-                    f"Failed to find/stop Next.js server on port {port}: {e}"
+                    f"Neither lsof nor psutil available to find process on port {port}"
                 )
+            except Exception as e:
+                logger.warning(f"Failed to find process on port {port}: {e}")
         except Exception as e:
             logger.warning(
                 f"Failed to stop Next.js server on port {port} for session {session_id}: {e}"
