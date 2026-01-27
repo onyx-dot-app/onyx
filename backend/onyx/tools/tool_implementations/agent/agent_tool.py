@@ -225,7 +225,7 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
 
         # Flatten tools and filter out agent tools to prevent deep nesting
         all_tools = [tool for tool_list in tools.values() for tool in tool_list]
-        current_tools = [t for t in all_tools if not isinstance(t, AgentTool)]
+        current_tools = [t for t in all_tools if not (isinstance(t, AgentTool) and t.target_persona.id in agent_call_stack)]
 
         # Build system prompt
         system_prompt_str = build_system_prompt(
