@@ -124,3 +124,26 @@ def send_message(
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         },
     )
+
+
+@router.post("/sessions/{session_id}/cancel-message", tags=PUBLIC_API_TAGS)
+def cancel_message(
+    session_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> dict[str, bool]:
+    """
+    Cancel the current message/prompt operation for a session.
+
+    Sends a session/cancel notification to the ACP agent to stop the
+    currently running operation. This follows the ACP protocol specification
+    for cancellation.
+
+    Returns:
+        {"cancelled": true} if cancel was sent successfully
+        {"cancelled": false} if no active operation to cancel
+    """
+    session_manager = SessionManager(db_session)
+    cancelled = session_manager.cancel_message(session_id, user.id)
+
+    return {"cancelled": cancelled}

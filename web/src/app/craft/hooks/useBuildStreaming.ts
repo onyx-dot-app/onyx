@@ -14,6 +14,7 @@ import {
   fetchSession,
   generateFollowupSuggestions,
   RateLimitError,
+  cancelMessage,
 } from "@/app/craft/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -40,9 +41,7 @@ export function useBuildStreaming() {
   const setAbortController = useBuildSessionStore(
     (state) => state.setAbortController
   );
-  const abortCurrentSession = useBuildSessionStore(
-    (state) => state.abortCurrentSession
-  );
+  const abortSession = useBuildSessionStore((state) => state.abortSession);
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
   );
@@ -449,11 +448,45 @@ export function useBuildStreaming() {
     ]
   );
 
+  /**
+   * Abort the current streaming operation.
+   * This both:
+   * 1. Aborts the HTTP request (via AbortController)
+   * 2. Sends a cancel notification to the ACP agent (via backend API)
+   * 3. Updates session status to "cancelled" to update UI state
+   */
+  const abortStream = useCallback(
+    async (sessionId?: string) => {
+      const targetSessionId =
+        sessionId ?? useBuildSessionStore.getState().currentSessionId;
+
+      if (!targetSessionId) {
+        return;
+      }
+
+      // First, send cancel to the backend to stop the agent
+      // This sends session/cancel notification per ACP protocol
+      try {
+        await cancelMessage(targetSessionId);
+      } catch (err) {
+        console.error("[Streaming] Failed to cancel agent operation:", err);
+      }
+
+      // Update status first so the UI transitions atomically (stop button
+      // disappears and cancellation message appears before the stream closes)
+      updateSessionData(targetSessionId, { status: "cancelled" });
+
+      // Abort the HTTP request to stop receiving events
+      abortSession(targetSessionId);
+    },
+    [abortSession, updateSessionData]
+  );
+
   return useMemo(
     () => ({
       streamMessage,
-      abortStream: abortCurrentSession,
+      abortStream,
     }),
-    [streamMessage, abortCurrentSession]
+    [streamMessage, abortStream]
   );
 }

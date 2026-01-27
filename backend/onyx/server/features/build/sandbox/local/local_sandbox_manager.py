@@ -1047,23 +1047,35 @@ class LocalSandboxManager(SandboxManager):
         if not self._is_path_allowed(session_path, target_path):
             raise ValueError("Path traversal not allowed")
 
+        # If directory doesn't exist, return empty list (no files yet)
+        if not target_path.exists():
+            return []
+
         if not target_path.is_dir():
             raise ValueError(f"Not a directory: {path}")
 
         entries = []
-        for item in target_path.iterdir():
-            stat = item.stat()
-            is_file = item.is_file()
-            mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
-            entries.append(
-                FilesystemEntry(
-                    name=item.name,
-                    path=str(item.relative_to(session_path)),
-                    is_directory=item.is_dir(),
-                    size=stat.st_size if is_file else None,
-                    mime_type=mime_type,
-                )
-            )
+        try:
+            for item in target_path.iterdir():
+                try:
+                    stat = item.stat()
+                    is_file = item.is_file()
+                    mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
+                    entries.append(
+                        FilesystemEntry(
+                            name=item.name,
+                            path=str(item.relative_to(session_path)),
+                            is_directory=item.is_dir(),
+                            size=stat.st_size if is_file else None,
+                            mime_type=mime_type,
+                        )
+                    )
+                except (FileNotFoundError, OSError):
+                    # Skip files that were deleted during iteration (race condition)
+                    continue
+        except FileNotFoundError:
+            # Directory was deleted during iteration
+            return []
 
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
@@ -1411,3 +1423,42 @@ class LocalSandboxManager(SandboxManager):
             f"sync_files called for local sandbox {sandbox_id}{source_info} - no-op"
         )
         return True
+
+    def cancel_message(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Cancel the current message/prompt operation for a session.
+
+        Sends a session/cancel notification to the ACP agent to stop the
+        currently running operation.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID whose operation should be cancelled
+
+        Returns:
+            True if cancel was sent, False if no active session/client found
+        """
+        client_key = (sandbox_id, session_id)
+        client = self._acp_clients.get(client_key)
+
+        if client is None or not client.is_running:
+            logger.debug(
+                f"No active ACP client for sandbox {sandbox_id}, session {session_id}"
+            )
+            return False
+
+        try:
+            client.cancel()
+            logger.info(
+                f"Sent cancel notification for sandbox {sandbox_id}, session {session_id}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                f"Failed to cancel operation for sandbox {sandbox_id}, "
+                f"session {session_id}: {e}"
+            )
+            return False

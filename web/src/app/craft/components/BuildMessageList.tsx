@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from "react";
 import Logo from "@/refresh-components/Logo";
+import Text from "@/refresh-components/texts/Text";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import ToolCallPill from "@/app/craft/components/ToolCallPill";
@@ -68,6 +69,8 @@ interface BuildMessageListProps {
   messages: BuildMessage[];
   streamItems: StreamItem[];
   isStreaming?: boolean;
+  /** Whether the user cancelled the current generation */
+  userCancelled?: boolean;
   /** Whether auto-scroll is enabled (user is at bottom) */
   autoScrollEnabled?: boolean;
   /** Ref to the end marker div for scroll detection */
@@ -85,6 +88,7 @@ export default function BuildMessageList({
   messages,
   streamItems,
   isStreaming = false,
+  userCancelled = false,
   autoScrollEnabled = true,
   messagesEndRef: externalMessagesEndRef,
 }: BuildMessageListProps) {
@@ -104,8 +108,11 @@ export default function BuildMessageList({
   const lastMessage = messages[messages.length - 1];
   const lastMessageIsUser = lastMessage?.type === "user";
   // Show streaming area if we have stream items OR if we're waiting for a response to the latest user message
+  // Also show if user cancelled (to display the cancellation message)
   const showStreamingArea =
-    hasStreamItems || (isStreaming && lastMessageIsUser);
+    hasStreamItems ||
+    (isStreaming && lastMessageIsUser) ||
+    (userCancelled && lastMessageIsUser);
 
   // Check for active tools (for "Working..." state)
   const hasActiveTools = streamItems.some(
@@ -206,16 +213,28 @@ export default function BuildMessageList({
             </div>
             <div className="flex-1 flex flex-col gap-3 min-w-0">
               {!hasStreamItems ? (
-                // Loading state - no content yet, show blinking dot like main chat
-                <BlinkingDot />
+                // Loading state or cancelled - show blinking dot or cancelled message
+                userCancelled ? (
+                  <Text as="p" secondaryBody text04>
+                    User has stopped generation
+                  </Text>
+                ) : (
+                  <BlinkingDot />
+                )
               ) : (
                 <>
                   {/* Render stream items in FIFO order */}
                   {renderStreamItems(streamItems, true)}
 
-                  {/* Streaming indicator when actively streaming text */}
-                  {isStreaming && hasStreamItems && !hasActiveTools && (
-                    <BlinkingDot />
+                  {/* Show cancelled message or streaming indicator */}
+                  {userCancelled ? (
+                    <Text as="p" secondaryBody text04>
+                      User has stopped generation
+                    </Text>
+                  ) : (
+                    isStreaming &&
+                    hasStreamItems &&
+                    !hasActiveTools && <BlinkingDot />
                   )}
                 </>
               )}
