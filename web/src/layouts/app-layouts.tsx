@@ -69,6 +69,7 @@ import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import { Section } from "@/layouts/general-layouts";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import useAppFocus from "@/hooks/useAppFocus";
 
 /**
  * App Header Component
@@ -108,6 +109,7 @@ function AppHeader() {
   } = useProjectsContext();
   const { currentChatSession, refreshChatSessions, currentChatSessionId } =
     useChatSessions();
+  const appFocus = useAppFocus();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -314,7 +316,7 @@ function AppHeader() {
               value={currentChatSessionId ? "chat" : appMode}
               onValueChange={(value) => setAppMode(value as AppMode)}
               variant="secondary"
-              disabled={!!currentChatSessionId}
+              disabled={!appFocus.isNewSession()}
             >
               <InputSelect.Trigger width="fit" />
               <InputSelect.Content>

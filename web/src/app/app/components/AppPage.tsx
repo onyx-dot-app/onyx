@@ -77,6 +77,7 @@ import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { Section } from "@/layouts/general-layouts";
+import Spacer from "@/refresh-components/Spacer";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -710,7 +711,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           {({ getRootProps }) => (
             <div
               className={cn(
-                "flex flex-col h-full items-center outline-none relative gap-3",
+                "flex flex-col h-full items-center outline-none relative",
                 !!appBackgroundUrl && "bg-cover bg-center bg-fixed"
               )}
               style={
@@ -727,7 +728,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
               {/* Upper Block */}
               {queryController.classification !== "search" && (
-                <Section justifyContent="end" height="scrollable">
+                <Section justifyContent="end" height="scrollable" gap={0}>
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
                     <ProjectContextPanel
@@ -749,7 +750,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       disableFadeOverlay={hasBackground}
                     >
                       {showScrollButton && (
-                        <div className="absolute bottom-4">
+                        <div className="absolute bottom-4 z-sticky">
                           <IconButton
                             icon={SvgChevronDown}
                             onClick={handleScrollToBottom}
@@ -778,24 +779,28 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* Onboarding */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     showOnboardingUi && (
-                      <OnboardingFlow
-                        handleHideOnboarding={hideOnboarding}
-                        handleFinishOnboarding={finishOnboarding}
-                        state={onboardingState}
-                        actions={onboardingActions}
-                        llmDescriptors={llmDescriptors}
-                      />
+                      <>
+                        <OnboardingFlow
+                          handleHideOnboarding={hideOnboarding}
+                          handleFinishOnboarding={finishOnboarding}
+                          state={onboardingState}
+                          actions={onboardingActions}
+                          llmDescriptors={llmDescriptors}
+                        />
+                        <Spacer rem={1} />
+                      </>
                     )}
 
                   {/* Welcome Message */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     showWelcomeMessage && (
-                      <Section height="fit">
+                      <>
                         <WelcomeMessage
                           agent={liveAssistant}
                           isDefaultAgent={isDefaultAgent}
                         />
-                      </Section>
+                        <Spacer rem={1} />
+                      </>
                     )}
                 </Section>
               )}
@@ -840,7 +845,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {(appFocus.isNewSession() ||
                 appFocus.isAgent() ||
                 appFocus.isProject()) && (
-                <Section justifyContent="start" height="scrollable">
+                <Section justifyContent="start" height="scrollable" gap={0}>
                   {/* SearchUI */}
                   {appFocus.isNewSession() && showSearchResults && (
                     <SearchUI

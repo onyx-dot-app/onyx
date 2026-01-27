@@ -12,6 +12,14 @@ export interface SuggestionsProps {
 export default function Suggestions({ onSubmit }: SuggestionsProps) {
   const currentAgent = useCurrentAgent();
 
+  function handleSuggestionClick(suggestion: string) {
+    onSubmit({
+      message: suggestion,
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  }
+
   if (
     !currentAgent ||
     !currentAgent.starter_messages ||
@@ -19,21 +27,15 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   )
     return null;
 
-  const handleSuggestionClick = (suggestion: string) => {
-    onSubmit({
-      message: suggestion,
-      currentMessageFiles: [],
-      deepResearch: false,
-    });
-  };
-
   return (
-    <Section padding={0.25} gap={0.25}>
-      {currentAgent.starter_messages.map(({ message }, index) => (
-        <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
-          {message}
-        </LineItem>
-      ))}
-    </Section>
+    <div className="w-[var(--main-app-width)]">
+      <Section padding={0.25} gap={0.25}>
+        {currentAgent.starter_messages.map(({ message }, index) => (
+          <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
+            {message}
+          </LineItem>
+        ))}
+      </Section>
+    </div>
   );
 }

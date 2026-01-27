@@ -50,7 +50,7 @@ export default function WelcomeMessage({
     );
   } else if (agent) {
     content = (
-      <>
+      <Section gap={0.25}>
         <div data-testid="assistant-name-display">
           <Section flexDirection="row" gap={1}>
             <AgentAvatar agent={agent} size={36} />
@@ -64,7 +64,7 @@ export default function WelcomeMessage({
             {agent.description}
           </Text>
         )}
-      </>
+      </Section>
     );
   }
 
@@ -74,7 +74,7 @@ export default function WelcomeMessage({
 
   return (
     <div data-testid="chat-intro" className="w-[min(50rem,100%)]">
-      <Section gap={1}>{content}</Section>
+      {content}
     </div>
   );
 }
