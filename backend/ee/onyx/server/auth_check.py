@@ -18,6 +18,7 @@ EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
     ("/proxy/create-customer-portal-session", {"POST"}),
     ("/proxy/billing-information", {"GET"}),
     ("/proxy/license/{tenant_id}", {"GET"}),
+    ("/proxy/seats/update", {"POST"}),
 ]
 
 
