@@ -6,9 +6,10 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_default_model
 from onyx.db.llm import fetch_default_vision_provider
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
@@ -69,10 +70,10 @@ def get_llm_config_for_persona(
 
     provider_name = provider_name_override or persona.llm_model_provider_override
     if not provider_name:
-        llm_provider = fetch_default_provider(db_session)
-        if not llm_provider:
+        default_model = fetch_default_model(db_session)
+        if not default_model:
             raise ValueError("No default LLM provider found")
-        model_name: str | None = llm_provider.default_model_name
+        model_name: str | None = default_model.model_name
     else:
         llm_provider = fetch_llm_provider_view(db_session, provider_name)
         if not llm_provider:
@@ -298,18 +299,28 @@ def get_default_llm(
     long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        llm_provider = fetch_default_provider(db_session)
+        default_model = fetch_default_model(db_session)
 
-    if not llm_provider:
+    if not default_model:
         raise ValueError("No default LLM provider found")
 
-    model_name = llm_provider.default_model_name
+    model_name = default_model.model_name
     if not model_name:
         raise ValueError("No default model name found")
 
+    llm_provider = fetch_existing_llm_provider_by_id(
+        default_model.provider_id, db_session
+    )
+
+    if not llm_provider:
+        raise ValueError(
+            "No LLM provider found with id {}".format(default_model.provider_id)
+        )
+    llm_provider_view = LLMProviderView.from_model(llm_provider)
+
     return llm_from_provider(
         model_name=model_name,
-        llm_provider=llm_provider,
+        llm_provider=llm_provider_view,
         timeout=timeout,
         temperature=temperature,
         additional_headers=additional_headers,

@@ -264,17 +264,14 @@ def upsert_llm_provider(
                 model_provider=llm_provider_upsert_request.provider,
             )
 
-        db_session.execute(
-            insert(ModelConfiguration)
-            .values(
-                llm_provider_id=existing_llm_provider.id,
-                name=model_configuration.name,
-                is_visible=model_configuration.is_visible,
-                max_input_tokens=max_input_tokens,
-                supports_image_input=model_configuration.supports_image_input,
-                display_name=model_configuration.display_name,
-            )
-            .on_conflict_do_nothing()
+        insert_new_model_configuration(
+            db_session=db_session,
+            llm_provider_id=existing_llm_provider.id,
+            model_name=model_configuration.name,
+            is_visible=model_configuration.is_visible,
+            max_input_tokens=max_input_tokens,
+            supports_image_input=model_configuration.supports_image_input or False,
+            display_name=model_configuration.display_name,
         )
 
     # Make sure the relationship table stays up to date
@@ -332,17 +329,14 @@ def sync_model_configurations(
         model_name = model["name"]
         if model_name not in existing_names:
             # Insert new model with is_visible=False (user must explicitly enable)
-            db_session.execute(
-                insert(ModelConfiguration)
-                .values(
-                    llm_provider_id=provider.id,
-                    name=model_name,
-                    is_visible=False,
-                    max_input_tokens=model.get("max_input_tokens"),
-                    supports_image_input=model.get("supports_image_input", False),
-                    display_name=model.get("display_name"),
-                )
-                .on_conflict_do_nothing()
+            insert_new_model_configuration(
+                db_session=db_session,
+                llm_provider_id=provider.id,
+                model_name=model_name,
+                is_visible=False,
+                max_input_tokens=model.get("max_input_tokens"),
+                supports_image_input=model.get("supports_image_input", False),
+                display_name=model.get("display_name"),
             )
             new_count += 1
 
@@ -420,6 +414,12 @@ def fetch_existing_llm_provider(
     return provider_model
 
 
+def fetch_existing_llm_provider_by_id(
+    id: int, db_session: Session
+) -> LLMProviderModel | None:
+    return db_session.scalar(select(LLMProviderModel).where(LLMProviderModel.id == id))
+
+
 def fetch_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> CloudEmbeddingProviderModel | None:
@@ -430,7 +430,7 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_provider(db_session: Session) -> DefaultModel | None:
+def fetch_default_model(db_session: Session) -> DefaultModel | None:
     flow_mapping = db_session.scalar(
         select(FlowMapping).where(
             FlowMapping.flow_type == ModelFlowType.TEXT,
@@ -719,7 +719,7 @@ def sync_auto_mode_models(
 
     # In Auto mode, default model is always set from GitHub config
     # Check if this provider is the set default provider
-    default_model = fetch_default_provider(db_session)
+    default_model = fetch_default_model(db_session)
     if not default_model or default_model.provider_id != provider.id:
         return changes
 
@@ -790,3 +790,48 @@ def set_default_flow_mapping(
         .values(is_default=True)
     )
     db_session.commit()
+
+
+def insert_new_model_configuration(
+    db_session: Session,
+    llm_provider_id: int,
+    model_name: str,
+    is_visible: bool,
+    max_input_tokens: int | None,
+    supports_image_input: bool,
+    display_name: str | None,
+) -> int | None:
+    result = db_session.execute(
+        insert(ModelConfiguration)
+        .values(
+            llm_provider_id=llm_provider_id,
+            name=model_name,
+            is_visible=is_visible,
+            max_input_tokens=max_input_tokens,
+            display_name=display_name,
+        )
+        .on_conflict_do_nothing()
+        .returning(ModelConfiguration.id)
+    )
+
+    model_config_id = result.scalar_one_or_none()
+
+    if not model_config_id:
+        return None
+
+    create_new_flow_mapping(
+        db_session=db_session,
+        model_configuration_id=model_config_id,
+        flow_type=ModelFlowType.TEXT,
+        is_default=False,
+    )
+
+    if supports_image_input:
+        create_new_flow_mapping(
+            db_session=db_session,
+            model_configuration_id=model_config_id,
+            flow_type=ModelFlowType.VISION,
+            is_default=False,
+        )
+
+    return model_config_id
