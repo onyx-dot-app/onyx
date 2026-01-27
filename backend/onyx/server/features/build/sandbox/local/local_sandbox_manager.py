@@ -9,6 +9,7 @@ All database operations should be handled by the caller (SessionManager, Celery 
 
 import mimetypes
 import re
+import subprocess
 import threading
 from collections.abc import Generator
 from pathlib import Path
@@ -86,6 +87,10 @@ class LocalSandboxManager(SandboxManager):
         # Track ACP clients in memory - keyed by (sandbox_id, session_id) tuple
         # Each session within a sandbox has its own ACP client
         self._acp_clients: dict[tuple[UUID, UUID], ACPAgentClient] = {}
+
+        # Track Next.js processes - keyed by (sandbox_id, session_id) tuple
+        # Used for clean shutdown when sessions are deleted
+        self._nextjs_processes: dict[tuple[UUID, UUID], subprocess.Popen[bytes]] = {}
 
         # Validate templates exist (raises RuntimeError if missing)
         self._validate_templates()
@@ -199,8 +204,9 @@ class LocalSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up all resources.
 
-        1. Stop all ACP clients for this sandbox (terminates agent subprocesses)
-        2. Cleanup sandbox directory (this will handle Next.js process cleanup)
+        1. Stop all Next.js processes for this sandbox
+        2. Stop all ACP clients for this sandbox (terminates agent subprocesses)
+        3. Cleanup sandbox directory
 
         Args:
             sandbox_id: The sandbox ID to terminate
@@ -208,6 +214,23 @@ class LocalSandboxManager(SandboxManager):
         Raises:
             RuntimeError: If termination fails
         """
+        # Stop all Next.js processes for this sandbox (keyed by (sandbox_id, session_id))
+        processes_to_stop = [
+            (key, process)
+            for key, process in self._nextjs_processes.items()
+            if key[0] == sandbox_id
+        ]
+        for key, process in processes_to_stop:
+            session_id = key[1]
+            try:
+                self._stop_nextjs_process(process, session_id)
+                del self._nextjs_processes[key]
+            except Exception as e:
+                logger.warning(
+                    f"Failed to stop Next.js for sandbox {sandbox_id}, "
+                    f"session {session_id}: {e}"
+                )
+
         # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
         clients_to_stop = [
             (key, client)
@@ -224,7 +247,7 @@ class LocalSandboxManager(SandboxManager):
                     f"session {key[1]}: {e}"
                 )
 
-        # Cleanup directory (this will handle Next.js process cleanup)
+        # Cleanup directory
         sandbox_path = self._get_sandbox_path(sandbox_id)
         try:
             self._directory_manager.cleanup_sandbox_directory(sandbox_path)
@@ -359,7 +382,11 @@ class LocalSandboxManager(SandboxManager):
             )
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
-            self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            nextjs_process = self._process_manager.start_nextjs_server(
+                web_dir, nextjs_port
+            )
+            # Store process for clean shutdown on session delete
+            self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
             logger.info("Next.js server started successfully")
 
             # Setup venv and AGENTS.md
@@ -400,18 +427,30 @@ class LocalSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace (on session delete).
 
-        1. Stop ACP client for this session
-        2. Remove session directory
+        1. Stop Next.js dev server if running
+        2. Stop ACP client for this session
+        3. Remove session directory
 
         Does NOT terminate the sandbox - other sessions may still be using it.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
+            nextjs_port: Optional port where Next.js server is running (fallback only)
         """
+        # Stop Next.js dev server - try stored process first, then fallback to port lookup
+        process_key = (sandbox_id, session_id)
+        nextjs_process = self._nextjs_processes.pop(process_key, None)
+        if nextjs_process is not None:
+            self._stop_nextjs_process(nextjs_process, session_id)
+        elif nextjs_port is not None:
+            # Fallback: find by port (e.g., if server was restarted)
+            self._stop_nextjs_server_on_port(nextjs_port, session_id)
+
         # Stop ACP client for this session
         client_key = (sandbox_id, session_id)
         client = self._acp_clients.pop(client_key, None)
@@ -428,6 +467,92 @@ class LocalSandboxManager(SandboxManager):
         sandbox_path = self._get_sandbox_path(sandbox_id)
         self._directory_manager.cleanup_session_directory(sandbox_path, str(session_id))
         logger.info(f"Cleaned up session workspace {session_id}")
+
+    def _stop_nextjs_process(
+        self, process: subprocess.Popen[bytes], session_id: UUID
+    ) -> None:
+        """Stop a Next.js dev server process gracefully.
+
+        Args:
+            process: The subprocess.Popen object for the Next.js server
+            session_id: The session ID (for logging)
+        """
+        if process.poll() is not None:
+            # Process already terminated
+            logger.debug(
+                f"Next.js server for session {session_id} already terminated "
+                f"(exit code: {process.returncode})"
+            )
+            return
+
+        try:
+            logger.info(
+                f"Stopping Next.js server (PID {process.pid}) for session {session_id}"
+            )
+            self._process_manager.terminate_process(process.pid)
+            logger.debug(f"Next.js server stopped for session {session_id}")
+        except Exception as e:
+            logger.warning(
+                f"Failed to stop Next.js server for session {session_id}: {e}"
+            )
+
+    def _stop_nextjs_server_on_port(self, port: int, session_id: UUID) -> None:
+        """Stop Next.js dev server running on a specific port (fallback method).
+
+        Finds the process listening on the port and terminates it gracefully.
+        Used when the process object is not available (e.g., after backend restart).
+
+        Args:
+            port: The port number where Next.js is running
+            session_id: The session ID (for logging)
+        """
+        try:
+            import psutil
+
+            for proc in psutil.process_iter(["pid", "name", "connections"]):
+                try:
+                    connections = proc.info.get("connections") or []
+                    for conn in connections:
+                        if conn.laddr.port == port:
+                            logger.info(
+                                f"Stopping Next.js server (PID {proc.pid}) on port {port} "
+                                f"for session {session_id}"
+                            )
+                            self._process_manager.terminate_process(proc.pid)
+                            return
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            logger.debug(f"No process found on port {port} for session {session_id}")
+        except ImportError:
+            # psutil not available, try lsof as fallback
+            try:
+                import subprocess
+
+                result = subprocess.run(
+                    ["lsof", "-ti", f":{port}"],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    pid = int(result.stdout.strip().split("\n")[0])
+                    logger.info(
+                        f"Stopping Next.js server (PID {pid}) on port {port} "
+                        f"for session {session_id}"
+                    )
+                    self._process_manager.terminate_process(pid)
+                else:
+                    logger.debug(
+                        f"No process found on port {port} for session {session_id}"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to find/stop Next.js server on port {port}: {e}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to stop Next.js server on port {port} for session {session_id}: {e}"
+            )
 
     def create_snapshot(
         self,
@@ -521,7 +646,11 @@ class LocalSandboxManager(SandboxManager):
         web_dir = session_path / "outputs" / "web"
         if web_dir.exists():
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
-            self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            nextjs_process = self._process_manager.start_nextjs_server(
+                web_dir, nextjs_port
+            )
+            # Store process for clean shutdown on session delete
+            self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
             logger.info(
                 f"Started NextJS server for session {session_id} on port {nextjs_port}"
             )

@@ -657,6 +657,7 @@ class SessionManager:
                 self._sandbox_manager.cleanup_session_workspace(
                     sandbox_id=sandbox.id,
                     session_id=session_id,
+                    nextjs_port=empty_session.nextjs_port,
                 )
                 logger.info(
                     f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
@@ -954,6 +955,7 @@ class SessionManager:
                 self._sandbox_manager.cleanup_session_workspace(
                     sandbox_id=sandbox.id,
                     session_id=session_id,
+                    nextjs_port=session.nextjs_port,
                 )
                 logger.info(
                     f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"

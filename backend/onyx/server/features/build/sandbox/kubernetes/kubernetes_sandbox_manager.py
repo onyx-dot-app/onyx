@@ -1081,6 +1081,7 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace (on session delete).
 
@@ -1089,6 +1090,8 @@ echo "Session workspace setup complete"
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
+            nextjs_port: Optional port where Next.js server is running (unused in K8s,
+                        we use PID file instead)
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
