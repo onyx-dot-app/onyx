@@ -8,7 +8,7 @@ on:
   pull_request:
     branches:
       - main
-      - "release/**"
+      - 'release/**'
   push:
     tags:
       - "v*.*.*"
@@ -21,13 +21,7 @@ jobs:
     # See https://runs-on.com/runners/linux/
     # Note: Mypy seems quite optimized for x64 compared to arm64.
     # Similarly, mypy is single-threaded and incremental, so 2cpu is sufficient.
-    runs-on:
-      [
-        runs-on,
-        runner=2cpu-linux-x64,
-        "run-id=${{ github.run_id }}-mypy-check",
-        "extras=s3-cache",
-      ]
+    runs-on: [runs-on, runner=2cpu-linux-x64, "run-id=${{ github.run_id }}-mypy-check", "extras=s3-cache"]
     timeout-minutes: 45
 
     steps:
@@ -59,6 +53,7 @@ jobs:
           key: mypy-${{ runner.os }}-${{ github.base_ref || github.ref_name }}-${{ hashFiles('**/*.py', '**/*.pyi', 'backend/pyproject.toml') }}
           restore-keys: |
             mypy-${{ runner.os }}-${{ github.base_ref || github.ref_name }}-
+            mypy-${{ runner.os }}-
 
       - name: Run MyPy
         working-directory: ./backend
