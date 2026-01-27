@@ -309,6 +309,63 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
         assert fallback_llm.config.model_name == default_provider.default_model_name
 
 
+def test_list_llm_provider_basics_excludes_non_public_unrestricted(
+    users: tuple[DATestUser, DATestUser],
+) -> None:
+    """Test that the /llm/provider endpoint correctly excludes non-public providers
+    with no group/persona restrictions.
+
+    This tests the fix for the bug where non-public providers with no restrictions
+    were incorrectly shown to all users instead of being admin-only.
+    """
+    admin_user, basic_user = users
+
+    # Create a public provider (should be visible to all)
+    public_provider = LLMProviderManager.create(
+        name="public-provider",
+        is_public=True,
+        set_as_default=True,
+        user_performing_action=admin_user,
+    )
+
+    # Create a non-public provider with no restrictions (should be admin-only)
+    non_public_provider = LLMProviderManager.create(
+        name="non-public-unrestricted",
+        is_public=False,
+        groups=[],
+        personas=[],
+        set_as_default=False,
+        user_performing_action=admin_user,
+    )
+
+    # Non-admin user calls the /llm/provider endpoint
+    response = requests.get(
+        f"{API_SERVER_URL}/llm/provider",
+        headers=basic_user.headers,
+    )
+    assert response.status_code == 200
+    providers = response.json()
+    provider_names = [p["name"] for p in providers]
+
+    # Public provider should be visible
+    assert public_provider.name in provider_names
+
+    # Non-public provider with no restrictions should NOT be visible to non-admin
+    assert non_public_provider.name not in provider_names
+
+    # Admin user should see both providers
+    admin_response = requests.get(
+        f"{API_SERVER_URL}/llm/provider",
+        headers=admin_user.headers,
+    )
+    assert admin_response.status_code == 200
+    admin_providers = admin_response.json()
+    admin_provider_names = [p["name"] for p in admin_providers]
+
+    assert public_provider.name in admin_provider_names
+    assert non_public_provider.name in admin_provider_names
+
+
 def test_provider_delete_clears_persona_references(reset: None) -> None:
     """Test that deleting a provider automatically clears persona references."""
     admin_user = UserManager.create(name="admin_user")
