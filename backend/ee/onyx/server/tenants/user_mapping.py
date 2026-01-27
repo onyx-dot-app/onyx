@@ -77,37 +77,79 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     If a user already has an active mapping to a different tenant, they receive
     an inactive mapping (invitation) to this tenant. They can accept the
     invitation later to switch tenants.
+
+    Raises:
+        HTTPException: 402 if adding active users would exceed seat limit
     """
+    from fastapi import HTTPException
+
+    from ee.onyx.db.license import check_seat_availability
+    from onyx.db.engine.sql_engine import get_session_with_tenant as get_tenant_session
+
+    unique_emails = set(emails)
+    if not unique_emails:
+        return
+
     with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
         try:
             # Start a transaction
             db_session.begin()
 
-            for email in set(emails):  # dedupe
-                # Check if the user already has a mapping to this tenant
-                existing_mapping = (
-                    db_session.query(UserTenantMapping)
-                    .filter(
-                        UserTenantMapping.email == email,
-                        UserTenantMapping.tenant_id == tenant_id,
-                    )
-                    .with_for_update()
-                    .first()
+            # Batch query 1: Get all existing mappings for these emails to this tenant
+            # Lock rows to prevent concurrent modifications
+            existing_mappings = (
+                db_session.query(UserTenantMapping)
+                .filter(
+                    UserTenantMapping.email.in_(unique_emails),
+                    UserTenantMapping.tenant_id == tenant_id,
                 )
+                .with_for_update()
+                .all()
+            )
+            emails_with_mapping = {m.email for m in existing_mappings}
 
-                # If user already has a mapping to this tenant, skip
-                if existing_mapping:
+            # Batch query 2: Get all active mappings for these emails (any tenant)
+            active_mappings = (
+                db_session.query(UserTenantMapping)
+                .filter(
+                    UserTenantMapping.email.in_(unique_emails),
+                    UserTenantMapping.active == True,  # noqa: E712
+                )
+                .all()
+            )
+            emails_with_active_mapping = {m.email for m in active_mappings}
+
+            # Determine which users will consume a new seat.
+            # Users with active mappings elsewhere get INACTIVE mappings (invitations)
+            # and don't consume seats until they accept. Only users without any active
+            # mapping will get an ACTIVE mapping and consume a seat immediately.
+            emails_consuming_seats = {
+                email
+                for email in unique_emails
+                if email not in emails_with_mapping
+                and email not in emails_with_active_mapping
+            }
+
+            # Check seat availability inside the transaction to prevent race conditions.
+            # Note: ALL users in unique_emails still get added below - this check only
+            # validates we have capacity for users who will consume seats immediately.
+            if emails_consuming_seats:
+                with get_tenant_session(tenant_id=tenant_id) as tenant_session:
+                    result = check_seat_availability(
+                        tenant_session,
+                        seats_needed=len(emails_consuming_seats),
+                        tenant_id=tenant_id,
+                    )
+                    if not result.available:
+                        raise HTTPException(
+                            status_code=402,
+                            detail=result.error_message or "Seat limit exceeded",
+                        )
+
+            # Add mappings for emails that don't already have one to this tenant
+            for email in unique_emails:
+                if email in emails_with_mapping:
                     continue
-
-                # Check if the user already has an active mapping to any tenant
-                has_active_mapping = (
-                    db_session.query(UserTenantMapping)
-                    .filter(
-                        UserTenantMapping.email == email,
-                        UserTenantMapping.active == True,  # noqa: E712
-                    )
-                    .first()
-                )
 
                 # Create mapping: inactive if user belongs to another tenant (invitation),
                 # active otherwise
@@ -115,7 +157,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
                     UserTenantMapping(
                         email=email,
                         tenant_id=tenant_id,
-                        active=not has_active_mapping,
+                        active=email not in emails_with_active_mapping,
                     )
                 )
 
@@ -126,6 +168,9 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
             # Invalidate license cache so used_seats reflects the new count
             invalidate_license_cache(tenant_id)
 
+        except HTTPException:
+            db_session.rollback()
+            raise
         except Exception:
             logger.exception(f"Failed to add users to tenant {tenant_id}")
             db_session.rollback()

@@ -322,7 +322,9 @@ def check_seat_availability(
     current_used = get_used_seats(tenant_id)
     total_seats = metadata.seats
 
-    if current_used + seats_needed > total_seats:
+    # Use > (not >=) to allow filling to exactly 100% capacity
+    would_exceed_limit = current_used + seats_needed > total_seats
+    if would_exceed_limit:
         return SeatAvailabilityResult(
             available=False,
             error_message=f"Seat limit would be exceeded: {current_used} of {total_seats} seats used, "

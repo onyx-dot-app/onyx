@@ -388,20 +388,20 @@ def bulk_invite_users(
             detail=f"Invalid email address: {email} - {str(e)}",
         )
 
-    # Count only truly new users (not already invited or existing)
+    # Count only new users (not already invited or existing) that need seats
     existing_users = {user.email for user in get_all_users(db_session)}
     already_invited = set(get_invited_users())
-    truly_new_emails = [
+    emails_needing_seats = [
         e
         for e in new_invited_emails
         if e not in existing_users and e not in already_invited
     ]
 
     # Check seat availability for new users
-    if truly_new_emails:
+    if emails_needing_seats:
         result = fetch_ee_implementation_or_noop(
             "onyx.db.license", "check_seat_availability", None
-        )(db_session, seats_needed=len(truly_new_emails))
+        )(db_session, seats_needed=len(emails_needing_seats))
         if result is not None and not result.available:
             raise HTTPException(status_code=402, detail=result.error_message)
 
