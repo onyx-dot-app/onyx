@@ -135,6 +135,9 @@ def _try_fallback_tool_extraction(
 # Cycle 6: No more tools available, forced to answer
 MAX_LLM_CYCLES = 6
 
+# Maximum number of agent tool calls allowed per turn to prevent runaway delegation
+MAX_AGENT_TOOL_CALLS_PER_TURN = 5
+
 
 def _build_project_file_citation_mapping(
     project_file_metadata: list[ProjectFileMetadata],
@@ -429,6 +432,7 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
+        agent_tool_calls_count: int = 0  # Track agent tool calls to enforce limit
 
         default_base_system_prompt: str = get_default_base_system_prompt(db_session)
         system_prompt = None
@@ -450,7 +454,11 @@ def run_llm_loop(
                 final_tools = []
             else:
                 tool_choice = ToolChoiceOptions.AUTO
-                final_tools = tools
+                # Filter out AgentTools if we've hit the limit (AgentTools have negative IDs)
+                if agent_tool_calls_count >= MAX_AGENT_TOOL_CALLS_PER_TURN:
+                    final_tools = [t for t in tools if t.id >= 0]
+                else:
+                    final_tools = tools
 
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
@@ -618,6 +626,8 @@ def run_llm_loop(
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
+                # Pass the current persona's ID to prevent recursive agent calls (A → B → A)
+                agent_call_stack=[persona.id] if persona else [],
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -653,6 +663,10 @@ def run_llm_loop(
                     raise ValueError(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
                     )
+
+                # Track agent tool calls (AgentTools have negative IDs)
+                if tool.id < 0:
+                    agent_tool_calls_count += 1
 
                 # Extract search_docs if this is a search tool response
                 search_docs = None

@@ -399,6 +399,26 @@ def translate_assistant_message_to_packets(
             research_agent_count = 0
             turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
+                # Handle AgentTool calls first (they have negative tool_ids and don't exist in DB)
+                if tool_call.tool_id < 0:
+                    # This is an AgentTool - reconstruct packets from saved data
+                    task = tool_call.tool_call_arguments.get("task", "")
+                    agent_name = tool_call.tool_name.replace("call_", "").replace("_", " ").title()
+                    turn_tool_packets.extend(
+                        create_custom_tool_packets(
+                            tool_name=f"Call {agent_name}",
+                            response_type="agent_result",
+                            turn_index=turn_num,
+                            tab_index=tool_call.tab_index,
+                            data={
+                                "task": task,
+                                "agent": agent_name,
+                                "answer": tool_call.tool_call_response,
+                            },
+                        )
+                    )
+                    continue
+
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)

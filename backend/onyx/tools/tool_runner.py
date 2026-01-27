@@ -18,6 +18,7 @@ from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
+from onyx.tools.models import AgentToolOverrideKwargs
 from onyx.tools.models import WebSearchToolOverrideKwargs
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
@@ -231,6 +232,8 @@ def run_tool_calls(
     skip_search_query_expansion: bool = False,
     # A map of url -> summary for passing web results to open url tool
     url_snippet_map: dict[str, str] = {},
+    # For AgentTool: track the call stack to prevent infinite loops
+    agent_call_stack: list[int] | None = None,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -367,6 +370,18 @@ def run_tool_calls(
 
         elif isinstance(tool, MemoryTool):
             raise NotImplementedError("MemoryTool is not implemented")
+
+        else:
+            # Check if this is an AgentTool (lazy import to avoid circular dependency)
+            from onyx.tools.tool_implementations.agent.agent_tool import AgentTool
+
+            if isinstance(tool, AgentTool):
+                override_kwargs = AgentToolOverrideKwargs(
+                    agent_call_stack=agent_call_stack or [],
+                    starting_citation_num=starting_citation_num,
+                    citation_mapping=citation_mapping,
+                )
+                starting_citation_num += 100
 
         tool_run_params.append((tool, tool_call, override_kwargs))
 

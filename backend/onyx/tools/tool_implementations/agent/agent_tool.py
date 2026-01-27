@@ -19,7 +19,7 @@ from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.factory import get_llm_for_persona
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CustomToolStart, Packet
+from onyx.server.query_and_chat.streaming_models import CustomToolDelta, CustomToolStart, Packet
 from onyx.tools.interface import Tool, ToolResponse
 from onyx.tools.models import AgentCallResult, AgentToolOverrideKwargs, SearchToolUsage, ToolCallException
 from onyx.tools.tool_constructor import construct_tools
@@ -136,6 +136,18 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
                 llm_facing_message="Please provide a task to delegate"
             )
 
+        # Emit the task being delegated so UI can show it
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=CustomToolDelta(
+                    tool_name=self.display_name,
+                    response_type="task",
+                    data={"task": task, "agent": self.target_persona.name},
+                ),
+            )
+        )
+
         # Run sub-agent
         result = self._run_sub_agent(
             task=task,
@@ -143,6 +155,18 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
             agent_call_stack=override_kwargs.agent_call_stack + [self.target_persona.id],
             starting_citation_num=override_kwargs.starting_citation_num,
             parent_citation_mapping=override_kwargs.citation_mapping,
+        )
+
+        # Emit the result so UI can show it
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=CustomToolDelta(
+                    tool_name=self.display_name,
+                    response_type="result",
+                    data={"answer": result.answer, "agent": self.target_persona.name},
+                ),
+            )
         )
 
         return ToolResponse(
@@ -283,6 +307,8 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
                     citation_mapping={},
                     next_citation_num=next_citation_num,
                     max_concurrent_tools=3,
+                    # Pass the current agent_call_stack to prevent infinite loops
+                    agent_call_stack=agent_call_stack,
                 )
 
                 # Add to history
