@@ -1516,7 +1516,7 @@ class SessionManager:
             raise ValueError("Only markdown (.md) files can be exported as DOCX")
 
         import tempfile
-        import pypandoc
+        import pypandoc  # type: ignore
 
         md_text = content_bytes.decode("utf-8")
 
