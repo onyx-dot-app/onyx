@@ -300,7 +300,7 @@ function BuildSessionButton({
           ) : isDeleting ? (
             <DeletingMessage />
           ) : (
-            "Are you sure you want to delete this build? This action cannot be undone."
+            "Are you sure you want to delete this craft? This action cannot be undone."
           )}
         </ConfirmationModalLayout>
       )}
