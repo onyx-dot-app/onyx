@@ -237,6 +237,8 @@ class ArtifactType(str, PyEnum):
     IMAGE = "image"
     MARKDOWN = "markdown"
     EXCEL = "excel"
+
+
 class HierarchyNodeType(str, PyEnum):
     """Types of hierarchy nodes across different sources"""
 
