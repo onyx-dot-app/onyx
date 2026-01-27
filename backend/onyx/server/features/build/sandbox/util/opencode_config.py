@@ -100,7 +100,11 @@ def build_opencode_config(
         },
         "edit": "allow",
         "write": "allow",
-        "read": "allow",
+        "read": {
+            "opencode.json": "deny",  # Prevent reading config file with API keys
+            "**/opencode.json": "deny",  # Deny in any subdirectory as well
+            "*": "allow",  # Allow reading other files
+        },
         "grep": "allow",
         "glob": "allow",
         "list": "allow",
