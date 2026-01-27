@@ -1,6 +1,24 @@
 """Middleware to enforce license status application-wide.
 
-License enforcement has three states for self-hosted deployments:
+IMPORTANT: Mutual Exclusivity with ENTERPRISE_EDITION_ENABLED
+============================================================
+This middleware is controlled by LICENSE_ENFORCEMENT_ENABLED env var.
+It works alongside the legacy ENTERPRISE_EDITION_ENABLED system:
+
+- LICENSE_ENFORCEMENT_ENABLED=false (default):
+  Middleware is disabled. EE features are controlled solely by
+  ENTERPRISE_EDITION_ENABLED. This preserves legacy behavior.
+
+- LICENSE_ENFORCEMENT_ENABLED=true:
+  Middleware actively enforces license status. EE features require
+  a valid license, regardless of ENTERPRISE_EDITION_ENABLED.
+
+Eventually, ENTERPRISE_EDITION_ENABLED will be removed and license
+enforcement will be the only mechanism for gating EE features.
+
+License Enforcement States (when enabled)
+=========================================
+For self-hosted deployments, there are three states:
 
 1. No license (never subscribed):
    - Allow community features (basic connectors, search, chat)
