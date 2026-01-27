@@ -201,6 +201,64 @@ def create_custom_tool_packets(
     return packets
 
 
+def create_agent_tool_packets(
+    tool_name: str,
+    agent_name: str,
+    task: str,
+    answer: str,
+    turn_index: int,
+    tab_index: int = 0,
+) -> list[Packet]:
+    """Create packets for agent tool (sub-agent delegation) calls.
+    This creates the packet structure that AgentToolRenderer expects:
+    - AgentToolStart with tool name and agent name
+    - AgentToolTask with the delegated task
+    - AgentToolResult with the answer
+    - SectionEnd to mark completion
+    """
+    from onyx.server.query_and_chat.streaming_models import (
+        AgentToolStart,
+        AgentToolTask,
+        AgentToolResult,
+    )
+
+    packets: list[Packet] = []
+
+    # Emit agent tool start
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=AgentToolStart(tool_name=tool_name, agent_name=agent_name),
+        )
+    )
+
+    # Emit the task
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=AgentToolTask(task=task, agent_name=agent_name),
+        )
+    )
+
+    # Emit the result
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=AgentToolResult(answer=answer, agent_name=agent_name),
+        )
+    )
+
+    # Mark completion
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=SectionEnd(),
+        )
+    )
+
+    return packets
+
+
 def create_research_agent_packets(
     research_task: str,
     report_content: str | None,
@@ -403,18 +461,18 @@ def translate_assistant_message_to_packets(
                 if tool_call.tool_id < 0:
                     # This is an AgentTool - reconstruct packets from saved data
                     task = tool_call.tool_call_arguments.get("task", "")
-                    agent_name = tool_call.tool_name.replace("call_", "").replace("_", " ").title()
+                    # Get agent_name from tool_call_arguments (stored during save)
+                    # Fallback to "Agent" if not available (for backwards compatibility)
+                    agent_name = tool_call.tool_call_arguments.get("_agent_name", "Agent")
+                    tool_name = tool_call.tool_call_arguments.get("_tool_name", f"Call {agent_name}")
                     turn_tool_packets.extend(
-                        create_custom_tool_packets(
-                            tool_name=f"Call {agent_name}",
-                            response_type="agent_result",
+                        create_agent_tool_packets(
+                            tool_name=tool_name,
+                            agent_name=agent_name,
+                            task=task,
+                            answer=tool_call.tool_call_response or "",
                             turn_index=turn_num,
                             tab_index=tool_call.tab_index,
-                            data={
-                                "task": task,
-                                "agent": agent_name,
-                                "answer": tool_call.tool_call_response,
-                            },
                         )
                     )
                     continue

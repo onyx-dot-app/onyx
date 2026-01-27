@@ -702,6 +702,20 @@ def run_llm_loop(
                     else tool_response.llm_facing_response
                 )
 
+                # For AgentTools (negative tool_id), include tool_name and agent_name
+                # in arguments so they can be retrieved when loading chat history
+                tool_call_arguments = tool_call.tool_args.copy()
+                if tool.id < 0:
+                    # AgentTool - store the display name and agent name for UI replay
+                    tool_call_arguments["_tool_name"] = tool.display_name
+                    tool_call_arguments["_agent_name"] = getattr(
+                        tool, "target_persona", None
+                    )
+                    if tool_call_arguments["_agent_name"]:
+                        tool_call_arguments["_agent_name"] = tool_call_arguments[
+                            "_agent_name"
+                        ].name
+
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
                     turn_index=llm_cycle_count + reasoning_cycles,
@@ -710,7 +724,7 @@ def run_llm_loop(
                     tool_call_id=tool_call.tool_call_id,
                     tool_id=tool.id,
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
-                    tool_call_arguments=tool_call.tool_args,
+                    tool_call_arguments=tool_call_arguments,
                     tool_call_response=saved_response,
                     search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,

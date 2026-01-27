@@ -32,6 +32,7 @@ import {
 import IconButton from "@/refresh-components/buttons/IconButton";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
+import CallableAgentsPopover from "@/refresh-components/popovers/CallableAgentsPopover";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   getIconForAction,
@@ -112,6 +113,10 @@ export interface ChatInputBarProps {
   // assistants
   selectedAssistant: MinimalPersonaSnapshot | undefined;
 
+  // callable agents (sub-agents)
+  runtimeCallablePersonaIds: number[];
+  onRuntimeCallablePersonaIdsChange: (ids: number[]) => void;
+
   toggleDocumentSidebar: () => void;
   handleFileUpload: (files: File[]) => void;
   filterManager: FilterManager;
@@ -138,6 +143,9 @@ const ChatInputBar = React.memo(
     availableContextTokens,
     // assistants
     selectedAssistant,
+    // callable agents
+    runtimeCallablePersonaIds,
+    onRuntimeCallablePersonaIdsChange,
 
     handleFileUpload,
     llmManager,
@@ -626,6 +634,17 @@ const ChatInputBar = React.memo(
                   selectedAssistant={selectedAssistant}
                   filterManager={filterManager}
                   availableSources={memoizedAvailableSources}
+                  disabled={disabled}
+                />
+              )}
+              {selectedAssistant && (
+                <CallableAgentsPopover
+                  currentPersonaId={selectedAssistant.id}
+                  preConfiguredCallableIds={
+                    selectedAssistant.callable_persona_ids ?? []
+                  }
+                  runtimeSelectedIds={runtimeCallablePersonaIds}
+                  onRuntimeSelectionChange={onRuntimeCallablePersonaIdsChange}
                   disabled={disabled}
                 />
               )}

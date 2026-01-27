@@ -30,6 +30,9 @@ export interface MinimalPersonaSnapshot {
 
   labels?: PersonaLabel[];
   owner: MinimalUserSnapshot | null;
+
+  // IDs of personas that this persona can call as sub-agents
+  callable_persona_ids: number[];
 }
 
 export interface Persona extends MinimalPersonaSnapshot {

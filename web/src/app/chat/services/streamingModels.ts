@@ -49,6 +49,11 @@ export enum PacketType {
   INTERMEDIATE_REPORT_START = "intermediate_report_start",
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
+
+  // Agent Tool (sub-agent delegation) packets
+  AGENT_TOOL_START = "agent_tool_start",
+  AGENT_TOOL_TASK = "agent_tool_task",
+  AGENT_TOOL_RESULT = "agent_tool_result",
 }
 
 // Basic Message Packets
@@ -228,6 +233,25 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: OnyxDocument[] | null;
 }
 
+// Agent Tool (sub-agent delegation) packets
+export interface AgentToolStart extends BaseObj {
+  type: "agent_tool_start";
+  tool_name: string;
+  agent_name: string;
+}
+
+export interface AgentToolTask extends BaseObj {
+  type: "agent_tool_task";
+  task: string;
+  agent_name: string;
+}
+
+export interface AgentToolResult extends BaseObj {
+  type: "agent_tool_result";
+  answer: string;
+  agent_name: string;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
@@ -298,6 +322,13 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
+export type AgentToolObj =
+  | AgentToolStart
+  | AgentToolTask
+  | AgentToolResult
+  | SectionEnd
+  | PacketError;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
   | ChatObj
@@ -309,6 +340,7 @@ export type ObjTypes =
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
+  | AgentToolObj
   | PacketErrorObj
   | CitationObj;
 
@@ -389,4 +421,9 @@ export interface DeepResearchPlanPacket {
 export interface ResearchAgentPacket {
   placement: Placement;
   obj: ResearchAgentObj;
+}
+
+export interface AgentToolPacket {
+  placement: Placement;
+  obj: AgentToolObj;
 }

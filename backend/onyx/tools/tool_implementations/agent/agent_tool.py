@@ -19,7 +19,12 @@ from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.factory import get_llm_for_persona
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta, CustomToolStart, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    AgentToolResult,
+    AgentToolStart,
+    AgentToolTask,
+    Packet,
+)
 from onyx.tools.interface import Tool, ToolResponse
 from onyx.tools.models import AgentCallResult, AgentToolOverrideKwargs, SearchToolUsage, ToolCallException
 from onyx.tools.tool_constructor import construct_tools
@@ -100,7 +105,10 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
         self.emitter.emit(
             Packet(
                 placement=placement,
-                obj=CustomToolStart(tool_name=self.display_name),
+                obj=AgentToolStart(
+                    tool_name=self.display_name,
+                    agent_name=self.target_persona.name,
+                ),
             )
         )
 
@@ -140,10 +148,9 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
         self.emitter.emit(
             Packet(
                 placement=placement,
-                obj=CustomToolDelta(
-                    tool_name=self.display_name,
-                    response_type="task",
-                    data={"task": task, "agent": self.target_persona.name},
+                obj=AgentToolTask(
+                    task=task,
+                    agent_name=self.target_persona.name,
                 ),
             )
         )
@@ -161,10 +168,9 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
         self.emitter.emit(
             Packet(
                 placement=placement,
-                obj=CustomToolDelta(
-                    tool_name=self.display_name,
-                    response_type="result",
-                    data={"answer": result.answer, "agent": self.target_persona.name},
+                obj=AgentToolResult(
+                    answer=result.answer,
+                    agent_name=self.target_persona.name,
                 ),
             )
         )

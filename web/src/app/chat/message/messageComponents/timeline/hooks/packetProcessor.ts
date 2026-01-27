@@ -10,6 +10,7 @@ import {
   Stop,
   SearchToolStart,
   CustomToolStart,
+  AgentToolStart,
 } from "@/app/chat/services/streamingModels";
 import { CitationMap } from "@/app/chat/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -139,6 +140,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
+  PacketType.AGENT_TOOL_START,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
@@ -171,6 +173,10 @@ function getToolNameFromPacket(packet: Packet): string | null {
       return "Generate plan";
     case PacketType.RESEARCH_AGENT_START:
       return "Research agent";
+    case PacketType.AGENT_TOOL_START: {
+      const agentPacket = packet.obj as AgentToolStart;
+      return agentPacket.tool_name || `Call ${agentPacket.agent_name}`;
+    }
     case PacketType.REASONING_START:
       return "Thinking";
     default:

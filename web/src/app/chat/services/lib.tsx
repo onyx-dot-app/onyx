@@ -120,6 +120,8 @@ export interface SendMessageParams {
   enabledToolIds?: number[];
   // Single forced tool ID (new API uses singular, not array)
   forcedToolId?: number | null;
+  // Additional persona IDs to make callable as sub-agents at runtime
+  runtimeCallablePersonaIds?: number[];
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
@@ -138,6 +140,7 @@ export async function* sendMessage({
   deepResearch,
   enabledToolIds,
   forcedToolId,
+  runtimeCallablePersonaIds,
   modelProvider,
   modelVersion,
   temperature,
@@ -153,6 +156,8 @@ export async function* sendMessage({
     deep_research: deepResearch ?? false,
     allowed_tool_ids: enabledToolIds,
     forced_tool_id: forcedToolId ?? null,
+    runtime_callable_persona_ids:
+      runtimeCallablePersonaIds?.length ? runtimeCallablePersonaIds : null,
     llm_override:
       temperature || modelVersion
         ? {
@@ -300,6 +305,11 @@ export function processRawChatHistory(
 ): Map<number, Message> {
   const messages: Map<number, Message> = new Map();
   const parentMessageChildrenMap: Map<number, number[]> = new Map();
+
+  // Handle undefined/null rawMessages gracefully
+  if (!rawMessages) {
+    return messages;
+  }
 
   let assistantMessageInd = 0;
 
