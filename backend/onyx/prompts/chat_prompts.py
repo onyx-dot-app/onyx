@@ -74,6 +74,13 @@ Do not acknowledge this hint/message in your response.
 """.strip()
 
 
+SUB_AGENT_ORCHESTRATOR_REMINDER = """
+You have specialized sub-agents available: {sub_agent_names}. As an orchestrator, delegate relevant sub-tasks to these agents when appropriate, then synthesize their responses into a cohesive answer for the user.
+
+Do not acknowledge this hint in your response.
+""".strip()
+
+
 # Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
 CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 

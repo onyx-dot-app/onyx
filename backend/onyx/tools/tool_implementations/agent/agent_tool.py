@@ -34,6 +34,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 AGENT_CYCLE_CAP = 3
+# Maximum agent tool calls within a sub-agent to prevent runaway nested delegation
+MAX_SUB_AGENT_TOOL_CALLS = 2
 
 
 class AgentTool(Tool[AgentToolOverrideKwargs | None]):
@@ -130,7 +132,7 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
                 llm_facing_message=f"Cannot call {self.target_persona.name} recursively"
             )
 
-        if len(override_kwargs.agent_call_stack) >= override_kwargs.max_recursion_depth:
+        if len(override_kwargs.agent_call_stack) > override_kwargs.max_recursion_depth:
             raise ToolCallException(
                 message=f"Max depth {override_kwargs.max_recursion_depth} exceeded",
                 llm_facing_message=f"Maximum delegation depth reached"
@@ -250,9 +252,19 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
         # Run LLM cycles
         final_answer = ""
         next_citation_num = starting_citation_num
+        sub_agent_tool_calls_count = 0
         for cycle in range(AGENT_CYCLE_CAP + 1):
             out_of_cycles = cycle == AGENT_CYCLE_CAP
-            cycle_tools = [] if out_of_cycles else current_tools
+            
+            # Determine available tools for this cycle
+            if out_of_cycles:
+                # Last cycle - no tools, must answer
+                cycle_tools = []
+            elif sub_agent_tool_calls_count >= MAX_SUB_AGENT_TOOL_CALLS:
+                # Hit agent tool limit - filter out agent tools
+                cycle_tools = [t for t in current_tools if not isinstance(t, AgentTool)]
+            else:
+                cycle_tools = current_tools
 
             # Build reminder
             reminder_text = build_reminder_message(
@@ -304,6 +316,12 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
 
             # Execute tool calls
             if llm_result.tool_calls:
+                # Track agent tool calls (AgentTools have negative IDs or are AgentTool instances)
+                for tc in llm_result.tool_calls:
+                    tool = next((t for t in cycle_tools if t.name == tc.tool_name), None)
+                    if tool and isinstance(tool, AgentTool):
+                        sub_agent_tool_calls_count += 1
+                
                 tool_call_results = run_tool_calls(
                     tool_calls=llm_result.tool_calls,
                     tools=cycle_tools,

@@ -438,6 +438,14 @@ def run_llm_loop(
         system_prompt = None
         custom_agent_prompt_msg = None
 
+        # Extract sub-agent names for orchestrator reminder (AgentTools have negative IDs)
+        # We check by attribute rather than isinstance to avoid circular import with agent_tool.py
+        sub_agent_names: list[str] = [
+            t.target_persona.name  # type: ignore[attr-defined]
+            for t in tools
+            if t.id < 0 and hasattr(t, "target_persona")
+        ]
+
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
             out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
@@ -535,6 +543,7 @@ def run_llm_loop(
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
                     is_last_cycle=out_of_cycles,
+                    sub_agent_names=sub_agent_names if sub_agent_names else None,
                 )
 
             reminder_msg = (
