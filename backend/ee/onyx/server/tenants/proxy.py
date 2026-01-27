@@ -1,6 +1,6 @@
 """Proxy endpoints for billing operations.
 
-These endpoints run on the CLOUD DATA PLANE (api.onyx.app) and serve as a proxy
+These endpoints run on the CLOUD DATA PLANE (cloud.onyx.app) and serve as a proxy
 for self-hosted instances to reach the control plane.
 
 Flow:
@@ -53,6 +53,32 @@ def _check_license_enforcement_enabled() -> None:
         )
 
 
+def _extract_license_from_header(
+    authorization: str | None,
+    required: bool = True,
+) -> str | None:
+    """Extract license data from Authorization header.
+
+    Args:
+        authorization: The Authorization header value
+        required: If True, raise 401 when header is missing/invalid
+
+    Returns:
+        License data string, or None if not required and missing
+
+    Raises:
+        HTTPException: 401 if required and header is missing/invalid
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        if required:
+            raise HTTPException(
+                status_code=401, detail="Missing or invalid authorization header"
+            )
+        return None
+
+    return authorization.split(" ", 1)[1]
+
+
 def verify_license_auth(
     license_data: str,
     allow_expired: bool = False,
@@ -89,12 +115,9 @@ async def get_license_payload(
 
     Used for endpoints that require an active subscription.
     """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401, detail="Missing or invalid authorization header"
-        )
-
-    license_data = authorization.split(" ", 1)[1]
+    license_data = _extract_license_from_header(authorization, required=True)
+    # license_data is guaranteed non-None when required=True
+    assert license_data is not None
     return verify_license_auth(license_data, allow_expired=False)
 
 
@@ -105,12 +128,9 @@ async def get_license_payload_allow_expired(
 
     Used for endpoints needed to fix payment issues (portal, renewal checkout).
     """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401, detail="Missing or invalid authorization header"
-        )
-
-    license_data = authorization.split(" ", 1)[1]
+    license_data = _extract_license_from_header(authorization, required=True)
+    # license_data is guaranteed non-None when required=True
+    assert license_data is not None
     return verify_license_auth(license_data, allow_expired=True)
 
 
@@ -124,10 +144,10 @@ async def get_optional_license_payload(
     """
     _check_license_enforcement_enabled()
 
-    if not authorization or not authorization.startswith("Bearer "):
+    license_data = _extract_license_from_header(authorization, required=False)
+    if license_data is None:
         return None
 
-    license_data = authorization.split(" ", 1)[1]
     return verify_license_auth(license_data, allow_expired=True)
 
 
@@ -283,8 +303,15 @@ async def proxy_claim_license(
         body={"session_id": request_body.session_id},
     )
 
-    tenant_id = result["tenant_id"]
-    license_data = result["license"]
+    tenant_id = result.get("tenant_id")
+    license_data = result.get("license")
+
+    if not tenant_id or not license_data:
+        logger.error(f"Control plane returned incomplete claim response: {result}")
+        raise HTTPException(
+            status_code=502,
+            detail="Control plane returned incomplete license data",
+        )
 
     return ClaimLicenseResponse(
         tenant_id=tenant_id,
@@ -381,7 +408,14 @@ async def proxy_license_fetch(
     result = await forward_to_control_plane("GET", f"/license/{tenant_id}")
 
     # Auto-store the refreshed license
-    license_data = result["license"]
+    license_data = result.get("license")
+    if not license_data:
+        logger.error(f"Control plane returned incomplete license response: {result}")
+        raise HTTPException(
+            status_code=502,
+            detail="Control plane returned incomplete license data",
+        )
+
     fetch_and_store_license(tenant_id, license_data)
 
     return LicenseFetchResponse(license=license_data, tenant_id=tenant_id)

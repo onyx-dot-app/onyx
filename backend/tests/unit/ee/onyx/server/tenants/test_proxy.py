@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import PlanType
 from ee.onyx.server.tenants.proxy import _check_license_enforcement_enabled
+from ee.onyx.server.tenants.proxy import _extract_license_from_header
 from ee.onyx.server.tenants.proxy import forward_to_control_plane
 from ee.onyx.server.tenants.proxy import get_license_payload
 from ee.onyx.server.tenants.proxy import get_license_payload_allow_expired
@@ -65,6 +66,48 @@ class TestLicenseEnforcementCheck:
         """Test that no exception is raised when LICENSE_ENFORCEMENT_ENABLED=True."""
         with patch("ee.onyx.server.tenants.proxy.LICENSE_ENFORCEMENT_ENABLED", True):
             _check_license_enforcement_enabled()  # Should not raise
+
+
+class TestExtractLicenseFromHeader:
+    """Tests for _extract_license_from_header helper function."""
+
+    def test_valid_bearer_token(self) -> None:
+        """Test extraction of valid Bearer token."""
+        result = _extract_license_from_header("Bearer license_data_here", required=True)
+        assert result == "license_data_here"
+
+    def test_bearer_with_spaces_in_token(self) -> None:
+        """Test that token with spaces is handled correctly (splits on first space only)."""
+        result = _extract_license_from_header("Bearer token with spaces", required=True)
+        assert result == "token with spaces"
+
+    def test_missing_header_required(self) -> None:
+        """Test that missing header raises 401 when required."""
+        with pytest.raises(HTTPException) as exc_info:
+            _extract_license_from_header(None, required=True)
+        assert exc_info.value.status_code == 401
+
+    def test_missing_header_optional(self) -> None:
+        """Test that missing header returns None when not required."""
+        result = _extract_license_from_header(None, required=False)
+        assert result is None
+
+    def test_non_bearer_required(self) -> None:
+        """Test that non-Bearer auth raises 401 when required."""
+        with pytest.raises(HTTPException) as exc_info:
+            _extract_license_from_header("Basic sometoken", required=True)
+        assert exc_info.value.status_code == 401
+
+    def test_non_bearer_optional(self) -> None:
+        """Test that non-Bearer auth returns None when not required."""
+        result = _extract_license_from_header("Basic sometoken", required=False)
+        assert result is None
+
+    def test_empty_string_required(self) -> None:
+        """Test that empty string raises 401 when required."""
+        with pytest.raises(HTTPException) as exc_info:
+            _extract_license_from_header("", required=True)
+        assert exc_info.value.status_code == 401
 
 
 class TestVerifyLicenseAuth:
