@@ -16,6 +16,7 @@ Auth levels by endpoint:
 - /create-customer-portal-session: Expired license OK (need portal to fix payment)
 - /billing-information: Valid license required
 - /license/{tenant_id}: Valid license required
+- /seats/update: Valid license required
 """
 
 from typing import Literal
@@ -30,6 +31,8 @@ from pydantic import BaseModel
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import update_license_cache
 from ee.onyx.db.license import upsert_license
+from ee.onyx.server.billing.models import SeatUpdateRequest
+from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.tenants.access import generate_data_plane_token
@@ -448,17 +451,6 @@ async def proxy_license_fetch(
     fetch_and_store_license(tenant_id, license_data)
 
     return LicenseFetchResponse(license=license_data, tenant_id=tenant_id)
-
-
-class SeatUpdateRequest(BaseModel):
-    new_seat_count: int
-
-
-class SeatUpdateResponse(BaseModel):
-    success: bool
-    current_seats: int
-    used_seats: int
-    message: str | None = None
 
 
 @router.post("/seats/update")

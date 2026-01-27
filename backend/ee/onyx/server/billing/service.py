@@ -10,6 +10,8 @@ based on deployment type:
   Flow: Cloud backend → Control plane
 """
 
+from typing import Literal
+
 import httpx
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
@@ -24,6 +26,9 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+# HTTP request timeout for billing service calls
+_REQUEST_TIMEOUT = 30.0
 
 
 class BillingServiceError(Exception):
@@ -72,6 +77,61 @@ def _get_headers(license_data: str | None) -> dict[str, str]:
     return _get_proxy_headers(license_data)
 
 
+async def _make_billing_request(
+    method: Literal["GET", "POST"],
+    path: str,
+    license_data: str | None = None,
+    body: dict | None = None,
+    params: dict | None = None,
+    error_message: str = "Billing service request failed",
+) -> dict:
+    """Make an HTTP request to the billing service.
+
+    Consolidates the common HTTP request pattern used by all billing operations.
+
+    Args:
+        method: HTTP method (GET or POST)
+        path: URL path (appended to base URL)
+        license_data: License for authentication (self-hosted)
+        body: Request body for POST requests
+        params: Query parameters for GET requests
+        error_message: Default error message if request fails
+
+    Returns:
+        Response JSON as dict
+
+    Raises:
+        BillingServiceError: If request fails
+    """
+    base_url = _get_base_url()
+    url = f"{base_url}{path}"
+    headers = _get_headers(license_data)
+
+    try:
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+            if method == "GET":
+                response = await client.get(url, headers=headers, params=params)
+            else:
+                response = await client.post(url, headers=headers, json=body)
+
+            response.raise_for_status()
+            return response.json()
+
+    except httpx.HTTPStatusError as e:
+        detail = error_message
+        try:
+            error_data = e.response.json()
+            detail = error_data.get("detail", detail)
+        except Exception:
+            pass
+        logger.error(f"{error_message}: {e.response.status_code} - {detail}")
+        raise BillingServiceError(detail, e.response.status_code)
+
+    except httpx.RequestError:
+        logger.exception("Failed to connect to billing service")
+        raise BillingServiceError("Failed to connect to billing service", 502)
+
+
 async def create_checkout_session(
     billing_period: str = "monthly",
     email: str | None = None,
@@ -91,10 +151,6 @@ async def create_checkout_session(
     Returns:
         CreateCheckoutSessionResponse with checkout URL
     """
-    base_url = _get_base_url()
-    url = f"{base_url}/create-checkout-session"
-    headers = _get_headers(license_data)
-
     body: dict = {"billing_period": billing_period}
     if email:
         body["email"] = email
@@ -103,28 +159,14 @@ async def create_checkout_session(
     if tenant_id and MULTI_TENANT:
         body["tenant_id"] = tenant_id
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=body)
-            response.raise_for_status()
-            data = response.json()
-            return CreateCheckoutSessionResponse(url=data["url"])
-
-    except httpx.HTTPStatusError as e:
-        detail = "Failed to create checkout session"
-        try:
-            error_data = e.response.json()
-            detail = error_data.get("detail", detail)
-        except Exception:
-            pass
-        logger.error(
-            f"Checkout session creation failed: {e.response.status_code} - {detail}"
-        )
-        raise BillingServiceError(detail, e.response.status_code)
-
-    except httpx.RequestError:
-        logger.exception("Failed to connect to billing service")
-        raise BillingServiceError("Failed to connect to billing service", 502)
+    data = await _make_billing_request(
+        method="POST",
+        path="/create-checkout-session",
+        license_data=license_data,
+        body=body,
+        error_message="Failed to create checkout session",
+    )
+    return CreateCheckoutSessionResponse(url=data["url"])
 
 
 async def create_customer_portal_session(
@@ -142,38 +184,20 @@ async def create_customer_portal_session(
     Returns:
         CreateCustomerPortalSessionResponse with portal URL
     """
-    base_url = _get_base_url()
-    url = f"{base_url}/create-customer-portal-session"
-    headers = _get_headers(license_data)
-
     body: dict = {}
     if return_url:
         body["return_url"] = return_url
     if tenant_id and MULTI_TENANT:
         body["tenant_id"] = tenant_id
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=body)
-            response.raise_for_status()
-            data = response.json()
-            return CreateCustomerPortalSessionResponse(url=data["url"])
-
-    except httpx.HTTPStatusError as e:
-        detail = "Failed to create customer portal session"
-        try:
-            error_data = e.response.json()
-            detail = error_data.get("detail", detail)
-        except Exception:
-            pass
-        logger.error(
-            f"Portal session creation failed: {e.response.status_code} - {detail}"
-        )
-        raise BillingServiceError(detail, e.response.status_code)
-
-    except httpx.RequestError:
-        logger.exception("Failed to connect to billing service")
-        raise BillingServiceError("Failed to connect to billing service", 502)
+    data = await _make_billing_request(
+        method="POST",
+        path="/create-customer-portal-session",
+        license_data=license_data,
+        body=body,
+        error_message="Failed to create customer portal session",
+    )
+    return CreateCustomerPortalSessionResponse(url=data["url"])
 
 
 async def get_billing_information(
@@ -189,39 +213,23 @@ async def get_billing_information(
     Returns:
         BillingInformationResponse or SubscriptionStatusResponse if no subscription
     """
-    base_url = _get_base_url()
-    url = f"{base_url}/billing-information"
-    headers = _get_headers(license_data)
-
     params = {}
     if tenant_id and MULTI_TENANT:
         params["tenant_id"] = tenant_id
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, headers=headers, params=params or None)
-            response.raise_for_status()
-            data = response.json()
+    data = await _make_billing_request(
+        method="GET",
+        path="/billing-information",
+        license_data=license_data,
+        params=params or None,
+        error_message="Failed to fetch billing information",
+    )
 
-            # Check if no subscription
-            if isinstance(data, dict) and data.get("subscribed") is False:
-                return SubscriptionStatusResponse(subscribed=False)
+    # Check if no subscription
+    if isinstance(data, dict) and data.get("subscribed") is False:
+        return SubscriptionStatusResponse(subscribed=False)
 
-            return BillingInformationResponse(**data)
-
-    except httpx.HTTPStatusError as e:
-        detail = "Failed to fetch billing information"
-        try:
-            error_data = e.response.json()
-            detail = error_data.get("detail", detail)
-        except Exception:
-            pass
-        logger.error(f"Billing info fetch failed: {e.response.status_code} - {detail}")
-        raise BillingServiceError(detail, e.response.status_code)
-
-    except httpx.RequestError:
-        logger.exception("Failed to connect to billing service")
-        raise BillingServiceError("Failed to connect to billing service", 502)
+    return BillingInformationResponse(**data)
 
 
 async def update_seat_count(
@@ -239,37 +247,21 @@ async def update_seat_count(
     Returns:
         SeatUpdateResponse with updated seat information
     """
-    base_url = _get_base_url()
-    url = f"{base_url}/seats/update"
-    headers = _get_headers(license_data)
-
     body: dict = {"new_seat_count": new_seat_count}
     if tenant_id and MULTI_TENANT:
         body["tenant_id"] = tenant_id
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=body)
-            response.raise_for_status()
-            data = response.json()
+    data = await _make_billing_request(
+        method="POST",
+        path="/seats/update",
+        license_data=license_data,
+        body=body,
+        error_message="Failed to update seat count",
+    )
 
-            return SeatUpdateResponse(
-                success=data.get("success", False),
-                current_seats=data.get("current_seats", 0),
-                used_seats=data.get("used_seats", 0),
-                message=data.get("message"),
-            )
-
-    except httpx.HTTPStatusError as e:
-        detail = "Failed to update seat count"
-        try:
-            error_data = e.response.json()
-            detail = error_data.get("detail", detail)
-        except Exception:
-            pass
-        logger.error(f"Seat update failed: {e.response.status_code} - {detail}")
-        raise BillingServiceError(detail, e.response.status_code)
-
-    except httpx.RequestError:
-        logger.exception("Failed to connect to billing service")
-        raise BillingServiceError("Failed to connect to billing service", 502)
+    return SeatUpdateResponse(
+        success=data.get("success", False),
+        current_seats=data.get("current_seats", 0),
+        used_seats=data.get("used_seats", 0),
+        message=data.get("message"),
+    )
