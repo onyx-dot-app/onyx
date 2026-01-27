@@ -59,12 +59,23 @@ def _extract_license_from_header(
 ) -> str | None:
     """Extract license data from Authorization header.
 
+    Self-hosted instances authenticate to these proxy endpoints by sending their
+    license as a Bearer token: `Authorization: Bearer <base64-encoded-license>`.
+
+    We use the Bearer scheme (RFC 6750) because:
+    1. It's the standard HTTP auth scheme for token-based authentication
+    2. The license blob is cryptographically signed (RSA), so it's self-validating
+    3. No other auth schemes (Basic, Digest, etc.) are supported for license auth
+
+    The license data is the base64-encoded signed blob that contains tenant_id,
+    seats, expiration, etc. We verify the signature to authenticate the caller.
+
     Args:
-        authorization: The Authorization header value
+        authorization: The Authorization header value (e.g., "Bearer <license>")
         required: If True, raise 401 when header is missing/invalid
 
     Returns:
-        License data string, or None if not required and missing
+        License data string (base64-encoded), or None if not required and missing
 
     Raises:
         HTTPException: 401 if required and header is missing/invalid
@@ -253,6 +264,9 @@ async def proxy_create_checkout_session(
     Auth: Optional license (new customers don't have one yet).
     If license provided, expired is OK (for renewals).
     """
+    # license_payload is None for new customers who don't have a license yet.
+    # In that case, tenant_id is omitted from the request body and the control
+    # plane will create a new tenant during checkout completion.
     tenant_id = license_payload.tenant_id if license_payload else None
 
     body: dict = {
@@ -337,6 +351,11 @@ async def proxy_create_customer_portal_session(
 
     Auth: License required, expired OK (need portal to fix payment issues).
     """
+    # tenant_id is a required field in LicensePayload (Pydantic validates this),
+    # but we check explicitly for defense in depth
+    if not license_payload.tenant_id:
+        raise HTTPException(status_code=401, detail="License missing tenant_id")
+
     tenant_id = license_payload.tenant_id
 
     body: dict = {"tenant_id": tenant_id}
@@ -373,6 +392,11 @@ async def proxy_billing_information(
 
     Auth: Valid (non-expired) license required.
     """
+    # tenant_id is a required field in LicensePayload (Pydantic validates this),
+    # but we check explicitly for defense in depth
+    if not license_payload.tenant_id:
+        raise HTTPException(status_code=401, detail="License missing tenant_id")
+
     tenant_id = license_payload.tenant_id
 
     result = await forward_to_control_plane(
@@ -399,6 +423,11 @@ async def proxy_license_fetch(
     Auth: Valid license required.
     The tenant_id in path must match the authenticated tenant.
     """
+    # tenant_id is a required field in LicensePayload (Pydantic validates this),
+    # but we check explicitly for defense in depth
+    if not license_payload.tenant_id:
+        raise HTTPException(status_code=401, detail="License missing tenant_id")
+
     if tenant_id != license_payload.tenant_id:
         raise HTTPException(
             status_code=403,
