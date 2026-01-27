@@ -98,7 +98,7 @@ export default function BuildChatPanel({
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
-  const { streamMessage } = useBuildStreaming();
+  const { streamMessage, abortStream } = useBuildStreaming();
   const isPreProvisioning = useIsPreProvisioning();
   const preProvisionedSessionId = usePreProvisionedSessionId();
   const { currentMessageFiles, hasUploadingFiles } = useUploadFilesContext();
@@ -415,6 +415,7 @@ export default function BuildChatPanel({
               messages={session?.messages ?? []}
               streamItems={session?.streamItems ?? []}
               isStreaming={isRunning}
+              userCancelled={session?.status === "cancelled"}
               autoScrollEnabled={isAtBottom}
             />
           )}
@@ -467,6 +468,7 @@ export default function BuildChatPanel({
               <InputBar
                 ref={inputBarRef}
                 onSubmit={handleSubmit}
+                onStop={abortStream}
                 isRunning={isRunning}
                 placeholder="Continue the conversation..."
                 sessionId={sessionId ?? undefined}

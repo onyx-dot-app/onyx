@@ -243,6 +243,10 @@ class KubernetesSandboxManager(SandboxManager):
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
         self._skills_path = build_dir / "skills"
 
+        # Track active ACP exec clients for cancellation support
+        # Keyed by (sandbox_id, session_id) tuple
+        self._acp_clients: dict[tuple[UUID, UUID], ACPExecClient] = {}
+
         logger.info(
             f"KubernetesSandboxManager initialized: "
             f"namespace={self._namespace}, image={self._image}"
@@ -870,6 +874,22 @@ sleep infinity
         Args:
             sandbox_id: The sandbox ID to terminate
         """
+        # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
+        clients_to_stop = [
+            (key, acp_client)
+            for key, acp_client in self._acp_clients.items()
+            if key[0] == sandbox_id
+        ]
+        for key, acp_client in clients_to_stop:
+            try:
+                acp_client.stop()
+                del self._acp_clients[key]
+            except Exception as e:
+                logger.warning(
+                    f"Failed to stop ACP client for sandbox {sandbox_id}, "
+                    f"session {key[1]}: {e}"
+                )
+
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
 
@@ -1085,6 +1105,18 @@ echo "Session workspace setup complete"
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
         """
+        # Stop ACP client for this session if it exists
+        client_key = (sandbox_id, session_id)
+        client = self._acp_clients.pop(client_key, None)
+        if client:
+            try:
+                client.stop()
+                logger.debug(f"Stopped ACP client for session {session_id}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to stop ACP client for session {session_id}: {e}"
+                )
+
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
@@ -1433,17 +1465,27 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
-        exec_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
-        try:
+        client_key = (sandbox_id, session_id)
+
+        # Get or create ACP client for this session
+        exec_client = self._acp_clients.get(client_key)
+        if exec_client is None or not exec_client.is_running:
+            exec_client = ACPExecClient(
+                pod_name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+            )
             exec_client.start(cwd=session_path)
+            self._acp_clients[client_key] = exec_client
+
+        try:
             for event in exec_client.send_message(message):
                 yield event
-        finally:
+        except Exception:
+            # On error, clean up the client
+            self._acp_clients.pop(client_key, None)
             exec_client.stop()
+            raise
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
@@ -1921,3 +1963,42 @@ fi
         except ApiException as e:
             logger.warning(f"Failed to get upload stats: {e}")
             return 0, 0
+
+    def cancel_message(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> bool:
+        """Cancel the current message/prompt operation for a session.
+
+        Sends a session/cancel notification to the ACP agent to stop the
+        currently running operation.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID whose operation should be cancelled
+
+        Returns:
+            True if cancel was sent, False if no active session/client found
+        """
+        client_key = (sandbox_id, session_id)
+        exec_client = self._acp_clients.get(client_key)
+
+        if exec_client is None or not exec_client.is_running:
+            logger.debug(
+                f"No active ACP client for sandbox {sandbox_id}, session {session_id}"
+            )
+            return False
+
+        try:
+            exec_client.cancel()
+            logger.info(
+                f"Sent cancel notification for sandbox {sandbox_id}, session {session_id}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                f"Failed to cancel operation for sandbox {sandbox_id}, "
+                f"session {session_id}: {e}"
+            )
+            return False

@@ -108,7 +108,8 @@ export type SessionStatus =
   | "creating"
   | "running"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export interface Session {
   id: string | null;

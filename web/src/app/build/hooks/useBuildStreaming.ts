@@ -14,6 +14,7 @@ import {
   processSSEStream,
   fetchSession,
   generateFollowupSuggestions,
+  cancelMessage,
 } from "@/app/build/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
@@ -506,11 +507,44 @@ export function useBuildStreaming() {
     ]
   );
 
+  /**
+   * Abort the current streaming operation.
+   * This both:
+   * 1. Aborts the HTTP request (via AbortController)
+   * 2. Sends a cancel notification to the ACP agent (via backend API)
+   * 3. Updates session status to "completed" to update UI state
+   */
+  const abortStream = useCallback(
+    async (sessionId?: string) => {
+      const targetSessionId =
+        sessionId ?? useBuildSessionStore.getState().currentSessionId;
+
+      if (!targetSessionId) {
+        return;
+      }
+
+      // First, send cancel to the backend to stop the agent
+      // This sends session/cancel notification per ACP protocol
+      try {
+        await cancelMessage(targetSessionId);
+      } catch (err) {
+        console.error("[Streaming] Failed to cancel agent operation:", err);
+      }
+
+      // Abort the HTTP request to stop receiving events
+      abortCurrentSession();
+
+      // Update session status to "cancelled" so UI shows cancellation message
+      updateSessionData(targetSessionId, { status: "cancelled" });
+    },
+    [abortCurrentSession, updateSessionData]
+  );
+
   return useMemo(
     () => ({
       streamMessage,
-      abortStream: abortCurrentSession,
+      abortStream,
     }),
-    [streamMessage, abortCurrentSession]
+    [streamMessage, abortStream]
   );
 }
