@@ -448,3 +448,46 @@ async def proxy_license_fetch(
     fetch_and_store_license(tenant_id, license_data)
 
     return LicenseFetchResponse(license=license_data, tenant_id=tenant_id)
+
+
+class SeatUpdateRequest(BaseModel):
+    new_seat_count: int
+
+
+class SeatUpdateResponse(BaseModel):
+    success: bool
+    current_seats: int
+    used_seats: int
+    message: str | None = None
+
+
+@router.post("/seats/update")
+async def proxy_seat_update(
+    request_body: SeatUpdateRequest,
+    license_payload: LicensePayload = Depends(get_license_payload),
+) -> SeatUpdateResponse:
+    """Proxy seat update to control plane.
+
+    Auth: Valid (non-expired) license required.
+    Handles Stripe proration and license regeneration.
+    """
+    if not license_payload.tenant_id:
+        raise HTTPException(status_code=401, detail="License missing tenant_id")
+
+    tenant_id = license_payload.tenant_id
+
+    result = await forward_to_control_plane(
+        "POST",
+        "/seats/update",
+        body={
+            "tenant_id": tenant_id,
+            "new_seat_count": request_body.new_seat_count,
+        },
+    )
+
+    return SeatUpdateResponse(
+        success=result.get("success", False),
+        current_seats=result.get("current_seats", 0),
+        used_seats=result.get("used_seats", 0),
+        message=result.get("message"),
+    )
