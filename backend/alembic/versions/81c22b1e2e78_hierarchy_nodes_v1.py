@@ -139,8 +139,8 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("connector_credential_pair_id", sa.Integer(), nullable=False),
         sa.Column("status", sa.String(), nullable=False),
-        sa.Column("nodes_fetched", sa.Integer(), nullable=True, default=0),
-        sa.Column("nodes_updated", sa.Integer(), nullable=True, default=0),
+        sa.Column("nodes_fetched", sa.Integer(), nullable=True, server_default="0"),
+        sa.Column("nodes_updated", sa.Integer(), nullable=True, server_default="0"),
         sa.Column("error_msg", sa.Text(), nullable=True),
         sa.Column("full_exception_trace", sa.Text(), nullable=True),
         sa.Column(
@@ -195,6 +195,7 @@ def upgrade() -> None:
                 """
                 INSERT INTO hierarchy_node (raw_node_id, display_name, source, node_type, parent_id, is_public)
                 VALUES (:raw_node_id, :display_name, :source, 'SOURCE', NULL, true)
+                ON CONFLICT (raw_node_id, source) DO NOTHING
                 """
             ).bindparams(
                 raw_node_id=source_value,  # Use .value for raw_node_id (human-readable identifier)
