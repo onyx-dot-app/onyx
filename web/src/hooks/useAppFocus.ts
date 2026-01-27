@@ -1,7 +1,7 @@
 "use client";
 
-// "AppFocus" is the current part of the main application which is active / focused on.
-// Namely, if the URL is pointing towards a "chat", then a `{ type: "chat", id: "..." }` is returned.
+// "AppFocus" is the current part of the main application (/app) which is active / focused on.
+// Namely, if the URL has a chat ID param, then a `{ type: "app", id: "..." }` is returned.
 //
 // This is useful in determining what `SidebarTab` should be active, for example.
 
@@ -9,7 +9,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { usePathname, useSearchParams } from "next/navigation";
 
 export type AppFocusType =
-  | { type: "agent" | "project" | "chat"; id: string }
+  | { type: "agent" | "project" | "app"; id: string }
   | "new-session"
   | "more-agents"
   | "user-settings";
@@ -25,8 +25,8 @@ export class AppFocus {
     return typeof this.value === "object" && this.value.type === "project";
   }
 
-  isChat(): boolean {
-    return typeof this.value === "object" && this.value.type === "chat";
+  isApp(): boolean {
+    return typeof this.value === "object" && this.value.type === "app";
   }
 
   isNewSession(): boolean {
@@ -48,7 +48,7 @@ export class AppFocus {
   getType():
     | "agent"
     | "project"
-    | "chat"
+    | "app"
     | "new-session"
     | "more-agents"
     | "user-settings" {
@@ -70,9 +70,9 @@ export default function useAppFocus(): AppFocus {
     return new AppFocus("more-agents");
   }
 
-  // Check search params for chat, agent, or project
+  // Check search params for app (chat session), agent, or project
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  if (chatId) return new AppFocus({ type: "chat", id: chatId });
+  if (chatId) return new AppFocus({ type: "app", id: chatId });
 
   const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   if (agentId) return new AppFocus({ type: "agent", id: agentId });

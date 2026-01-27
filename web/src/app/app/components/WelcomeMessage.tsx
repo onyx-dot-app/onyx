@@ -10,6 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useState, useEffect } from "react";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { Section } from "@/layouts/general-layouts";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -38,27 +39,28 @@ export default function WelcomeMessage({
 
   if (isDefaultAgent) {
     content = (
-      <div data-testid="onyx-logo" className="flex flex-row items-center gap-4">
-        <Logo folded size={32} />
-        <Text as="p" headingH2>
-          {greeting}
-        </Text>
+      <div data-testid="onyx-logo">
+        <Section flexDirection="row" gap={1}>
+          <Logo folded size={32} />
+          <Text as="p" headingH2>
+            {greeting}
+          </Text>
+        </Section>
       </div>
     );
   } else if (agent) {
     content = (
       <>
-        <div
-          data-testid="assistant-name-display"
-          className="flex flex-row items-center gap-3"
-        >
-          <AgentAvatar agent={agent} size={36} />
-          <Text as="p" headingH2>
-            {agent.name}
-          </Text>
+        <div data-testid="assistant-name-display">
+          <Section flexDirection="row" gap={1}>
+            <AgentAvatar agent={agent} size={36} />
+            <Text as="p" headingH2>
+              {agent.name}
+            </Text>
+          </Section>
         </div>
         {agent.description && (
-          <Text as="p" secondaryBody text03>
+          <Text secondaryBody text03>
             {agent.description}
           </Text>
         )}
@@ -71,11 +73,8 @@ export default function WelcomeMessage({
   if (!content) return null;
 
   return (
-    <div
-      data-testid="chat-intro"
-      className="flex flex-col items-center justify-center gap-3 max-w-[50rem]"
-    >
-      {content}
+    <div data-testid="chat-intro" className="w-[min(50rem,100%)]">
+      <Section gap={1}>{content}</Section>
     </div>
   );
 }
