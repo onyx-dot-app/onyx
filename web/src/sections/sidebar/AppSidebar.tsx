@@ -63,6 +63,7 @@ import {
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
+  SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
 import BuildModeIntroBackground from "@/app/build/components/IntroBackground";
@@ -74,6 +75,7 @@ import {
 } from "@/app/admin/settings/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -446,6 +448,18 @@ const MemoizedAppSidebarInner = memo(
       [folded]
     );
 
+    const searchChatsButton = useMemo(
+      () => (
+        <ChatSearchCommandMenu
+          trigger={
+            <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
+              Search chats
+            </SidebarTab>
+          }
+        />
+      ),
+      [folded]
+    );
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -578,10 +592,11 @@ const MemoizedAppSidebarInner = memo(
             scrollKey="app-sidebar"
             footer={settingsButton}
             actionButtons={
-              <>
+              <div className="flex flex-col gap-0.5">
                 {newSessionButton}
                 {isOnyxCraftEnabled && buildButton}
-              </>
+                {searchChatsButton}
+              </div>
             }
           >
             {/* When folded, show icons immediately without waiting for data */}
