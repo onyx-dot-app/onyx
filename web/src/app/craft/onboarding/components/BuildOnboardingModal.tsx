@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { SvgArrowRight, SvgArrowLeft, SvgCheckCircle } from "@opal/icons";
+import { SvgArrowRight, SvgArrowLeft, SvgCheckCircle, SvgX } from "@opal/icons";
 import { FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -567,6 +567,16 @@ export default function BuildOnboardingModal({
 
       {/* Modal */}
       <div className="relative z-10 w-full max-w-xl mx-4 bg-background-tint-01 rounded-16 shadow-lg border border-border-01">
+        {/* Close button for add-llm mode */}
+        {mode.type === "add-llm" && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 p-1 rounded-08 text-text-03 hover:text-text-05 hover:bg-background-tint-02 transition-colors"
+          >
+            <SvgX className="w-5 h-5" />
+          </button>
+        )}
         <div className="p-6 flex flex-col gap-6 min-h-[600px]">
           {/* User Info Step */}
           {currentStep === "user-info" && (

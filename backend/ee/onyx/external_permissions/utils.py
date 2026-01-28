@@ -2,7 +2,9 @@ from collections.abc import Generator
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import DocExternalAccess
+from onyx.access.models import ElementExternalAccess
 from onyx.access.models import ExternalAccess
+from onyx.access.models import NodeExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import HierarchyNode
@@ -20,7 +22,7 @@ def generic_doc_sync(
     doc_source: DocumentSource,
     slim_connector: SlimConnectorWithPermSync,
     label: str,
-) -> Generator[DocExternalAccess, None, None]:
+) -> Generator[ElementExternalAccess, None, None]:
     """
     A convenience function for performing a generic document synchronization.
 
@@ -30,7 +32,7 @@ def generic_doc_sync(
         - fetching *all* new (slim) docs
         - yielding external-access permissions for existing docs which do not exist in the newly fetched slim-docs set (with their
         `external_access` set to "private")
-        - yielding external-access permissions for newly fetched docs
+        - yielding external-access permissions for newly fetched docs and hierarchy nodes
 
     Returns:
         A `Generator` which yields existing and newly fetched external-access permissions.
@@ -51,7 +53,13 @@ def generic_doc_sync(
 
         for doc in doc_batch:
             if isinstance(doc, HierarchyNode):
-                # TODO: handle hierarchynodes during sync
+                # Yield hierarchy node permissions to be processed in outer layer
+                if doc.external_access:
+                    yield NodeExternalAccess(
+                        external_access=doc.external_access,
+                        raw_node_id=doc.raw_node_id,
+                        source=doc_source.value,
+                    )
                 continue
             if not doc.external_access:
                 raise RuntimeError(

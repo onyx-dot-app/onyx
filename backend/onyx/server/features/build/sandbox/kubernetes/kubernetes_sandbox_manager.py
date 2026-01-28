@@ -231,9 +231,21 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Failed to load Kubernetes configuration: {e}"
                 ) from e
 
-        self._core_api = client.CoreV1Api()
-        self._batch_api = client.BatchV1Api()
-        self._networking_api = client.NetworkingV1Api()
+        # IMPORTANT: We use separate ApiClient instances for REST vs streaming operations.
+        # The kubernetes.stream.stream function monkey-patches the ApiClient's request
+        # method to use WebSocket. If we share the same ApiClient for both REST and
+        # streaming, the patching can leak, causing REST calls to erroneously use
+        # WebSocket (resulting in "Handshake status 200 OK" errors).
+        self._rest_api_client = client.ApiClient()
+        self._stream_api_client = client.ApiClient()
+
+        # Use the REST client for standard CRUD operations
+        self._core_api = client.CoreV1Api(api_client=self._rest_api_client)
+        self._batch_api = client.BatchV1Api(api_client=self._rest_api_client)
+        self._networking_api = client.NetworkingV1Api(api_client=self._rest_api_client)
+
+        # Use a separate client for streaming/exec operations
+        self._stream_core_api = client.CoreV1Api(api_client=self._stream_api_client)
 
         self._namespace = SANDBOX_NAMESPACE
         self._image = SANDBOX_CONTAINER_IMAGE
@@ -1058,7 +1070,7 @@ echo "Session workspace setup complete"
         try:
             # Execute setup script in the pod
             exec_response = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", setup_script],
@@ -1123,7 +1135,7 @@ echo "Session cleanup complete"
 
         try:
             exec_response = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", cleanup_script],
@@ -1191,7 +1203,7 @@ echo "Session cleanup complete"
         try:
             # Use exec to run snapshot command in sandbox container
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1250,7 +1262,7 @@ echo "Session cleanup complete"
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1331,7 +1343,7 @@ set -e
 mkdir -p {safe_session_path}/outputs
 """
             k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1359,7 +1371,7 @@ cd {safe_session_path}
 echo '{tar_b64}' | base64 -d | tar -xzf -
 """
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1378,7 +1390,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 safe_session_path, nextjs_port, check_node_modules=True
             )
             k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1497,7 +1509,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1627,7 +1639,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1696,7 +1708,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             f'aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/" /workspace/files/',
         ]
         resp = k8s_stream(
-            self._core_api.connect_get_namespaced_pod_exec,
+            self._stream_core_api.connect_get_namespaced_pod_exec,
             pod_name,
             self._namespace,
             container="file-sync",  # Execute in sidecar, not sandbox container
@@ -1781,7 +1793,7 @@ echo "$base"
         try:
             # Open WebSocket connection with stdin enabled
             ws_client = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1881,7 +1893,7 @@ echo "$base"
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1942,7 +1954,7 @@ fi
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",

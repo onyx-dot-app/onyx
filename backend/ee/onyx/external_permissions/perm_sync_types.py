@@ -5,6 +5,8 @@ from typing import Protocol
 
 from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
 from onyx.access.models import DocExternalAccess  # noqa
+from onyx.access.models import ElementExternalAccess  # noqa
+from onyx.access.models import NodeExternalAccess  # noqa
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import ConnectorCredentialPair  # noqa
 from onyx.db.utils import DocumentRow
@@ -53,7 +55,7 @@ DocSyncFuncType = Callable[
         FetchAllDocumentsIdsFunction,
         Optional[IndexingHeartbeatInterface],
     ],
-    Generator[DocExternalAccess, None, None],
+    Generator[ElementExternalAccess, None, None],
 ]
 
 GroupSyncFuncType = Callable[

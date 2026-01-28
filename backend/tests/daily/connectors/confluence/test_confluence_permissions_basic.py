@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
+from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -146,7 +147,11 @@ def test_confluence_connector_restriction_handling(
     special_restricted_user_groups: set[str] = set()
 
     # Check Root+Page+2 is public
-    root_page_2 = next(d for d in doc_access_list if d.doc_id.endswith("Root+Page+2"))
+    root_page_2 = next(
+        d
+        for d in doc_access_list
+        if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Root+Page+2")
+    )
     assert root_page_2.external_access.external_user_emails == non_restricted_emails
     assert (
         root_page_2.external_access.external_user_group_ids
@@ -155,7 +160,9 @@ def test_confluence_connector_restriction_handling(
 
     # Check Overview page is public
     overview_page = next(
-        d for d in doc_access_list if d.doc_id.lower().endswith("overview")
+        d
+        for d in doc_access_list
+        if isinstance(d, DocExternalAccess) and d.doc_id.lower().endswith("overview")
     )
     assert (
         overview_page.external_access.external_user_emails == non_restricted_emails
@@ -166,7 +173,11 @@ def test_confluence_connector_restriction_handling(
     ), "Overview page groups do not match expected values"
 
     # check root page is restricted
-    root_page = next(d for d in doc_access_list if d.doc_id.endswith("Root+Page"))
+    root_page = next(
+        d
+        for d in doc_access_list
+        if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Root+Page")
+    )
     assert (
         root_page.external_access.external_user_emails == restricted_emails
     ), "Root page emails do not match expected values"
@@ -175,7 +186,11 @@ def test_confluence_connector_restriction_handling(
     ), "Root page groups do not match expected values"
 
     # check child page has restriction propagated
-    child_page = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page"))
+    child_page = next(
+        d
+        for d in doc_access_list
+        if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Child+Page")
+    )
     assert (
         child_page.external_access.external_user_emails == restricted_emails
     ), "Child page emails do not match expected values"
@@ -184,7 +199,11 @@ def test_confluence_connector_restriction_handling(
     ), "Child page groups do not match expected values"
 
     # check doubly nested child page has restriction propagated
-    child_page_2 = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page+2"))
+    child_page_2 = next(
+        d
+        for d in doc_access_list
+        if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Child+Page+2")
+    )
     assert (
         child_page_2.external_access.external_user_emails == restricted_emails
     ), "Child page 2 emails do not match expected values"
@@ -193,7 +212,11 @@ def test_confluence_connector_restriction_handling(
     ), "Child page 2 groups do not match expected values"
 
     # check child page w/ specific restrictions have those applied
-    child_page_3 = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page+3"))
+    child_page_3 = next(
+        d
+        for d in doc_access_list
+        if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Child+Page+3")
+    )
     assert (
         child_page_3.external_access.external_user_emails == extra_restricted_emails
     ), "Child page 3 emails do not match expected values"
@@ -203,7 +226,11 @@ def test_confluence_connector_restriction_handling(
     ), "Child page 3 groups do not match expected values"
 
     # check child page w/ specific restrictions have those applied
-    child_page_4 = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page+4"))
+    child_page_4 = next(
+        d
+        for d in doc_access_list
+        if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Child+Page+4")
+    )
     assert (
         child_page_4.external_access.external_user_emails == special_restricted_emails
     ), "Child page 4 emails do not match expected values"

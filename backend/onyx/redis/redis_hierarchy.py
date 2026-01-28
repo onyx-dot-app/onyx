@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.hierarchy import ensure_source_node_exists as db_ensure_source_node_exists
 from onyx.db.hierarchy import get_all_hierarchy_nodes_for_source
 from onyx.utils.logger import setup_logger
 
@@ -306,14 +307,9 @@ def refresh_hierarchy_cache_from_db(
         return
 
     try:
-        # Double-check: cache might have been populated while we waited
-        if is_cache_populated(redis_client, source):
-            logger.debug(
-                f"Hierarchy cache for {source.value} was populated "
-                "while waiting for lock, skipping refresh"
-            )
-            return
-
+        # Always refresh from DB when called - new nodes may have been added
+        # since the cache was last populated. The lock ensures only one worker
+        # does the refresh at a time.
         logger.info(f"Refreshing hierarchy cache for source {source.value} from DB")
 
         # Load all nodes for this source from DB
@@ -501,3 +497,56 @@ def clear_hierarchy_cache(redis_client: Redis, source: DocumentSource) -> None:
     redis_client.delete(cache_key)
     redis_client.delete(raw_id_key)
     redis_client.delete(source_node_key)
+
+
+def ensure_source_node_exists(
+    redis_client: Redis,
+    db_session: Session,
+    source: DocumentSource,
+) -> int:
+    """
+    Ensure that a SOURCE-type hierarchy node exists for the given source and cache it.
+
+    This is the primary entry point for ensuring hierarchy infrastructure is set up
+    for a source before processing documents. It should be called early in the
+    indexing pipeline (e.g., at the start of docfetching or hierarchy fetching).
+
+    The function:
+    1. Checks Redis cache for existing SOURCE node ID
+    2. If not cached, ensures the SOURCE node exists in the database
+    3. Caches the SOURCE node in Redis for fast subsequent lookups
+
+    This is idempotent and safe to call multiple times concurrently.
+
+    Args:
+        redis_client: Redis client with tenant prefixing
+        db_session: SQLAlchemy session for database operations
+        source: The document source type (e.g., GOOGLE_DRIVE, CONFLUENCE)
+
+    Returns:
+        The database ID of the SOURCE-type hierarchy node
+    """
+    # First check if we already have it cached
+    source_node_key = _source_node_key(source)
+    cached_value = redis_client.get(source_node_key)
+
+    if cached_value is not None:
+        value_str: str
+        if isinstance(cached_value, bytes):
+            value_str = cached_value.decode("utf-8")
+        else:
+            value_str = str(cached_value)
+        return int(value_str)
+
+    # Not cached - ensure it exists in DB and cache it
+    source_node = db_ensure_source_node_exists(db_session, source, commit=True)
+
+    # Cache the SOURCE node
+    cache_entry = HierarchyNodeCacheEntry.from_db_model(source_node)
+    cache_hierarchy_node(redis_client, source, cache_entry)
+
+    logger.info(
+        f"Ensured SOURCE node exists and cached for {source.value}: id={source_node.id}"
+    )
+
+    return source_node.id

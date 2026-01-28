@@ -146,6 +146,10 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # cached user emails
     user_emails: list[str] | None = None
 
+    # Hierarchy node raw IDs that have already been yielded.
+    # Used to avoid yielding duplicate hierarchy nodes across checkpoints.
+    seen_hierarchy_node_raw_ids: set[str] = set()
+
     @field_serializer("completion_map")
     def serialize_completion_map(
         self, completion_map: ThreadSafeDict[str, StageCompletion], _info: Any

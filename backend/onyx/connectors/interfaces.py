@@ -245,6 +245,8 @@ CheckpointOutput: TypeAlias = Generator[
     Document | HierarchyNode | ConnectorFailure, None, CT
 ]
 
+HierarchyOutput: TypeAlias = Generator[HierarchyNode, None, None]
+
 
 class CheckpointedConnector(BaseConnector[CT]):
     @abc.abstractmethod
@@ -293,4 +295,14 @@ class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
         end: SecondsSinceUnixEpoch,
         checkpoint: CT,
     ) -> CheckpointOutput[CT]:
+        raise NotImplementedError
+
+
+class HierarchyConnector(BaseConnector):
+    @abc.abstractmethod
+    def load_hierarchy(
+        self,
+        start: SecondsSinceUnixEpoch,  # may be unused if the connector must load the full hierarchy each time
+        end: SecondsSinceUnixEpoch,
+    ) -> HierarchyOutput:
         raise NotImplementedError
