@@ -57,9 +57,7 @@ def require_ee_license() -> None:
 
         if metadata is None:
             # No license - block EE features
-            logger.info(
-                f"[require_ee_license] Blocking EE endpoint for unlicensed tenant {tenant_id}"
-            )
+            logger.info("[require_ee_license] Blocking EE endpoint (no license)")
             raise HTTPException(
                 status_code=402,
                 detail={
@@ -71,9 +69,7 @@ def require_ee_license() -> None:
 
         if metadata.status == _BLOCKING_STATUS:
             # License expired
-            logger.info(
-                f"[require_ee_license] Blocking EE endpoint for gated tenant {tenant_id}"
-            )
+            logger.info("[require_ee_license] Blocking EE endpoint (license expired)")
             raise HTTPException(
                 status_code=402,
                 detail={
