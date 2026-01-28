@@ -170,3 +170,9 @@ func IsCherryPickInProgress() bool {
 	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD")
 	return cmd.Run() == nil
 }
+
+// HasStagedChanges checks if there are staged changes in the index
+func HasStagedChanges() bool {
+	cmd := exec.Command("git", "diff", "--quiet", "--cached")
+	return cmd.Run() != nil
+}

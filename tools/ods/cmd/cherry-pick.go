@@ -82,7 +82,6 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	if err != nil {
 		log.Fatalf("Failed to stash changes: %v", err)
 	}
-	defer git.RestoreStash(stashResult)
 
 	// Fetch commits from remote before cherry-picking
 	if err := git.FetchCommits(commitSHAs); err != nil {
@@ -183,6 +182,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 				if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 					log.Warnf("Failed to switch back to original branch: %v", switchErr)
 				}
+				git.RestoreStash(stashResult)
 			}
 			log.Fatalf("Failed to cherry-pick to release %s: %v", release, err)
 		}
@@ -196,6 +196,9 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
 		log.Warnf("Failed to switch back to original branch: %v", err)
 	}
+
+	// Restore stashed changes now that we're back on the original branch
+	git.RestoreStash(stashResult)
 
 	// Print all PR URLs
 	for i, prURL := range prURLs {
@@ -311,7 +314,14 @@ func performCherryPick(commitSHAs []string, noVerify bool) error {
 			return fmt.Errorf("merge conflict during cherry-pick")
 		}
 		// Check if cherry-pick is empty (commit already applied with different SHA)
+		// Only skip if there are no staged changes - if user resolved conflicts and staged,
+		// they should run `git cherry-pick --continue` instead
 		if git.IsCherryPickInProgress() {
+			if git.HasStagedChanges() {
+				log.Error("Cherry-pick in progress with staged changes.")
+				log.Info("It looks like you resolved conflicts. Run: git cherry-pick --continue")
+				return fmt.Errorf("cherry-pick in progress with staged changes")
+			}
 			log.Info("Cherry-pick is empty (changes already applied), skipping...")
 			if skipErr := git.RunCommand("cherry-pick", "--skip"); skipErr != nil {
 				return fmt.Errorf("failed to skip empty cherry-pick: %w", skipErr)
