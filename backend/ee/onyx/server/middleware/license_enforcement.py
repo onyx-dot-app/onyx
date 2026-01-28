@@ -50,8 +50,10 @@ from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
-from ee.onyx.configs.license_enforcement import EE_ONLY_PATH_PREFIXES
-from ee.onyx.configs.license_enforcement import LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
+from ee.onyx.configs.license_enforcement_config import EE_ONLY_PATH_PREFIXES
+from ee.onyx.configs.license_enforcement_config import (
+    LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
+)
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
 from onyx.db.engine.sql_engine import get_session_with_current_tenant

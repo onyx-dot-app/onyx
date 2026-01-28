@@ -10,8 +10,10 @@ import pytest
 from starlette.requests import Request
 from starlette.responses import Response
 
-from ee.onyx.configs.license_enforcement import EE_ONLY_PATH_PREFIXES
-from ee.onyx.configs.license_enforcement import LICENSE_ENFORCEMENT_ALLOWED_PREFIXES
+from ee.onyx.configs.license_enforcement_config import EE_ONLY_PATH_PREFIXES
+from ee.onyx.configs.license_enforcement_config import (
+    LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
+)
 from ee.onyx.server.middleware.license_enforcement import _is_ee_only_path
 from ee.onyx.server.middleware.license_enforcement import _is_path_allowed
 from onyx.server.settings.models import ApplicationStatus
