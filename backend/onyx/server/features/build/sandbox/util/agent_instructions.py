@@ -6,10 +6,10 @@ that are shared between local and kubernetes sandbox managers.
 
 from pathlib import Path
 
-from onyx.server.features.build.sandbox.kubernetes.docker.generate_agents_md import (
+from onyx.server.features.build.sandbox.kubernetes.docker.agent_content import (
     ATTACHMENTS_SECTION_CONTENT,
 )
-from onyx.server.features.build.sandbox.kubernetes.docker.generate_agents_md import (
+from onyx.server.features.build.sandbox.kubernetes.docker.agent_content import (
     CONNECTOR_DESCRIPTIONS,
 )
 from onyx.utils.logger import setup_logger
