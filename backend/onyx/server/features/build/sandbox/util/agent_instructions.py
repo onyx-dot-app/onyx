@@ -39,6 +39,20 @@ CONNECTOR_DESCRIPTIONS = {
     "notion": "**Notion**: Hierarchical pages as `PAGE_TITLE.json`.",
 }
 
+# Per-connector directory scan depth (0 = just connector name, 1 = one level, 2 = two levels)
+CONNECTOR_SCAN_DEPTH = {
+    "google_drive": 0,  # Don't look into folders
+    "gmail": 0,  # Don't look into folders
+    "fireflies": 1,  # Show YYYY-MM folders only
+    "linear": 2,  # Linear/TEAM/issues
+    "github": 2,  # Github/ORG/pull_requests
+    "slack": 1,  # Show channels
+    "hubspot": 1,  # Show Tickets/, Companies/, etc.
+    "notion": 1,  # Show top-level pages
+    "org_info": 0,  # Don't look into folders
+}
+DEFAULT_SCAN_DEPTH = 1
+
 
 def get_provider_display_name(provider: str | None) -> str | None:
     """Get user-friendly display name for LLM provider.
@@ -209,7 +223,7 @@ def _scan_skills_directory(skills_path: Path) -> str:
     """
     skills_list: list[str] = []
     try:
-        for skill_dir in skills_path.iterdir():
+        for skill_dir in sorted(skills_path.iterdir()):
             if not skill_dir.is_dir():
                 continue
 
@@ -264,83 +278,49 @@ def _normalize_connector_name(name: str) -> str:
     return name.lower().replace(" ", "_").replace("-", "_")
 
 
-def scan_file_structure(files_path: Path) -> str:
-    """Scan the files directory and list knowledge sources with one level of subdirs.
+def _scan_directory_to_depth(
+    directory: Path, current_depth: int, max_depth: int, indent: str = "  "
+) -> list[str]:
+    """Recursively scan directory up to max_depth levels.
 
     Args:
-        files_path: Path to the files directory
+        directory: Directory to scan
+        current_depth: Current depth level (0 = connector root)
+        max_depth: Maximum depth to scan
+        indent: Indentation string for current level
 
     Returns:
-        Formatted file structure section string
+        List of formatted directory lines
     """
-    if not files_path.exists():
-        return "No knowledge sources available."
+    if current_depth >= max_depth:
+        return []
 
-    sources: list[str] = []
+    lines: list[str] = []
     try:
-        for item in sorted(files_path.iterdir()):
-            if not item.is_dir() or item.name.startswith("."):
-                continue
+        subdirs = sorted(
+            d for d in directory.iterdir() if d.is_dir() and not d.name.startswith(".")
+        )
 
-            sources.append(f"- **{item.name}/**")
+        for subdir in subdirs[:10]:  # Limit to 10 per level
+            lines.append(f"{indent}- {subdir.name}/")
 
-            # Add one level of subdirectories
-            subdirs = sorted(
-                d.name
-                for d in item.iterdir()
-                if d.is_dir() and not d.name.startswith(".")
-            )
-            for subdir in subdirs[:10]:  # Limit to 10 subdirs to avoid huge output
-                sources.append(f"  - {subdir}/")
-            if len(subdirs) > 10:
-                sources.append(f"  - ... and {len(subdirs) - 10} more")
-    except Exception as e:
-        logger.warning(f"Error scanning files directory: {e}")
-        return "Error scanning knowledge sources."
+            # Recurse if we haven't hit max depth
+            if current_depth + 1 < max_depth:
+                nested = _scan_directory_to_depth(
+                    subdir, current_depth + 1, max_depth, indent + "  "
+                )
+                lines.extend(nested)
 
-    if not sources:
-        return "No knowledge sources available."
+        if len(subdirs) > 10:
+            lines.append(f"{indent}- ... and {len(subdirs) - 10} more")
+    except Exception:
+        pass
 
-    header = "The `files/` directory contains:\n\n"
-    return header + "\n".join(sources)
-
-
-def scan_connector_descriptions(files_path: Path) -> str:
-    """Scan the files directory and build connector descriptions.
-
-    This is the core scanning function without caching.
-
-    Args:
-        files_path: Path to the files directory
-
-    Returns:
-        Formatted connector descriptions section
-    """
-    if not files_path.exists():
-        return ""
-
-    descriptions: list[str] = []
-    try:
-        for item in sorted(files_path.iterdir()):
-            if not item.is_dir() or item.name.startswith("."):
-                continue
-
-            normalized = _normalize_connector_name(item.name)
-            if normalized in CONNECTOR_DESCRIPTIONS:
-                descriptions.append(f"- {CONNECTOR_DESCRIPTIONS[normalized]}")
-    except Exception as e:
-        logger.warning(f"Error scanning for connector descriptions: {e}")
-        return ""
-
-    if not descriptions:
-        return ""
-
-    header = "### Connector Structures\n\n"
-    return header + "\n".join(descriptions)
+    return lines
 
 
 def build_file_structure_section(files_path: Path) -> str:
-    """Build the file structure section by scanning the files directory.
+    """Build the file structure section with per-connector depth rules.
 
     Args:
         files_path: Path to the files directory (symlink to knowledge sources)
@@ -359,7 +339,30 @@ def build_file_structure_section(files_path: Path) -> str:
     except Exception:
         actual_path = files_path
 
-    return scan_file_structure(actual_path)
+    sources: list[str] = []
+    try:
+        for item in sorted(actual_path.iterdir()):
+            if not item.is_dir() or item.name.startswith("."):
+                continue
+
+            sources.append(f"- **{item.name}/**")
+
+            # Get scan depth for this connector
+            normalized = _normalize_connector_name(item.name)
+            max_depth = CONNECTOR_SCAN_DEPTH.get(normalized, DEFAULT_SCAN_DEPTH)
+
+            # Scan subdirectories up to max_depth
+            nested = _scan_directory_to_depth(item, 0, max_depth, "  ")
+            sources.extend(nested)
+    except Exception as e:
+        logger.warning(f"Error scanning files directory: {e}")
+        return "Error scanning knowledge sources."
+
+    if not sources:
+        return "No knowledge sources available."
+
+    header = "The `files/` directory contains:\n\n"
+    return header + "\n".join(sources)
 
 
 def build_connector_descriptions_section(files_path: Path) -> str:
@@ -385,8 +388,29 @@ def build_connector_descriptions_section(files_path: Path) -> str:
     except Exception:
         actual_path = files_path
 
-    # Use shared function for scanning
-    return scan_connector_descriptions(actual_path)
+    descriptions: list[str] = []
+    try:
+        for item in sorted(actual_path.iterdir()):
+            if not item.is_dir():
+                continue
+            if item.name.startswith("."):
+                continue
+
+            # Look up connector description
+            normalized_name = _normalize_connector_name(item.name)
+            if normalized_name in CONNECTOR_DESCRIPTIONS:
+                descriptions.append(f"- {CONNECTOR_DESCRIPTIONS[normalized_name]}")
+    except Exception as e:
+        logger.warning(
+            f"Error scanning files directory for connector descriptions: {e}"
+        )
+        return ""
+
+    if not descriptions:
+        return ""
+
+    header = "### Connector Structures\n\n"
+    return header + "\n".join(descriptions)
 
 
 def generate_agent_instructions(
