@@ -3,7 +3,7 @@ import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import { useStreamingDuration } from "../hooks";
+import { useStreamingDuration } from "../hooks/useStreamingDuration";
 import { formatDurationSeconds } from "@/lib/time";
 
 export interface StreamingHeaderProps {
