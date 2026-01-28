@@ -24,7 +24,7 @@ jobs:
           - { goos: "darwin", goarch: "arm64" }
           - { goos: "", goarch: "" }
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
