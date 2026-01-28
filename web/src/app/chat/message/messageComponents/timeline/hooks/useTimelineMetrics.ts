@@ -3,22 +3,14 @@ import {
   TurnGroup,
   TransformedStep,
 } from "@/app/chat/message/messageComponents/timeline/transformers";
-import { getToolIconByName } from "@/app/chat/message/messageComponents/toolDisplayHelpers";
 import {
   isResearchAgentPackets,
   stepSupportsCompact,
 } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
 
-export interface UniqueTool {
-  key: string;
-  name: string;
-  icon: React.JSX.Element;
-}
-
 export interface TimelineMetrics {
   totalSteps: number;
   isSingleStep: boolean;
-  uniqueTools: UniqueTool[];
   lastTurnGroup: TurnGroup | undefined;
   lastStep: TransformedStep | undefined;
   lastStepIsResearchAgent: boolean;
@@ -31,7 +23,6 @@ export interface TimelineMetrics {
  */
 export function useTimelineMetrics(
   turnGroups: TurnGroup[],
-  uniqueToolNames: string[],
   userStopped: boolean
 ): TimelineMetrics {
   return useMemo(() => {
@@ -55,15 +46,10 @@ export function useTimelineMetrics(
     return {
       totalSteps,
       isSingleStep: totalSteps === 1 && !userStopped,
-      uniqueTools: uniqueToolNames.map((name) => ({
-        key: name,
-        name,
-        icon: getToolIconByName(name),
-      })),
       lastTurnGroup,
       lastStep,
       lastStepIsResearchAgent,
       lastStepSupportsCompact,
     };
-  }, [turnGroups, uniqueToolNames, userStopped]);
+  }, [turnGroups, userStopped]);
 }

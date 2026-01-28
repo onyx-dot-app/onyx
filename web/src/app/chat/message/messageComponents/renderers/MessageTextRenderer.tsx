@@ -123,21 +123,23 @@ export const MessageTextRenderer: MessageRenderer<
 
   const wasUserCancelled = stopReason === StopReason.USER_CANCELLED;
 
-  return children({
-    icon: null,
-    status: null,
-    content:
-      content.length > 0 || packets.length > 0 ? (
-        <>
-          {renderedContent}
-          {wasUserCancelled && (
-            <Text as="p" secondaryBody text04>
-              User has stopped generation
-            </Text>
-          )}
-        </>
-      ) : (
-        <BlinkingDot addMargin />
-      ),
-  });
+  return children([
+    {
+      icon: null,
+      status: null,
+      content:
+        content.length > 0 || packets.length > 0 ? (
+          <>
+            {renderedContent}
+            {wasUserCancelled && (
+              <Text as="p" secondaryBody text04>
+                User has stopped generation
+              </Text>
+            )}
+          </>
+        ) : (
+          <BlinkingDot addMargin />
+        ),
+    },
+  ]);
 };
