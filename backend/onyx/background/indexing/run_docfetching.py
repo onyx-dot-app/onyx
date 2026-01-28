@@ -58,12 +58,12 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
-from onyx.server.features.build.indexing.persistent_document_writer import (
-    get_persistent_document_writer,
-)
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.indexing.persistent_document_writer import (
+    get_persistent_document_writer,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.variable_functionality import global_version
