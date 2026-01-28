@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import Cookies from "js-cookie";
-import { BUILD_DEMO_DATA_COOKIE_NAME } from "@/app/craft/v1/constants";
+import { CRAFT_DEMO_DATA_COOKIE_NAME } from "@/app/craft/v1/constants";
 import {
   getBuildUserPersona,
   getBuildLlmSelection,
@@ -498,7 +498,7 @@ interface BuildSessionStore {
  */
 function getInitialDemoDataEnabled(): boolean {
   if (typeof window === "undefined") return true; // SSR fallback
-  const cookieValue = Cookies.get(BUILD_DEMO_DATA_COOKIE_NAME);
+  const cookieValue = Cookies.get(CRAFT_DEMO_DATA_COOKIE_NAME);
   if (cookieValue === "false") return false;
   return true; // Default to true
 }
@@ -1557,7 +1557,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Update the state value and persist to cookie
     set({ demoDataEnabled: enabled });
-    Cookies.set(BUILD_DEMO_DATA_COOKIE_NAME, String(enabled), {
+    Cookies.set(CRAFT_DEMO_DATA_COOKIE_NAME, String(enabled), {
       path: "/",
       expires: 365, // 1 year
     });

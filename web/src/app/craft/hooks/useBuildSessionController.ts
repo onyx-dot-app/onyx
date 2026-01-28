@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-import { BUILD_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
+import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
@@ -178,7 +178,7 @@ export function useBuildSessionController({
   const navigateToSession = useCallback(
     (sessionId: string) => {
       router.push(
-        `${CRAFT_PATH}?${BUILD_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
+        `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
       );
     },
     [router]

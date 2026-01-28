@@ -22,7 +22,7 @@ import {
   useUploadFilesContext,
 } from "@/app/craft/contexts/UploadFilesContext";
 import { uploadFile } from "@/app/craft/services/apiServices";
-import { BUILD_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
+import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
@@ -330,7 +330,7 @@ export default function BuildChatPanel({
 
           // Navigate to URL - session controller will set currentSessionId
           router.push(
-            `${CRAFT_PATH}?${BUILD_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
+            `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
           );
 
           // Schedule naming after delay (message will be saved by then)

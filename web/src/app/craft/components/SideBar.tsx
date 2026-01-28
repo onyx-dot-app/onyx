@@ -10,7 +10,7 @@ import {
   SessionHistoryItem,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
-import { BUILD_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
+import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import Text from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
@@ -40,7 +40,7 @@ import {
   DELETE_SUCCESS_DISPLAY_DURATION_MS,
   DELETE_MESSAGE_ROTATION_INTERVAL_MS,
 } from "@/app/craft/constants";
-import { CRAFT_PATH, BUILD_CONFIGURE_PATH } from "@/app/craft/v1/constants";
+import { CRAFT_PATH, CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 
 // ============================================================================
 // Fun Deleting Messages
@@ -357,7 +357,7 @@ const MemoizedBuildSidebarInner = memo(
     const handleLoadSession = useCallback(
       (sessionId: string) => {
         router.push(
-          `${CRAFT_PATH}?${BUILD_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
+          `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
         );
       },
       [router]
@@ -381,8 +381,8 @@ const MemoizedBuildSidebarInner = memo(
         <SidebarTab
           leftIcon={SvgSettings}
           folded={folded}
-          href={BUILD_CONFIGURE_PATH}
-          transient={pathname.startsWith(BUILD_CONFIGURE_PATH)}
+          href={CRAFT_CONFIGURE_PATH}
+          transient={pathname.startsWith(CRAFT_CONFIGURE_PATH)}
         >
           Configure
         </SidebarTab>
@@ -435,7 +435,7 @@ const MemoizedBuildSidebarInner = memo(
                     key={historyItem.id}
                     historyItem={historyItem}
                     isActive={
-                      !pathname.startsWith(BUILD_CONFIGURE_PATH) &&
+                      !pathname.startsWith(CRAFT_CONFIGURE_PATH) &&
                       session?.id === historyItem.id
                     }
                     onLoad={() => handleLoadSession(historyItem.id)}

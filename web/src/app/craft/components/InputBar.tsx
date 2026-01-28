@@ -20,7 +20,7 @@ import {
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
 import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
-import { BUILD_CONFIGURE_PATH } from "@/app/craft/v1/constants";
+import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -369,7 +369,7 @@ const InputBar = memo(
                       action
                       folded
                       disabled={disabled}
-                      onClick={() => router.push(BUILD_CONFIGURE_PATH)}
+                      onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
                       className="bg-action-link-01"
                     >
                       Demo Data Active

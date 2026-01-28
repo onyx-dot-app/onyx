@@ -13,7 +13,7 @@ import {
 } from "@/components/icons/icons";
 import { SvgChevronRight } from "@opal/icons";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
-import { BUILD_CONFIGURE_PATH } from "@/app/craft/v1/constants";
+import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 
 interface ConnectDataBannerProps {
   className?: string;
@@ -34,7 +34,7 @@ export default function ConnectDataBanner({
   const { hasConnectorEverSucceeded, isLoading } = useBuildConnectors();
 
   const handleClick = () => {
-    router.push(BUILD_CONFIGURE_PATH);
+    router.push(CRAFT_CONFIGURE_PATH);
   };
 
   // Only show banner if user hasn't successfully synced any connectors (and not loading)

@@ -13,7 +13,7 @@ import {
 import { SvgChevronRight, SvgCalendar } from "@opal/icons";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import {
-  BUILD_CONFIGURE_PATH,
+  CRAFT_CONFIGURE_PATH,
   ONYX_CRAFT_CALENDAR_URL,
 } from "@/app/craft/v1/constants";
 
@@ -48,7 +48,7 @@ export default function ConnectorBannersRow({
   }
 
   const handleConnectClick = () => {
-    window.location.href = BUILD_CONFIGURE_PATH;
+    window.location.href = CRAFT_CONFIGURE_PATH;
   };
 
   const handleHelpClick = () => {

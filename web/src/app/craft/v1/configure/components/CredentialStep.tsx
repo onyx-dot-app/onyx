@@ -28,8 +28,8 @@ import {
   NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
 import {
-  BUILD_CONFIGURE_PATH,
-  BUILD_MODE_OAUTH_COOKIE_NAME,
+  CRAFT_CONFIGURE_PATH,
+  CRAFT_OAUTH_COOKIE_NAME,
 } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -83,7 +83,7 @@ export default function CredentialStep({
     onOAuthRedirect();
 
     const redirectUrl = await getConnectorOauthRedirectUrl(connectorType, {
-      desired_return_url: `${window.location.origin}${BUILD_CONFIGURE_PATH}`,
+      desired_return_url: `${window.location.origin}${CRAFT_CONFIGURE_PATH}`,
     });
     if (redirectUrl) {
       window.location.href = redirectUrl;
@@ -204,7 +204,7 @@ export default function CredentialStep({
                         } else {
                           const redirectUrl =
                             await getConnectorOauthRedirectUrl(connectorType, {
-                              desired_return_url: `${window.location.origin}${BUILD_CONFIGURE_PATH}`,
+                              desired_return_url: `${window.location.origin}${CRAFT_CONFIGURE_PATH}`,
                             });
                           if (redirectUrl) {
                             onOAuthRedirect();
@@ -217,7 +217,7 @@ export default function CredentialStep({
                         }
                       } else {
                         if (connectorType === ValidSources.GoogleDrive) {
-                          Cookies.set(BUILD_MODE_OAUTH_COOKIE_NAME, "true", {
+                          Cookies.set(CRAFT_OAUTH_COOKIE_NAME, "true", {
                             path: "/",
                           });
                           onOAuthRedirect();
