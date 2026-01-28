@@ -18,6 +18,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
@@ -245,7 +246,7 @@ class FreshdeskConnector(PollConnector, LoadConnector):
     def _process_tickets(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
-        doc_batch: List[Document] = []
+        doc_batch: List[Document | HierarchyNode] = []
 
         for ticket_batch in self._fetch_tickets(start, end):
             for ticket in ticket_batch:

@@ -8,6 +8,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
@@ -120,7 +121,9 @@ def test_zendesk_connector_slim(zendesk_article_connector: ZendeskConnector) -> 
     # Get slim doc IDs
     all_slim_doc_ids = set()
     for slim_doc_batch in zendesk_article_connector.retrieve_all_slim_docs_perm_sync():
-        all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
+        all_slim_doc_ids.update(
+            [doc.id for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # Full docs should be subset of slim docs
     assert all_full_doc_ids.issubset(

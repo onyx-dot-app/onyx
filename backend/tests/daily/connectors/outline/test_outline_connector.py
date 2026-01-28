@@ -9,6 +9,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.outline.connector import OutlineConnector
 
 
@@ -65,7 +66,9 @@ class TestOutlineConnector:
 
         documents: list[Document] = []
         for batch in connector.load_from_state():
-            documents.extend(batch)
+            documents.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
 
         assert len(documents) > 0, "Expected at least one document/collection"
 
@@ -106,7 +109,7 @@ class TestOutlineConnector:
 
         docs: list[Document] = []
         for batch in connector.poll_source(start_time, end_time):
-            docs.extend(batch)
+            docs.extend([doc for doc in batch if not isinstance(doc, HierarchyNode)])
 
         for doc in docs:
             assert isinstance(doc, Document)
@@ -147,7 +150,7 @@ class TestOutlineConnector:
 
         docs: list[Document] = []
         for batch in connector.poll_source(0, time.time()):
-            docs.extend(batch)
+            docs.extend([doc for doc in batch if not isinstance(doc, HierarchyNode)])
 
         if docs:
             doc_types = {d.metadata["type"] for d in docs}

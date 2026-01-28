@@ -19,6 +19,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
@@ -414,7 +415,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associations=["contacts", "companies", "deals"],
         )
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         for ticket in tickets_iter:
             updated_at = ticket.updated_at.replace(tzinfo=None)
@@ -527,7 +528,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associations=["contacts", "deals", "tickets"],
         )
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         for company in companies_iter:
             updated_at = company.updated_at.replace(tzinfo=None)
@@ -659,7 +660,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associations=["contacts", "companies", "tickets"],
         )
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         for deal in deals_iter:
             updated_at = deal.updated_at.replace(tzinfo=None)
@@ -791,7 +792,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associations=["companies", "deals", "tickets"],
         )
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         for contact in contacts_iter:
             updated_at = contact.updated_at.replace(tzinfo=None)

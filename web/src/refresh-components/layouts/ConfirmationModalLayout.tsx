@@ -16,6 +16,8 @@ export interface ConfirmationModalProps {
   submit: React.ReactNode;
   hideCancel?: boolean;
   onClose?: () => void;
+  /** If false, removes the gray background from the body. Defaults to true. */
+  twoTone?: boolean;
 }
 
 export default function ConfirmationModalLayout({
@@ -27,6 +29,7 @@ export default function ConfirmationModalLayout({
   submit,
   hideCancel,
   onClose: externalOnClose,
+  twoTone = true,
 }: ConfirmationModalProps) {
   const onClose = useModalClose(externalOnClose);
 
@@ -39,7 +42,7 @@ export default function ConfirmationModalLayout({
           description={description}
           onClose={onClose}
         />
-        <Modal.Body>
+        <Modal.Body twoTone={twoTone}>
           {typeof children === "string" ? (
             <Text as="p" text03>
               {children}

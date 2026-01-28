@@ -24,7 +24,7 @@ DEMO_DATA_ZIP="${CRAFT_BASE}/demo_data.zip"
 DEMO_DATA_DIR="${CRAFT_BASE}/demo_data"
 # Use environment variables if set, otherwise use defaults
 OUTPUTS_TEMPLATE_PATH="${OUTPUTS_TEMPLATE_PATH:-${CRAFT_BASE}/templates/outputs}"
-VENV_TEMPLATE_PATH="${VENV_TEMPLATE_PATH:-${OUTPUTS_TEMPLATE_PATH}/venv}"
+VENV_TEMPLATE_PATH="${VENV_TEMPLATE_PATH:-${CRAFT_BASE}/templates/venv}"
 WEB_TEMPLATE_PATH="${WEB_TEMPLATE_PATH:-${OUTPUTS_TEMPLATE_PATH}/web}"
 REQUIREMENTS_PATH="${CRAFT_BASE}/initial-requirements.txt"
 

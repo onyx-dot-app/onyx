@@ -4,6 +4,7 @@ from collections.abc import Generator
 import pytest
 
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.connector import SlackConnector
 from onyx.utils.variable_functionality import global_version
@@ -121,7 +122,9 @@ def test_slim_documents_access__public_channel(
     # Collect all slim documents from the generator
     all_slim_docs: list[SlimDocument] = []
     for slim_doc_batch in slim_docs_generator:
-        all_slim_docs.extend(slim_doc_batch)
+        all_slim_docs.extend(
+            [doc for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # We should have at least some slim documents
     assert len(all_slim_docs) > 0, "Expected to find at least one slim document"
@@ -155,7 +158,9 @@ def test_slim_documents_access__private_channel(
     # Collect all slim documents from the generator
     all_slim_docs: list[SlimDocument] = []
     for slim_doc_batch in slim_docs_generator:
-        all_slim_docs.extend(slim_doc_batch)
+        all_slim_docs.extend(
+            [doc for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # We should have at least some slim documents
     assert len(all_slim_docs) > 0, "Expected to find at least one slim document"

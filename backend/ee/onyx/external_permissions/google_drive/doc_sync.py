@@ -15,6 +15,7 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -195,7 +196,9 @@ def gdrive_doc_sync(
                     raise RuntimeError("gdrive_doc_sync: Stop signal detected")
 
                 callback.progress("gdrive_doc_sync", 1)
-
+            if isinstance(slim_doc, HierarchyNode):
+                # TODO: handle hierarchynodes during sync
+                continue
             if slim_doc.external_access is None:
                 raise ValueError(
                     f"Drive perm sync: No external access for document {slim_doc.id}"

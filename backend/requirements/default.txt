@@ -861,6 +861,8 @@ pympler==1.1
     # via onyx
 pynacl==1.6.2
     # via pygithub
+pypandoc-binary==1.16.2
+    # via onyx
 pyparsing==3.2.5
     # via httplib2
 pypdf==6.6.0

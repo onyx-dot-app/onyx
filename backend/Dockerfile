@@ -142,6 +142,13 @@ COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervis
 COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
 RUN chmod +x /app/scripts/supervisord_entrypoint.sh /app/scripts/setup_craft_templates.sh
 
+# Run Craft template setup at build time when ENABLE_CRAFT=true
+# This pre-bakes demo data, Python venv, and npm dependencies into the image
+RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
+        echo "Running Craft template setup at build time..." && \
+        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
+    fi
+
 # Put logo in assets
 COPY --chown=onyx:onyx ./assets /app/assets
 

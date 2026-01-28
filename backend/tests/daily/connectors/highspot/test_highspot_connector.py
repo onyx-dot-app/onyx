@@ -11,6 +11,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 
 
 def load_test_data(file_name: str = "test_highspot_data.json") -> dict:
@@ -59,6 +60,8 @@ def test_highspot_connector_basic(
     # Test loading documents
     for doc_batch in highspot_connector.poll_source(0, time.time()):
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             all_docs.append(doc)
             if doc.id == f"HIGHSPOT_{target_test_doc_id}":
                 target_test_doc = doc
@@ -93,12 +96,16 @@ def test_highspot_connector_slim(
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
     for doc_batch in highspot_connector.load_from_state():
-        all_full_doc_ids.update([doc.id for doc in doc_batch])
+        all_full_doc_ids.update(
+            [doc.id for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
     for slim_doc_batch in highspot_connector.retrieve_all_slim_docs_perm_sync():
-        all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
+        all_slim_doc_ids.update(
+            [doc.id for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # The set of full doc IDs should be a subset of the slim doc IDs
     assert all_full_doc_ids.issubset(all_slim_doc_ids)
@@ -138,6 +145,8 @@ def test_highspot_connector_poll_source(
 
     for doc_batch in highspot_connector.poll_source(start_time, end_time):
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             all_docs.append(doc)
             if doc.id == f"HIGHSPOT_{target_doc_id}":
                 target_doc = doc

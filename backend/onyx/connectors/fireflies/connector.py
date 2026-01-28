@@ -15,6 +15,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
@@ -194,7 +195,7 @@ class FirefliesConnector(PollConnector, LoadConnector):
     def _process_transcripts(
         self, start: str | None = None, end: str | None = None
     ) -> GenerateDocumentsOutput:
-        doc_batch: List[Document] = []
+        doc_batch: List[Document | HierarchyNode] = []
 
         for transcript_batch in self._fetch_transcripts(start, end):
             for transcript in transcript_batch:

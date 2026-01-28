@@ -12,21 +12,51 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# Statuses that indicate a billing/license problem - propagate these to settings
-_GATED_STATUSES = frozenset(
-    {
-        ApplicationStatus.GATED_ACCESS,
-        ApplicationStatus.GRACE_PERIOD,
-        ApplicationStatus.PAYMENT_REMINDER,
-    }
-)
+# Only GATED_ACCESS actually blocks access - other statuses are for notifications
+_BLOCKING_STATUS = ApplicationStatus.GATED_ACCESS
+
+
+def check_ee_features_enabled() -> bool:
+    """EE version: checks if EE features should be available.
+
+    Returns True if:
+    - LICENSE_ENFORCEMENT_ENABLED is False (legacy/rollout mode)
+    - Cloud mode (MULTI_TENANT) - cloud handles its own gating
+    - Self-hosted with a valid (non-expired) license
+
+    Returns False if:
+    - Self-hosted with no license (never subscribed)
+    - Self-hosted with expired license
+    """
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        # License enforcement disabled - allow EE features (legacy behavior)
+        return True
+
+    if MULTI_TENANT:
+        # Cloud mode - EE features always available (gating handled by is_tenant_gated)
+        return True
+
+    # Self-hosted with enforcement - check for valid license
+    tenant_id = get_current_tenant_id()
+    try:
+        metadata = get_cached_license_metadata(tenant_id)
+        if metadata and metadata.status != _BLOCKING_STATUS:
+            # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
+            return True
+    except RedisError as e:
+        logger.warning(f"Failed to check license for EE features: {e}")
+        # Fail closed - if Redis is down, other things will break anyway
+        return False
+
+    # No license or GATED_ACCESS - no EE features
+    return False
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
     """EE version: checks license status for self-hosted deployments.
 
     For self-hosted, looks up license metadata and overrides application_status
-    if the license is missing or indicates a problem (expired, grace period, etc.).
+    if the license indicates GATED_ACCESS (fully expired).
 
     For multi-tenant (cloud), the settings already have the correct status
     from the control plane, so no override is needed.
@@ -43,11 +73,10 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
-        if metadata and metadata.status in _GATED_STATUSES:
+        if metadata and metadata.status == _BLOCKING_STATUS:
             settings.application_status = metadata.status
-        elif not metadata:
-            # No license = gated access for self-hosted EE
-            settings.application_status = ApplicationStatus.GATED_ACCESS
+        # No license = user hasn't purchased yet, allow access for upgrade flow
+        # GRACE_PERIOD/PAYMENT_REMINDER don't block - they're for notifications
     except RedisError as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
 

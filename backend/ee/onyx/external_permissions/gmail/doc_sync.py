@@ -7,6 +7,7 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFun
 from onyx.access.models import DocExternalAccess
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -60,6 +61,9 @@ def gmail_doc_sync(
 
                 callback.progress("gmail_doc_sync", 1)
 
+            if isinstance(slim_doc, HierarchyNode):
+                # TODO: handle hierarchynodes during sync
+                continue
             if slim_doc.external_access is None:
                 logger.warning(f"No permissions found for document {slim_doc.id}")
                 continue

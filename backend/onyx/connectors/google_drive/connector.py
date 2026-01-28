@@ -73,6 +73,8 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import SlimDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
@@ -1358,7 +1360,7 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        slim_batch = []
+        slim_batch: list[SlimDocument | HierarchyNode] = []
         for file in self._fetch_drive_items(
             field_type=DriveFileFieldType.SLIM,
             checkpoint=checkpoint,

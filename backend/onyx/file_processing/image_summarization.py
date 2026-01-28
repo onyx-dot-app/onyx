@@ -14,6 +14,8 @@ from onyx.llm.models import SystemMessage
 from onyx.llm.models import TextContentPart
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
@@ -118,7 +120,18 @@ def _summarize_image(
     )
 
     try:
-        return llm_response_to_string(llm.invoke(messages))
+        # Call LLM with Braintrust tracing
+        with llm_generation_span(
+            llm=llm,
+            flow="image_summarization",
+            input_messages=[{"type": "image_summarization_request"}],
+        ) as span_generation:
+            # Note: We don't include the actual image in the span input to avoid bloating traces
+            response = llm.invoke(messages)
+            summary = llm_response_to_string(response)
+            record_llm_span_output(span_generation, summary, response.usage)
+
+        return summary
 
     except Exception as e:
         error_msg = f"Summarization failed. Messages: {messages}"
