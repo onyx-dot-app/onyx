@@ -85,11 +85,8 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	defer git.RestoreStash(stashResult)
 
 	// Fetch commits from remote before cherry-picking
-	// TODO: Batch these rather than iterate.
-	for _, sha := range commitSHAs {
-		if err := git.FetchCommit(sha); err != nil {
-			log.Warnf("Failed to fetch commit %s: %v", sha, err)
-		}
+	if err := git.FetchCommits(commitSHAs); err != nil {
+		log.Warnf("Failed to fetch commits: %v", err)
 	}
 
 	// Get the short SHA(s) for branch naming
@@ -176,9 +173,16 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		prTitleWithRelease := fmt.Sprintf("%s to release %s", prTitle, release)
 		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, opts.DryRun, opts.NoVerify)
 		if err != nil {
-			// Switch back to original branch before exiting on error
-			if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
-				log.Warnf("Failed to switch back to original branch: %v", switchErr)
+			// Don't try to switch back if there's a merge conflict - git won't allow it
+			if strings.Contains(err.Error(), "merge conflict") {
+				if stashResult.Stashed {
+					log.Warn("Your uncommitted changes are still stashed.")
+					log.Infof("After resolving the conflict and returning to %s, run: git stash pop", originalBranch)
+				}
+			} else {
+				if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
+					log.Warnf("Failed to switch back to original branch: %v", switchErr)
+				}
 			}
 			log.Fatalf("Failed to cherry-pick to release %s: %v", release, err)
 		}

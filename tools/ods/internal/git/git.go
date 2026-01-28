@@ -127,9 +127,24 @@ func CommitExistsOnBranch(commitSHA, branchName string) bool {
 
 // FetchCommit fetches a specific commit from the remote
 func FetchCommit(commitSHA string) error {
-	log.Infof("Fetching commit %s from origin", commitSHA)
-	// Try to fetch the specific commit - this works if the remote allows it
-	if err := RunCommand("fetch", "--quiet", "origin", commitSHA); err != nil {
+	return FetchCommits([]string{commitSHA})
+}
+
+// FetchCommits fetches multiple commits from the remote in a single operation
+func FetchCommits(commitSHAs []string) error {
+	if len(commitSHAs) == 0 {
+		return nil
+	}
+
+	if len(commitSHAs) == 1 {
+		log.Infof("Fetching commit %s from origin", commitSHAs[0])
+	} else {
+		log.Infof("Fetching %d commits from origin", len(commitSHAs))
+	}
+
+	// Try to fetch all specific commits at once - this works if the remote allows it
+	args := append([]string{"fetch", "--quiet", "origin"}, commitSHAs...)
+	if err := RunCommand(args...); err != nil {
 		// Fall back to fetching all refs if specific commit fetch fails
 		log.Debugf("Specific commit fetch failed, fetching all: %v", err)
 		if err := RunCommand("fetch", "--quiet", "origin"); err != nil {
