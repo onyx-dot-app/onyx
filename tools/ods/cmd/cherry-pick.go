@@ -350,14 +350,20 @@ func findNearestStableTag(commitSHA string) (string, error) {
 // createCherryPickPR creates a pull request for cherry-picks using the GitHub CLI
 func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commitMessages []string) (string, error) {
 	var body string
+
+	// Collect all original PR numbers for the summary
+	allPRNumbers := []string{}
+	for _, msg := range commitMessages {
+		if msg != "" {
+			prNumbers := extractPRNumbers(msg)
+			allPRNumbers = append(allPRNumbers, prNumbers...)
+		}
+	}
+
 	if len(commitSHAs) == 1 {
 		body = fmt.Sprintf("Cherry-pick of commit %s to %s branch.", commitSHAs[0], baseBranch)
-		// Extract and add original PR reference if present
-		if len(commitMessages) > 0 && commitMessages[0] != "" {
-			prNumbers := extractPRNumbers(commitMessages[0])
-			if len(prNumbers) > 0 {
-				body += fmt.Sprintf("\n\nOriginal PR: %s", strings.Join(prNumbers, ", "))
-			}
+		if len(allPRNumbers) > 0 {
+			body += fmt.Sprintf("\n\nOriginal PR: %s", strings.Join(allPRNumbers, ", "))
 		}
 	} else {
 		body = fmt.Sprintf("Cherry-pick of %d commits to %s branch:\n\n", len(commitSHAs), baseBranch)
@@ -373,6 +379,11 @@ func createCherryPickPR(headBranch, baseBranch, title string, commitSHAs, commit
 			body += fmt.Sprintf("- %s%s\n", sha, prRef)
 		}
 	}
+
+	// Add standard checklist
+	body += "\n\n"
+	body += "- [x] [Required] I have considered whether this PR needs to be cherry-picked to the latest beta branch.\n"
+	body += "- [x] [Optional] Override Linear Check\n"
 
 	cmd := exec.Command("gh", "pr", "create",
 		"--base", baseBranch,
