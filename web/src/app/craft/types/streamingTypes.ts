@@ -1,4 +1,15 @@
 // =============================================================================
+// Session Error Constants
+// =============================================================================
+
+export const SessionErrorCode = {
+  RATE_LIMIT_EXCEEDED: "RATE_LIMIT_EXCEEDED",
+} as const;
+
+export type SessionErrorCode =
+  (typeof SessionErrorCode)[keyof typeof SessionErrorCode];
+
+// =============================================================================
 // Usage Limits Types
 // =============================================================================
 

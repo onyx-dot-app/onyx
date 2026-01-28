@@ -278,6 +278,20 @@ export async function fetchMessages(
 }
 
 /**
+ * Custom error class for rate limit (429) errors.
+ * Used to distinguish rate limit errors from other API errors
+ * so the UI can show an upsell modal instead of a generic error.
+ */
+export class RateLimitError extends Error {
+  public readonly statusCode: number = 429;
+
+  constructor() {
+    super("Rate limit exceeded");
+    this.name = "RateLimitError";
+  }
+}
+
+/**
  * Send a message and return the streaming response.
  * The caller is responsible for processing the SSE stream.
  */
@@ -294,6 +308,10 @@ export async function sendMessageStream(
   });
 
   if (!res.ok) {
+    // Handle rate limit errors specifically so UI can show upsell modal
+    if (res.status === 429) {
+      throw new RateLimitError();
+    }
     throw new Error(`Failed to send message: ${res.status}`);
   }
 

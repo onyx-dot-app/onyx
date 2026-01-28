@@ -36,8 +36,9 @@ export interface UseUsageLimitsReturn {
  * useUsageLimits - Hook for managing build mode usage limits
  *
  * Rate limits from API:
- * - Free/unpaid users: 10 messages total (limitType: "total")
- * - Paid users: 50 messages per week (limitType: "weekly")
+ * - Free/unpaid users: 5 messages total (limitType: "total")
+ * - Paid users: 25 messages per week by default (limitType: "weekly")
+ *   (configurable via CRAFT_PAID_USER_RATE_LIMIT env var)
  *
  * Only fetches when NEXT_PUBLIC_CLOUD_ENABLED is true.
  * Automatically fetches limits on mount and provides refresh capability.

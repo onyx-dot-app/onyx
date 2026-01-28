@@ -2,13 +2,18 @@
 
 import { useCallback, useMemo } from "react";
 
-import { Artifact, ArtifactType } from "@/app/craft/types/streamingTypes";
+import {
+  Artifact,
+  ArtifactType,
+  SessionErrorCode,
+} from "@/app/craft/types/streamingTypes";
 
 import {
   sendMessageStream,
   processSSEStream,
   fetchSession,
   generateFollowupSuggestions,
+  RateLimitError,
 } from "@/app/craft/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -408,7 +413,15 @@ export function useBuildStreaming() {
           }
         });
       } catch (err) {
-        if ((err as Error).name !== "AbortError") {
+        if ((err as Error).name === "AbortError") {
+          // User cancelled - no error handling needed
+        } else if (err instanceof RateLimitError) {
+          console.warn("[Streaming] Rate limit exceeded");
+          updateSessionData(sessionId, {
+            status: "completed",
+            error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
+          });
+        } else {
           console.error("[Streaming] Stream error:", err);
           updateSessionData(sessionId, {
             status: "failed",
