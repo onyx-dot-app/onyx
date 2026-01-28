@@ -18,8 +18,11 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.prompts.compression_prompts import PROGRESSIVE_SUMMARY_USER_PROMPT
-from onyx.prompts.compression_prompts import SUMMARY_SYSTEM_PROMPT
+from onyx.prompts.compression_prompts import PROGRESSIVE_SUMMARY_PROMPT
+from onyx.prompts.compression_prompts import PROGRESSIVE_USER_REMINDER
+from onyx.prompts.compression_prompts import SUMMARIZATION_CUTOFF_MARKER
+from onyx.prompts.compression_prompts import SUMMARIZATION_PROMPT
+from onyx.prompts.compression_prompts import USER_FINAL_REMINDER
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -181,47 +184,76 @@ def get_messages_to_summarize(
 
 
 def format_messages_for_summary(messages: list[ChatMessage]) -> str:
-    """Format messages into a string for the summarization prompt."""
+    """Format messages into a string for the summarization prompt.
+
+    Tool call messages are formatted compactly to save tokens.
+    """
     formatted = []
     for msg in messages:
+        # Format assistant messages with tool calls compactly
+        if msg.message_type == MessageType.ASSISTANT and msg.tool_calls:
+            tool_names = [tc.tool.display_name for tc in msg.tool_calls if tc.tool]
+            if tool_names:
+                formatted.append(f"[assistant used tools: {', '.join(tool_names)}]")
+            continue
+
+        # Skip standalone tool call/response messages - captured above
+        if msg.message_type in (MessageType.TOOL_CALL, MessageType.TOOL_CALL_RESPONSE):
+            continue
+
         role = msg.message_type.value
         formatted.append(f"[{role}]: {msg.message}")
     return "\n\n".join(formatted)
 
 
 def generate_summary(
-    messages: list[ChatMessage],
+    older_messages: list[ChatMessage],
+    recent_messages: list[ChatMessage],
     llm: LLM,
     existing_summary: str | None = None,
 ) -> str:
     """
-    Generate a summary of the provided messages.
+    Generate a summary using cutoff marker approach.
 
-    If existing_summary provided, incorporate it (progressive summarization).
+    The cutoff marker tells the LLM to summarize only older messages,
+    while using recent messages as context to inform what's important.
 
     Args:
-        messages: Messages to summarize
+        older_messages: Messages to compress into summary (before cutoff)
+        recent_messages: Messages kept verbatim (after cutoff, for context only)
         llm: LLM to use for summarization
-        existing_summary: Previous summary text to incorporate
+        existing_summary: Previous summary text to incorporate (progressive)
 
     Returns:
         Summary text
     """
-    messages_text = format_messages_for_summary(messages)
+    older_messages_str = format_messages_for_summary(older_messages)
+    recent_messages_str = format_messages_for_summary(recent_messages)
 
+    # Build user prompt with cutoff marker
     if existing_summary:
-        user_prompt = PROGRESSIVE_SUMMARY_USER_PROMPT.format(
-            existing_summary=existing_summary,
-            messages_text=messages_text,
+        # Progressive summarization: include existing summary
+        user_prompt = PROGRESSIVE_SUMMARY_PROMPT.format(
+            existing_summary=existing_summary
         )
+        user_prompt += f"\n\n{older_messages_str}"
+        final_reminder = PROGRESSIVE_USER_REMINDER
     else:
-        user_prompt = (
-            f"Summarize this conversation (most recent topic first):\n\n{messages_text}"
-        )
+        # Initial summarization
+        user_prompt = older_messages_str
+        final_reminder = USER_FINAL_REMINDER
+
+    # Add cutoff marker and recent messages as context
+    user_prompt += f"\n\n{SUMMARIZATION_CUTOFF_MARKER}"
+    if recent_messages_str:
+        user_prompt += f"\n\n{recent_messages_str}"
+
+    # Add final reminder
+    user_prompt += f"\n\n{final_reminder}"
 
     response = llm.invoke(
         [
-            SystemMessage(content=SUMMARY_SYSTEM_PROMPT),
+            SystemMessage(content=SUMMARIZATION_PROMPT),
             UserMessage(content=user_prompt),
         ]
     )
@@ -269,8 +301,9 @@ def compress_chat_history(
         # Generate summary (incorporate existing summary if present)
         existing_summary_text = existing_summary.message if existing_summary else None
         summary_text = generate_summary(
-            to_summarize,
-            llm,
+            older_messages=to_summarize,
+            recent_messages=to_keep,
+            llm=llm,
             existing_summary=existing_summary_text,
         )
 
