@@ -43,12 +43,13 @@ def upgrade() -> None:
     """
     connection = op.get_bind()
 
-    # Create the anonymous user
+    # Create the anonymous user (using ON CONFLICT to be idempotent)
     connection.execute(
         sa.text(
             """
             INSERT INTO "user" (id, email, hashed_password, is_active, is_superuser, is_verified, role)
             VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, :is_verified, :role)
+            ON CONFLICT (id) DO NOTHING
             """
         ),
         {
