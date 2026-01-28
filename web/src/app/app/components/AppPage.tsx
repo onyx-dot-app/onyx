@@ -667,7 +667,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       removeDocs={() => setSelectedDocuments([])}
       retrievalEnabled={retrievalEnabled}
       selectedDocuments={selectedDocuments}
-      initialMessage={searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""}
+      initialMessage={
+        queryController.query ||
+        searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
+        ""
+      }
       stopGenerating={stopGenerating}
       onSubmit={handleChatInputSubmit}
       chatState={currentChatState}
