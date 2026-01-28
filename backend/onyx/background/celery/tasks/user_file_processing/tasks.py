@@ -233,7 +233,9 @@ def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -
 
             try:
                 for batch in connector.load_from_state():
-                    documents.extend([doc for doc in batch if not isinstance(doc, HierarchyNode)])  # type: ignore
+                    documents.extend(
+                        [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+                    )
 
                 adapter = UserFileIndexingAdapter(
                     tenant_id=tenant_id,
