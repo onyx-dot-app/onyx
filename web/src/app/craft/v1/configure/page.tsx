@@ -45,9 +45,10 @@ import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { useUser } from "@/components/user/UserProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import {
-  WORK_AREA_OPTIONS,
-  LEVEL_OPTIONS,
   getBuildUserPersona,
+  getPersonaInfo,
+  getPositionText,
+  DEMO_COMPANY_NAME,
   BuildLlmSelection,
   BUILD_MODE_PROVIDERS,
 } from "@/app/craft/onboarding/constants";
@@ -250,15 +251,26 @@ export default function BuildConfigPage() {
 
   // Read persona from cookies
   const existingPersona = getBuildUserPersona();
-  const workAreaValue = existingPersona?.workArea || "";
-  const levelValue = existingPersona?.level || "";
+  const workAreaValue = existingPersona?.workArea;
+  const levelValue = existingPersona?.level;
 
-  // Get display labels
-  const workAreaLabel =
-    WORK_AREA_OPTIONS.find((o) => o.value === workAreaValue)?.label ||
-    workAreaValue;
-  const levelLabel =
-    LEVEL_OPTIONS.find((o) => o.value === levelValue)?.label || levelValue;
+  // Get persona info from mapping
+  // If workAreaValue and levelValue exist, personaInfo will always be defined
+  // (all combinations are mapped in PERSONA_MAPPING)
+  const personaInfo =
+    workAreaValue && levelValue
+      ? getPersonaInfo(workAreaValue, levelValue)
+      : undefined;
+
+  // Get persona name (split into first and last)
+  const personaName = personaInfo?.name;
+  const [firstName, ...lastNameParts] = personaName?.split(" ") || [];
+  const lastName = lastNameParts.join(" ") || "";
+
+  // Get position text using shared helper
+  const positionText = workAreaValue
+    ? getPositionText(workAreaValue, levelValue)
+    : "Not set";
 
   const hasLlmProvider = (llmProviders?.length ?? 0) > 0;
 
@@ -383,9 +395,11 @@ export default function BuildConfigPage() {
                   <InputLayouts.Horizontal
                     title="Your Demo Persona"
                     description={
-                      workAreaLabel && levelLabel
-                        ? `${workAreaLabel} ${levelLabel}`
-                        : workAreaLabel || "Not set"
+                      firstName && lastName && positionText
+                        ? `${firstName} ${lastName}, ${positionText} at ${DEMO_COMPANY_NAME}`
+                        : positionText
+                          ? `${positionText} at ${DEMO_COMPANY_NAME}`
+                          : "Not set"
                     }
                     center
                   >

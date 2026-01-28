@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import useSWR from "swr";
 import Modal from "@/refresh-components/Modal";
 import { ValidSources, ConfigurableSources } from "@/lib/types";
-import { getSourceMetadata } from "@/lib/sources";
+import { getSourceMetadata, getSourceDocLink } from "@/lib/sources";
 import { SvgPlug } from "@opal/icons";
 import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -161,7 +161,18 @@ export default function ConfigureConnectorModal({
             title={getStepTitle()}
             description={getStepDescription()}
             onClose={onClose}
-          />
+          >
+            {getSourceDocLink(connectorType) && (
+              <a
+                href={getSourceDocLink(connectorType)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-link hover:underline"
+              >
+                View setup documentation →
+              </a>
+            )}
+          </Modal.Header>
           <Modal.Body>
             {step === "credential" ? (
               <CredentialStep

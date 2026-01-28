@@ -1,104 +1,33 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { SvgArrowRight, SvgArrowLeft, SvgCheckCircle, SvgX } from "@opal/icons";
-import { FiInfo } from "react-icons/fi";
+import { SvgArrowRight, SvgArrowLeft, SvgX, SvgLoader } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   BuildUserInfo,
   OnboardingModalMode,
   OnboardingStep,
 } from "@/app/craft/onboarding/types";
 import {
-  WORK_AREA_OPTIONS,
-  LEVEL_OPTIONS,
-  WORK_AREAS_WITH_LEVEL,
+  WorkArea,
+  Level,
+  WORK_AREAS_REQUIRING_LEVEL,
   setBuildLlmSelection,
   getBuildLlmSelection,
 } from "@/app/craft/onboarding/constants";
-import {
-  LLMProviderDescriptor,
-  LLMProviderName,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 import {
   buildInitialValues,
   testApiKeyHelper,
 } from "@/refresh-components/onboarding/components/llmConnectionHelpers";
-import {
-  GoogleDriveIcon,
-  GithubIcon,
-  HubSpotIcon,
-  LinearIcon,
-  FirefliesIcon,
-} from "@/components/icons/icons";
-
-// Provider configurations
-type ProviderKey = "anthropic" | "openai" | "openrouter";
-
-interface ModelOption {
-  name: string;
-  label: string;
-  recommended?: boolean;
-}
-
-interface ProviderConfig {
-  key: ProviderKey;
-  label: string;
-  providerName: LLMProviderName;
-  recommended?: boolean;
-  models: ModelOption[];
-  apiKeyPlaceholder: string;
-  apiKeyUrl: string;
-  apiKeyLabel: string;
-}
-
-const PROVIDERS: ProviderConfig[] = [
-  {
-    key: "anthropic",
-    label: "Anthropic",
-    providerName: LLMProviderName.ANTHROPIC,
-    recommended: true,
-    models: [
-      { name: "claude-opus-4-5", label: "Claude Opus 4.5", recommended: true },
-      { name: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-    ],
-    apiKeyPlaceholder: "sk-ant-...",
-    apiKeyUrl: "https://console.anthropic.com/dashboard",
-    apiKeyLabel: "Anthropic Console",
-  },
-  {
-    key: "openai",
-    label: "OpenAI",
-    providerName: LLMProviderName.OPENAI,
-    models: [
-      { name: "gpt-5.2", label: "GPT-5.2", recommended: true },
-      { name: "gpt-5.1", label: "GPT-5.1" },
-    ],
-    apiKeyPlaceholder: "sk-...",
-    apiKeyUrl: "https://platform.openai.com/api-keys",
-    apiKeyLabel: "OpenAI Dashboard",
-  },
-  {
-    key: "openrouter",
-    label: "OpenRouter",
-    providerName: LLMProviderName.OPENROUTER,
-    models: [
-      {
-        name: "moonshotai/kimi-k2-thinking",
-        label: "Kimi K2 Thinking",
-        recommended: true,
-      },
-      { name: "google/gemini-3-pro-preview", label: "Gemini 3 Pro" },
-      { name: "qwen/qwen3-235b-a22b-thinking-2507", label: "Qwen3 235B" },
-    ],
-    apiKeyPlaceholder: "sk-or-...",
-    apiKeyUrl: "https://openrouter.ai/keys",
-    apiKeyLabel: "OpenRouter Dashboard",
-  },
-];
+import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
+import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
+import OnboardingLlmSetup, {
+  PROVIDERS,
+  type ProviderKey,
+} from "@/app/craft/onboarding/components/OnboardingLlmSetup";
 
 // Priority order for auto-selecting LLM when user completes onboarding without explicit selection
 const LLM_AUTO_SELECT_PRIORITY = [
@@ -151,99 +80,11 @@ function autoSelectBestLlm(
   }
 }
 
-interface SelectableButtonProps {
-  selected: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  subtext?: string;
-  disabled?: boolean;
-  tooltip?: string;
-}
-
-function SelectableButton({
-  selected,
-  onClick,
-  children,
-  subtext,
-  disabled,
-  tooltip,
-}: SelectableButtonProps) {
-  const button = (
-    <div className="flex flex-col items-center gap-1">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={cn(
-          "w-full px-6 py-3 rounded-12 border transition-colors",
-          disabled && "opacity-50 cursor-not-allowed",
-          selected
-            ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
-            : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
-        )}
-      >
-        <Text mainUiAction>{children}</Text>
-      </button>
-      {subtext && (
-        <Text figureSmallLabel text02>
-          {subtext}
-        </Text>
-      )}
-    </div>
-  );
-
-  if (tooltip) {
-    return <SimpleTooltip tooltip={tooltip}>{button}</SimpleTooltip>;
-  }
-
-  return button;
-}
-
-interface ModelSelectButtonProps {
-  selected: boolean;
-  onClick: () => void;
-  label: string;
-  recommended?: boolean;
-  disabled?: boolean;
-}
-
-function ModelSelectButton({
-  selected,
-  onClick,
-  label,
-  recommended,
-  disabled,
-}: ModelSelectButtonProps) {
-  return (
-    <div className="flex flex-col items-center gap-1 w-full">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={cn(
-          "w-full px-4 py-2.5 rounded-12 border transition-colors",
-          disabled && "opacity-50 cursor-not-allowed",
-          selected
-            ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
-            : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
-        )}
-      >
-        <Text mainUiAction>{label}</Text>
-      </button>
-      {recommended && (
-        <Text figureSmallLabel text02>
-          Recommended
-        </Text>
-      )}
-    </div>
-  );
-}
-
 interface InitialValues {
   firstName: string;
   lastName: string;
-  workArea: string;
-  level: string;
+  workArea: WorkArea | undefined;
+  level: Level | undefined;
 }
 
 interface BuildOnboardingModalProps {
@@ -358,7 +199,9 @@ export default function BuildOnboardingModal({
   // Reset LLM state when mode changes to add-llm with a specific provider
   useEffect(() => {
     if (mode.type === "add-llm" && mode.provider) {
-      const providerConfig = PROVIDERS.find((p) => p.key === mode.provider);
+      const providerConfig = PROVIDERS.find(
+        (p) => p.key === (mode.provider as ProviderKey)
+      );
       if (providerConfig) {
         setSelectedProvider(providerConfig.key);
         setSelectedModel(providerConfig.models[0]?.name || "");
@@ -372,33 +215,55 @@ export default function BuildOnboardingModal({
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const useLevelForPrompt = WORK_AREAS_WITH_LEVEL.includes(workArea);
-  const isUserInfoValid = firstName.trim() && lastName.trim() && workArea;
+  // Timeout state for informational pages (page1 and page2)
+  // Track which pages have already been seen (timer completed)
+  const [seenInfoPages, setSeenInfoPages] = useState<Set<OnboardingStep>>(
+    new Set()
+  );
+  const [canContinueInfoPage, setCanContinueInfoPage] = useState(false);
+
+  // Set up timeout when entering page1 or page2 (only if not seen before)
+  useEffect(() => {
+    if (
+      (currentStep === "page1" || currentStep === "page2") &&
+      !seenInfoPages.has(currentStep)
+    ) {
+      setCanContinueInfoPage(false);
+
+      // page1: 1s, page2: 3s
+      const timeoutDuration = currentStep === "page1" ? 1000 : 3000;
+
+      const timeout = setTimeout(() => {
+        setCanContinueInfoPage(true);
+        setSeenInfoPages((prev) => new Set(prev).add(currentStep));
+      }, timeoutDuration);
+
+      return () => clearTimeout(timeout);
+    } else if (
+      (currentStep === "page1" || currentStep === "page2") &&
+      seenInfoPages.has(currentStep)
+    ) {
+      // If already seen, allow immediate continuation
+      setCanContinueInfoPage(true);
+    }
+  }, [currentStep, seenInfoPages]);
+
+  const requiresLevel =
+    workArea !== undefined && WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
+  const isUserInfoValid =
+    firstName.trim() &&
+    lastName.trim() &&
+    workArea &&
+    (!requiresLevel || level);
 
   const currentProviderConfig = PROVIDERS.find(
     (p) => p.key === selectedProvider
   )!;
   const isLlmValid = apiKey.trim() && selectedModel;
 
-  // Check if a provider is already configured
-  const isProviderConfigured = (providerName: string) => {
-    return llmProviders?.some((p) => p.provider === providerName) ?? false;
-  };
-
   // Calculate step navigation
   const currentStepIndex = steps.indexOf(currentStep);
   const totalSteps = steps.length;
-
-  const handleProviderChange = (provider: ProviderKey) => {
-    const providerConfig = PROVIDERS.find((p) => p.key === provider)!;
-    // Don't allow selecting already-configured providers
-    if (isProviderConfigured(providerConfig.providerName)) return;
-
-    setSelectedProvider(provider);
-    setSelectedModel(providerConfig.models[0]?.name || "");
-    setConnectionStatus("idle");
-    setErrorMessage("");
-  };
 
   const handleNext = () => {
     setErrorMessage("");
@@ -525,11 +390,27 @@ export default function BuildOnboardingModal({
       // (e.g., non-admin users or when all providers already configured)
       autoSelectBestLlm(llmProviders);
 
+      // Validate workArea is provided before submission
+      if (!workArea) {
+        setErrorMessage("Please select a work area.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const requiresLevel = WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
+
+      // Validate level if required
+      if (requiresLevel && !level) {
+        setErrorMessage("Please select a level.");
+        setIsSubmitting(false);
+        return;
+      }
+
       await onComplete({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         workArea,
-        level: useLevelForPrompt && level ? level : undefined,
+        level: level || undefined,
       });
 
       onClose();
@@ -540,15 +421,6 @@ export default function BuildOnboardingModal({
       );
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  // Handle final step action based on mode
-  const handleFinalAction = () => {
-    if (currentStep === steps[steps.length - 1]) {
-      handleSubmit();
-    } else {
-      handleNext();
     }
   };
 
@@ -580,286 +452,51 @@ export default function BuildOnboardingModal({
         <div className="p-6 flex flex-col gap-6 min-h-[600px]">
           {/* User Info Step */}
           {currentStep === "user-info" && (
-            <div className="flex-1 flex flex-col gap-6">
-              {/* Header */}
-              <div className="flex items-center justify-center gap-2">
-                <SimpleTooltip
-                  tooltip="We use this information to personalize your demo data and examples."
-                  side="bottom"
-                >
-                  <button
-                    type="button"
-                    className="text-text-02 hover:text-text-03 transition-colors"
-                  >
-                    <FiInfo size={16} className="text-text-03" />
-                  </button>
-                </SimpleTooltip>
-                <Text headingH2 text05>
-                  Tell us about yourself
-                </Text>
-              </div>
-
-              <div className="flex-1 flex flex-col gap-8 justify-center">
-                {/* Name inputs */}
-                <div className="flex justify-center">
-                  <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-                    <div className="flex flex-col gap-1.5">
-                      <Text secondaryBody text03>
-                        First name
-                      </Text>
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="Steven"
-                        className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Text secondaryBody text03>
-                        Last name
-                      </Text>
-                      <input
-                        type="text"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        placeholder="Alexson"
-                        className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Work area */}
-                <div className="flex flex-col gap-3 items-center">
-                  <Text mainUiBody text04>
-                    What do you do?
-                  </Text>
-                  <div className="grid grid-cols-3 gap-3 w-full">
-                    {WORK_AREA_OPTIONS.map((option) => (
-                      <SelectableButton
-                        key={option.value}
-                        selected={workArea === option.value}
-                        onClick={() =>
-                          setWorkArea(
-                            workArea === option.value ? "" : option.value
-                          )
-                        }
-                      >
-                        {option.label}
-                      </SelectableButton>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Level */}
-                <div className="flex flex-col gap-3 items-center">
-                  <Text mainUiBody text04>
-                    Level
-                  </Text>
-                  <div className="flex justify-center gap-3 w-full">
-                    <div className="grid grid-cols-2 gap-3 w-2/3">
-                      {LEVEL_OPTIONS.map((option) => (
-                        <SelectableButton
-                          key={option.value}
-                          selected={level === option.value}
-                          onClick={() =>
-                            setLevel(level === option.value ? "" : option.value)
-                          }
-                        >
-                          {option.label}
-                        </SelectableButton>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <OnboardingUserInfo
+              firstName={firstName}
+              lastName={lastName}
+              workArea={workArea}
+              level={level}
+              onFirstNameChange={setFirstName}
+              onLastNameChange={setLastName}
+              onWorkAreaChange={setWorkArea}
+              onLevelChange={setLevel}
+            />
           )}
 
           {/* LLM Setup Step */}
           {currentStep === "llm-setup" && (
-            <div className="flex-1 flex flex-col gap-6 justify-between">
-              {/* Header */}
-              <div className="flex items-center justify-center">
-                <Text headingH2 text05>
-                  Connect your LLM
-                </Text>
-              </div>
-
-              {/* Provider selection */}
-              <div className="flex flex-col gap-3 items-center">
-                <Text mainUiBody text04>
-                  Provider
-                </Text>
-                <div className="flex justify-center gap-3 w-full max-w-md">
-                  {PROVIDERS.map((provider) => {
-                    const isConfigured = isProviderConfigured(
-                      provider.providerName
-                    );
-                    return (
-                      <div key={provider.key} className="flex-1">
-                        <SelectableButton
-                          selected={selectedProvider === provider.key}
-                          onClick={() => handleProviderChange(provider.key)}
-                          subtext={
-                            isConfigured
-                              ? "Already configured"
-                              : provider.recommended
-                                ? "Recommended"
-                                : undefined
-                          }
-                          disabled={
-                            connectionStatus === "testing" || isConfigured
-                          }
-                          tooltip={
-                            isConfigured
-                              ? "This provider is already configured"
-                              : undefined
-                          }
-                        >
-                          {provider.label}
-                        </SelectableButton>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Model selection */}
-              <div className="flex flex-col gap-3 items-center">
-                <Text mainUiBody text04>
-                  Default Model
-                </Text>
-                <div className="flex justify-center gap-3 flex-wrap w-full max-w-md">
-                  {currentProviderConfig.models.map((model) => (
-                    <div key={model.name} className="flex-1 min-w-0">
-                      <ModelSelectButton
-                        selected={selectedModel === model.name}
-                        onClick={() => {
-                          setSelectedModel(model.name);
-                          setConnectionStatus("idle");
-                          setErrorMessage("");
-                        }}
-                        label={model.label}
-                        recommended={model.recommended}
-                        disabled={connectionStatus === "testing"}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* API Key input */}
-              <div className="flex flex-col gap-3 items-center">
-                <Text mainUiBody text04>
-                  API Key
-                </Text>
-                <div className="w-full max-w-md">
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => {
-                      setApiKey(e.target.value);
-                      setConnectionStatus("idle");
-                      setErrorMessage("");
-                    }}
-                    placeholder={currentProviderConfig.apiKeyPlaceholder}
-                    disabled={connectionStatus === "testing"}
-                    className={cn(
-                      "w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none",
-                      connectionStatus === "testing" &&
-                        "opacity-50 cursor-not-allowed"
-                    )}
-                  />
-                  {/* Message area */}
-                  <div className="min-h-[2rem] flex justify-center pt-4">
-                    {connectionStatus === "error" && (
-                      <Text secondaryBody className="text-red-500">
-                        {errorMessage}
-                      </Text>
-                    )}
-                    <div
-                      className={cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-08 bg-status-success-00 border border-status-success-02 w-fit",
-                        connectionStatus !== "success" && "hidden"
-                      )}
-                    >
-                      <SvgCheckCircle className="w-4 h-4 stroke-status-success-05 shrink-0" />
-                      <Text secondaryBody className="text-status-success-05">
-                        Success!
-                      </Text>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <OnboardingLlmSetup
+              selectedProvider={selectedProvider}
+              selectedModel={selectedModel}
+              apiKey={apiKey}
+              connectionStatus={connectionStatus}
+              errorMessage={errorMessage}
+              llmProviders={llmProviders}
+              onProviderChange={setSelectedProvider}
+              onModelChange={setSelectedModel}
+              onApiKeyChange={setApiKey}
+              onConnectionStatusChange={setConnectionStatus}
+              onErrorMessageChange={setErrorMessage}
+            />
           )}
 
           {/* Page 1 - What is Onyx Craft? */}
           {currentStep === "page1" && (
-            <div className="flex-1 flex flex-col gap-6 items-center justify-center">
-              <Text headingH2 text05>
-                What is Onyx Craft?
-              </Text>
-              <img
-                src="/craft_demo_image_1.png"
-                alt="Onyx Craft"
-                className="max-w-full h-auto rounded-12"
-              />
-              <Text mainContentBody text04 className="text-center">
-                Beautiful dashboards, slides, and reports.
-                <br />
-                Built by AI agents that know your world. Privately and securely.
-              </Text>
-            </div>
+            <OnboardingInfoPages
+              step="page1"
+              workArea={workArea}
+              level={level}
+            />
           )}
 
           {/* Page 2 - Let's get started */}
           {currentStep === "page2" && (
-            <div className="flex-1 flex flex-col gap-6 items-center justify-center">
-              <Text headingH2 text05>
-                Let's get started!
-              </Text>
-              <img
-                src="/craft_demo_image_2.png"
-                alt="Onyx Craft"
-                className="max-w-full h-auto rounded-12"
-              />
-              <Text mainContentBody text04 className="text-center">
-                While we sync your data, try our demo dataset
-                <br />
-                of 1,000+ simulated documents across 5 apps!
-                <br />
-              </Text>
-              <div className="flex items-center justify-center gap-4">
-                <SimpleTooltip tooltip="Google Drive">
-                  <span className="inline-flex items-center cursor-help">
-                    <GoogleDriveIcon size={25} />
-                  </span>
-                </SimpleTooltip>
-                <SimpleTooltip tooltip="GitHub">
-                  <span className="inline-flex items-center cursor-help">
-                    <GithubIcon size={25} />
-                  </span>
-                </SimpleTooltip>
-                <SimpleTooltip tooltip="HubSpot">
-                  <span className="inline-flex items-center cursor-help">
-                    <HubSpotIcon size={25} />
-                  </span>
-                </SimpleTooltip>
-                <SimpleTooltip tooltip="Linear">
-                  <span className="inline-flex items-center cursor-help">
-                    <LinearIcon size={25} />
-                  </span>
-                </SimpleTooltip>
-                <SimpleTooltip tooltip="Fireflies">
-                  <span className="inline-flex items-center cursor-help">
-                    <FirefliesIcon size={25} />
-                  </span>
-                </SimpleTooltip>
-              </div>
-            </div>
+            <OnboardingInfoPages
+              step="page2"
+              workArea={workArea}
+              level={level}
+            />
           )}
 
           {/* Navigation buttons */}
@@ -941,12 +578,24 @@ export default function BuildOnboardingModal({
               <button
                 type="button"
                 onClick={handleNext}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-12 bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-colors"
+                disabled={!canContinueInfoPage}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
+                  canContinueInfoPage
+                    ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
+                    : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
+                )}
               >
-                <Text mainUiAction className="text-white dark:text-black">
-                  Continue
-                </Text>
-                <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
+                {!canContinueInfoPage ? (
+                  <SvgLoader className="w-4 h-4 animate-spin text-text-02" />
+                ) : (
+                  <>
+                    <Text mainUiAction className="text-white dark:text-black">
+                      Continue
+                    </Text>
+                    <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
+                  </>
+                )}
               </button>
             )}
 
@@ -954,24 +603,28 @@ export default function BuildOnboardingModal({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={isSubmitting}
+                disabled={!canContinueInfoPage || isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                  !isSubmitting
+                  canContinueInfoPage && !isSubmitting
                     ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
                     : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
                 )}
               >
-                <Text
-                  mainUiAction
-                  className={cn(
-                    !isSubmitting
-                      ? "text-white dark:text-black"
-                      : "text-text-02"
-                  )}
-                >
-                  {isSubmitting ? "Saving..." : "Get Started!"}
-                </Text>
+                {isSubmitting ? (
+                  <>
+                    <SvgLoader className="w-4 h-4 animate-spin text-text-02" />
+                    <Text mainUiAction className="text-text-02">
+                      Saving...
+                    </Text>
+                  </>
+                ) : !canContinueInfoPage ? (
+                  <SvgLoader className="w-4 h-4 animate-spin text-text-02" />
+                ) : (
+                  <Text mainUiAction className="text-white dark:text-black">
+                    Get Started!
+                  </Text>
+                )}
               </button>
             )}
 

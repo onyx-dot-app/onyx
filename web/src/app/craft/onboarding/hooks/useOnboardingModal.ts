@@ -14,6 +14,7 @@ import {
   setBuildUserPersona,
 } from "@/app/craft/onboarding/constants";
 import { updateUserPersonalization } from "@/lib/userSettings";
+import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 // Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
 function checkAllProvidersConfigured(
@@ -49,27 +50,30 @@ export function useOnboardingModal(): OnboardingModalController {
     refetch: refetchLlmProviders,
   } = useLLMProviders();
 
+  // Get ensurePreProvisionedSession from the session store
+  const ensurePreProvisionedSession = useBuildSessionStore(
+    (state) => state.ensurePreProvisionedSession
+  );
+
   // Modal mode state
   const [mode, setMode] = useState<OnboardingModalMode>({ type: "closed" });
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Compute initial values for the form
-  const initialValues = useMemo(() => {
-    const existingPersona = getBuildUserPersona();
-    const existingName = user?.personalization?.name || "";
-    const spaceIndex = existingName.indexOf(" ");
-    const initialFirstName =
-      spaceIndex > 0 ? existingName.slice(0, spaceIndex) : existingName;
-    const initialLastName =
-      spaceIndex > 0 ? existingName.slice(spaceIndex + 1) : "";
+  // Compute initial values for the form (read fresh on every render)
+  const existingPersona = getBuildUserPersona();
+  const existingName = user?.personalization?.name || "";
+  const spaceIndex = existingName.indexOf(" ");
+  const initialFirstName =
+    spaceIndex > 0 ? existingName.slice(0, spaceIndex) : existingName;
+  const initialLastName =
+    spaceIndex > 0 ? existingName.slice(spaceIndex + 1) : "";
 
-    return {
-      firstName: initialFirstName,
-      lastName: initialLastName,
-      workArea: existingPersona?.workArea || "",
-      level: existingPersona?.level || "",
-    };
-  }, [user?.personalization?.name]);
+  const initialValues = {
+    firstName: initialFirstName,
+    lastName: initialLastName,
+    workArea: existingPersona?.workArea,
+    level: existingPersona?.level,
+  };
 
   // Check if user has completed initial onboarding
   const hasUserInfo = useMemo(() => {
@@ -126,8 +130,13 @@ export function useOnboardingModal(): OnboardingModalController {
 
       // Refresh user to update state
       await refreshUser();
+
+      // Trigger pre-provisioning now that onboarding is complete
+      // This ensures the sandbox starts provisioning immediately rather than
+      // waiting for the controller effect to detect the cookie change
+      ensurePreProvisionedSession();
     },
-    [refreshUser]
+    [refreshUser, ensurePreProvisionedSession]
   );
 
   // Complete LLM setup callback
