@@ -654,8 +654,8 @@ def upload_file_endpoint(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File has no filename")
 
-    # Read file content
-    content = file.read()
+    # Read file content (use sync file interface)
+    content = file.file.read()
 
     # Validate file (extension, mime type, size)
     is_valid, error = validate_file(file.filename, file.content_type, len(content))
