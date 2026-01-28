@@ -88,7 +88,7 @@ export default function Hoverable({
       ref={ref}
       type={asChild ? undefined : "button"}
       className={cn(
-        "flex flex-1",
+        "flex flex-1 cursor-pointer",
         !disableHoverInteractivity && [
           "transition-colors",
           "hover:bg-background-tint-02",
