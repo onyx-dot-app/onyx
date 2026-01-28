@@ -164,9 +164,8 @@ def validate_persona_ids_exist(
 
 
 def get_personas_using_provider(
-    db_session: Session, provider_name: str
+    db_session: Session, provider: LLMProviderModel
 ) -> list[Persona]:
-    """Get all non-deleted personas that use a specific LLM provider."""
     return list(
         db_session.scalars(
             select(Persona)
@@ -174,14 +173,7 @@ def get_personas_using_provider(
                 ModelConfiguration,
                 Persona.model_configuration_id_override == ModelConfiguration.id,
             )
-            .join(
-                LLMProviderModel,
-                ModelConfiguration.llm_provider_id == LLMProviderModel.id,
-            )
-            .where(
-                LLMProviderModel.name == provider_name,
-                Persona.deleted == False,  # noqa: E712
-            )
+            .where(ModelConfiguration.llm_provider_id == provider.id)
         ).all()
     )
 
@@ -547,7 +539,7 @@ def remove_llm_provider(db_session: Session, provider_id: int) -> None:
 
     # Clear the provider override from any personas using it
     # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
+    personas_using_provider = get_personas_using_provider(db_session, provider)
     for persona in personas_using_provider:
         persona.model_configuration_id_override = None
 
@@ -571,7 +563,7 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
 
     # Clear the provider override from any personas using it
     # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
+    personas_using_provider = get_personas_using_provider(db_session, provider)
     for persona in personas_using_provider:
         persona.model_configuration_id_override = None
 
