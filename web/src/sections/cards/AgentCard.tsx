@@ -30,20 +30,10 @@ import {
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { LineItemLayout } from "@/layouts/general-layouts";
 interface IconLabelProps {
   icon: React.FunctionComponent<IconProps>;
   children: string;
-}
-
-function IconLabel({ icon: Icon, children }: IconLabelProps) {
-  return (
-    <div className="flex flex-row items-center gap-1">
-      <Icon className="stroke-text-03 w-3 h-3" />
-      <Text as="p" text03 secondaryBody>
-        {children}
-      </Text>
-    </div>
-  );
 }
 
 export interface AgentCardProps {
@@ -189,16 +179,22 @@ export default function AgentCard({ agent }: AgentCardProps) {
           <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between">
             {/* Left side - creator and actions */}
             <div className="flex flex-col gap-1 py-1 px-2">
-              <IconLabel icon={SvgUser}>
-                {agent.owner?.email || "Onyx"}
-              </IconLabel>
-              <IconLabel icon={SvgActions}>
-                {agent.tools.length > 0
-                  ? `${agent.tools.length} Action${
-                      agent.tools.length > 1 ? "s" : ""
-                    }`
-                  : "No Actions"}
-              </IconLabel>
+              <LineItemLayout
+                icon={SvgUser}
+                title={agent.owner?.email || "Onyx"}
+                variant="mini"
+              />
+              <LineItemLayout
+                icon={SvgActions}
+                title={
+                  agent.tools.length > 0
+                    ? `${agent.tools.length} Action${
+                        agent.tools.length > 1 ? "s" : ""
+                      }`
+                    : "No Actions"
+                }
+                variant="mini"
+              />
             </div>
 
             {/* Right side - Start Chat button */}

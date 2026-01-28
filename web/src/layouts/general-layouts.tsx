@@ -179,7 +179,8 @@ type LineItemLayoutVariant =
   | "primary"
   | "secondary"
   | "tertiary"
-  | "tertiary-muted";
+  | "tertiary-muted"
+  | "mini";
 export interface LineItemLayoutProps {
   icon?: React.FunctionComponent<IconProps>;
   title: string;
@@ -207,18 +208,25 @@ function LineItemLayout({
   reducedPadding,
 }: LineItemLayoutProps) {
   // Derive styling from variant
+  const isMini = variant === "mini";
   const isCompact =
     variant === "secondary" ||
     variant === "tertiary" ||
     variant === "tertiary-muted";
-  const isMuted = variant === "tertiary-muted";
+  const isMuted = variant === "tertiary-muted" || isMini;
+
+  // Determine icon size: mini=12px, compact=16px, primary=20px
+  const iconSize = isMini ? 12 : isCompact ? 16 : 20;
+
+  // Determine gap: mini=0.25rem, others=1.5rem
+  const gap = isMini ? 0.25 : 1.5;
 
   return (
     <Section
       flexDirection="row"
       justifyContent="between"
-      alignItems={center ? "center" : "start"}
-      gap={1.5}
+      alignItems={center || isMini ? "center" : "start"}
+      gap={gap}
     >
       <div
         className="line-item-layout"
@@ -229,14 +237,13 @@ function LineItemLayout({
         data-reduced-padding={reducedPadding ? "true" : undefined}
       >
         {/* Row 1: Icon, Title */}
-        {Icon && (
-          <Icon size={isCompact ? 16 : 20} className="line-item-layout-icon" />
-        )}
+        {Icon && <Icon size={iconSize} className="line-item-layout-icon" />}
         {loading ? (
           <div className="line-item-layout-skeleton-title" />
         ) : (
           <Text
-            mainContentEmphasis={!isCompact}
+            mainContentEmphasis={!isCompact && !isMini}
+            secondaryBody={isMini}
             text03={isMuted}
             className="line-item-layout-title"
           >
