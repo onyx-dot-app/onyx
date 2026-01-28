@@ -13,8 +13,18 @@ import os
 import sys
 from pathlib import Path
 
-# Connector descriptions for known connector types
-# Keep in sync with agent_instructions.py CONNECTOR_DESCRIPTIONS
+# Provider display name mapping
+PROVIDER_DISPLAY_NAMES = {
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "azure": "Azure OpenAI",
+    "google": "Google AI",
+    "bedrock": "AWS Bedrock",
+    "vertex": "Google Vertex AI",
+}
+
+# Connector directory structure descriptions
+# Keys are normalized (lowercase, underscores) directory names
 CONNECTOR_DESCRIPTIONS = {
     "google_drive": (
         "**Google Drive**: Copied over directly as is. "
@@ -59,7 +69,6 @@ CONNECTOR_DESCRIPTIONS = {
 }
 
 # Content for the attachments section when user has uploaded files
-# Keep in sync with agent_instructions.py ATTACHMENTS_SECTION_CONTENT
 ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
 
 The `attachments/` directory contains files that the user has explicitly uploaded during this session.
