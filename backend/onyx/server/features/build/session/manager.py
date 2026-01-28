@@ -513,14 +513,14 @@ class SessionManager:
                         f"for new session {session_id}"
                     )
             else:
-                # Handle PROVISIONING status - sandbox is being created by another request
-                logger.info(
-                    f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
-                    f"for new session {session_id}"
+                # PROVISIONING status - sandbox is being created by another request
+                # Just fail this request
+                msg = (
+                    f"Sandbox {sandbox_id} has status {sandbox.status.value} and is being "
+                    f"created by another request for new session {session_id}"
                 )
-                raise RuntimeError(
-                    f"Sandbox {sandbox_id} is being created by another request"
-                )
+                logger.error(msg)
+                raise RuntimeError(msg)
         else:
             # Create new Sandbox record for the user (uses flush, caller commits)
             sandbox = create_sandbox__no_commit(
