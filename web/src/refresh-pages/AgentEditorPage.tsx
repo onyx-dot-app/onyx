@@ -452,16 +452,23 @@ export default function AgentEditorPage({
   const deleteAgentModal = useCreateModal();
 
   // LLM Model Selection
+  const findProviderAndModel = useCallback(
+    (providers: any[] | undefined, predicate: (m: any) => boolean) => {
+      const provider = providers?.find(
+        (p: any) => p.model_configurations?.find(predicate)
+      );
+      const model = provider?.model_configurations?.find(predicate);
+      return { provider, model };
+    },
+    []
+  );
+
   const getCurrentLlm = useCallback(
     (values: any, llmProviders: any) =>
       values.model_configuration_id_override
         ? (() => {
-            const provider = llmProviders?.find((p: any) =>
-              p.model_configurations.find(
-                (m: any) => m.id === values.model_configuration_id_override
-              )
-            );
-            const model = provider?.model_configurations?.find(
+            const { provider, model } = findProviderAndModel(
+              llmProviders,
               (m: any) => m.id === values.model_configuration_id_override
             );
             return structureValue(
@@ -471,26 +478,25 @@ export default function AgentEditorPage({
             );
           })()
         : null,
-    []
+    [findProviderAndModel]
   );
 
   const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
+    (selected: string | null, setFieldValue: any, llmProviders: any) => {
       if (selected === null) {
         setFieldValue("model_configuration_id_override", null);
       } else {
         const { modelName, name } = parseLlmDescriptor(selected);
         if (modelName && name) {
-          const model = llmProviders
-            ?.find((p: any) =>
-              p.model_configurations.find((m: any) => m.name === modelName)
-            )
-            ?.model_configurations?.find((m: any) => m.name === modelName);
+          const { model } = findProviderAndModel(
+            llmProviders,
+            (m: any) => m.name === modelName
+          );
           setFieldValue("model_configuration_id_override", model?.id || null);
         }
       }
     },
-    []
+    [findProviderAndModel]
   );
 
   // Hooks for Knowledge section
@@ -1510,7 +1516,11 @@ export default function AgentEditorPage({
                                 llmProviders={llmProviders ?? []}
                                 currentLlm={getCurrentLlm(values, llmProviders)}
                                 onSelect={(selected) =>
-                                  onLlmSelect(selected, setFieldValue)
+                                  onLlmSelect(
+                                    selected,
+                                    setFieldValue,
+                                    llmProviders
+                                  )
                                 }
                               />
                             </InputLayouts.Horizontal>
