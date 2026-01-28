@@ -383,35 +383,28 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     });
 
   useSendMessageToParent();
+  const onChat = useCallback(
+    (message: string) => {
+      onSubmit({
+        message,
+        currentMessageFiles,
+        deepResearch: deepResearchEnabled,
+      });
+      if (showOnboarding) {
+        finishOnboarding();
+      }
+    },
+    [
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      showOnboarding,
+      finishOnboarding,
+    ]
+  );
 
   // Unified query controller - handles classification and search routing
-  const queryController = useQueryController({
-    onChat: useCallback(
-      (message: string) => {
-        onSubmit({
-          message,
-          currentMessageFiles,
-          deepResearch: deepResearchEnabled,
-        });
-        if (showOnboarding) {
-          finishOnboarding();
-        }
-      },
-      [
-        onSubmit,
-        currentMessageFiles,
-        deepResearchEnabled,
-        showOnboarding,
-        finishOnboarding,
-      ]
-    ),
-  });
-
-  // Determine if we're showing search results
-  const showSearchResults =
-    queryController.classification === "search" &&
-    (queryController.searchResults.length > 0 ||
-      queryController.isSearchLoading);
+  const queryController = useQueryController(onChat);
 
   // Source filter state for search results
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
@@ -440,22 +433,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       updateCurrentDocumentSidebarVisible(false);
     }
   }, [currentChatSessionId]);
-
-  // Sync query controller classification with session state
-  // When in an existing chat session, classification should be "chat"
-  // When starting fresh (no session) or switching agents, reset to allow classification
-  useEffect(() => {
-    if (currentChatSessionId) {
-      queryController.setClassification("chat");
-    } else {
-      queryController.reset();
-    }
-  }, [
-    currentChatSessionId,
-    selectedAssistant?.id,
-    queryController.setClassification,
-    queryController.reset,
-  ]);
 
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
@@ -789,8 +766,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <SearchResults
                       results={queryController.searchResults}
                       llmSelectedDocIds={queryController.llmSelectedDocIds}
-                      isLoading={queryController.isSearchLoading}
-                      error={queryController.searchError}
                       onDocumentClick={handleSearchDocumentClick}
                       selectedSources={selectedSources}
                     />

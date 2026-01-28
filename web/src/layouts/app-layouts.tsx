@@ -312,37 +312,39 @@ function AppHeader() {
               className={cn(!isMobile && "hidden")}
               internal
             />
-            <InputSelect
-              value={currentChatSessionId ? "chat" : appMode}
-              onValueChange={(value) => setAppMode(value as AppMode)}
-              variant="secondary"
-              disabled={!appFocus.isNewSession()}
-            >
-              <InputSelect.Trigger width="fit" />
-              <InputSelect.Content>
-                <InputSelect.Item
-                  value="auto"
-                  icon={SvgSparkle}
-                  description="Automatic Search/Chat mode"
-                >
-                  Auto
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value="search"
-                  icon={SvgSearch}
-                  description="Quick search for documents"
-                >
-                  Search
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value="chat"
-                  icon={SvgBubbleText}
-                  description="Conversation and research with follow-up questions"
-                >
-                  Chat
-                </InputSelect.Item>
-              </InputSelect.Content>
-            </InputSelect>
+            {!appFocus.isUserSettings() && (
+              <InputSelect
+                value={currentChatSessionId ? "chat" : appMode}
+                onValueChange={(value) => setAppMode(value as AppMode)}
+                variant="secondary"
+                disabled={!appFocus.isNewSession()}
+              >
+                <InputSelect.Trigger width="fit" />
+                <InputSelect.Content>
+                  <InputSelect.Item
+                    value="auto"
+                    icon={SvgSparkle}
+                    description="Automatic Search/Chat mode"
+                  >
+                    Auto
+                  </InputSelect.Item>
+                  <InputSelect.Item
+                    value="search"
+                    icon={SvgSearch}
+                    description="Quick search for documents"
+                  >
+                    Search
+                  </InputSelect.Item>
+                  <InputSelect.Item
+                    value="chat"
+                    icon={SvgBubbleText}
+                    description="Conversation and research with follow-up questions"
+                  >
+                    Chat
+                  </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            )}
           </Section>
 
           {/* Center - contains the custom-header-content */}

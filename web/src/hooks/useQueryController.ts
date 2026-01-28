@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BaseFilters,
   classifyQuery,
@@ -10,13 +10,9 @@ import {
   SearchFullResponse,
 } from "@/lib/search/searchApi";
 import { useAppMode } from "@/providers/AppModeProvider";
+import useAppFocus from "@/hooks/useAppFocus";
 
 export type QueryClassification = "search" | "chat" | null;
-
-export interface UseQueryControllerOptions {
-  /** Callback invoked when the query should be handled as a chat */
-  onChat: (query: string) => void;
-}
 
 export interface UseQueryControllerReturn {
   /** The query that was submitted */
@@ -27,20 +23,12 @@ export interface UseQueryControllerReturn {
   isClassifying: boolean;
   /** Search results (empty if chat or not yet searched) */
   searchResults: SearchDocWithContent[];
-  /** Query expansions that were executed */
-  executedQueries: string[];
   /** Document IDs selected by the LLM as most relevant */
   llmSelectedDocIds: string[] | null;
-  /** Whether a search is currently in progress */
-  isSearchLoading: boolean;
-  /** Error message if search failed */
-  searchError: string | null;
   /** Submit a query - routes to search or chat based on app mode */
   submit: (query: string, filters?: BaseFilters) => Promise<void>;
   /** Reset all state to initial values */
   reset: () => void;
-  /** Directly set the classification (e.g., when entering an existing chat session) */
-  setClassification: (classification: QueryClassification) => void;
 }
 
 /**
@@ -69,10 +57,10 @@ export interface UseQueryControllerReturn {
  * ```
  */
 export function useQueryController(
-  options: UseQueryControllerOptions
+  onChat: (query: string) => void
 ): UseQueryControllerReturn {
-  const { onChat } = options;
   const { appMode } = useAppMode();
+  const appFocus = useAppFocus();
 
   // Query state
   const [query, setQuery] = useState<string | null>(null);
@@ -274,17 +262,22 @@ export function useQueryController(
     setSearchError(null);
   }, []);
 
+  // Sync classification state with navigation context
+  // When in an existing chat session, classification should be "chat"
+  // When switching agents or projects (no session), reset to allow new classification
+  useEffect(() => {
+    if (appFocus.isNewSession()) return;
+    else if (appFocus.isChat()) setClassification("chat");
+    else reset();
+  }, [appFocus]);
+
   return {
     query,
     classification,
     isClassifying,
     searchResults,
-    executedQueries,
     llmSelectedDocIds,
-    isSearchLoading,
-    searchError,
     submit,
     reset,
-    setClassification,
   };
 }

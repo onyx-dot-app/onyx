@@ -19,10 +19,6 @@ export interface SearchResultsProps {
   results: SearchDocWithContent[];
   /** Document IDs that the LLM selected as most relevant */
   llmSelectedDocIds?: string[] | null;
-  /** Whether search is currently loading */
-  isLoading: boolean;
-  /** Error message if search failed */
-  error?: string | null;
   /** Callback when a document is clicked */
   onDocumentClick: (doc: MinimalOnyxDocument) => void;
   /** Selected sources for filtering */
@@ -75,7 +71,6 @@ function getTimeFilterDate(filter: TimeFilter): Date | null {
 export default function SearchResults({
   results,
   llmSelectedDocIds,
-  error,
   onDocumentClick,
   selectedSources,
 }: SearchResultsProps) {
