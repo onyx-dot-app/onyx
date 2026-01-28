@@ -101,6 +101,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
         asChild
         onClick={handleStartChat}
         group="group/AgentCard"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         disableHoverInteractivity
       >
         <Card padding={0} gap={0} height="full">
