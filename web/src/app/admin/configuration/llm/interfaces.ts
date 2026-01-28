@@ -10,7 +10,6 @@ export enum LLMProviderName {
 }
 
 export interface ModelConfiguration {
-  id: number;
   name: string;
   is_visible: boolean;
   max_input_tokens: number | null;

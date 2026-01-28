@@ -16,7 +16,8 @@ export interface MinimalPersonaSnapshot {
   tools: ToolSnapshot[];
   starter_messages: StarterMessage[] | null;
   document_sets: DocumentSetSummary[];
-  model_configuration_id_override?: number;
+  llm_model_version_override?: string;
+  llm_model_provider_override?: string;
 
   uploaded_image_id?: string;
   icon_name?: string;

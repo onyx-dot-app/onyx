@@ -19,20 +19,14 @@ export function getFinalLLM(
 
   if (persona) {
     // Map "provider override" to actual LLLMProvider
-    // Map "model override" to actual model
-    if (persona.model_configuration_id_override) {
+    if (persona.llm_model_provider_override) {
       const underlyingProvider = llmProviders.find(
         (item: LLMProviderDescriptor) =>
-          item.model_configurations.find(
-            (m) => m.id === persona.model_configuration_id_override
-          )
-      );
-      const underlyingModel = underlyingProvider?.model_configurations.find(
-        (m) => m.id === persona.model_configuration_id_override
+          item.name === persona.llm_model_provider_override
       );
       provider = underlyingProvider?.provider || provider;
-      model = underlyingModel?.name || model;
     }
+    model = persona.llm_model_version_override || model;
   }
 
   if (currentLlm) {
@@ -47,23 +41,26 @@ export function getLLMProviderOverrideForPersona(
   liveAssistant: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
-  const overrideModelId = liveAssistant.model_configuration_id_override;
+  const overrideProvider = liveAssistant.llm_model_provider_override;
+  const overrideModel = liveAssistant.llm_model_version_override;
 
-  if (!overrideModelId) {
+  if (!overrideModel) {
     return null;
   }
 
-  const matchingProvider = llmProviders.find((provider) =>
-    provider.model_configurations.find((m) => m.id === overrideModelId)
+  const matchingProvider = llmProviders.find(
+    (provider) =>
+      (overrideProvider ? provider.name === overrideProvider : true) &&
+      provider.model_configurations
+        .map((modelConfiguration) => modelConfiguration.name)
+        .includes(overrideModel)
   );
-  const underlyingModel = matchingProvider?.model_configurations.find(
-    (m) => m.id === overrideModelId
-  );
-  if (matchingProvider && underlyingModel) {
+
+  if (matchingProvider) {
     return {
       name: matchingProvider.name,
       provider: matchingProvider.provider,
-      modelName: underlyingModel.name,
+      modelName: overrideModel,
     };
   }
 
