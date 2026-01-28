@@ -130,6 +130,22 @@ def downgrade() -> None:
         sa.Column("llm_model_provider_override", sa.String(), nullable=True),
     )
 
+    # Migrate data back from model_configuration_id_override to old columns
+    conn = op.get_bind()
+    conn.execute(
+        sa.text(
+            """
+            UPDATE persona
+            SET llm_model_provider_override = lp.name,
+                llm_model_version_override = mc.name
+            FROM model_configuration mc
+            JOIN llm_provider lp ON mc.llm_provider_id = lp.id
+            WHERE persona.model_configuration_id_override IS NOT NULL
+              AND persona.model_configuration_id_override = mc.id
+        """
+        )
+    )
+
     # Drop FK constraint and new column
     op.drop_constraint(
         "fk_persona_model_configuration_id_override", "persona", type_="foreignkey"

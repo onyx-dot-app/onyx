@@ -423,11 +423,11 @@ def test_provider_delete_clears_persona_references(reset: None) -> None:
         user_performing_action=admin_user,
     )
 
-    # Verify the persona now falls back to default (llm_model_provider_override cleared)
+    # Verify the persona now falls back to default (model_configuration_id_override cleared)
     persona_response = requests.get(
         f"{API_SERVER_URL}/persona/{persona.id}",
         headers=admin_user.headers,
     )
     assert persona_response.status_code == 200
     updated_persona = persona_response.json()
-    assert updated_persona["llm_model_provider_override"] is None
+    assert updated_persona["model_configuration_id_override"] is None
