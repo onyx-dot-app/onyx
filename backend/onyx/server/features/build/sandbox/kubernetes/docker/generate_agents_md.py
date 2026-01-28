@@ -58,6 +58,50 @@ CONNECTOR_DESCRIPTIONS = {
     ),
 }
 
+# Content for the attachments section when user has uploaded files
+# Keep in sync with agent_instructions.py ATTACHMENTS_SECTION_CONTENT
+ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
+
+The `attachments/` directory contains files that the user has explicitly uploaded during this session.
+**These files are critically important** and should be treated as high-priority context.
+
+### Why Attachments Matter
+
+- The user deliberately chose to upload these files, signaling they are directly relevant to the task
+- These files often contain the specific data, requirements, or examples the user wants you to work with
+- They may include spreadsheets, documents, images, or code that should inform your work
+
+### Required Actions
+
+**At the start of every task, you MUST:**
+
+1. **Check for attachments**: List the contents of `attachments/` to see what the user has provided
+2. **Read and analyze each file**: Thoroughly examine every attachment to understand its contents and relevance
+3. **Reference attachment content**: Use the information from attachments to inform your responses and outputs
+
+### File Handling
+
+- Uploaded files may be in various formats: CSV, JSON, PDF, images, text files, etc.
+- For spreadsheets and data files, examine the structure, columns, and sample data
+- For documents, extract key information and requirements
+- For images, analyze and describe their content
+- For code files, understand the logic and patterns
+
+**Do NOT ignore user uploaded files.** They are there for a reason and likely contain exactly what you need to
+complete the task successfully."""
+
+
+def build_attachments_section(attachments_path: Path) -> str:
+    """Return attachments section if files exist, empty string otherwise."""
+    if not attachments_path.exists():
+        return ""
+    try:
+        if any(attachments_path.iterdir()):
+            return ATTACHMENTS_SECTION_CONTENT
+    except Exception:
+        pass
+    return ""
+
 
 def build_file_structure_section(files_path: Path) -> str:
     """Build the file structure section by scanning the files directory."""
@@ -136,12 +180,17 @@ def main() -> None:
     file_structure = build_file_structure_section(files_path)
     connector_descriptions = build_connector_descriptions(files_path)
 
+    # Check attachments directory
+    attachments_path = Path("/workspace/attachments")
+    attachments_section = build_attachments_section(attachments_path)
+
     # Replace placeholders
     content = template
     content = content.replace("{{FILE_STRUCTURE_SECTION}}", file_structure)
     content = content.replace(
         "{{CONNECTOR_DESCRIPTIONS_SECTION}}", connector_descriptions
     )
+    content = content.replace("{{ATTACHMENTS_SECTION}}", attachments_section)
 
     # Write AGENTS.md
     output_path = Path("/workspace/AGENTS.md")
