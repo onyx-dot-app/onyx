@@ -41,6 +41,7 @@ logger = setup_logger()
 
 _NOTION_PAGE_SIZE = 100
 _NOTION_CALL_TIMEOUT = 30  # 30 seconds
+_MAX_PAGES = 1000
 
 
 # TODO: Tables need to be ingested, Pages need to have their metadata ingested
@@ -791,6 +792,52 @@ class NotionConnector(LoadConnector, PollConnector):
         res.raise_for_status()
         return NotionSearchResponse(**res.json())
 
+    def _yield_database_hierarchy_nodes(self) -> Generator[HierarchyNode, None, None]:
+        """Search for all databases and yield hierarchy nodes for each.
+
+        This must be called BEFORE page indexing so that database hierarchy nodes
+        exist when pages inside databases reference them as parents.
+        """
+        query_dict: dict[str, Any] = {
+            "filter": {"property": "object", "value": "database"},
+            "page_size": _NOTION_PAGE_SIZE,
+        }
+        pages_seen = 0
+        while pages_seen < _MAX_PAGES:
+            db_res = self._search_notion(query_dict)
+            for db in db_res.results:
+                db_id = db["id"]
+                # Extract title from the title array
+                title_arr = db.get("title", [])
+                db_name = None
+                if title_arr:
+                    db_name = " ".join(
+                        t.get("plain_text", "") for t in title_arr
+                    ).strip()
+                if not db_name:
+                    db_name = f"Database {db_id}"
+
+                # Get parent using existing helper
+                parent_raw_id = self._get_parent_raw_id(db.get("parent"))
+
+                # Notion URLs omit dashes from UUIDs
+                db_url = db.get("url") or f"https://notion.so/{db_id.replace('-', '')}"
+
+                node = self._maybe_yield_hierarchy_node(
+                    raw_node_id=db_id,
+                    raw_parent_id=parent_raw_id or self.workspace_id,
+                    display_name=db_name,
+                    link=db_url,
+                    node_type=HierarchyNodeType.DATABASE,
+                )
+                if node:
+                    yield node
+
+            if not db_res.has_more:
+                break
+            query_dict["start_cursor"] = db_res.next_cursor
+            pages_seen += 1
+
     def _filter_pages_by_time(
         self,
         pages: list[dict[str, Any]],
@@ -859,7 +906,12 @@ class NotionConnector(LoadConnector, PollConnector):
         if workspace_node:
             yield [workspace_node]
 
-        query_dict = {
+        # Yield database hierarchy nodes BEFORE pages so parent references resolve
+        yield from batch_generator(
+            self._yield_database_hierarchy_nodes(), self.batch_size
+        )
+
+        query_dict: dict[str, Any] = {
             "filter": {"property": "object", "value": "page"},
             "page_size": _NOTION_PAGE_SIZE,
         }
@@ -891,7 +943,14 @@ class NotionConnector(LoadConnector, PollConnector):
         if workspace_node:
             yield [workspace_node]
 
-        query_dict = {
+        # Yield database hierarchy nodes BEFORE pages so parent references resolve.
+        # We yield all databases without time filtering because a page's parent
+        # database might not have been edited even if the page was.
+        yield from batch_generator(
+            self._yield_database_hierarchy_nodes(), self.batch_size
+        )
+
+        query_dict: dict[str, Any] = {
             "page_size": _NOTION_PAGE_SIZE,
             "sort": {"timestamp": "last_edited_time", "direction": "descending"},
             "filter": {"property": "object", "value": "page"},
