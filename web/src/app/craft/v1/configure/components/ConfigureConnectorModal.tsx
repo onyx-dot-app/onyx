@@ -5,7 +5,7 @@ import useSWR from "swr";
 import Modal from "@/refresh-components/Modal";
 import { ValidSources, ConfigurableSources } from "@/lib/types";
 import { getSourceMetadata, getSourceDocLink } from "@/lib/sources";
-import { SvgPlug } from "@opal/icons";
+import { SvgPlug, SvgExternalLink } from "@opal/icons";
 import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
@@ -14,6 +14,8 @@ import ConnectorConfigStep from "@/app/craft/v1/configure/components/ConnectorCo
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { OAUTH_STATE_KEY } from "@/app/craft/v1/constants";
 import { connectorConfigs } from "@/lib/connectors/connectors";
+import Button from "@/refresh-components/buttons/Button";
+import { Section } from "@/layouts/general-layouts";
 
 type ModalStep = "credential" | "configure";
 
@@ -161,19 +163,23 @@ export default function ConfigureConnectorModal({
             title={getStepTitle()}
             description={getStepDescription()}
             onClose={onClose}
-          >
-            {getSourceDocLink(connectorType) && (
-              <a
-                href={getSourceDocLink(connectorType)!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-link hover:underline"
-              >
-                View setup documentation →
-              </a>
-            )}
-          </Modal.Header>
+          ></Modal.Header>
           <Modal.Body>
+            {getSourceDocLink(connectorType) && (
+              <Section flexDirection="row" justifyContent="end" width="full">
+                <div className="pr-10">
+                  <Button
+                    rightIcon={SvgExternalLink}
+                    href={getSourceDocLink(connectorType)!}
+                    target="_blank"
+                    tertiary
+                    action
+                  >
+                    View setup documentation
+                  </Button>
+                </div>
+              </Section>
+            )}
             {step === "credential" ? (
               <CredentialStep
                 connectorType={connectorType}
