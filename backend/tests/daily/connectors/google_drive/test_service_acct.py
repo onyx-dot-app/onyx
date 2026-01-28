@@ -8,6 +8,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_MY_DRIVE_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
@@ -50,6 +53,21 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     MISC_SHARED_DRIVE_FNAMES,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PILL_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    RESTRICTED_ACCESS_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_URL,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FILE_IDS
@@ -58,10 +76,25 @@ from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_1_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_FOLDER_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_MY_DRIVE_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_2_MY_DRIVE,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
 
@@ -109,13 +142,29 @@ def test_include_all(
     )
 
     # Verify hierarchy nodes for shared drives
+    # When include_shared_drives=True, we get ALL shared drives in the organization
     expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
         include_drive_2=True,
         include_restricted_folder=False,
     )
-    # Also include My Drive folders (folder_3)
+
+    # Add additional shared drives in the organization
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_ONLY_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
+    expected_ids.add(TEST_USER_1_MY_DRIVE_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
+    expected_ids.add(ADMIN_MY_DRIVE_ID)
+    expected_ids.add(TEST_USER_2_MY_DRIVE)
+    expected_ids.add(PILL_FOLDER_ID)
+    expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_FOLDER_ID)
+
+    # My Drive folders
     expected_ids.add(FOLDER_3_ID)
+
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
