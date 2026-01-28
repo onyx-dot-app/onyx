@@ -28,7 +28,7 @@ export default function FooterLinks({
           <button
             type="button"
             onClick={onActivateLicense}
-            className="bg-transparent border-none cursor-pointer p-0"
+            className="bg-transparent border-none cursor-pointer p-0 underline"
           >
             <Text secondaryBody text02>
               {licenseText}
@@ -43,7 +43,7 @@ export default function FooterLinks({
         href={BILLING_HELP_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="no-underline"
+        className="underline"
       >
         <Text secondaryBody text02>
           Billing Help

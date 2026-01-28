@@ -1,124 +1,152 @@
 "use client";
 
-import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
+import { Card } from "@/components/ui/card";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { SvgCheck } from "@opal/icons";
-import { IconProps } from "@opal/types";
+import type { IconProps } from "@opal/types";
+import { Section } from "@/layouts/general-layouts";
+
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+export interface PlanFeature {
+  icon: React.FunctionComponent<IconProps>;
+  text: string;
+}
+
+export interface PlanPricing {
+  amount: string;
+  details: string[];
+}
+
+export interface PlanButton {
+  label: string;
+  variant: "primary" | "secondary";
+  onClick?: () => void;
+  href?: string;
+}
 
 interface PlanCardProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;
+  pricing?: PlanPricing;
   description?: string;
-  price?: {
-    main: string;
-    sub?: string;
-  };
-  features: string[];
+  button: PlanButton;
+  features: PlanFeature[];
   featuresPrefix?: string;
-  ctaLabel: string;
-  ctaHref?: string;
-  onCtaClick?: () => void;
   isCurrentPlan?: boolean;
-  isExternal?: boolean;
+  hideFeatures?: boolean;
 }
 
-export default function PlanCard({
+// -----------------------------------------------------------------------------
+// PlanCard Component
+// -----------------------------------------------------------------------------
+
+export function PlanCard({
   icon: Icon,
   title,
+  pricing,
   description,
-  price,
+  button,
   features,
   featuresPrefix,
-  ctaLabel,
-  ctaHref,
-  onCtaClick,
   isCurrentPlan,
-  isExternal,
+  hideFeatures,
 }: PlanCardProps) {
   return (
-    <Card className="flex-1">
-      <Section gap={1} alignItems="start" height="auto">
-        {/* Header with icon and title */}
-        <Section
-          flexDirection="row"
-          gap={0.5}
-          justifyContent="start"
-          height="auto"
-        >
-          <Icon className="w-5 h-5 stroke-text-04" />
-          <Text headingH3>{title}</Text>
-        </Section>
-
-        {/* Description or price */}
-        {description && (
-          <Text secondaryBody text03>
-            {description}
-          </Text>
-        )}
-
-        {price && (
-          <Section gap={0.25} alignItems="start" height="auto">
-            <div className="billing-price-main">
-              <Text mainContentEmphasis>{price.main}</Text>
-            </div>
-            {price.sub && (
-              <Text secondaryBody text03>
-                {price.sub}
-              </Text>
-            )}
-          </Section>
-        )}
-
-        {/* CTA Button or Current Plan Badge */}
-        {isCurrentPlan ? (
-          <div className="billing-current-plan-badge">
-            <Text secondaryBody text03>
-              Your Current Plan
+    <Card className="plan-card">
+      <div className="plan-card-content">
+        <div className="plan-card-info">
+          {/* Plan title */}
+          <Section flexDirection="column" alignItems="start" gap={0.25}>
+            <Icon size={24} />
+            <Text headingH3 text04>
+              {title}
             </Text>
-          </div>
-        ) : (
-          <Button
-            main
-            primary={!isExternal}
-            secondary={isExternal}
-            onClick={onCtaClick}
-            href={ctaHref}
-            target={isExternal ? "_blank" : undefined}
-          >
-            {ctaLabel}
-          </Button>
-        )}
-      </Section>
+          </Section>
 
-      {/* Features section with light background */}
-      <div className="bg-background-tint-01 rounded-12 -mx-4 -mb-4 mt-2">
-        <Section gap={1} padding={1} alignItems="start" height="auto">
+          {/* Plan pricing details */}
+          {pricing && (
+            <Section flexDirection="row" gap={0.5}>
+              <Text headingH2 text04>
+                {pricing.amount}
+              </Text>
+              <Section flexDirection="column" alignItems="start" gap={0.25}>
+                {pricing.details.map((detail, index) => (
+                  <Text key={index} secondaryBody text03>
+                    {detail}
+                  </Text>
+                ))}
+              </Section>
+            </Section>
+          )}
+
+          {description && (
+            <div className="plan-card-description">
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            </div>
+          )}
+        </div>
+
+        <div className="plan-card-button">
+          {isCurrentPlan ? (
+            <div className="plan-card-current-badge">
+              <Text mainUiAction text03>
+                Your Current Plan
+              </Text>
+            </div>
+          ) : button.href ? (
+            <Button
+              main
+              secondary={button.variant === "secondary"}
+              primary={button.variant === "primary"}
+              href={button.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full"
+            >
+              {button.label}
+            </Button>
+          ) : (
+            <Button
+              main
+              secondary={button.variant === "secondary"}
+              primary={button.variant === "primary"}
+              onClick={button.onClick}
+              className="w-full"
+            >
+              {button.label}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="plan-card-features-container"
+        data-hidden={hideFeatures ? "true" : "false"}
+      >
+        <div className="plan-card-features">
           {featuresPrefix && (
-            <Text secondaryBody text03>
+            <Text mainUiBody text03>
               {featuresPrefix}
             </Text>
           )}
-
-          <Section gap={0.5} alignItems="start" height="auto">
-            {features.map((feature, index) => (
-              <Section
-                key={index}
-                flexDirection="row"
-                gap={0.25}
-                justifyContent="start"
-                alignItems="center"
-                height="auto"
-              >
-                <div className="billing-feature-icon">
-                  <SvgCheck className="w-4 h-4 stroke-status-success-05" />
+          <div className="plan-card-feature-list">
+            {features.map((feature) => (
+              <div key={feature.text} className="plan-card-feature-item">
+                <div className="plan-card-feature-icon">
+                  <feature.icon size={16} />
                 </div>
-                <Text secondaryBody>{feature}</Text>
-              </Section>
+                <Text mainUiBody text03>
+                  {feature.text}
+                </Text>
+              </div>
             ))}
-          </Section>
-        </Section>
+          </div>
+        </div>
       </div>
     </Card>
   );

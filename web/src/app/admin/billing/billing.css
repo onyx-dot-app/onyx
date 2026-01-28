@@ -5,24 +5,140 @@
  * with built-in component props. Prefer using component props over custom CSS.
  */
 
-/* Plan Card feature list checkmark icon container */
-.billing-feature-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  padding: 0.125rem;
+/* -----------------------------------------------------------------------------
+ * Plan Card
+ * -------------------------------------------------------------------------- */
+
+.plan-card {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 20.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-card-content {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  /* Ensures both cards have same content height for button alignment */
+  min-height: 12rem;
+}
+
+.plan-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.plan-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.plan-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+}
+
+.plan-card-pricing {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.plan-card-price {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 2.25rem;
+  letter-spacing: -0.24px;
+}
+
+.plan-card-pricing-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-card-description {
+  /* Constrain width so description wraps similar to pricing details */
+  max-width: 16rem;
+}
+
+.plan-card-button {
+  margin-top: auto;
+}
+
+.plan-card-current-badge {
+  width: 100%;
+  background: var(--background-tint-01);
+  border: 1px solid var(--border-01);
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  text-align: center;
+}
+
+.plan-card-features-container {
+  overflow: hidden;
+  transition:
+    max-height 0.25s ease-out,
+    opacity 0.2s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-card-features-container[data-hidden="true"] {
+  max-height: 0;
+  opacity: 0;
+}
+
+.plan-card-features-container[data-hidden="false"] {
+  max-height: none;
+  opacity: 1;
+  flex: 1;
+}
+
+.plan-card-features {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--background-tint-01);
+  flex: 1;
+}
+
+.plan-card-feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.plan-card-feature-item {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.plan-card-feature-icon {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0.125rem;
+  flex-shrink: 0;
 }
 
-/* Current plan badge styling */
-.billing-current-plan-badge {
-  background: var(--background-tint-02);
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.5rem;
-}
+/* -----------------------------------------------------------------------------
+ * Billing Banners
+ * -------------------------------------------------------------------------- */
 
-/* Expiration banner variants */
 .billing-banner {
   padding: 1rem;
   border-radius: 0.75rem;
@@ -42,26 +158,82 @@
   border: 1px solid var(--status-error-02);
 }
 
-/* Payment card styling */
+/* -----------------------------------------------------------------------------
+ * Other Billing Components
+ * -------------------------------------------------------------------------- */
+
 .billing-payment-card {
   min-width: 17.5rem;
   flex: 1;
 }
 
-/* License input container */
 .billing-license-input {
   font-family: var(--font-mono);
 }
 
-/* Plan card price styling */
-.billing-price-main {
-  display: flex;
-  align-items: baseline;
-  gap: 0.25rem;
-}
-
-/* Seats adjustment input */
 .billing-seats-input {
   width: 5rem;
   text-align: center;
+}
+
+/* -----------------------------------------------------------------------------
+ * View Transition Animations
+ * -------------------------------------------------------------------------- */
+
+@keyframes billing-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes billing-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes billing-expand-from-card {
+  from {
+    clip-path: inset(0 52% 50% 0);
+    opacity: 0.8;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+@keyframes billing-collapse-to-cards {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.billing-view-enter {
+  animation: billing-fade-in 0.25s ease-out;
+}
+
+.billing-view-expand {
+  animation: billing-expand-from-card 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.billing-view-collapse {
+  animation: billing-collapse-to-cards 0.25s ease-out;
+}
+
+.billing-card-enter {
+  animation: billing-slide-down 0.2s ease-out;
 }

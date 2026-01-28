@@ -1,11 +1,9 @@
+/* Copy this file into '.vscode/launch.json' or merge its contents into your existing configurations. */
+
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "compounds": [
     {
-      // Dummy entry used to label the group
       "name": "--- Compound ---",
       "configurations": ["--- Individual ---"],
       "presentation": {
@@ -15,14 +13,13 @@
     {
       "name": "Run All Onyx Services",
       "configurations": [
-        "Web Server",
+        // "Web Server",
         "Model Server",
         "API Server",
-        "MCP Server",
-        "Slack Bot",
+        // "Slack Bot",
         "Celery primary",
         "Celery light",
-        "Celery heavy",
+        "Celery background",
         "Celery docfetching",
         "Celery docprocessing",
         "Celery beat"
@@ -40,11 +37,7 @@
     },
     {
       "name": "Celery (lightweight mode)",
-      "configurations": [
-        "Celery primary",
-        "Celery background",
-        "Celery beat"
-      ],
+      "configurations": ["Celery primary", "Celery background", "Celery beat"],
       "presentation": {
         "group": "1"
       },
@@ -71,7 +64,6 @@
   ],
   "configurations": [
     {
-      // Dummy entry used to label the group
       "name": "--- Individual ---",
       "type": "node",
       "request": "launch",
@@ -106,7 +98,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["model_server.main:app", "--reload", "--port", "9000"],
+      "args": ["model_server.main:app", "--reload", "--port", "9010"],
       "presentation": {
         "group": "2"
       },
@@ -125,7 +117,7 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "args": ["onyx.main:app", "--reload", "--port", "8090"],
       "presentation": {
         "group": "2"
       },
@@ -148,52 +140,6 @@
         "group": "2"
       },
       "consoleTitle": "Slack Bot Console"
-    },
-    {
-      "name": "Discord Bot",
-      "consoleName": "Discord Bot",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "onyx/onyxbot/discord/client.py",
-      "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
-      "env": {
-        "LOG_LEVEL": "DEBUG",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "."
-      },
-      "presentation": {
-        "group": "2"
-      },
-      "consoleTitle": "Discord Bot Console"
-    },
-    {
-      "name": "MCP Server",
-      "consoleName": "MCP Server",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "uvicorn",
-      "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
-      "env": {
-        "MCP_SERVER_ENABLED": "true",
-        "MCP_SERVER_PORT": "8090",
-        "MCP_SERVER_CORS_ORIGINS": "http://localhost:*",
-        "LOG_LEVEL": "DEBUG",
-        "PYTHONUNBUFFERED": "1"
-      },
-      "args": [
-        "onyx.mcp_server.api:mcp_app",
-        "--reload",
-        "--port",
-        "8090",
-        "--timeout-graceful-shutdown",
-        "0"
-      ],
-      "presentation": {
-        "group": "2"
-      },
-      "consoleTitle": "MCP Server Console"
     },
     {
       "name": "Celery primary",
@@ -415,6 +361,7 @@
         "onyx.background.celery.versioned_apps.docfetching",
         "worker",
         "--pool=threads",
+        "--concurrency=1",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docfetching@%n",
@@ -445,6 +392,7 @@
         "onyx.background.celery.versioned_apps.docprocessing",
         "worker",
         "--pool=threads",
+        "--concurrency=6",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
@@ -492,18 +440,13 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
-      "args": [
-        "-v"
-        // Specify a specific module/test to run or provide nothing to run all tests
-        // "tests/unit/onyx/llm/answering/test_prune_and_merge.py"
-      ],
+      "args": ["-v"],
       "presentation": {
         "group": "2"
       },
       "consoleTitle": "Pytest Console"
     },
     {
-      // Dummy entry used to label the group
       "name": "--- Tasks ---",
       "type": "node",
       "request": "launch",
@@ -513,30 +456,14 @@
       }
     },
     {
-      "name": "Clear and Restart External Volumes and Containers",
+      "name": "Start Worktree Containers",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "${workspaceFolder}/backend/scripts/restart_containers.sh"
-      ],
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["${workspaceFolder}/scripts/start_containers.py"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
-      "presentation": {
-        "group": "3"
-      }
-    },
-    {
-      "name": "Clear and Restart OpenSearch Container",
-      // Generic debugger type, required arg but has no bearing on bash.
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "${workspaceFolder}/backend/scripts/restart_opensearch_container.sh"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.vscode/.env",
       "presentation": {
         "group": "3"
       }
@@ -562,8 +489,6 @@
       "consoleTitle": "Eval CLI Console"
     },
     {
-      // Celery jobs launched through a single background script (legacy)
-      // Recommend using the "Celery (all)" compound launch instead.
       "name": "Background Jobs",
       "consoleName": "Background Jobs",
       "type": "debugpy",
@@ -582,10 +507,10 @@
       "name": "Install Python Requirements",
       "type": "node",
       "request": "launch",
-      "runtimeExecutable": "uv",
+      "runtimeExecutable": "bash",
       "runtimeArgs": [
-        "sync",
-        "--all-extras"
+        "-c",
+        "pip install -r backend/requirements/default.txt && pip install -r backend/requirements/dev.txt && pip install -r backend/requirements/ee.txt && pip install -r backend/requirements/model_server.txt"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -594,152 +519,19 @@
       }
     },
     {
-      "name": "Build Sandbox Templates",
+      "name": "Onyx OpenAPI Schema Generator",
       "type": "debugpy",
       "request": "launch",
-      "module": "onyx.server.features.build.sandbox.build_templates",
+      "program": "scripts/onyx_openapi_schema.py",
       "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
+      "envFile": "${workspaceFolder}/.env",
       "env": {
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
-      "console": "integratedTerminal",
-      "presentation": {
-        "group": "3"
-      },
-      "consoleTitle": "Build Sandbox Templates"
+      "args": ["--filename", "generated/openapi.json"]
     },
     {
-      // Dummy entry used to label the group
-      "name": "--- Database ---",
-      "type": "node",
-      "request": "launch",
-      "presentation": {
-        "group": "4",
-        "order": 0
-      }
-    },
-    {
-      "name": "Restore seeded database dump",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "run",
-        "--with",
-        "onyx-devtools",
-        "ods",
-        "db",
-        "restore",
-        "--fetch-seeded",
-        "--yes"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "presentation": {
-        "group": "4"
-      }
-    },
-    {
-      "name": "Clean restore seeded database dump (destructive)",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "run",
-        "--with",
-        "onyx-devtools",
-        "ods",
-        "db",
-        "restore",
-        "--fetch-seeded",
-        "--clean",
-        "--yes"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "presentation": {
-        "group": "4"
-      }
-    },
-    {
-      "name": "Create database snapshot",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "run",
-        "--with",
-        "onyx-devtools",
-        "ods",
-        "db",
-        "dump",
-        "backup.dump"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "presentation": {
-        "group": "4"
-      }
-    },
-    {
-      "name": "Clean restore database snapshot (destructive)",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "run",
-        "--with",
-        "onyx-devtools",
-        "ods",
-        "db",
-        "restore",
-        "--clean",
-        "--yes",
-        "backup.dump"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "presentation": {
-        "group": "4"
-      }
-    },
-    {
-      "name": "Upgrade database to head revision",
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "uv",
-      "runtimeArgs": [
-        "run",
-        "--with",
-        "onyx-devtools",
-        "ods",
-        "db",
-        "upgrade"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "presentation": {
-        "group": "4"
-      }
-    },
-    {
-      // script to generate the openapi schema
-      "name": "Onyx OpenAPI Schema Generator",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "backend/scripts/onyx_openapi_schema.py",
-      "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
-      "env": {
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "backend"
-      },
-      "args": ["--filename", "backend/generated/openapi.json", "--generate-python-client"]
-    },
-    {
-      // script to debug multi tenant db issues
       "name": "Onyx DB Manager (Top Chunks)",
       "type": "debugpy",
       "request": "launch",
@@ -765,7 +557,7 @@
       "name": "Debug React Web App in Chrome",
       "type": "chrome",
       "request": "launch",
-      "url": "http://localhost:3000",
+      "url": "http://localhost:3010",
       "webRoot": "${workspaceFolder}/web"
     }
   ]

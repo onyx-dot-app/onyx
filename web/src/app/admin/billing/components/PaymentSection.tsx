@@ -46,7 +46,7 @@ export default function PaymentSection({ billing }: PaymentSectionProps) {
   );
 
   return (
-    <Section gap={0.75} alignItems="start" height="auto">
+    <Section gap={0.75} alignItems="start" height="auto" width="full">
       <Text mainContentEmphasis>Payment</Text>
 
       <Section flexDirection="row" gap={0.5} alignItems="stretch" height="auto">

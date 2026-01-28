@@ -84,11 +84,12 @@ export interface SubscriptionStatus {
 
 export interface CreateCheckoutSessionRequest {
   billing_period?: "monthly" | "annual";
+  seats?: number;
   email?: string;
 }
 
 export interface CreateCheckoutSessionResponse {
-  url: string;
+  stripe_checkout_url: string;
 }
 
 export interface CreateCustomerPortalSessionRequest {

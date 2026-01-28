@@ -1,111 +1,87 @@
 "use client";
 
-import { useState } from "react";
-import { Section } from "@/layouts/general-layouts";
-import { SvgUsers, SvgShield } from "@opal/icons";
-import PlanCard from "./PlanCard";
-import FooterLinks from "./FooterLinks";
-import LicenseInput from "./LicenseInput";
-import { createCheckoutSession } from "@/lib/billing/actions";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import {
+  SvgBarChart,
+  SvgFileText,
+  SvgGlobe,
+  SvgHeadsetMic,
+  SvgKey,
+  SvgLock,
+  SvgOrganization,
+  SvgPaintBrush,
+  SvgSearch,
+  SvgServer,
+  SvgUsers,
+} from "@opal/icons";
+import { PlanCard, type PlanFeature } from "./PlanCard";
 
-const SALES_URL = "https://www.onyx.app/contact";
+const SALES_URL = "https://www.onyx.app/contact-sales";
 
-const BUSINESS_FEATURES = [
-  "Enterprise Search",
-  "Query History & Usage Dashboard",
-  "On-Premise Deployments",
-  "Region-Specific Deployments",
-  "RBAC Support",
-  "Permission Inheritance",
-  "OIDC/SAML SSO",
-  "Encryption of Secrets",
+const BUSINESS_FEATURES: PlanFeature[] = [
+  { icon: SvgSearch, text: "Enterprise Search" },
+  { icon: SvgBarChart, text: "Query History & Usage Dashboard" },
+  { icon: SvgServer, text: "On-Premise Deployments" },
+  { icon: SvgGlobe, text: "Region-Specific Deployments" },
+  { icon: SvgUsers, text: "RBAC Support" },
+  { icon: SvgOrganization, text: "Permission Inheritance" },
+  { icon: SvgKey, text: "OIDC/SAML SSO" },
+  { icon: SvgLock, text: "Encryption of Secrets" },
 ];
 
-const ENTERPRISE_FEATURES = [
-  "Priority Support",
-  "White-labeling",
-  "Enterprise SLAs",
+const ENTERPRISE_FEATURES: PlanFeature[] = [
+  { icon: SvgHeadsetMic, text: "Priority Support" },
+  { icon: SvgPaintBrush, text: "White-labeling" },
+  { icon: SvgFileText, text: "Enterprise SLAs" },
 ];
 
 interface PlansProps {
   currentPlan?: string;
-  onLicenseActivated?: () => void;
+  onCheckout: () => void;
+  hideFeatures?: boolean;
 }
 
-export default function Plans({ currentPlan, onLicenseActivated }: PlansProps) {
-  const [showLicenseInput, setShowLicenseInput] = useState(false);
+export default function Plans({
+  currentPlan,
+  onCheckout,
+  hideFeatures,
+}: PlansProps) {
   const isBusinessPlan = currentPlan?.toLowerCase() === "business";
-  const isSelfHosted = !NEXT_PUBLIC_CLOUD_ENABLED;
-
-  const handleGetBusinessPlan = async () => {
-    try {
-      const response = await createCheckoutSession({
-        billing_period: "annual",
-      });
-      if (response.url) {
-        window.location.href = response.url;
-      }
-    } catch (error) {
-      console.error("Failed to create checkout session:", error);
-    }
-  };
-
-  const handleActivateLicense = () => {
-    setShowLicenseInput(true);
-  };
-
-  const handleCancelLicenseInput = () => {
-    setShowLicenseInput(false);
-  };
-
-  const handleLicenseSuccess = () => {
-    setShowLicenseInput(false);
-    onLicenseActivated?.();
-  };
 
   return (
-    <Section gap={2} height="auto">
-      {/* Plan cards */}
-      <Section flexDirection="row" gap={1} alignItems="stretch" height="auto">
-        <PlanCard
-          icon={SvgUsers}
-          title="Business"
-          price={{
-            main: "$20 per seat/month billed annually",
-            sub: "or $25 per seat if billed monthly",
-          }}
-          features={BUSINESS_FEATURES}
-          ctaLabel="Get Business Plan"
-          onCtaClick={handleGetBusinessPlan}
-          isCurrentPlan={isBusinessPlan}
-        />
-
-        <PlanCard
-          icon={SvgShield}
-          title="Enterprise"
-          description="Flexible pricing & deployment options for large organizations"
-          features={ENTERPRISE_FEATURES}
-          featuresPrefix="Everything in Business Plan, plus:"
-          ctaLabel="Contact Sales"
-          ctaHref={SALES_URL}
-          isExternal
-        />
-      </Section>
-
-      {/* License input - self-hosted only */}
-      {isSelfHosted && showLicenseInput && (
-        <LicenseInput
-          onCancel={handleCancelLicenseInput}
-          onSuccess={handleLicenseSuccess}
-        />
-      )}
-
-      {/* Footer links */}
-      <FooterLinks
-        hasSubscription={!!currentPlan}
-        onActivateLicense={isSelfHosted ? handleActivateLicense : undefined}
+    <div className="w-full flex flex-row gap-4 items-stretch">
+      <PlanCard
+        icon={SvgUsers}
+        title="Business"
+        pricing={{
+          amount: "$20",
+          details: [
+            "per seat/month billed annually",
+            "or $25 per seat if billed monthly",
+          ],
+        }}
+        button={{
+          label: "Get Business Plan",
+          variant: "primary",
+          onClick: onCheckout,
+        }}
+        features={BUSINESS_FEATURES}
+        featuresPrefix="Get more work done with AI for your team."
+        isCurrentPlan={isBusinessPlan}
+        hideFeatures={hideFeatures}
       />
-    </Section>
+      <PlanCard
+        icon={SvgOrganization}
+        title="Enterprise"
+        description="Flexible pricing & deployment options for large organizations"
+        button={{
+          label: "Contact Sales",
+          variant: "secondary",
+          href: SALES_URL,
+        }}
+        features={ENTERPRISE_FEATURES}
+        featuresPrefix="Everything in Business Plan, plus:"
+        hideFeatures={hideFeatures}
+      />
+    </div>
   );
 }

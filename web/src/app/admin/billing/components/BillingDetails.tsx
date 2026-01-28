@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Section } from "@/layouts/general-layouts";
 import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -8,7 +8,6 @@ import ExpirationBanner from "./ExpirationBanner";
 import SubscriptionCard from "./SubscriptionCard";
 import SeatsCard from "./SeatsCard";
 import PaymentSection from "./PaymentSection";
-import LicenseInput from "./LicenseInput";
 import FooterLinks from "./FooterLinks";
 import { humanReadableFormatShort } from "@/lib/time";
 
@@ -90,26 +89,17 @@ export default function BillingDetails({
   onViewPlans,
   onRefresh,
 }: BillingDetailsProps) {
-  const [showLicenseInput, setShowLicenseInput] = useState(false);
+  const router = useRouter();
   const isSelfHosted = !NEXT_PUBLIC_CLOUD_ENABLED;
 
   const expirationState = getExpirationState(billing, license);
 
   const handleActivateLicense = () => {
-    setShowLicenseInput(true);
-  };
-
-  const handleCancelLicenseInput = () => {
-    setShowLicenseInput(false);
-  };
-
-  const handleLicenseSuccess = () => {
-    setShowLicenseInput(false);
-    onRefresh?.();
+    router.push("/admin/billing/activate" as any);
   };
 
   return (
-    <Section gap={1} height="auto">
+    <Section gap={1} height="auto" width="full">
       {/* Expiration banner */}
       {expirationState && (
         <ExpirationBanner
@@ -127,14 +117,6 @@ export default function BillingDetails({
 
       {/* Payment section - only show if has payment info */}
       {billing.payment_method_enabled && <PaymentSection billing={billing} />}
-
-      {/* License input - self-hosted only */}
-      {isSelfHosted && showLicenseInput && (
-        <LicenseInput
-          onCancel={handleCancelLicenseInput}
-          onSuccess={handleLicenseSuccess}
-        />
-      )}
 
       {/* Footer links */}
       <FooterLinks
