@@ -2,6 +2,11 @@ import os
 from enum import Enum
 from pathlib import Path
 
+from onyx.configs.app_configs import PERSISTENT_DOCUMENT_STORAGE_ENABLED
+from onyx.configs.app_configs import PERSISTENT_DOCUMENT_STORAGE_PATH
+
+# Import shared config from app_configs to avoid duplication
+
 
 class SandboxBackend(str, Enum):
     """Backend mode for sandbox operations.
@@ -20,17 +25,13 @@ class SandboxBackend(str, Enum):
 SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
 
 
-# Persistent Document Storage Configuration
-# When enabled, indexed documents are written to local filesystem with hierarchical structure
-PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
-    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
-)
-
-# Base directory path for persistent document storage (local filesystem)
-# Example: /var/onyx/indexed-docs or /app/indexed-docs
-PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
-    "PERSISTENT_DOCUMENT_STORAGE_PATH", ""
-)
+# Re-export for convenience (imported from app_configs)
+__all__ = [
+    "PERSISTENT_DOCUMENT_STORAGE_ENABLED",
+    "PERSISTENT_DOCUMENT_STORAGE_PATH",
+    "SandboxBackend",
+    "SANDBOX_BACKEND",
+]
 
 # Demo Data Path
 # Local: Source tree path (relative to this file)

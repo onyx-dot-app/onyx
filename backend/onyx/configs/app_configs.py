@@ -1048,7 +1048,7 @@ PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
 )
 
 # Base directory path for persistent document storage (local filesystem)
-# Example: /var/onyx/indexed-docs or /app/indexed-docs
+# Example: /var/onyx/file-system or /app/file-system
 PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
-    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/indexed-docs"
+    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/file-system"
 )
