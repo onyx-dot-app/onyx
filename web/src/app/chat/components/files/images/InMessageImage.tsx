@@ -73,12 +73,10 @@ export function InMessageImage({
         )}
 
         <img
-          width={1200}
-          height={1200}
           alt="Chat Message Image"
           onLoad={() => setImageLoaded(true)}
           className={cn(
-            "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
+            "object-contain object-left overflow-hidden rounded-lg transition-opacity duration-300 cursor-pointer",
             shapeImageClasses,
             imageLoaded ? "opacity-100" : "opacity-0"
           )}
