@@ -85,6 +85,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	defer git.RestoreStash(stashResult)
 
 	// Fetch commits from remote before cherry-picking
+	// TODO: Batch these rather than iterate.
 	for _, sha := range commitSHAs {
 		if err := git.FetchCommit(sha); err != nil {
 			log.Warnf("Failed to fetch commit %s: %v", sha, err)
@@ -212,8 +213,8 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 	// Check if hotfix branch already exists
 	branchExists := git.BranchExists(hotfixBranch)
 	if branchExists {
-		log.Infof("Hotfix branch %s already exists, checking out", hotfixBranch)
-		if err := git.RunCommand("checkout", "--quiet", hotfixBranch); err != nil {
+		log.Infof("Hotfix branch %s already exists, switching", hotfixBranch)
+		if err := git.RunCommand("switch", "--quiet", hotfixBranch); err != nil {
 			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
 		}
 
