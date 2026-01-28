@@ -32,6 +32,7 @@ import {
   SvgPaperclip,
   SvgOrganization,
   SvgAlertCircle,
+  SvgStop,
 } from "@opal/icons";
 
 const MAX_INPUT_HEIGHT = 200;
@@ -48,6 +49,8 @@ export interface InputBarProps {
     files: BuildFile[],
     demoDataEnabled: boolean
   ) => void;
+  /** Callback to stop the current generation. If provided and isRunning is true, shows a stop button. */
+  onStop?: () => void;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -127,6 +130,7 @@ const InputBar = memo(
     (
       {
         onSubmit,
+        onStop,
         isRunning,
         disabled = false,
         placeholder = "Describe your task...",
@@ -380,16 +384,26 @@ const InputBar = memo(
 
             {/* Bottom right controls */}
             <div className="flex flex-row items-center gap-1">
-              {/* Submit button */}
-              <IconButton
-                icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                tooltip={
-                  sandboxInitializing ? "Initializing sandbox..." : "Send"
-                }
-                iconClassName={sandboxInitializing ? "animate-spin" : undefined}
-              />
+              {/* Submit button - shows Stop when running, Send otherwise */}
+              {isRunning && onStop ? (
+                <IconButton
+                  icon={SvgStop}
+                  onClick={() => onStop()}
+                  tooltip="Stop generation"
+                />
+              ) : (
+                <IconButton
+                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                  onClick={handleSubmit}
+                  disabled={!canSubmit}
+                  tooltip={
+                    sandboxInitializing ? "Initializing sandbox..." : "Send"
+                  }
+                  iconClassName={
+                    sandboxInitializing ? "animate-spin" : undefined
+                  }
+                />
+              )}
             </div>
           </div>
         </div>
