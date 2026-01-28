@@ -8,7 +8,7 @@ import { ErrorBanner } from "@/app/chat/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
+import AgentMessage from "@/app/chat/message/messageComponents/AgentMessage";
 import Spacer from "@/refresh-components/Spacer";
 import {
   useCurrentMessageHistory,
@@ -193,9 +193,9 @@ const MessageList = React.memo(
                 key={messageReactComponentKey}
                 data-anchor={isAnchor ? "true" : undefined}
               >
-                <AIMessage
+                <AgentMessage
                   rawPackets={message.packets}
-                  packetsVersion={message.packetsVersion}
+                  packetCount={message.packetsVersion}
                   chatState={chatStateData}
                   nodeId={message.nodeId}
                   messageId={message.messageId}
@@ -207,6 +207,7 @@ const MessageList = React.memo(
                   onMessageSelection={onMessageSelection}
                   onRegenerate={createRegenerator}
                   parentMessage={previousMessage}
+                  processingDurationSeconds={message.processingDurationSeconds}
                 />
               </div>
             );

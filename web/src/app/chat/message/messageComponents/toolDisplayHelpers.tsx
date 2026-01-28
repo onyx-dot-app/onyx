@@ -7,7 +7,7 @@ import {
   PacketType,
   SearchToolPacket,
 } from "@/app/chat/services/streamingModels";
-import { constructCurrentSearchState } from "./renderers/SearchToolRenderer";
+import { constructCurrentSearchState } from "./timeline/renderers/search/searchStateUtils";
 import {
   SvgGlobe,
   SvgSearchMenu,
