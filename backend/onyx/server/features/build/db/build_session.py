@@ -108,9 +108,11 @@ def get_empty_session_for_user(
         user_id: The user ID
         db_session: Database session
         max_age_minutes: Maximum age of session to consider (default 30)
-        demo_data_enabled: If provided, only match sessions with this demo_data setting.
+        demo_data_enabled: Match sessions with this demo_data setting.
                           This ensures pre-provisioned sessions match the user's current
                           preferences. If None, matches any session regardless of setting.
+                          Note: None is only used internally for operations that need to
+                          match any session (e.g., deletion).
     """
     cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
 
