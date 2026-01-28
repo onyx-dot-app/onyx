@@ -121,6 +121,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		// Find the nearest stable tag using the first commit
 		version, err := findNearestStableTag(commitSHAs[0])
 		if err != nil {
+			git.RestoreStash(stashResult)
 			log.Fatalf("Failed to find nearest stable tag: %v", err)
 		}
 
@@ -128,6 +129,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		if !opts.Yes {
 			if !prompt.Confirm(fmt.Sprintf("Auto-detected release version: %s. Continue? (yes/no): ", version)) {
 				log.Info("If you want to cherry-pick to a different release, use the --release flag. Exiting...")
+				git.RestoreStash(stashResult)
 				return
 			}
 		} else {
