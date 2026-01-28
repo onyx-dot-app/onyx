@@ -67,7 +67,7 @@ jobs:
           BUILD_MODEL_SERVER=true
 
           # Determine tag type based on pattern matching (do regex checks once)
-          if [[ "$TAG" == craft-latest ]]; then
+          if [[ "$TAG" == craft-* ]]; then
             IS_CRAFT_LATEST=true
           fi
           if [[ "$TAG" == *cloud* ]]; then
