@@ -102,15 +102,14 @@ def add_license_enforcement_middleware(
             # If no cached metadata, check database (cache may have been cleared)
             if not metadata:
                 logger.debug(
-                    f"[license_enforcement] No cached license for tenant {tenant_id}, "
-                    "checking database..."
+                    "[license_enforcement] No cached license, checking database..."
                 )
                 try:
                     with get_session_with_current_tenant() as db_session:
                         metadata = refresh_license_cache(db_session, tenant_id)
                         if metadata:
                             logger.info(
-                                f"[license_enforcement] Loaded license from DB for tenant {tenant_id}"
+                                "[license_enforcement] Loaded license from database"
                             )
                 except SQLAlchemyError as db_error:
                     logger.warning(
@@ -130,7 +129,7 @@ def add_license_enforcement_middleware(
                     # when users are added/removed
                     if metadata.used_seats > metadata.seats:
                         logger.info(
-                            f"Blocking request for tenant {tenant_id}: "
+                            f"[license_enforcement] Blocking request: "
                             f"seat limit exceeded ({metadata.used_seats}/{metadata.seats})"
                         )
                         return JSONResponse(
@@ -149,7 +148,7 @@ def add_license_enforcement_middleware(
                 # Allow community features, but block EE-only features
                 if _is_ee_only_path(path):
                     logger.info(
-                        f"[license_enforcement] Blocking EE-only path for unlicensed tenant {tenant_id}: {path}"
+                        f"[license_enforcement] Blocking EE-only path (no license): {path}"
                     )
                     return JSONResponse(
                         status_code=402,
@@ -162,8 +161,7 @@ def add_license_enforcement_middleware(
                         },
                     )
                 logger.debug(
-                    f"[license_enforcement] No license for tenant {tenant_id}, "
-                    "allowing community features"
+                    "[license_enforcement] No license, allowing community features"
                 )
                 is_gated = False
         except RedisError as e:
@@ -172,7 +170,9 @@ def add_license_enforcement_middleware(
             is_gated = False
 
         if is_gated:
-            logger.info(f"Blocking request for gated tenant: {tenant_id}, path={path}")
+            logger.info(
+                f"[license_enforcement] Blocking request (license expired): {path}"
+            )
 
             return JSONResponse(
                 status_code=402,
