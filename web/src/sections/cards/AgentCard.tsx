@@ -9,7 +9,6 @@ import { Card } from "@/components/ui/card";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Truncated from "@/refresh-components/texts/Truncated";
-import type { IconProps } from "@opal/types";
 import { usePinnedAgents, useAgent } from "@/hooks/useAgents";
 import { cn, noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -31,10 +30,6 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { LineItemLayout } from "@/layouts/general-layouts";
-interface IconLabelProps {
-  icon: React.FunctionComponent<IconProps>;
-  children: string;
-}
 
 export interface AgentCardProps {
   agent: MinimalPersonaSnapshot;
