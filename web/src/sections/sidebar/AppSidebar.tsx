@@ -594,8 +594,8 @@ const MemoizedAppSidebarInner = memo(
             actionButtons={
               <div className="flex flex-col gap-0.5">
                 {newSessionButton}
-                {isOnyxCraftEnabled && buildButton}
                 {searchChatsButton}
+                {isOnyxCraftEnabled && buildButton}
               </div>
             }
           >

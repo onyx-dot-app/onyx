@@ -48,7 +48,6 @@ export default function WorkingPill({
       <div
         className={cn(
           "w-full border-[0.5px] rounded-lg overflow-hidden transition-colors",
-          "hover:bg-background-tint-02",
           hasInProgress
             ? "bg-status-info-01 border-status-info-01"
             : "bg-background-neutral-01 border-border-01"
@@ -58,7 +57,8 @@ export default function WorkingPill({
           <button
             className={cn(
               "w-full flex items-center justify-between gap-2 px-3 py-2",
-              "transition-colors text-left"
+              "transition-colors text-left rounded-t-lg",
+              "hover:bg-background-tint-02"
             )}
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -80,7 +80,7 @@ export default function WorkingPill({
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="px-3 pb-3 pt-0 space-y-1">
+          <div className="pl-5 pr-3 pb-3 pt-0 space-y-1">
             {toolCalls.map((toolCall) => (
               <WorkingLine key={toolCall.id} toolCall={toolCall} />
             ))}

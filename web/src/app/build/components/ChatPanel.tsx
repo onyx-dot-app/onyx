@@ -370,8 +370,8 @@ export default function BuildChatPanel({
         )}
       >
         {/* Chat header */}
-        <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible max-w-[75%]">
-          <div className="flex flex-row items-center gap-2">
+        <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
+          <div className="flex flex-row items-center gap-2 max-w-[75%]">
             {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
             {isMobile && leftSidebarFolded && (
               <IconButton

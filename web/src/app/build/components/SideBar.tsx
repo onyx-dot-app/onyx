@@ -400,7 +400,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const footer = useMemo(
       () => (
-        <div className="flex flex-col gap-2">
+        <div>
           {backToChatButton}
           <UserAvatarPopover folded={folded} />
         </div>
@@ -411,7 +411,12 @@ const MemoizedBuildSidebarInner = memo(
     return (
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody
-          actionButtons={[newBuildButton, buildConfigurePanel]}
+          actionButtons={
+            <div className="flex flex-col gap-0.5">
+              {newBuildButton}
+              {buildConfigurePanel}
+            </div>
+          }
           footer={footer}
           scrollKey="build-sidebar"
         >
