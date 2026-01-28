@@ -10,7 +10,11 @@ import Separator from "@/refresh-components/Separator";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgClock, SvgTag, SvgUser } from "@opal/icons";
 
-export interface SearchUIProps {
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface SearchResultsProps {
   /** Search results to display */
   results: SearchDocWithContent[];
   /** Document IDs that the LLM selected as most relevant */
@@ -21,7 +25,13 @@ export interface SearchUIProps {
   error?: string | null;
   /** Callback when a document is clicked */
   onDocumentClick: (doc: MinimalOnyxDocument) => void;
+  /** Selected sources for filtering */
+  selectedSources: string[];
 }
+
+// ============================================================================
+// Constants
+// ============================================================================
 
 type TimeFilter = "all-time" | "day" | "week" | "month" | "year";
 
@@ -32,6 +42,10 @@ const TIME_FILTER_OPTIONS: { value: TimeFilter; label: string }[] = [
   { value: "month", label: "Past month" },
   { value: "year", label: "Past year" },
 ];
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 function getTimeFilterDate(filter: TimeFilter): Date | null {
   if (filter === "all-time") return null;
@@ -51,17 +65,20 @@ function getTimeFilterDate(filter: TimeFilter): Date | null {
   }
 }
 
+// ============================================================================
+// SearchResults Component (default export)
+// ============================================================================
+
 /**
- * Panel component for displaying search results.
- *
- * Shows a vertical list of search result cards with loading and empty states.
+ * Component for displaying search results with filters.
  */
-export default function SearchUI({
+export default function SearchResults({
   results,
   llmSelectedDocIds,
   error,
   onDocumentClick,
-}: SearchUIProps) {
+  selectedSources,
+}: SearchResultsProps) {
   // Filter state
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all-time");
   const [ownerFilter, setOwnerFilter] = useState<string>("everyone");
@@ -104,6 +121,13 @@ export default function SearchUI({
     const timeThreshold = getTimeFilterDate(timeFilter);
 
     const filtered = results.filter((doc) => {
+      // Source filter
+      if (selectedSources.length > 0) {
+        if (!doc.source_type || !selectedSources.includes(doc.source_type)) {
+          return false;
+        }
+      }
+
       // Time filter
       if (timeThreshold && doc.updated_at) {
         const docDate = new Date(doc.updated_at);
@@ -139,14 +163,21 @@ export default function SearchUI({
 
       return (b.score ?? 0) - (a.score ?? 0);
     });
-  }, [results, timeFilter, ownerFilter, tagFilter, llmSelectedSet]);
+  }, [
+    results,
+    selectedSources,
+    timeFilter,
+    ownerFilter,
+    tagFilter,
+    llmSelectedSet,
+  ]);
 
   return (
-    <div className="flex flex-col h-full w-full gap-0">
+    <div className="flex flex-col h-full w-[var(--main-app-width)]">
       <Spacer rem={1.5} />
 
       {/* Filters - fixed at top */}
-      <div className="w-[var(--main-app-width)] flex flex-col flex-shrink-0 mx-auto gap-4">
+      <div className="flex flex-col flex-shrink-0 gap-4">
         <div className="flex flex-row items-center justify-start">
           <InputSelect
             value={timeFilter}
@@ -207,7 +238,8 @@ export default function SearchUI({
         <Separator noPadding />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto w-[var(--main-app-width)] mx-auto py-4">
+      {/* Results list */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-2">
         <Section gap={0.5} justifyContent="start">
           {filteredAndSortedResults.map((doc) => (
             <SearchCard

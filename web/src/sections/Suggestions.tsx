@@ -28,7 +28,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
     return null;
 
   return (
-    <div className="w-[var(--main-app-width)]">
+    <div className="w-[var(--main-app-width)] mx-auto">
       <Section padding={0.25} gap={0.25}>
         {currentAgent.starter_messages.map(({ message }, index) => (
           <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
