@@ -595,6 +595,9 @@ class SessionManager:
         """
         existing = get_empty_session_for_user(user_id, self._db_session)
         if existing:
+            logger.info(
+                f"Existing empty session {existing.id} found for user {user_id}"
+            )
             # Verify sandbox is healthy before returning existing session
             sandbox = get_sandbox_by_user_id(self._db_session, user_id)
 

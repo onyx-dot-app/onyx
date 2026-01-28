@@ -436,7 +436,7 @@ sleep infinity
             containers=[sandbox_container, file_sync_container],
             volumes=volumes,
             restart_policy="Never",
-            termination_grace_period_seconds=600,
+            termination_grace_period_seconds=10,  # Fast pod termination
             # Node selection for sandbox nodes
             node_selector={"onyx.app/workload": "sandbox"},
             tolerations=[
