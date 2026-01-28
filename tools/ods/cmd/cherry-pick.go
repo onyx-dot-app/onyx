@@ -18,6 +18,7 @@ type CherryPickOptions struct {
 	Releases []string
 	DryRun   bool
 	Yes      bool
+	NoVerify bool
 }
 
 // NewCherryPickCommand creates a new cherry-pick command
@@ -50,6 +51,7 @@ Example usage:
 	cmd.Flags().StringSliceVar(&opts.Releases, "release", []string{}, "Release version(s) to cherry-pick to (e.g., 1.0, v1.1). 'v' prefix is optional. Can be specified multiple times.")
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
+	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-commit and commit-msg hooks for cherry-pick and push")
 
 	return cmd
 }
@@ -74,6 +76,20 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		log.Fatalf("Failed to get current branch: %v", err)
 	}
 	log.Debugf("Original branch: %s", originalBranch)
+
+	// Stash any uncommitted changes before switching branches
+	stashResult, err := git.StashChanges()
+	if err != nil {
+		log.Fatalf("Failed to stash changes: %v", err)
+	}
+	defer git.RestoreStash(stashResult)
+
+	// Fetch commits from remote before cherry-picking
+	for _, sha := range commitSHAs {
+		if err := git.FetchCommit(sha); err != nil {
+			log.Warnf("Failed to fetch commit %s: %v", sha, err)
+		}
+	}
 
 	// Get the short SHA(s) for branch naming
 	var branchSuffix string
@@ -157,7 +173,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	for _, release := range releases {
 		log.Infof("Processing release %s", release)
 		prTitleWithRelease := fmt.Sprintf("%s to release %s", prTitle, release)
-		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, opts.DryRun)
+		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, opts.DryRun, opts.NoVerify)
 		if err != nil {
 			// Switch back to original branch before exiting on error
 			if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
@@ -183,7 +199,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 }
 
 // cherryPickToRelease cherry-picks one or more commits to a specific release branch
-func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, version, prTitle string, dryRun bool) (string, error) {
+func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, version, prTitle string, dryRun, noVerify bool) (string, error) {
 	releaseBranch := fmt.Sprintf("release/%s", version)
 	hotfixBranch := fmt.Sprintf("hotfix/%s-%s", branchSuffix, version)
 
@@ -193,23 +209,43 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		return "", fmt.Errorf("failed to fetch release branch %s: %w", releaseBranch, err)
 	}
 
-	// Create the hotfix branch from the release branch
-	log.Infof("Creating hotfix branch: %s", hotfixBranch)
-	if err := git.RunCommand("checkout", "--quiet", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
-		return "", fmt.Errorf("failed to create hotfix branch: %w", err)
-	}
+	// Check if hotfix branch already exists
+	branchExists := git.BranchExists(hotfixBranch)
+	if branchExists {
+		log.Infof("Hotfix branch %s already exists, checking out", hotfixBranch)
+		if err := git.RunCommand("checkout", "--quiet", hotfixBranch); err != nil {
+			return "", fmt.Errorf("failed to checkout existing hotfix branch: %w", err)
+		}
 
-	// Cherry-pick the commits
-	if len(commitSHAs) == 1 {
-		log.Infof("Cherry-picking commit: %s", commitSHAs[0])
+		// Check which commits need to be cherry-picked
+		commitsToCherry := []string{}
+		for _, sha := range commitSHAs {
+			if git.CommitExistsOnBranch(sha, hotfixBranch) {
+				log.Infof("Commit %s already exists on branch %s, skipping", sha, hotfixBranch)
+			} else {
+				commitsToCherry = append(commitsToCherry, sha)
+			}
+		}
+
+		if len(commitsToCherry) == 0 {
+			log.Infof("All commits already exist on branch %s", hotfixBranch)
+		} else {
+			// Cherry-pick only the missing commits
+			if err := performCherryPick(commitsToCherry, noVerify); err != nil {
+				return "", err
+			}
+		}
 	} else {
-		log.Infof("Cherry-picking %d commits: %s", len(commitSHAs), strings.Join(commitSHAs, " "))
-	}
+		// Create the hotfix branch from the release branch
+		log.Infof("Creating hotfix branch: %s", hotfixBranch)
+		if err := git.RunCommand("checkout", "--quiet", "-b", hotfixBranch, fmt.Sprintf("origin/%s", releaseBranch)); err != nil {
+			return "", fmt.Errorf("failed to create hotfix branch: %w", err)
+		}
 
-	// Build git cherry-pick command with all commits
-	cherryPickArgs := append([]string{"cherry-pick"}, commitSHAs...)
-	if err := git.RunCommandVerboseOnError(cherryPickArgs...); err != nil {
-		return "", fmt.Errorf("failed to cherry-pick commits: %w", err)
+		// Cherry-pick all commits
+		if err := performCherryPick(commitSHAs, noVerify); err != nil {
+			return "", err
+		}
 	}
 
 	if dryRun {
@@ -220,7 +256,11 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 
 	// Push the hotfix branch
 	log.Infof("Pushing hotfix branch: %s", hotfixBranch)
-	if err := git.RunCommandVerboseOnError("push", "-u", "origin", hotfixBranch); err != nil {
+	pushArgs := []string{"push", "-u", "origin", hotfixBranch}
+	if noVerify {
+		pushArgs = []string{"push", "--no-verify", "-u", "origin", hotfixBranch}
+	}
+	if err := git.RunCommandVerboseOnError(pushArgs...); err != nil {
 		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
 	}
 
@@ -233,6 +273,31 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 
 	log.Infof("PR created successfully: %s", prURL)
 	return prURL, nil
+}
+
+// performCherryPick cherry-picks the given commits with optional --no-verify flag
+func performCherryPick(commitSHAs []string, noVerify bool) error {
+	if len(commitSHAs) == 0 {
+		return nil
+	}
+
+	if len(commitSHAs) == 1 {
+		log.Infof("Cherry-picking commit: %s", commitSHAs[0])
+	} else {
+		log.Infof("Cherry-picking %d commits: %s", len(commitSHAs), strings.Join(commitSHAs, " "))
+	}
+
+	// Build git cherry-pick command with all commits
+	cherryPickArgs := []string{"cherry-pick"}
+	if noVerify {
+		cherryPickArgs = append(cherryPickArgs, "--no-verify")
+	}
+	cherryPickArgs = append(cherryPickArgs, commitSHAs...)
+
+	if err := git.RunCommandVerboseOnError(cherryPickArgs...); err != nil {
+		return fmt.Errorf("failed to cherry-pick commits: %w", err)
+	}
+	return nil
 }
 
 // normalizeVersion ensures the version has a 'v' prefix

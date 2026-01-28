@@ -83,3 +83,58 @@ func HasUncommittedChanges() bool {
 	unstaged := exec.Command("git", "diff", "--quiet")
 	return staged.Run() != nil || unstaged.Run() != nil
 }
+
+// StashResult holds the result of a stash operation
+type StashResult struct {
+	Stashed bool
+}
+
+// StashChanges stashes any uncommitted changes if present
+// Returns a StashResult that should be passed to RestoreStash
+func StashChanges() (*StashResult, error) {
+	result := &StashResult{Stashed: false}
+	if HasUncommittedChanges() {
+		log.Info("Stashing uncommitted changes...")
+		if err := RunCommand("stash", "--include-untracked"); err != nil {
+			return nil, fmt.Errorf("failed to stash changes: %w", err)
+		}
+		result.Stashed = true
+	}
+	return result, nil
+}
+
+// RestoreStash restores previously stashed changes
+func RestoreStash(result *StashResult) {
+	if result == nil || !result.Stashed {
+		return
+	}
+	log.Info("Restoring stashed changes...")
+	if err := RunCommand("stash", "pop"); err != nil {
+		log.Warnf("Failed to restore stashed changes (may have conflicts): %v", err)
+		log.Info("Your changes are still in the stash. Run 'git stash pop' to restore them manually.")
+	}
+}
+
+// CommitExistsOnBranch checks if a commit exists on a branch
+func CommitExistsOnBranch(commitSHA, branchName string) bool {
+	cmd := exec.Command("git", "branch", "--contains", commitSHA, "--list", branchName)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(output)) != ""
+}
+
+// FetchCommit fetches a specific commit from the remote
+func FetchCommit(commitSHA string) error {
+	log.Infof("Fetching commit %s from origin", commitSHA)
+	// Try to fetch the specific commit - this works if the remote allows it
+	if err := RunCommand("fetch", "--quiet", "origin", commitSHA); err != nil {
+		// Fall back to fetching all refs if specific commit fetch fails
+		log.Debugf("Specific commit fetch failed, fetching all: %v", err)
+		if err := RunCommand("fetch", "--quiet", "origin"); err != nil {
+			return fmt.Errorf("failed to fetch from origin: %w", err)
+		}
+	}
+	return nil
+}
