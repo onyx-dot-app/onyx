@@ -19,6 +19,7 @@ enable_error_code = ["possibly-undefined"]
 strict_equality = true
 exclude = [
   "^generated/.*",
+  "^\\.venv/",
 ]
 
 [[tool.mypy.overrides]]
