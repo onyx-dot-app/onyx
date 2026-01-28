@@ -765,6 +765,23 @@ class LocalSandboxManager(SandboxManager):
         for event in client.send_message(message):
             yield event
 
+    def _sanitize_path(self, path: str) -> str:
+        """Sanitize a user-provided path to prevent path traversal attacks.
+
+        Removes '..' components and normalizes the path to prevent attacks like
+        'files/../../../../etc/passwd'.
+
+        Args:
+            path: User-provided relative path
+
+        Returns:
+            Sanitized path string with '..' components removed
+        """
+        # Parse the path and filter out '..' components
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        return str(Path(*clean_parts)) if clean_parts else "."
+
     def _is_path_allowed(self, session_path: Path, target_path: Path) -> bool:
         """Check if target_path is allowed for access.
 
@@ -816,7 +833,7 @@ class LocalSandboxManager(SandboxManager):
         """
         session_path = self._get_session_path(sandbox_id, session_id)
         # Security: sanitize path to remove path traversal attempts
-        clean_path = path.lstrip("/").replace("..", "")
+        clean_path = self._sanitize_path(path)
         target_path = session_path / clean_path
 
         # Security check
@@ -859,7 +876,7 @@ class LocalSandboxManager(SandboxManager):
         """
         session_path = self._get_session_path(sandbox_id, session_id)
         # Security: sanitize path to remove path traversal attempts
-        clean_path = path.lstrip("/").replace("..", "")
+        clean_path = self._sanitize_path(path)
         target_path = session_path / clean_path
 
         # Security check

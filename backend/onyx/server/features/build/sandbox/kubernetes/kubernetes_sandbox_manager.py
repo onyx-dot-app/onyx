@@ -1478,8 +1478,10 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # _get_pod_name needs string
         pod_name = self._get_pod_name(str(sandbox_id))
 
-        # Security: sanitize path
-        clean_path = path.lstrip("/").replace("..", "")
+        # Security: sanitize path by removing '..' components individually
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        clean_path = str(Path(*clean_parts)) if clean_parts else "."
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
         # Use shlex.quote to prevent command injection
         quoted_path = shlex.quote(target_path)
@@ -1607,8 +1609,10 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # _get_pod_name needs string
         pod_name = self._get_pod_name(str(sandbox_id))
 
-        # Security: sanitize path
-        clean_path = path.lstrip("/").replace("..", "")
+        # Security: sanitize path by removing '..' components individually
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        clean_path = str(Path(*clean_parts)) if clean_parts else "."
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
         # Use shlex.quote to prevent command injection
         quoted_path = shlex.quote(target_path)
