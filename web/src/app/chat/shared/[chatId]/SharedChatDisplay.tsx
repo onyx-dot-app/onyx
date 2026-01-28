@@ -6,7 +6,7 @@ import { BackendChatSession } from "@/app/chat/interfaces";
 import { processRawChatHistory } from "@/app/chat/services/lib";
 import { getLatestMessageChain } from "@/app/chat/services/messageTree";
 import HumanMessage from "@/app/chat/message/HumanMessage";
-import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
+import AgentMessage from "@/app/chat/message/messageComponents/AgentMessage";
 import { Callout } from "@/components/ui/callout";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
@@ -93,16 +93,14 @@ export default function SharedChatDisplay({
                 );
               } else if (message.type === "assistant") {
                 return (
-                  <AIMessage
+                  <AgentMessage
                     key={message.messageId}
                     rawPackets={message.packets}
                     chatState={{
                       assistant: persona,
                       docs: message.documents,
-                      userFiles: [],
                       citations: message.citations,
                       setPresentingDocument: setPresentingDocument,
-                      regenerate: undefined, // No regeneration in shared chat
                       overriddenModel: message.overridden_model,
                     }}
                     nodeId={message.nodeId}
