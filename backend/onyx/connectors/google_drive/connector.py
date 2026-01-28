@@ -460,7 +460,9 @@ class GoogleDriveConnector(
                     break
 
                 # Fetch folder metadata
-                folder = self._get_folder_metadata(current_id, file.user_email, field_type)
+                folder = self._get_folder_metadata(
+                    current_id, file.user_email, field_type
+                )
                 if not folder:
                     # Can't access this folder - stop climbing
                     break
