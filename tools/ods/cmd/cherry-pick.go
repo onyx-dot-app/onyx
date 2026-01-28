@@ -295,6 +295,16 @@ func performCherryPick(commitSHAs []string, noVerify bool) error {
 	cherryPickArgs = append(cherryPickArgs, commitSHAs...)
 
 	if err := git.RunCommandVerboseOnError(cherryPickArgs...); err != nil {
+		// Check if this is a merge conflict
+		if git.HasMergeConflict() {
+			log.Error("Cherry-pick failed due to merge conflict!")
+			log.Info("To resolve:")
+			log.Info("  1. Fix the conflicts in the affected files")
+			log.Info("  2. Stage the resolved files: git add <files>")
+			log.Info("  3. Continue the cherry-pick: git cherry-pick --continue")
+			log.Info("  4. Re-run this command to continue with the remaining steps")
+			return fmt.Errorf("merge conflict during cherry-pick")
+		}
 		return fmt.Errorf("failed to cherry-pick commits: %w", err)
 	}
 	return nil

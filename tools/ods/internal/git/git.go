@@ -138,3 +138,14 @@ func FetchCommit(commitSHA string) error {
 	}
 	return nil
 }
+
+// HasMergeConflict checks if the repository is in a merge conflict state
+func HasMergeConflict() bool {
+	// Check if there are unmerged files (indicates merge conflict)
+	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=U")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(output)) != ""
+}
