@@ -133,6 +133,7 @@ class MinimalPersonaSnapshot(BaseModel):
     model_configuration_id_override: int | None
     hierarchy_nodes: list[HierarchyNodeSnapshot]
 
+    uploaded_image_id: str | None
     icon_name: str | None
 
     is_public: bool
