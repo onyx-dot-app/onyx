@@ -97,57 +97,65 @@ export default function AgentCard({ agent }: AgentCardProps) {
         />
       </shareAgentModal.Provider>
 
-      <Hoverable asChild onClick={handleStartChat} group="group/AgentCard">
+      <Hoverable
+        asChild
+        onClick={handleStartChat}
+        group="group/AgentCard"
+        disableHoverInteractivity
+      >
         <Card padding={0} gap={0} height="full">
-          {/* Main Body */}
-          <CardItemLayout
-            icon={(props) => <AgentAvatar agent={agent} {...props} />}
-            title={agent.name}
-            description={agent.description}
-            rightChildren={
-              <>
-                {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+          <div className="flex self-stretch h-[6rem]">
+            <CardItemLayout
+              icon={(props) => <AgentAvatar agent={agent} {...props} />}
+              title={agent.name}
+              description={agent.description}
+              rightChildren={
+                <>
+                  {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+                    <IconButton
+                      icon={SvgBarChart}
+                      tertiary
+                      onClick={noProp(() =>
+                        router.push(`/ee/assistants/stats/${agent.id}` as Route)
+                      )}
+                      tooltip="View Agent Stats"
+                      className="hidden group-hover/AgentCard:flex"
+                    />
+                  )}
+                  {isOwnedByUser && (
+                    <IconButton
+                      icon={SvgEdit}
+                      tertiary
+                      onClick={noProp(() =>
+                        router.push(`/app/agents/edit/${agent.id}` as Route)
+                      )}
+                      tooltip="Edit Agent"
+                      className="hidden group-hover/AgentCard:flex"
+                    />
+                  )}
+                  {isOwnedByUser && (
+                    <IconButton
+                      icon={SvgShare}
+                      tertiary
+                      onClick={noProp(() => shareAgentModal.toggle(true))}
+                      tooltip="Share Agent"
+                      className="hidden group-hover/AgentCard:flex"
+                    />
+                  )}
                   <IconButton
-                    icon={SvgBarChart}
+                    icon={pinned ? SvgPinned : SvgPin}
                     tertiary
-                    onClick={noProp(() =>
-                      router.push(`/ee/assistants/stats/${agent.id}` as Route)
+                    onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+                    tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
+                    transient={hovered && pinned}
+                    className={cn(
+                      !pinned && "hidden group-hover/AgentCard:flex"
                     )}
-                    tooltip="View Agent Stats"
-                    className="hidden group-hover/AgentCard:flex"
                   />
-                )}
-                {isOwnedByUser && (
-                  <IconButton
-                    icon={SvgEdit}
-                    tertiary
-                    onClick={noProp(() =>
-                      router.push(`/app/agents/edit/${agent.id}` as Route)
-                    )}
-                    tooltip="Edit Agent"
-                    className="hidden group-hover/AgentCard:flex"
-                  />
-                )}
-                {isOwnedByUser && (
-                  <IconButton
-                    icon={SvgShare}
-                    tertiary
-                    onClick={noProp(() => shareAgentModal.toggle(true))}
-                    tooltip="Share Agent"
-                    className="hidden group-hover/AgentCard:flex"
-                  />
-                )}
-                <IconButton
-                  icon={pinned ? SvgPinned : SvgPin}
-                  tertiary
-                  onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-                  tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
-                  transient={hovered && pinned}
-                  className={cn(!pinned && "hidden group-hover/AgentCard:flex")}
-                />
-              </>
-            }
-          />
+                </>
+              }
+            />
+          </div>
 
           {/* Footer section - bg-background-tint-01 */}
           <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between w-full">

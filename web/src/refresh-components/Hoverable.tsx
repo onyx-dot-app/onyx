@@ -23,6 +23,7 @@ export interface HoverableProps
    * Enables group-hover utilities on descendant elements.
    */
   group?: string;
+  disableHoverInteractivity?: boolean;
 }
 
 /**
@@ -77,6 +78,7 @@ export default function Hoverable({
   href,
   ref,
   group,
+  disableHoverInteractivity,
   ...props
 }: HoverableProps) {
   const Comp = asChild ? Slot : "button";
@@ -87,10 +89,12 @@ export default function Hoverable({
       type={asChild ? undefined : "button"}
       className={cn(
         "flex flex-1",
-        "transition-colors",
-        "hover:bg-background-tint-02",
-        "active:bg-background-tint-00",
-        "data-[pressed=true]:bg-background-tint-00",
+        !disableHoverInteractivity && [
+          "transition-colors",
+          "hover:bg-background-tint-02",
+          "active:bg-background-tint-00",
+          "data-[pressed=true]:bg-background-tint-00",
+        ],
         group
       )}
       {...props}

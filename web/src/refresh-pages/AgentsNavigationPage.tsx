@@ -51,7 +51,7 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
           {description}
         </Text>
       </div>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2 auto-rows-[8.5rem]">
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent) => (
