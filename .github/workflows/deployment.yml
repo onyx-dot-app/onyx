@@ -1214,6 +1214,8 @@ jobs:
             latest=false
           tags: |
             type=raw,value=craft-latest
+            # TODO: Consider aligning craft-latest tags with regular backend builds (e.g., latest, edge, beta)
+            # to keep tagging strategy consistent across all backend images
 
       - name: Create and push manifest
         env:
