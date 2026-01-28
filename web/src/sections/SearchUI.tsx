@@ -9,6 +9,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgClock, SvgTag, SvgUser } from "@opal/icons";
+import EmptyMessage from "@/refresh-components/EmptyMessage";
 
 // ============================================================================
 // Types
@@ -235,15 +236,27 @@ export default function SearchResults({
 
       {/* Results list */}
       <div className="flex-1 min-h-0 overflow-y-auto py-4">
-        <Section gap={0.5} justifyContent="start">
-          {filteredAndSortedResults.map((doc) => (
-            <SearchCard
-              key={`${doc.document_id}-${doc.chunk_ind}`}
-              document={doc}
-              isLlmSelected={llmSelectedSet.has(doc.document_id)}
-              onDocumentClick={onDocumentClick}
+        <Section
+          gap={0.5}
+          justifyContent={
+            filteredAndSortedResults.length > 0 ? "start" : "center"
+          }
+        >
+          {filteredAndSortedResults.length > 0 ? (
+            filteredAndSortedResults.map((doc) => (
+              <SearchCard
+                key={`${doc.document_id}-${doc.chunk_ind}`}
+                document={doc}
+                isLlmSelected={llmSelectedSet.has(doc.document_id)}
+                onDocumentClick={onDocumentClick}
+              />
+            ))
+          ) : (
+            <EmptyMessage
+              title="No documents found"
+              description="Try searching for something else"
             />
-          ))}
+          )}
         </Section>
       </div>
     </div>
