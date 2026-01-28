@@ -5,6 +5,9 @@ This script runs at container startup, AFTER the init container has synced files
 from S3. It scans the /workspace/files directory to discover what knowledge sources
 are available and generates appropriate documentation.
 
+The core scanning functions are also imported by agent_instructions.py for use
+in the local sandbox manager.
+
 Environment variables:
 - AGENT_INSTRUCTIONS: The template content with placeholders to replace
 """
@@ -13,50 +16,19 @@ import os
 import sys
 from pathlib import Path
 
-# Connector descriptions for known connector types
+# Connector descriptions for known connector types (condensed for token efficiency)
 # Keep in sync with agent_instructions.py CONNECTOR_DESCRIPTIONS
 # NOTE: This is duplicated to avoid circular imports
 CONNECTOR_DESCRIPTIONS = {
-    "google_drive": (
-        "**Google Drive**: Copied over directly as is. "
-        "End files are stored as `FILE_NAME.json`."
-    ),
-    "gmail": (
-        "**Gmail**: Copied over directly as is. "
-        "End files are stored as `FILE_NAME.json`."
-    ),
-    "linear": (
-        "**Linear**: Each project is a folder, and within each project, "
-        "individual tickets are stored as `[TICKET_ID]_TICKET_NAME.json`."
-    ),
-    "slack": (
-        "**Slack**: Each channel is a folder titled `[CHANNEL_NAME]`. "
-        "Within each channel, each thread is a single file called "
-        "`[INITIAL_AUTHOR]_in_[CHANNEL]__[FIRST_MESSAGE].json`."
-    ),
-    "github": (
-        "**Github**: Each organization is a folder titled `[ORG_NAME]`. "
-        "Within each organization, there is a folder for each repository "
-        "titled `[REPO_NAME]`. Within each repository there are up to two "
-        "folders: `pull_requests` and `issues`. Pull requests are structured "
-        "as `[PR_ID]__[PR_NAME].json` and issues as `[ISSUE_ID]__[ISSUE_NAME].json`."
-    ),
-    "fireflies": (
-        "**Fireflies**: All calls are in the root, each as a single file "
-        "titled `CALL_TITLE.json`."
-    ),
-    "hubspot": (
-        "**HubSpot**: Four folders in the root: `Tickets`, `Companies`, "
-        "`Deals`, and `Contacts`. Each object is stored as a file named "
-        "after its title/name (e.g., `[TICKET_SUBJECT].json`, `[COMPANY_NAME].json`)."
-    ),
-    "notion": (
-        "**Notion**: Pages and databases are organized hierarchically. "
-        "Each page is stored as `PAGE_TITLE.json`."
-    ),
-    "org_info": (
-        "**Org Info**: Contains organizational data and identity information."
-    ),
+    "google_drive": "**Google Drive**: Files stored as `FILE_NAME.json`.",
+    "gmail": "**Gmail**: Files stored as `FILE_NAME.json`.",
+    "linear": "**Linear**: `[TEAM]/[TICKET_ID]_TICKET_TITLE.json`.",
+    "slack": "**Slack**: `[CHANNEL]/[AUTHOR]_in_[CHANNEL]__[MSG].json`.",
+    "github": "**Github**: `[ORG]/[REPO]/pull_requests/[PR_NUMBER]__[PR_TITLE].json`.",
+    "fireflies": "**Fireflies**: `[YYYY-MM]/CALL_TITLE.json` organized by month.",
+    "hubspot": "**HubSpot**: `Tickets/`, `Companies/`, `Deals/`, `Contacts/` folders.",
+    "notion": "**Notion**: Hierarchical pages as `PAGE_TITLE.json`.",
+    "org_info": "**Org Info**: Organizational data and identity information.",
 }
 
 # Content for the attachments section when user has uploaded files
@@ -93,8 +65,27 @@ should be treated as high-priority context.
 contain exactly what you need to complete the task successfully."""
 
 
+def normalize_connector_name(name: str) -> str:
+    """Normalize a connector directory name for lookup.
+
+    Args:
+        name: The directory name
+
+    Returns:
+        Normalized name (lowercase, spaces to underscores)
+    """
+    return name.lower().replace(" ", "_").replace("-", "_")
+
+
 def build_attachments_section(attachments_path: Path) -> str:
-    """Return attachments section if files exist, empty string otherwise."""
+    """Return attachments section if files exist, empty string otherwise.
+
+    Args:
+        attachments_path: Path to the attachments directory
+
+    Returns:
+        Attachments section content or empty string
+    """
     if not attachments_path.exists():
         return ""
     try:
@@ -105,32 +96,36 @@ def build_attachments_section(attachments_path: Path) -> str:
     return ""
 
 
-def build_file_structure_section(files_path: Path) -> str:
-    """Build the file structure section by scanning the files directory."""
+def scan_file_structure(files_path: Path) -> str:
+    """Scan the files directory and list knowledge sources with one level of subdirs.
+
+    Args:
+        files_path: Path to the files directory
+
+    Returns:
+        Formatted file structure section string
+    """
     if not files_path.exists():
         return "No knowledge sources available."
 
-    sources = []
+    sources: list[str] = []
     try:
         for item in sorted(files_path.iterdir()):
             if not item.is_dir() or item.name.startswith("."):
                 continue
 
-            file_count = sum(1 for f in item.rglob("*") if f.is_file())
-            subdir_count = sum(1 for d in item.rglob("*") if d.is_dir())
+            sources.append(f"- **{item.name}/**")
 
-            details = []
-            if file_count > 0:
-                details.append(f"{file_count} file{'s' if file_count != 1 else ''}")
-            if subdir_count > 0:
-                details.append(
-                    f"{subdir_count} subdirector{'ies' if subdir_count != 1 else 'y'}"
-                )
-
-            source_info = f"- **{item.name}/**"
-            if details:
-                source_info += f" ({', '.join(details)})"
-            sources.append(source_info)
+            # Add one level of subdirectories
+            subdirs = sorted(
+                d.name
+                for d in item.iterdir()
+                if d.is_dir() and not d.name.startswith(".")
+            )
+            for subdir in subdirs[:10]:  # Limit to 10 subdirs to avoid huge output
+                sources.append(f"  - {subdir}/")
+            if len(subdirs) > 10:
+                sources.append(f"  - ... and {len(subdirs) - 10} more")
     except Exception as e:
         print(f"Warning: Error scanning files directory: {e}", file=sys.stderr)
         return "Error scanning knowledge sources."
@@ -138,22 +133,31 @@ def build_file_structure_section(files_path: Path) -> str:
     if not sources:
         return "No knowledge sources available."
 
-    header = "The `files/` directory contains the following knowledge sources:\n\n"
+    header = "The `files/` directory contains:\n\n"
     return header + "\n".join(sources)
 
 
-def build_connector_descriptions(files_path: Path) -> str:
-    """Build connector-specific descriptions for available data sources."""
+def scan_connector_descriptions(files_path: Path) -> str:
+    """Scan the files directory and build connector descriptions.
+
+    This is the core scanning function without caching.
+
+    Args:
+        files_path: Path to the files directory
+
+    Returns:
+        Formatted connector descriptions section
+    """
     if not files_path.exists():
         return ""
 
-    descriptions = []
+    descriptions: list[str] = []
     try:
         for item in sorted(files_path.iterdir()):
             if not item.is_dir() or item.name.startswith("."):
                 continue
 
-            normalized = item.name.lower().replace(" ", "_").replace("-", "_")
+            normalized = normalize_connector_name(item.name)
             if normalized in CONNECTOR_DESCRIPTIONS:
                 descriptions.append(f"- {CONNECTOR_DESCRIPTIONS[normalized]}")
     except Exception as e:
@@ -165,12 +169,12 @@ def build_connector_descriptions(files_path: Path) -> str:
     if not descriptions:
         return ""
 
-    header = "Each connector type organizes its data differently:\n\n"
-    footer = "\n\nSpaces in names are replaced by `_`."
-    return header + "\n".join(descriptions) + footer
+    header = "### Connector Structures\n\n"
+    return header + "\n".join(descriptions)
 
 
 def main() -> None:
+    """Main entry point for container startup script."""
     # Read template from environment variable
     template = os.environ.get("AGENT_INSTRUCTIONS", "")
     if not template:
@@ -179,8 +183,8 @@ def main() -> None:
 
     # Scan files directory
     files_path = Path("/workspace/files")
-    file_structure = build_file_structure_section(files_path)
-    connector_descriptions = build_connector_descriptions(files_path)
+    file_structure = scan_file_structure(files_path)
+    connector_descriptions = scan_connector_descriptions(files_path)
 
     # Check attachments directory
     attachments_path = Path("/workspace/attachments")

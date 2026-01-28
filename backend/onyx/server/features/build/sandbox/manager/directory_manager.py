@@ -244,8 +244,9 @@ class DirectoryManager:
                 )
 
         # Create additional output directories for generated content
-        (output_dir / "slides").mkdir(parents=True, exist_ok=True)
         (output_dir / "markdown").mkdir(parents=True, exist_ok=True)
+        # TODO: no images for now
+        # (output_dir / "slides").mkdir(parents=True, exist_ok=True)
         # TODO: No graphs for now
         # (output_dir / "graphs").mkdir(parents=True, exist_ok=True)
 
