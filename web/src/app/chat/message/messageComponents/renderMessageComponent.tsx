@@ -21,7 +21,9 @@ import CustomToolRenderer from "./renderers/CustomToolRenderer";
 import { FetchToolRenderer } from "./timeline/renderers/fetch/FetchToolRenderer";
 import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/DeepResearchPlanRenderer";
 import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
-import { SearchToolRenderer } from "./timeline/renderers/search/SearchToolRenderer";
+import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
+import { InternalSearchToolRenderer } from "./timeline/renderers/search/InternalSearchToolRenderer";
+import { SearchToolStart } from "../../services/streamingModels";
 
 // Different types of chat packets using discriminated unions
 export interface GroupedPackets {
@@ -36,8 +38,14 @@ function isChatPacket(packet: Packet): packet is ChatPacket {
   );
 }
 
-function isSearchToolPacket(packet: Packet) {
-  return packet.obj.type === PacketType.SEARCH_TOOL_START;
+function isWebSearchPacket(packet: Packet): boolean {
+  if (packet.obj.type !== PacketType.SEARCH_TOOL_START) return false;
+  return (packet.obj as SearchToolStart).is_internet_search === true;
+}
+
+function isInternalSearchPacket(packet: Packet): boolean {
+  if (packet.obj.type !== PacketType.SEARCH_TOOL_START) return false;
+  return (packet.obj as SearchToolStart).is_internet_search !== true;
 }
 
 function isImageToolPacket(packet: Packet) {
@@ -102,8 +110,11 @@ export function findRenderer(
   }
 
   // Standard tool checks
-  if (groupedPackets.packets.some((packet) => isSearchToolPacket(packet))) {
-    return SearchToolRenderer;
+  if (groupedPackets.packets.some((packet) => isWebSearchPacket(packet))) {
+    return WebSearchToolRenderer;
+  }
+  if (groupedPackets.packets.some((packet) => isInternalSearchPacket(packet))) {
+    return InternalSearchToolRenderer;
   }
   if (groupedPackets.packets.some((packet) => isImageToolPacket(packet))) {
     return ImageToolRenderer;

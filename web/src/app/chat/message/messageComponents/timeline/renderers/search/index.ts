@@ -1,4 +1,5 @@
-export { SearchToolRenderer } from "./SearchToolRenderer";
+export { WebSearchToolRenderer } from "./WebSearchToolRenderer";
+export { InternalSearchToolRenderer } from "./InternalSearchToolRenderer";
 
 export {
   constructCurrentSearchState,
