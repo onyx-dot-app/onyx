@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 
 import boto3
 import httpx
@@ -106,14 +107,14 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
 
     # Mask sensitive values in custom_config
     if provider_view.custom_config:
-        masked_config: dict[str, str] = {}
+        masked_config: dict[str, Any] = {}
         for key, value in provider_view.custom_config.items():
             # Check if key matches any sensitive pattern (case-insensitive)
             key_lower = key.lower()
             is_sensitive = any(
                 sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS
             )
-            if is_sensitive and value:
+            if is_sensitive and isinstance(value, str) and value:
                 masked_config[key] = _mask_string(value)
             else:
                 masked_config[key] = value
