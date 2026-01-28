@@ -649,9 +649,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   if (!isReady) return <OnyxInitializingLoader />;
 
   const hasSuggestions = (liveAssistant?.starter_messages?.length ?? 0) > 0;
-  const showWelcomeMessage =
-    !queryController.classification ||
-    queryController.classification === "pending";
+  const showWelcomeMessage = !queryController.classification;
   const showOnboardingUi =
     showOnboarding ||
     (user?.role !== UserRole.ADMIN && !user?.personalization?.name);
@@ -690,7 +688,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         (!isLoadingOnboarding &&
           onboardingState.currentStep !== OnboardingStep.Complete)
       }
-      isClassifying={queryController.classification === "pending"}
+      isClassifying={queryController.isClassifying}
     />
   );
 
@@ -822,7 +820,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
 
                     {/* ChatUI */}
-                    {appFocus.isChat() && (
+                    {(appFocus.isChat() ||
+                      queryController.classification === "chat") && (
                       <ChatScrollContainer
                         ref={scrollContainerRef}
                         sessionId={appFocus.getId()!}
@@ -893,7 +892,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </div>
 
                   {/* Lower Block */}
-                  {(appFocus.isNewSession() ||
+                  {((appFocus.isNewSession() &&
+                    queryController.classification !== "chat") ||
                     appFocus.isAgent() ||
                     appFocus.isProject()) && (
                     <div className="flex-1 min-h-0 w-full">

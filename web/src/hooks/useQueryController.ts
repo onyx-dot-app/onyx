@@ -11,7 +11,7 @@ import {
 } from "@/lib/search/searchApi";
 import { useAppMode } from "@/providers/AppModeProvider";
 
-export type QueryClassification = "search" | "chat" | "pending" | null;
+export type QueryClassification = "search" | "chat" | null;
 
 export interface UseQueryControllerOptions {
   /** Callback invoked when the query should be handled as a chat */
@@ -23,6 +23,8 @@ export interface UseQueryControllerReturn {
   query: string | null;
   /** Classification state: null (idle), "pending" (classifying), "search", or "chat" */
   classification: QueryClassification;
+  /** Whether or not the currently submitted query is being actively classified by the backend */
+  isClassifying: boolean;
   /** Search results (empty if chat or not yet searched) */
   searchResults: SearchDocWithContent[];
   /** Query expansions that were executed */
@@ -76,6 +78,7 @@ export function useQueryController(
   const [query, setQuery] = useState<string | null>(null);
   const [classification, setClassification] =
     useState<QueryClassification>(null);
+  const [isClassifying, setIsClassifying] = useState(false);
 
   // Search state
   const [searchResults, setSearchResults] = useState<SearchDocWithContent[]>(
@@ -167,7 +170,7 @@ export function useQueryController(
       const controller = new AbortController();
       classifyAbortRef.current = controller;
 
-      setClassification("pending");
+      setIsClassifying(true);
 
       try {
         const response: SearchFlowClassificationResponse = await classifyQuery(
@@ -188,6 +191,8 @@ export function useQueryController(
         // Default to chat flow on error (matches backend behavior)
         setClassification("chat");
         return "chat";
+      } finally {
+        setIsClassifying(false);
       }
     },
     []
@@ -272,6 +277,7 @@ export function useQueryController(
   return {
     query,
     classification,
+    isClassifying,
     searchResults,
     executedQueries,
     llmSelectedDocIds,
