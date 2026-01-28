@@ -297,7 +297,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute flex flex-col border rounded-12 border-border-01 bg-background-neutral-00 overflow-hidden transition-all duration-300 ease-in-out",
+        "absolute z-20 flex flex-col border rounded-12 border-border-01 bg-background-neutral-00 overflow-hidden transition-all duration-300 ease-in-out",
         isMaximized
           ? "top-4 right-16 bottom-4 w-[calc(100%-8rem)]"
           : "top-4 right-4 bottom-4 w-[calc(50%-2rem)]",
