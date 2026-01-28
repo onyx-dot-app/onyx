@@ -1,12 +1,20 @@
-from mistune import Markdown  # type: ignore[import-untyped]
-from mistune import Renderer
+from typing import Any
+
+from mistune import create_markdown
+from mistune import HTMLRenderer
 
 
 def format_slack_message(message: str | None) -> str:
-    return Markdown(renderer=SlackRenderer()).render(message)
+    if message is None:
+        return ""
+    md = create_markdown(renderer=SlackRenderer(), plugins=["strikethrough"])
+    result = md(message)
+    # With HTMLRenderer, result is always str (not AST list)
+    assert isinstance(result, str)
+    return result
 
 
-class SlackRenderer(Renderer):
+class SlackRenderer(HTMLRenderer):
     SPECIALS: dict[str, str] = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
 
     def escape_special(self, text: str) -> str:
@@ -14,20 +22,20 @@ class SlackRenderer(Renderer):
             text = text.replace(special, replacement)
         return text
 
-    def header(self, text: str, level: int, raw: str | None = None) -> str:
+    def heading(self, text: str, level: int, **attrs: Any) -> str:
         return f"*{text}*\n"
 
     def emphasis(self, text: str) -> str:
         return f"_{text}_"
 
-    def double_emphasis(self, text: str) -> str:
+    def strong(self, text: str) -> str:
         return f"*{text}*"
 
     def strikethrough(self, text: str) -> str:
         return f"~{text}~"
 
-    def list(self, body: str, ordered: bool = True) -> str:
-        lines = body.split("\n")
+    def list(self, text: str, ordered: bool, **attrs: Any) -> str:
+        lines = text.split("\n")
         count = 0
         for i, line in enumerate(lines):
             if line.startswith("li: "):
@@ -39,27 +47,24 @@ class SlackRenderer(Renderer):
     def list_item(self, text: str) -> str:
         return f"li: {text}\n"
 
-    def link(self, link: str, title: str | None, content: str | None) -> str:
-        escaped_link = self.escape_special(link)
-        if content:
-            return f"<{escaped_link}|{content}>"
+    def link(self, text: str, url: str, title: str | None = None) -> str:
+        escaped_url = self.escape_special(url)
+        if text:
+            return f"<{escaped_url}|{text}>"
         if title:
-            return f"<{escaped_link}|{title}>"
-        return f"<{escaped_link}>"
+            return f"<{escaped_url}|{title}>"
+        return f"<{escaped_url}>"
 
-    def image(self, src: str, title: str | None, text: str | None) -> str:
-        escaped_src = self.escape_special(src)
+    def image(self, text: str, url: str, title: str | None = None) -> str:
+        escaped_url = self.escape_special(url)
         display_text = title or text
-        return f"<{escaped_src}|{display_text}>" if display_text else f"<{escaped_src}>"
+        return f"<{escaped_url}|{display_text}>" if display_text else f"<{escaped_url}>"
 
     def codespan(self, text: str) -> str:
         return f"`{text}`"
 
-    def block_code(self, text: str, lang: str | None) -> str:
-        return f"```\n{text}\n```\n"
+    def block_code(self, code: str, info: str | None = None) -> str:
+        return f"```\n{code}\n```\n"
 
     def paragraph(self, text: str) -> str:
         return f"{text}\n"
-
-    def autolink(self, link: str, is_email: bool) -> str:
-        return link if is_email else self.link(link, None, None)
