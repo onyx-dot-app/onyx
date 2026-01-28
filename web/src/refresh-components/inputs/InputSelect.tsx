@@ -89,15 +89,15 @@ const useInputSelectContext = () => {
  * ```
  */
 interface InputSelectRootProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> {
+  extends WithoutStyles<
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
+  > {
   /** Whether the select is disabled */
   disabled?: boolean;
   /** Whether to show error styling */
   error?: boolean;
   /** Visual variant for the select */
   variant?: Variants;
-  /** Additional CSS classes for the wrapper element */
-  className?: string;
   children: React.ReactNode;
 }
 const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
@@ -109,7 +109,6 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
       value,
       defaultValue,
       onValueChange,
-      className,
       children,
       ...props
     },
@@ -173,9 +172,7 @@ const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
             disabled={disabled}
             {...props}
           >
-            <div ref={ref} className={className}>
-              {children}
-            </div>
+            <div ref={ref}>{children}</div>
           </SelectPrimitive.Root>
         </InputSelectContext.Provider>
       </div>
