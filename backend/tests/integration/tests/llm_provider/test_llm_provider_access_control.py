@@ -11,6 +11,7 @@ from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -59,11 +60,34 @@ def _create_llm_provider(
     return provider
 
 
+def _create_model_configuration(
+    db_session: Session,
+    *,
+    llm_provider_id: int,
+    name: str,
+    is_visible: bool,
+    max_input_tokens: int | None,
+    supports_image_input: bool,
+    display_name: str | None,
+) -> ModelConfiguration:
+    model_configuration = ModelConfiguration(
+        llm_provider_id=llm_provider_id,
+        name=name,
+        is_visible=is_visible,
+        max_input_tokens=max_input_tokens,
+        supports_image_input=supports_image_input,
+        display_name=display_name,
+    )
+    db_session.add(model_configuration)
+    db_session.flush()
+    return model_configuration
+
+
 def _create_persona(
     db_session: Session,
     *,
     name: str,
-    provider_name: str,
+    model_configuration_id_override: int,
 ) -> Persona:
     persona = Persona(
         name=name,
@@ -74,8 +98,7 @@ def _create_persona(
         llm_relevance_filter=True,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
-        llm_model_provider_override=provider_name,
-        llm_model_version_override="gpt-4o-mini",
+        model_configuration_id_override=model_configuration_id_override,
         system_prompt="System prompt",
         task_prompt="Task prompt",
         datetime_aware=True,
@@ -114,6 +137,15 @@ def test_can_user_access_llm_provider_or_logic(
             is_public=True,
             is_default=True,
         )
+        _create_model_configuration(
+            db_session,
+            llm_provider_id=default_provider.id,
+            name="default-model",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=False,
+            display_name=None,
+        )
         # Locked provider - is_public=False with no restrictions
         locked_provider = _create_llm_provider(
             db_session,
@@ -121,6 +153,15 @@ def test_can_user_access_llm_provider_or_logic(
             default_model_name="gpt-4o",
             is_public=False,
             is_default=False,
+        )
+        _create_model_configuration(
+            db_session,
+            llm_provider_id=locked_provider.id,
+            name="locked-model",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=False,
+            display_name=None,
         )
         # Restricted provider - has both group AND persona restrictions (AND logic)
         restricted_provider = _create_llm_provider(
@@ -130,16 +171,34 @@ def test_can_user_access_llm_provider_or_logic(
             is_public=False,
             is_default=False,
         )
+        restricted_model_1 = _create_model_configuration(
+            db_session,
+            llm_provider_id=restricted_provider.id,
+            name="restricted-model-1",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=False,
+            display_name=None,
+        )
+        restricted_model_2 = _create_model_configuration(
+            db_session,
+            llm_provider_id=restricted_provider.id,
+            name="restricted-model-2",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=False,
+            display_name=None,
+        )
 
         allowed_persona = _create_persona(
             db_session,
             name="allowed-persona",
-            provider_name=restricted_provider.name,
+            model_configuration_id_override=restricted_model_1.id,
         )
         blocked_persona = _create_persona(
             db_session,
             name="blocked-persona",
-            provider_name=restricted_provider.name,
+            model_configuration_id_override=restricted_model_2.id,
         )
 
         access_group = UserGroup(name="access-group")
@@ -253,6 +312,15 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             is_public=True,
             is_default=True,
         )
+        _create_model_configuration(
+            db_session,
+            llm_provider_id=default_provider.id,
+            name="default-model",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=False,
+            display_name=None,
+        )
         restricted_provider = _create_llm_provider(
             db_session,
             name="restricted-provider",
@@ -260,11 +328,19 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             is_public=False,
             is_default=False,
         )
-
+        restricted_model_configuration = _create_model_configuration(
+            db_session,
+            llm_provider_id=restricted_provider.id,
+            name="restricted-model",
+            is_visible=True,
+            max_input_tokens=None,
+            supports_image_input=False,
+            display_name=None,
+        )
         persona = _create_persona(
             db_session,
             name="fallback-persona",
-            provider_name=restricted_provider.name,
+            model_configuration_id_override=restricted_model_configuration.id,
         )
 
         access_group = UserGroup(name="persona-group")
@@ -325,9 +401,19 @@ def test_provider_delete_clears_persona_references(reset: None) -> None:
         is_public=False,
         set_as_default=False,
         user_performing_action=admin_user,
+        model_configuarations=[
+            LLMProviderManager.build_model_configuration_upsert_request(
+                name="model-1",
+                is_visible=True,
+                max_input_tokens=None,
+                supports_image_input=False,
+                display_name=None,
+            )
+        ],
     )
+
     persona = PersonaManager.create(
-        llm_model_provider_override=provider.name,
+        model_configuration_id_override=provider.model_configurations[0].id,
         user_performing_action=admin_user,
     )
 

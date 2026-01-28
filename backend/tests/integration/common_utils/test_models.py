@@ -111,6 +111,15 @@ class DATestUserGroup(BaseModel):
     cc_pair_ids: list[int]
 
 
+class DATestModelConfiguration(BaseModel):
+    id: int
+    name: str
+    is_visible: bool
+    max_input_tokens: int | None
+    supports_image_input: bool | None
+    display_name: str | None
+
+
 class DATestLLMProvider(BaseModel):
     id: int
     name: str
@@ -123,6 +132,7 @@ class DATestLLMProvider(BaseModel):
     personas: list[int]
     api_base: str | None = None
     api_version: str | None = None
+    model_configurations: list[DATestModelConfiguration] = Field(default_factory=list)
 
 
 class DATestImageGenerationConfig(BaseModel):
