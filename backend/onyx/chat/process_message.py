@@ -4,6 +4,7 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
+import time
 import traceback
 from collections.abc import Callable
 from uuid import UUID
@@ -312,6 +313,7 @@ def handle_stream_message_objects(
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
+    processing_start_time = time.monotonic()
 
     llm: LLM | None = None
     chat_session: ChatSession | None = None
@@ -602,6 +604,7 @@ def handle_stream_message_objects(
                 chat_session_id=str(chat_session.id),
                 is_connected=check_is_connected,
                 assistant_message=assistant_response,
+                processing_start_time=processing_start_time,
             )
 
         # Run the LLM loop with explicit wrapper for stop signal handling
@@ -722,6 +725,7 @@ def llm_loop_completion_handle(
     db_session: Session,
     chat_session_id: str,
     assistant_message: ChatMessage,
+    processing_start_time: float | None = None,
 ) -> None:
     # Determine if stopped by user
     completed_normally = is_connected()
@@ -753,6 +757,7 @@ def llm_loop_completion_handle(
         assistant_message=assistant_message,
         is_clarification=state_container.is_clarification,
         emitted_citations=state_container.get_emitted_citations(),
+        processing_start_time=processing_start_time,
     )
 
 

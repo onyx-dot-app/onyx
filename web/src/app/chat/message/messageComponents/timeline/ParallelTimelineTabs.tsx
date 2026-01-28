@@ -15,10 +15,11 @@ import {
   TimelineRendererResult,
 } from "./TimelineRendererComponent";
 import Tabs from "@/refresh-components/Tabs";
-import { SvgBranch } from "@opal/icons";
+import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
 import { StepContainer } from "./StepContainer";
 import { isResearchAgentPackets } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
 import { IconProps } from "@/components/icons/icons";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 export interface ParallelTimelineTabsProps {
   /** Turn group containing parallel steps */
@@ -44,6 +45,8 @@ export function ParallelTimelineTabs({
   className,
 }: ParallelTimelineTabsProps) {
   const [activeTab, setActiveTab] = useState(turnGroup.steps[0]?.key ?? "");
+  const [isExpanded, setIsExpanded] = useState(true);
+  const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
 
   // Find the active step based on selected tab
   const activeStep = useMemo(
@@ -93,9 +96,18 @@ export function ParallelTimelineTabs({
             <div className="w-px flex-1 bg-border-01" />
           </div>
 
-          {/* Right column: Tabs */}
+          {/* Right column: Tabs + collapse button */}
           <div className="flex-1">
-            <Tabs.List variant="pill">
+            <Tabs.List
+              variant="pill"
+              rightContent={
+                <IconButton
+                  tertiary
+                  onClick={handleToggle}
+                  icon={isExpanded ? SvgFold : SvgExpand}
+                />
+              }
+            >
               {turnGroup.steps.map((step) => (
                 <Tabs.Trigger key={step.key} value={step.key} variant="pill">
                   <span className="flex items-center gap-1.5">
@@ -109,14 +121,14 @@ export function ParallelTimelineTabs({
         </div>
         <div className="w-full">
           <TimelineRendererComponent
-            key={activeTab}
+            key={`${activeTab}-${isExpanded}`}
             packets={activeStep?.packets ?? []}
             chatState={chatState}
             onComplete={noopComplete}
             animate={!stopPacketSeen}
             stopPacketSeen={stopPacketSeen}
             stopReason={stopReason}
-            defaultExpanded={true}
+            defaultExpanded={isExpanded}
             isLastStep={isLastTurnGroup}
           >
             {renderTabContent}

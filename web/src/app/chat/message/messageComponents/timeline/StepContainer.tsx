@@ -73,7 +73,7 @@ export function StepContainer({
         )}
       >
         {!hideHeader && (
-          <div className="flex items-center justify-between px-2">
+          <div className="flex items-center justify-between pl-2 pr-1">
             {header && (
               <Text as="p" mainUiMuted text03>
                 {header}
