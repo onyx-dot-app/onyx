@@ -1,3 +1,5 @@
+"use client";
+
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {

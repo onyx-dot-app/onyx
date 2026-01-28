@@ -1,3 +1,5 @@
+"use client";
+
 import { FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";

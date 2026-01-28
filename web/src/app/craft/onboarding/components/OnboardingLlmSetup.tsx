@@ -1,3 +1,5 @@
+"use client";
+
 import { SvgCheckCircle } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
