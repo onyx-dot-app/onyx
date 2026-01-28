@@ -13,8 +13,9 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 // Re-export hook
 export { useBillingInformation } from "@/lib/hooks/useBillingInformation";
 
-// Re-export utilities
+// Re-export utilities and types
 export { statusToDisplay, hasActiveSubscription } from "./interfaces";
+export type { BillingInformation } from "./interfaces";
 
 // Legacy function - returns raw Response for backwards compatibility
 export async function fetchCustomerPortal(): Promise<Response> {
