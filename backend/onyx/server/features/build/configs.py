@@ -19,12 +19,6 @@ class SandboxBackend(str, Enum):
 # "kubernetes" = full snapshots and cleanup (for production)
 SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
 
-# Persistent Document Storage Configuration
-# When enabled, indexed documents are written to local filesystem with hierarchical structure
-PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
-    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
-)
-
 # Base directory path for persistent document storage (local filesystem)
 # Example: /var/onyx/file-system or /app/file-system
 PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
