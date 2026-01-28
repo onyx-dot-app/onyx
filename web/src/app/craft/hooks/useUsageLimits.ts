@@ -8,6 +8,7 @@ import {
   USAGE_LIMITS_ENDPOINT,
   fetchUsageLimits,
 } from "@/app/craft/services/apiServices";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 // Re-export types for consumers
 export type { UsageLimits, LimitType };
@@ -44,9 +45,7 @@ export interface UseUsageLimitsReturn {
  * Automatically fetches limits on mount and provides refresh capability.
  */
 export function useUsageLimits(): UseUsageLimitsReturn {
-  // TODO: Remove this once API is ready
-  // const isEnabled = NEXT_PUBLIC_CLOUD_ENABLED;
-  const isEnabled = true;
+  const isEnabled = NEXT_PUBLIC_CLOUD_ENABLED;
 
   const { data, error, isLoading, mutate } = useSWR<UsageLimits>(
     // Only fetch if cloud is enabled

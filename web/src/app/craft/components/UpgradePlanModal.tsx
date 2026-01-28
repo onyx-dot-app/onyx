@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { SvgArrowRight } from "@opal/icons";
+import { SvgArrowRight, SvgAlertTriangle } from "@opal/icons";
 import { UsageLimits } from "@/app/craft/types/streamingTypes";
 import type { Route } from "next";
 
@@ -39,11 +39,7 @@ export default function UpgradePlanModal({
       <div className="relative z-10 w-full max-w-xl mx-4 bg-background-tint-01 rounded-16 shadow-lg border border-border-01">
         <div className="p-6 flex flex-col gap-6 min-h-[400px]">
           <div className="flex-1 flex flex-col items-center justify-center gap-6">
-            <img
-              src="/upgrade_modal_icon.png"
-              alt="Upgrade"
-              className="w-32 h-32"
-            />
+            <SvgAlertTriangle className="w-16 h-16 text-status-warning-02" />
 
             <div className="flex flex-col items-center gap-2 text-center">
               <Text headingH2 text05>
