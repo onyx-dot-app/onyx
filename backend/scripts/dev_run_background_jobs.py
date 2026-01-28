@@ -96,7 +96,7 @@ def run_jobs() -> None:
             "--loglevel=INFO",
             "--hostname=background@%n",
             "-Q",
-            "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync,user_file_delete",
+            "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,monitoring,user_file_processing,user_file_project_sync,user_file_delete",
         ]
         background_workers = [("BACKGROUND", cmd_worker_background)]
     else:
@@ -113,19 +113,6 @@ def run_jobs() -> None:
             "--hostname=heavy@%n",
             "-Q",
             "connector_pruning,sandbox",
-        ]
-        cmd_worker_kg_processing = [
-            "celery",
-            "-A",
-            "onyx.background.celery.versioned_apps.kg_processing",
-            "worker",
-            "--pool=threads",
-            "--concurrency=2",
-            "--prefetch-multiplier=1",
-            "--loglevel=INFO",
-            "--hostname=kg_processing@%n",
-            "-Q",
-            "kg_processing",
         ]
         cmd_worker_monitoring = [
             "celery",
@@ -155,7 +142,6 @@ def run_jobs() -> None:
         ]
         background_workers = [
             ("HEAVY", cmd_worker_heavy),
-            ("KG_PROCESSING", cmd_worker_kg_processing),
             ("MONITORING", cmd_worker_monitoring),
             ("USER_FILE_PROCESSING", cmd_worker_user_file_processing),
         ]

@@ -47,7 +47,9 @@ def load_everything_from_checkpoint_connector_from_checkpoint(
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
             connector.load_from_checkpoint(start, end, checkpoint)
         )
-        for document, failure, next_checkpoint in doc_batch_generator:
+        for document, hierarchy_node, failure, next_checkpoint in doc_batch_generator:
+            if hierarchy_node is not None:
+                continue
             if failure is not None:
                 items.append(failure)
             if document is not None:

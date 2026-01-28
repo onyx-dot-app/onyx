@@ -13,14 +13,16 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 SecondsSinceUnixEpoch = float
 
-GenerateDocumentsOutput = Iterator[list[Document]]
-GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
+# Output types that can include HierarchyNode alongside Documents/SlimDocuments
+GenerateDocumentsOutput = Iterator[list[Document | HierarchyNode]]
+GenerateSlimDocumentOutput = Iterator[list[SlimDocument | HierarchyNode]]
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
@@ -239,7 +241,9 @@ class EventConnector(BaseConnector):
         raise NotImplementedError
 
 
-CheckpointOutput: TypeAlias = Generator[Document | ConnectorFailure, None, CT]
+CheckpointOutput: TypeAlias = Generator[
+    Document | HierarchyNode | ConnectorFailure, None, CT
+]
 
 
 class CheckpointedConnector(BaseConnector[CT]):

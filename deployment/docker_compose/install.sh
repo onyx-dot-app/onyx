@@ -543,12 +543,22 @@ if [ -f "$ENV_FILE" ]; then
         echo "• Press Enter for latest (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        read -p "Enter tag [default: latest]: " -r VERSION
+        # If --include-craft was passed, default to craft-latest
+        if [ "$INCLUDE_CRAFT" = true ]; then
+            read -p "Enter tag [default: craft-latest]: " -r VERSION
+        else
+            read -p "Enter tag [default: latest]: " -r VERSION
+        fi
         echo ""
 
         if [ -z "$VERSION" ]; then
-            VERSION="latest"
-            print_info "Selected: Latest version"
+            if [ "$INCLUDE_CRAFT" = true ]; then
+                VERSION="craft-latest"
+                print_info "Selected: craft-latest (Craft enabled)"
+            else
+                VERSION="latest"
+                print_info "Selected: Latest version"
+            fi
         else
             print_info "Selected: $VERSION"
         fi
@@ -563,6 +573,12 @@ if [ -f "$ENV_FILE" ]; then
             echo "IMAGE_TAG=$VERSION" >> "$ENV_FILE"
         fi
         print_success "Updated IMAGE_TAG to $VERSION in .env file"
+
+        # If using craft image, also enable ENABLE_CRAFT
+        if [[ "$VERSION" == craft-* ]]; then
+            sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
+            print_success "ENABLE_CRAFT set to true"
+        fi
         print_success "Configuration updated for upgrade"
     else
         print_info "Keeping existing configuration..."
@@ -575,15 +591,27 @@ else
     # Ask for version
     print_info "Which tag would you like to deploy?"
     echo ""
-    echo "• Press Enter for latest (recommended)"
-    echo "• Type a specific tag (e.g., v0.1.0)"
-    echo ""
-    read -p "Enter tag [default: latest]: " -r VERSION
+    if [ "$INCLUDE_CRAFT" = true ]; then
+        echo "• Press Enter for craft-latest (recommended for Craft)"
+        echo "• Type a specific tag (e.g., craft-v1.0.0)"
+        echo ""
+        read -p "Enter tag [default: craft-latest]: " -r VERSION
+    else
+        echo "• Press Enter for latest (recommended)"
+        echo "• Type a specific tag (e.g., v0.1.0)"
+        echo ""
+        read -p "Enter tag [default: latest]: " -r VERSION
+    fi
     echo ""
 
     if [ -z "$VERSION" ]; then
-        VERSION="latest"
-        print_info "Selected: Latest tag"
+        if [ "$INCLUDE_CRAFT" = true ]; then
+            VERSION="craft-latest"
+            print_info "Selected: craft-latest (Craft enabled)"
+        else
+            VERSION="latest"
+            print_info "Selected: Latest tag"
+        fi
     else
         print_info "Selected: $VERSION"
     fi
@@ -637,13 +665,12 @@ else
         print_success "Basic authentication enabled in configuration"
     fi
 
-    # Configure Craft based on flag
+    # Configure Craft based on flag or if using a craft-* image tag
     # By default, env.template has Craft commented out (disabled)
-    # Only enable if --include-craft flag was passed
-    if [ "$INCLUDE_CRAFT" = true ]; then
-        # Uncomment and set Craft config (replace commented line with uncommented)
-        sed -i.bak 's/^# ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Onyx Craft enabled (image will include Node.js and opencode CLI)"
+    if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
+        # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
+        sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true)"
     else
         print_info "Onyx Craft disabled (use --include-craft to enable)"
     fi

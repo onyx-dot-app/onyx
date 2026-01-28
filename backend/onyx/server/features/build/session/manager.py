@@ -321,20 +321,15 @@ class SessionManager:
                 self._db_session, requested_provider_type
             )
             if provider:
-                # Validate model exists in this provider's configurations
-                valid_models = [m.name for m in provider.model_configurations]
-                if requested_model_name in valid_models:
-                    return LLMProviderConfig(
-                        provider=provider.provider,
-                        model_name=requested_model_name,
-                        api_key=provider.api_key,
-                        api_base=provider.api_base,
-                    )
-                else:
-                    logger.warning(
-                        f"Requested model {requested_model_name} not found in provider "
-                        f"{requested_provider_type}, falling back to default"
-                    )
+                # Use the requested model directly - the provider's API will
+                # reject invalid models. This allows users to use models that
+                # aren't explicitly configured as "visible" in the admin UI.
+                return LLMProviderConfig(
+                    provider=provider.provider,
+                    model_name=requested_model_name,
+                    api_key=provider.api_key,
+                    api_base=provider.api_base,
+                )
             else:
                 logger.warning(
                     f"Requested provider type {requested_provider_type} not found, "

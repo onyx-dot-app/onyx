@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -83,7 +84,9 @@ def test_slim_docs_retrieval(
     for doc_batch in connector.retrieve_all_slim_docs_perm_sync(
         _THREAD_1_START_TIME, _THREAD_1_END_TIME
     ):
-        retrieved_slim_docs.extend(doc_batch)
+        retrieved_slim_docs.extend(
+            [doc for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     assert len(retrieved_slim_docs) == 4
 

@@ -34,6 +34,8 @@ All database operations should be handled by the caller (SessionManager, Celery 
 Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
+import base64
+import binascii
 import io
 import json
 import mimetypes
@@ -1476,9 +1478,13 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # _get_pod_name needs string
         pod_name = self._get_pod_name(str(sandbox_id))
 
-        # Security: sanitize path
-        clean_path = path.lstrip("/").replace("..", "")
+        # Security: sanitize path by removing '..' components individually
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        clean_path = str(Path(*clean_parts)) if clean_parts else "."
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
+        # Use shlex.quote to prevent command injection
+        quoted_path = shlex.quote(target_path)
 
         logger.info(f"Listing directory {target_path} in pod {pod_name}")
 
@@ -1486,7 +1492,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         exec_command = [
             "/bin/sh",
             "-c",
-            f'ls -la --time-style=+%s "{target_path}" 2>/dev/null || echo "ERROR_NOT_FOUND"',
+            f"ls -la --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
         ]
 
         try:
@@ -1512,7 +1518,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             raise RuntimeError(f"Failed to list directory: {e}") from e
 
     def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
-        """Parse ls -la output into FilesystemEntry objects."""
+        """Parse ls -la output into FilesystemEntry objects.
+
+        Handles regular files, directories, and symlinks. Symlinks to directories
+        are treated as directories for navigation purposes.
+        """
         entries = []
         lines = ls_output.strip().split("\n")
 
@@ -1526,14 +1536,37 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 continue
 
             parts = line.split()
-            if len(parts) < 8:
+            # ls -la --time-style=+%s format: perms links owner group size timestamp name
+            # Minimum 7 parts for a simple filename
+            if len(parts) < 7:
                 continue
 
-            name = parts[-1]
+            # Handle symlinks: format is "name -> target"
+            # For symlinks, parts[-1] is the target, not the name
+            is_symlink = line.startswith("l")
+            if is_symlink and " -> " in line:
+                # Extract name from the "name -> target" portion
+                # Filename starts at index 6 (after perms, links, owner, group, size, timestamp)
+                try:
+                    # Rejoin from index 6 onwards to handle names with spaces
+                    name_and_target = " ".join(parts[6:])
+                    if " -> " in name_and_target:
+                        name = name_and_target.split(" -> ")[0]
+                    else:
+                        name = parts[-1]
+                except (IndexError, ValueError):
+                    name = parts[-1]
+            else:
+                # For regular files/directories, name is at index 6 or later (with spaces)
+                name = " ".join(parts[6:])
+
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d")
+            # Directories start with 'd', symlinks start with 'l'
+            # Treat symlinks as directories (they typically point to directories
+            # in our sandbox setup, like files/ -> /workspace/demo-data)
+            is_directory = line.startswith("d") or is_symlink
             size_str = parts[4]
 
             try:
@@ -1576,15 +1609,20 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # _get_pod_name needs string
         pod_name = self._get_pod_name(str(sandbox_id))
 
-        # Security: sanitize path
-        clean_path = path.lstrip("/").replace("..", "")
+        # Security: sanitize path by removing '..' components individually
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        clean_path = str(Path(*clean_parts)) if clean_parts else "."
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
+        # Use shlex.quote to prevent command injection
+        quoted_path = shlex.quote(target_path)
 
-        # Use exec to read file (base64 encode to handle binary)
+        # Use exec to read file with base64 encoding to handle binary data
+        # Base64 encode the output to safely transport binary content
         exec_command = [
             "/bin/sh",
             "-c",
-            f'cat "{target_path}" 2>/dev/null || echo "ERROR_NOT_FOUND"',
+            f"if [ -f {quoted_path} ]; then base64 {quoted_path}; else echo 'ERROR_NOT_FOUND'; fi",
         ]
 
         try:
@@ -1598,16 +1636,17 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 stdin=False,
                 stdout=True,
                 tty=False,
-                _preload_content=False,  # Return raw bytes
             )
 
-            # Read response
-            content = b""
-            for chunk in resp:
-                content += chunk
-
-            if b"ERROR_NOT_FOUND" in content:
+            if "ERROR_NOT_FOUND" in resp:
                 raise ValueError(f"File not found: {path}")
+
+            # Decode base64 content
+            try:
+                content = base64.b64decode(resp.strip())
+            except binascii.Error as e:
+                logger.error(f"Failed to decode base64 content: {e}")
+                raise RuntimeError(f"Failed to decode file content: {e}") from e
 
             return content
 

@@ -969,7 +969,9 @@ if __name__ == "__main__":
 
     # Run the connector
     while checkpoint.has_more:
-        for doc_batch, failure, next_checkpoint in runner.run(checkpoint):
+        for doc_batch, hierarchy_node_batch, failure, next_checkpoint in runner.run(
+            checkpoint
+        ):
             if doc_batch:
                 print(f"Retrieved batch of {len(doc_batch)} documents")
                 for doc in doc_batch:

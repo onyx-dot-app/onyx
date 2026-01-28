@@ -45,8 +45,7 @@ services:
       args:
         - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
-      /bin/sh -c "/app/scripts/setup_craft_templates.sh &&
-      alembic upgrade head &&
+      /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     # Check env.template and copy to .env for env vars
