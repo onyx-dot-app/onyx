@@ -316,8 +316,7 @@ function AppHeader() {
               <InputSelect
                 value={currentChatSessionId ? "chat" : appMode}
                 onValueChange={(value) => setAppMode(value as AppMode)}
-                variant="secondary"
-                disabled={!appFocus.isNewSession()}
+                variant={appFocus.isNewSession() ? "secondary" : "readOnly"}
               >
                 <InputSelect.Trigger width="fit" />
                 <InputSelect.Content>
