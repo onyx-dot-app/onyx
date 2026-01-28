@@ -305,12 +305,10 @@ InputSelectTrigger.displayName = "InputSelectTrigger";
  * </InputSelect.Content>
  * ```
  */
-interface InputSelectContentProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> {}
 const InputSelectContent = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Content>,
-  InputSelectContentProps
->(({ className, children, ...props }, ref) => (
+  WithoutStyles<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>>
+>(({ children, ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
@@ -318,8 +316,7 @@ const InputSelectContent = React.forwardRef<
         "z-[4000] w-64 max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-        "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-        className
+        "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
       )}
       sideOffset={4}
       position="popper"
@@ -429,13 +426,11 @@ InputSelectItem.displayName = "InputSelectItem";
  * </InputSelect.Group>
  * ```
  */
-interface InputSelectGroupProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Group> {}
 const InputSelectGroup = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Group>,
-  InputSelectGroupProps
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Group ref={ref} className={cn("", className)} {...props}>
+  WithoutStyles<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Group>>
+>(({ children, ...props }, ref) => (
+  <SelectPrimitive.Group ref={ref} {...props}>
     {children}
   </SelectPrimitive.Group>
 ));
@@ -455,18 +450,13 @@ InputSelectGroup.displayName = "InputSelectGroup";
  * <InputSelect.Label>Category Name</InputSelect.Label>
  * ```
  */
-interface InputSelectLabelProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label> {}
 const InputSelectLabel = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Label>,
-  InputSelectLabelProps
->(({ className, children, ...props }, ref) => (
+  WithoutStyles<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>>
+>(({ children, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn(
-      "px-2 py-1.5 text-xs font-medium text-text-03 uppercase tracking-wide",
-      className
-    )}
+    className="px-2 py-1.5 text-xs font-medium text-text-03 uppercase tracking-wide"
     {...props}
   >
     {children}
@@ -551,8 +541,5 @@ export {
   type InputSelectRootProps,
   type InputSelectTriggerProps,
   type InputSelectTriggerWidth,
-  type InputSelectContentProps,
   type InputSelectItemProps,
-  type InputSelectGroupProps,
-  type InputSelectLabelProps,
 };
