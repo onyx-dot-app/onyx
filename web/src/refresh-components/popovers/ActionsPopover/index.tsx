@@ -19,7 +19,7 @@ import {
 } from "@/lib/tools/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAssistantPreferences } from "@/app/app/hooks/useAssistantPreferences";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";

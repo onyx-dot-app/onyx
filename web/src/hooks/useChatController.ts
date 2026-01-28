@@ -4,13 +4,12 @@ import {
   buildChatUrl,
   nameChatSession,
   updateLlmOverrideForChatSession,
-} from "../services/lib";
+} from "@/app/app/services/lib";
 
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { stopChatSession } from "../chat_search/utils";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -19,10 +18,10 @@ import {
   SYSTEM_NODE_ID,
   buildImmediateMessages,
   buildEmptyMessage,
-} from "../services/messageTree";
+} from "@/app/app/services/messageTree";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { SEARCH_PARAM_NAMES } from "../services/searchParams";
-import { SEARCH_TOOL_ID } from "../components/tools/constants";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
@@ -38,9 +37,9 @@ import {
   StreamingError,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
-} from "../interfaces";
+} from "@/app/app/interfaces";
 import { StreamStopReason } from "@/lib/search/interfaces";
-import { createChatSession } from "../services/lib";
+import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -49,7 +48,7 @@ import {
 import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
-} from "../services/currentMessageFIFO";
+} from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -67,15 +66,35 @@ import {
   useCurrentMessageTree,
   useCurrentChatState,
   useCurrentMessageHistory,
-} from "../stores/useChatSessionStore";
-import { Packet, MessageStart, PacketType } from "../services/streamingModels";
+} from "@/app/app/stores/useChatSessionStore";
+import {
+  Packet,
+  MessageStart,
+  PacketType,
+} from "@/app/app/services/streamingModels";
 import { useAssistantPreferences } from "@/app/app/hooks/useAssistantPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
+import {
+  ProjectFile,
+  useProjectsContext,
+} from "@/app/app/projects/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "../services/fileUtils";
+import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
 
 const SYSTEM_MESSAGE_ID = -3;
+
+async function stopChatSession(chatSessionId: string): Promise<void> {
+  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to stop chat session: ${response.statusText}`);
+  }
+}
 
 export interface OnSubmitProps {
   message: string;

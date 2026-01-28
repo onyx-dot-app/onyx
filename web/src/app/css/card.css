@@ -18,6 +18,7 @@
   @apply cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50;
 }
 
-.card[data-variant="borderless"] {
-  @apply bg-background-tint-00;
+/* Borderless modifier - can be combined with any variant */
+.card[data-borderless="true"] {
+  @apply border-none;
 }

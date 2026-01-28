@@ -144,7 +144,6 @@ export function DiscordChannelsTable({
                     )
                   }
                   disabled={disabled}
-                  className="w-[160px]"
                 >
                   <InputSelect.Trigger placeholder="-" />
                   <InputSelect.Content>

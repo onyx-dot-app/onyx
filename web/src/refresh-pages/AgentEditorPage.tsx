@@ -1201,10 +1201,7 @@ export default function AgentEditorPage({
                                 description="Choose the sources of truth this agent refers to."
                                 center
                               >
-                                <InputSelectField
-                                  name="knowledge_source"
-                                  className="w-full"
-                                >
+                                <InputSelectField name="knowledge_source">
                                   <InputSelect.Trigger />
                                   <InputSelect.Content>
                                     <InputSelect.Item value="team_knowledge">

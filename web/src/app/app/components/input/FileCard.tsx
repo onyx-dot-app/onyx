@@ -8,6 +8,7 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import { cn, isImageFile } from "@/lib/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgFileText, SvgX } from "@opal/icons";
+
 function ImageFileCard({
   file,
   imageUrl,

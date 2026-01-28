@@ -1,30 +1,17 @@
+"use client";
+
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import useSWRInfinite from "swr/infinite";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ChatSearchResponse } from "@/app/app/chat_search/interfaces";
 import { UNNAMED_CHAT } from "@/lib/constants";
-
-export interface FilterableChat {
-  id: string;
-  label: string;
-  time: string;
-}
-
-interface UseChatSearchOptimisticOptions {
-  searchQuery: string;
-  enabled?: boolean;
-}
-
-interface UseChatSearchOptimisticResult {
-  results: FilterableChat[];
-  isSearching: boolean;
-  hasMore: boolean;
-  fetchMore: () => Promise<void>;
-  isLoadingMore: boolean;
-  sentinelRef: React.RefObject<HTMLDivElement | null>;
-}
+import {
+  ChatSearchResponse,
+  FilterableChat,
+  UseChatSearchOptimisticOptions,
+  UseChatSearchOptimisticResult,
+} from "@/interfaces/chat_search";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -58,7 +45,7 @@ function filterLocalSessions(
 
 // --- Hook ---
 
-export function useChatSearchOptimistic(
+export default function useChatSearchOptimistic(
   options: UseChatSearchOptimisticOptions
 ): UseChatSearchOptimisticResult {
   const { searchQuery, enabled = true } = options;

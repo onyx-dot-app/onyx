@@ -25,7 +25,7 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
 import Modal from "@/refresh-components/Modal";
@@ -35,11 +35,14 @@ import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import { useChatController } from "@/app/app/hooks/useChatController";
+import { useChatController } from "@/hooks/useChatController";
 import { useAssistantController } from "@/app/app/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
+import useQueryController from "@/hooks/useQueryController";
+import useAppFocus from "@/hooks/useAppFocus";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
@@ -53,7 +56,9 @@ import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/components/chat/ChatScrollContainer";
-import MessageList from "@/components/chat/MessageList";
+import ChatUI from "@/sections/ChatUI";
+import SearchResults from "@/sections/SearchUI";
+import SourceFilter from "@/sections/SourceFilter";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
@@ -69,14 +74,9 @@ import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import AppHeader from "@/app/app/components/AppHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import Spacer from "@/refresh-components/Spacer";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -190,6 +190,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     assistantId: selectedAssistant?.id,
   });
 
+  const { appBackgroundUrl, hasBackground } = useAppBackground();
+
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
@@ -263,8 +265,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
 
-  const [projectPanelVisible, setProjectPanelVisible] = useState(true);
   const chatInputBarRef = useRef<ChatInputBarHandle>(null);
+
+  // Determine current app focus for conditional rendering
+  const appFocus = useAppFocus();
 
   const filterManager = useFilters();
 
@@ -378,6 +382,36 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     });
 
   useSendMessageToParent();
+  const onChat = useCallback(
+    (message: string) => {
+      onSubmit({
+        message,
+        currentMessageFiles,
+        deepResearch: deepResearchEnabled,
+      });
+      if (showOnboarding) {
+        finishOnboarding();
+      }
+    },
+    [
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      showOnboarding,
+      finishOnboarding,
+    ]
+  );
+
+  // Unified query controller - handles classification and search routing
+  const queryController = useQueryController(onChat);
+
+  // Source filter state for search results
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+
+  // Reset source filter when search results change
+  useEffect(() => {
+    setSelectedSources([]);
+  }, [queryController.searchResults]);
 
   const retrievalEnabled = useMemo(() => {
     if (liveAssistant) {
@@ -443,23 +477,42 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const handleChatInputSubmit = useCallback(
-    (message: string) => {
-      onSubmit({
-        message,
-        currentMessageFiles: currentMessageFiles,
-        deepResearch: deepResearchEnabled,
-      });
-      if (showOnboarding) {
-        finishOnboarding();
+    async (message: string) => {
+      // If we're in an existing chat session, always use chat mode
+      // (appMode only applies to new sessions)
+      if (currentChatSessionId) {
+        queryController.reset();
+        onSubmit({
+          message,
+          currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+        });
+        if (showOnboarding) {
+          finishOnboarding();
+        }
+        return;
       }
+
+      // For new sessions, let the query controller handle routing
+      await queryController.submit(message);
     },
     [
+      currentChatSessionId,
+      queryController,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
       showOnboarding,
       finishOnboarding,
     ]
+  );
+
+  // Handle document click from search results
+  const handleSearchDocumentClick = useCallback(
+    (doc: MinimalOnyxDocument) => {
+      setPresentingDocument(doc);
+    },
+    [setPresentingDocument]
   );
 
   // Memoized callbacks for DocumentsSidebar
@@ -489,15 +542,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         </div>
       </div>
     ) : null;
-
-  useEffect(() => {
-    if (!!currentProjectId && !currentChatSessionId) {
-      setProjectPanelVisible(true);
-    }
-    if (!!currentChatSessionId) {
-      setProjectPanelVisible(false);
-    }
-  }, [currentProjectId, currentChatSessionId]);
 
   // When no chat session exists but a project is selected, fetch the
   // total tokens for the project's files so upload UX can compare
@@ -576,13 +620,51 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     );
   }
 
-  // Chat background logic
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
-
   if (!isReady) return <OnyxInitializingLoader />;
+
+  const hasSuggestions = (liveAssistant?.starter_messages?.length ?? 0) > 0;
+  const showWelcomeMessage = !queryController.classification;
+  const showOnboardingUi =
+    showOnboarding ||
+    (user?.role !== UserRole.ADMIN && !user?.personalization?.name);
+
+  const chatInputBar = (
+    <ChatInputBar
+      ref={chatInputBarRef}
+      deepResearchEnabled={deepResearchEnabled}
+      toggleDeepResearch={toggleDeepResearch}
+      toggleDocumentSidebar={toggleDocumentSidebar}
+      filterManager={filterManager}
+      llmManager={llmManager}
+      removeDocs={() => setSelectedDocuments([])}
+      retrievalEnabled={retrievalEnabled}
+      selectedDocuments={selectedDocuments}
+      initialMessage={
+        queryController.query ||
+        searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
+        ""
+      }
+      stopGenerating={stopGenerating}
+      onSubmit={handleChatInputSubmit}
+      chatState={currentChatState}
+      currentSessionFileTokenCount={
+        currentChatSessionId
+          ? currentSessionFileTokenCount
+          : projectContextTokenCount
+      }
+      availableContextTokens={availableContextTokens}
+      selectedAssistant={selectedAssistant || liveAssistant}
+      handleFileUpload={handleMessageSpecificFileUpload}
+      setPresentingDocument={setPresentingDocument}
+      disabled={
+        (!llmManager.isLoadingProviders &&
+          llmManager.hasAnyProvider === false) ||
+        (!isLoadingOnboarding &&
+          onboardingState.currentStep !== OnboardingStep.Complete)
+      }
+      isClassifying={queryController.isClassifying}
+    />
+  );
 
   return (
     <>
@@ -638,7 +720,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root disableFooter>
+      <AppLayouts.Root>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -648,163 +730,156 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           {({ getRootProps }) => (
             <div
               className={cn(
-                "h-full w-full flex flex-col items-center outline-none relative",
-                hasBackground && "bg-cover bg-center bg-fixed"
+                "flex flex-col h-full items-center outline-none relative",
+                !!appBackgroundUrl && "bg-cover bg-center bg-fixed"
               )}
               style={
-                hasBackground
-                  ? { backgroundImage: `url(${chatBackground.url})` }
+                !!appBackgroundUrl
+                  ? { backgroundImage: `url(${appBackgroundUrl})` }
                   : undefined
               }
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* Semi-transparent overlay for readability when background is set */}
-              {hasBackground && (
+              {!!appBackgroundUrl && (
                 <div className="absolute inset-0 bg-background/80 pointer-events-none" />
               )}
 
-              {/* ProjectUI */}
-              {!!currentProjectId && projectPanelVisible && (
-                <ProjectContextPanel
-                  projectTokenCount={projectContextTokenCount}
-                  availableContextTokens={availableContextTokens}
-                  setPresentingDocument={setPresentingDocument}
-                />
-              )}
+              {queryController.classification === "search" ? (
+                // ========== SEARCH MODE: Grid Layout ==========
+                <div className="grid grid-cols-[3fr_1fr] grid-rows-[auto_1fr] h-full w-full gap-x-8">
+                  {/* Row 1, Col 1: ChatInputBar */}
+                  <div className="flex flex-col w-full justify-center items-end py-1 pointer-events-auto">
+                    <div className="w-[var(--main-app-width)]">
+                      {chatInputBar}
+                    </div>
+                  </div>
 
-              {/* ChatUI */}
-              {!!currentChatSessionId && liveAssistant && (
-                <ChatScrollContainer
-                  ref={scrollContainerRef}
-                  sessionId={currentChatSessionId}
-                  anchorSelector={anchorSelector}
-                  autoScroll={autoScrollEnabled}
-                  isStreaming={isStreaming}
-                  onScrollButtonVisibilityChange={setShowScrollButton}
-                  disableFadeOverlay={hasBackground}
-                >
-                  <AppLayouts.StickyHeader>
-                    <AppHeader />
-                  </AppLayouts.StickyHeader>
-                  <MessageList
-                    liveAssistant={liveAssistant}
-                    llmManager={llmManager}
-                    deepResearchEnabled={deepResearchEnabled}
-                    currentMessageFiles={currentMessageFiles}
-                    setPresentingDocument={setPresentingDocument}
-                    onSubmit={onSubmit}
-                    onMessageSelection={onMessageSelection}
-                    stopGenerating={stopGenerating}
-                    onResubmit={handleResubmitLastMessage}
-                    anchorNodeId={anchorNodeId}
-                    disableBlur={!hasBackground}
-                  />
-                </ChatScrollContainer>
-              )}
+                  {/* Row 1, Col 2: Empty */}
+                  <div />
 
-              {!currentChatSessionId && !currentProjectId && (
-                <div className="w-full flex-1 flex flex-col items-center justify-end">
-                  <WelcomeMessage
-                    agent={liveAssistant}
-                    isDefaultAgent={isDefaultAgent}
-                  />
-                  <Spacer rem={1.5} />
+                  {/* Row 2, Col 1: Search Results */}
+                  <div className="min-h-0 overflow-hidden flex flex-col items-end">
+                    <SearchResults
+                      results={queryController.searchResults}
+                      llmSelectedDocIds={queryController.llmSelectedDocIds}
+                      onDocumentClick={handleSearchDocumentClick}
+                      selectedSources={selectedSources}
+                    />
+                  </div>
+
+                  {/* Row 2, Col 2: Source Filter */}
+                  <div className="min-h-0 overflow-hidden">
+                    <SourceFilter
+                      results={queryController.searchResults}
+                      selectedSources={selectedSources}
+                      onSourceChange={setSelectedSources}
+                    />
+                  </div>
                 </div>
-              )}
-
-              {/* ChatInputBar container - absolutely positioned when in chat, centered when no session */}
-              <div
-                className={cn(
-                  "flex justify-center",
-                  currentChatSessionId
-                    ? "absolute bottom-6 left-0 right-0 pointer-events-none"
-                    : "w-full"
-                )}
-              >
-                <div
-                  className={cn(
-                    "w-[min(50rem,100%)] z-sticky flex flex-col px-4",
-                    currentChatSessionId && "pointer-events-auto"
-                  )}
-                >
-                  {/* Scroll to bottom button - positioned above ChatInputBar */}
-                  {showScrollButton && (
-                    <div className="mb-2 self-center">
-                      <IconButton
-                        icon={SvgChevronDown}
-                        onClick={handleScrollToBottom}
-                        aria-label="Scroll to bottom"
+              ) : (
+                // ========== NORMAL MODE: Flex Layout ==========
+                <>
+                  {/* Upper Block */}
+                  <div className="flex-1 min-h-0 w-full flex flex-col justify-end items-center overflow-y-auto overflow-x-hidden">
+                    {/* ProjectUI */}
+                    {appFocus.isProject() && (
+                      <ProjectContextPanel
+                        projectTokenCount={projectContextTokenCount}
+                        availableContextTokens={availableContextTokens}
+                        setPresentingDocument={setPresentingDocument}
                       />
+                    )}
+
+                    {/* ChatUI */}
+                    {(appFocus.isChat() ||
+                      queryController.classification === "chat") && (
+                      <ChatScrollContainer
+                        ref={scrollContainerRef}
+                        sessionId={appFocus.getId()!}
+                        anchorSelector={anchorSelector}
+                        autoScroll={autoScrollEnabled}
+                        isStreaming={isStreaming}
+                        onScrollButtonVisibilityChange={setShowScrollButton}
+                        disableFadeOverlay={hasBackground}
+                      >
+                        {showScrollButton && (
+                          <div className="absolute bottom-4 z-sticky">
+                            <IconButton
+                              icon={SvgChevronDown}
+                              onClick={handleScrollToBottom}
+                              secondary
+                              aria-label="Scroll to bottom"
+                            />
+                          </div>
+                        )}
+
+                        <ChatUI
+                          liveAssistant={liveAssistant!}
+                          llmManager={llmManager}
+                          deepResearchEnabled={deepResearchEnabled}
+                          currentMessageFiles={currentMessageFiles}
+                          setPresentingDocument={setPresentingDocument}
+                          onSubmit={onSubmit}
+                          onMessageSelection={onMessageSelection}
+                          stopGenerating={stopGenerating}
+                          onResubmit={handleResubmitLastMessage}
+                          anchorNodeId={anchorNodeId}
+                          disableBlur={!hasBackground}
+                        />
+                      </ChatScrollContainer>
+                    )}
+
+                    {/* Onboarding */}
+                    {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                      showOnboardingUi && (
+                        <>
+                          <OnboardingFlow
+                            handleHideOnboarding={hideOnboarding}
+                            handleFinishOnboarding={finishOnboarding}
+                            state={onboardingState}
+                            actions={onboardingActions}
+                            llmDescriptors={llmDescriptors}
+                          />
+                          <Spacer rem={1} />
+                        </>
+                      )}
+
+                    {/* Welcome Message */}
+                    {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                      showWelcomeMessage && (
+                        <>
+                          <WelcomeMessage
+                            agent={liveAssistant}
+                            isDefaultAgent={isDefaultAgent}
+                          />
+                          <Spacer rem={1} />
+                        </>
+                      )}
+                  </div>
+
+                  {/* ChatInputBar - centrally laid out */}
+                  <div className="w-[var(--main-app-width)] pointer-events-auto py-1">
+                    {chatInputBar}
+                  </div>
+
+                  {/* Lower Block */}
+                  {((appFocus.isNewSession() &&
+                    queryController.classification !== "chat") ||
+                    appFocus.isAgent() ||
+                    appFocus.isProject()) && (
+                    <div className="flex-1 min-h-0 w-full">
+                      {/* Agent-Suggestions */}
+                      {appFocus.isAgent() && hasSuggestions && (
+                        <Suggestions onSubmit={onSubmit} />
+                      )}
+
+                      {/* Project Sessions */}
+                      {appFocus.isProject() && <ProjectChatSessionList />}
                     </div>
                   )}
-
-                  {(showOnboarding ||
-                    (user?.role !== UserRole.ADMIN &&
-                      !user?.personalization?.name)) &&
-                    currentProjectId === null && (
-                      <OnboardingFlow
-                        handleHideOnboarding={hideOnboarding}
-                        handleFinishOnboarding={finishOnboarding}
-                        state={onboardingState}
-                        actions={onboardingActions}
-                        llmDescriptors={llmDescriptors}
-                      />
-                    )}
-
-                  <ChatInputBar
-                    ref={chatInputBarRef}
-                    deepResearchEnabled={deepResearchEnabled}
-                    toggleDeepResearch={toggleDeepResearch}
-                    toggleDocumentSidebar={toggleDocumentSidebar}
-                    filterManager={filterManager}
-                    llmManager={llmManager}
-                    removeDocs={() => setSelectedDocuments([])}
-                    retrievalEnabled={retrievalEnabled}
-                    selectedDocuments={selectedDocuments}
-                    initialMessage={
-                      searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
-                    }
-                    stopGenerating={stopGenerating}
-                    onSubmit={handleChatInputSubmit}
-                    chatState={currentChatState}
-                    currentSessionFileTokenCount={
-                      currentChatSessionId
-                        ? currentSessionFileTokenCount
-                        : projectContextTokenCount
-                    }
-                    availableContextTokens={availableContextTokens}
-                    selectedAssistant={selectedAssistant || liveAssistant}
-                    handleFileUpload={handleMessageSpecificFileUpload}
-                    setPresentingDocument={setPresentingDocument}
-                    disabled={
-                      (!llmManager.isLoadingProviders &&
-                        llmManager.hasAnyProvider === false) ||
-                      (!isLoadingOnboarding &&
-                        onboardingState.currentStep !== OnboardingStep.Complete)
-                    }
-                  />
-
-                  <Spacer rem={0.5} />
-
-                  {!!currentProjectId && <ProjectChatSessionList />}
-                </div>
-              </div>
-
-              {/* SearchUI */}
-              {!currentChatSessionId && !currentProjectId && (
-                <div className="flex flex-1 flex-col items-center w-full">
-                  {liveAssistant?.starter_messages &&
-                    liveAssistant.starter_messages.length > 0 &&
-                    messageHistory.length === 0 &&
-                    !currentProjectId &&
-                    !currentChatSessionId && (
-                      <div className="max-w-[50rem] w-full">
-                        <Suggestions onSubmit={onSubmit} />
-                      </div>
-                    )}
-                </div>
+                </>
               )}
-              <AppLayouts.Footer />
             </div>
           )}
         </Dropzone>

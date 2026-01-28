@@ -22,7 +22,7 @@ import Text from "@/refresh-components/texts/Text";
 import useUsers from "@/hooks/useUsers";
 import useGroups from "@/hooks/useGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -140,7 +140,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
       <Modal.Header icon={SvgShare} title="Share Agent" onClose={handleClose} />
 
       <Modal.Body padding={0.5}>
-        <Card variant="borderless" padding={0.5}>
+        <Card borderless padding={0.5}>
           <Tabs
             defaultValue={
               values.isPublic ? YOUR_ORGANIZATION_TAB : USERS_AND_GROUPS_TAB

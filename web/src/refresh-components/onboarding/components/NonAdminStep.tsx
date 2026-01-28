@@ -3,7 +3,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";

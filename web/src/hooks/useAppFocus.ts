@@ -1,7 +1,7 @@
 "use client";
 
-// "AppFocus" is the current part of the main application which is active / focused on.
-// Namely, if the URL is pointing towards a "chat", then a `{ type: "chat", id: "..." }` is returned.
+// "AppFocus" is the current part of the main application (/app) which is active / focused on.
+// Namely, if the URL has a chat ID param, then a `{ type: "app", id: "..." }` is returned.
 //
 // This is useful in determining what `SidebarTab` should be active, for example.
 
@@ -70,7 +70,7 @@ export default function useAppFocus(): AppFocus {
     return new AppFocus("more-agents");
   }
 
-  // Check search params for chat, agent, or project
+  // Check search params for chat session, agent, or project
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
   if (chatId) return new AppFocus({ type: "chat", id: chatId });
 

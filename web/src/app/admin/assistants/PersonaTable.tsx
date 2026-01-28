@@ -15,7 +15,7 @@ import {
   togglePersonaVisibility,
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";

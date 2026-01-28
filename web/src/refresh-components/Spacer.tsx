@@ -1,25 +1,20 @@
-type DirectionProps = {
-  vertical?: boolean;
-  horizontal?: boolean;
-};
-
-export type SpacerProps = DirectionProps &
-  ({ rem?: number; pixels?: never } | { pixels: number; rem?: never });
+export interface SpacerProps {
+  direction?: "horizontal" | "vertical";
+  rem?: number;
+}
 
 export default function Spacer({
-  vertical,
-  horizontal,
+  direction = "vertical",
   rem = 1,
-  pixels,
 }: SpacerProps) {
-  const isVertical = vertical ? true : horizontal ? false : true;
-  const size = pixels !== undefined ? `${pixels}px` : `${rem}rem`;
+  const isVertical = direction === "vertical";
+  const size = `${rem}rem`;
 
   return (
     <div
       style={{
         height: isVertical ? size : undefined,
-        width: !isVertical ? size : undefined,
+        width: isVertical ? undefined : size,
       }}
     />
   );

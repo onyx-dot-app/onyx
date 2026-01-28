@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, useMemo, useEffect } from "react";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 import { LLMProviderName } from "@/app/admin/configuration/llm/interfaces";
 import {

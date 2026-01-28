@@ -1,4 +1,4 @@
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { KGConfig, KGConfigRaw } from "./interfaces";

@@ -16,7 +16,9 @@
  * - `secondary`: Transparent background with border. Use for less prominent content or nested cards.
  * - `tertiary`: Transparent background with dashed border. Use for placeholder or empty states.
  * - `disabled`: Dimmed primary style with reduced opacity. Indicates unavailable or locked content.
- * - `borderless`: Solid background without border. Use when cards are visually grouped or in tight layouts.
+ *
+ * Modifiers:
+ * - `borderless`: Removes the border. Can be combined with any variant.
  *
  * @example
  * ```tsx
@@ -37,6 +39,11 @@
  * <Card variant="tertiary">
  *   <div>No items yet</div>
  * </Card>
+ *
+ * // Borderless primary card
+ * <Card borderless>
+ *   <div>No border around this card</div>
+ * </Card>
  * ```
  */
 
@@ -51,13 +58,13 @@ type CardVariant =
   // A background-colorless card variant with a dashed border.
   | "tertiary"
   // A dimmed version of the primary variant (indicates that this card is unavailable).
-  | "disabled"
-  // A borderless version of the primary variant.
-  | "borderless";
+  | "disabled";
 
 export interface CardProps extends SectionProps {
   // variants
   variant?: CardVariant;
+  // Remove the border from the card. Can be combined with any variant.
+  borderless?: boolean;
   // Optional className to apply custom styles
   className?: string;
 
@@ -66,13 +73,19 @@ export interface CardProps extends SectionProps {
 
 export default function Card({
   variant = "primary",
+  borderless = false,
   padding = 1,
   className,
   ref,
   ...props
 }: CardProps) {
   return (
-    <div ref={ref} className={cn("card", className)} data-variant={variant}>
+    <div
+      ref={ref}
+      className={cn("card", className)}
+      data-variant={variant}
+      data-borderless={borderless}
+    >
       <Section alignItems="start" padding={padding} height="fit" {...props} />
     </div>
   );

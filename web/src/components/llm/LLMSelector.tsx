@@ -159,8 +159,7 @@ export default function LLMSelector({
       onValueChange={(value) => onSelect(value === "default" ? null : value)}
     >
       <InputSelect.Trigger placeholder={defaultLabel} />
-
-      <InputSelect.Content className="min-w-[280px]">
+      <InputSelect.Content>
         {!excludePublicProviders && (
           <InputSelect.Item
             value="default"

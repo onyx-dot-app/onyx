@@ -46,7 +46,7 @@ interface UseUserPersonalizationOptions {
  * @example
  * ```tsx
  * import useUserPersonalization from "@/hooks/useUserPersonalization";
- * import { useUser } from "@/components/user/UserProvider";
+ * import { useUser } from "@/providers/UserProvider";
  *
  * function PersonalizationSettings() {
  *   const { user, updateUserPersonalization } = useUser();

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
@@ -20,14 +20,14 @@ import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useChatController } from "@/app/app/hooks/useChatController";
+import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
 import { useAssistantController } from "@/app/app/hooks/useAssistantController";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import MessageList from "@/components/chat/MessageList";
+import ChatUI from "@/sections/ChatUI";
 import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -356,7 +356,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   isStreaming={isStreaming}
                   disableFadeOverlay={!isSidePanel}
                 >
-                  <MessageList
+                  <ChatUI
                     liveAssistant={resolvedAssistant}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
@@ -423,7 +423,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             </div>
             {!hasMessages && <div className="flex-1 w-full" />}
-            <AppLayouts.Footer />
           </div>
         )}
       </Dropzone>

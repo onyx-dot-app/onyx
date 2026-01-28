@@ -23,7 +23,6 @@ export interface TagProps {
 
 export default function Tag({
   active,
-
   label,
   className,
   children,

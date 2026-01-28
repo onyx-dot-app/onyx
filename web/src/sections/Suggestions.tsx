@@ -1,9 +1,9 @@
 "use client";
 
-import { OnSubmitProps } from "@/app/app/hooks/useChatController";
+import { OnSubmitProps } from "@/hooks/useChatController";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useCurrentAgent } from "@/hooks/useAgents";
-import { cn } from "@/lib/utils";
+import { Section } from "@/layouts/general-layouts";
 
 export interface SuggestionsProps {
   onSubmit: (props: OnSubmitProps) => void;
@@ -12,6 +12,14 @@ export interface SuggestionsProps {
 export default function Suggestions({ onSubmit }: SuggestionsProps) {
   const currentAgent = useCurrentAgent();
 
+  function handleSuggestionClick(suggestion: string) {
+    onSubmit({
+      message: suggestion,
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  }
+
   if (
     !currentAgent ||
     !currentAgent.starter_messages ||
@@ -19,21 +27,15 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   )
     return null;
 
-  const handleSuggestionClick = (suggestion: string) => {
-    onSubmit({
-      message: suggestion,
-      currentMessageFiles: [],
-      deepResearch: false,
-    });
-  };
-
   return (
-    <div className={cn("flex flex-col w-full p-1 gap-1")}>
-      {currentAgent.starter_messages.map(({ message }, index) => (
-        <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
-          {message}
-        </LineItem>
-      ))}
+    <div className="w-[var(--main-app-width)] mx-auto">
+      <Section padding={0.25} gap={0.25}>
+        {currentAgent.starter_messages.map(({ message }, index) => (
+          <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
+            {message}
+          </LineItem>
+        ))}
+      </Section>
     </div>
   );
 }

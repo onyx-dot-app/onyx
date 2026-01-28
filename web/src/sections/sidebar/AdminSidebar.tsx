@@ -8,7 +8,7 @@ import SidebarSection from "@/sections/sidebar/SidebarSection";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { MdOutlineCreditCard } from "react-icons/md";
 import {

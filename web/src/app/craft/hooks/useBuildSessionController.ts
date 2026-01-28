@@ -7,7 +7,7 @@ import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */

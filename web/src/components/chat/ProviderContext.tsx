@@ -7,7 +7,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { useUser } from "../user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { useRouter } from "next/navigation";
 import { checkLlmProvider } from "../initialSetup/welcome/lib";
 

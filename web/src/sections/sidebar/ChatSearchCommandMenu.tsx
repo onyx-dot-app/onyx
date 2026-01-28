@@ -9,14 +9,11 @@ import CommandMenu, {
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
-import { formatDisplayTime } from "@/sections/sidebar/chatSearchUtils";
+import { formatDisplayTime } from "@/lib/utils";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
-import {
-  useChatSearchOptimistic,
-  FilterableChat,
-} from "./useChatSearchOptimistic";
+import useChatSearchOptimistic from "@/sections/sidebar/useChatSearchOptimistic";
 import {
   SvgEditBig,
   SvgFolder,
