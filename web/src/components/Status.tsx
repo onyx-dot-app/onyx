@@ -2,7 +2,6 @@
 
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { timeAgo } from "@/lib/time";
 import {
   FiAlertTriangle,
   FiCheckCircle,

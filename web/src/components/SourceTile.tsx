@@ -2,7 +2,6 @@ import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 import type { Route } from "next";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import React from "react";
 import Text from "@/refresh-components/texts/Text";
 
 interface SourceTileProps {

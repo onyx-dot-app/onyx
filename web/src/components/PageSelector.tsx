@@ -1,5 +1,3 @@
-import React from "react";
-
 const PAGINATION_OPTIONS_ON_EACH_SIDE = 2;
 
 const getPaginationOptions = (
