@@ -164,3 +164,9 @@ func HasMergeConflict() bool {
 	}
 	return strings.TrimSpace(string(output)) != ""
 }
+
+// IsCherryPickInProgress checks if a cherry-pick is currently in progress
+func IsCherryPickInProgress() bool {
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "CHERRY_PICK_HEAD")
+	return cmd.Run() == nil
+}

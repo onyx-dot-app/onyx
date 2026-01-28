@@ -310,6 +310,14 @@ func performCherryPick(commitSHAs []string, noVerify bool) error {
 			log.Info("  4. Re-run this command to continue with the remaining steps")
 			return fmt.Errorf("merge conflict during cherry-pick")
 		}
+		// Check if cherry-pick is empty (commit already applied with different SHA)
+		if git.IsCherryPickInProgress() {
+			log.Info("Cherry-pick is empty (changes already applied), skipping...")
+			if skipErr := git.RunCommand("cherry-pick", "--skip"); skipErr != nil {
+				return fmt.Errorf("failed to skip empty cherry-pick: %w", skipErr)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to cherry-pick commits: %w", err)
 	}
 	return nil
