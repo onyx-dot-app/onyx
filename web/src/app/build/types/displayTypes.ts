@@ -5,7 +5,13 @@
  * Items are stored and rendered in chronological order as they arrive.
  */
 
-export type ToolCallKind = "execute" | "read" | "task" | "other";
+export type ToolCallKind =
+  | "search"
+  | "read"
+  | "execute"
+  | "edit"
+  | "task"
+  | "other";
 
 // =============================================================================
 // Todo List Types (for TodoWrite tool)

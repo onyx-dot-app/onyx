@@ -82,7 +82,9 @@ def get_build_connectors(
 ) -> BuildConnectorListResponse:
     """Get all connectors for the build admin panel.
 
-    Returns all connector-credential pairs with simplified status information.
+    Returns connector-credential pairs with simplified status information.
+    On the build configure page, all users (including admins) only see connectors
+    they own/created. Users can create new connectors if they don't have one of a type.
     """
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
@@ -92,6 +94,11 @@ def get_build_connectors(
         eager_load_credential=True,
         processing_mode=ProcessingMode.FILE_SYSTEM,  # Only show FILE_SYSTEM connectors
     )
+
+    # Filter to only show connectors created by the current user
+    # All users (including admins) must create their own connectors on the build configure page
+    if user:
+        cc_pairs = [cc_pair for cc_pair in cc_pairs if cc_pair.creator_id == user.id]
 
     connectors: list[BuildConnectorInfo] = []
     for cc_pair in cc_pairs:

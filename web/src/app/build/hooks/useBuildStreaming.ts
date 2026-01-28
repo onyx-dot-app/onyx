@@ -2,12 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 
-import {
-  Artifact,
-  ArtifactType,
-  ArtifactCreatedPacket,
-  ErrorPacket,
-} from "@/app/build/types/streamingTypes";
+import { Artifact, ArtifactType } from "@/app/build/types/streamingTypes";
 
 import {
   sendMessageStream,
@@ -17,39 +12,10 @@ import {
 } from "@/app/build/services/apiServices";
 
 import { useBuildSessionStore } from "@/app/build/hooks/useBuildSessionStore";
-import { StreamItem, ToolCallState } from "@/app/build/types/displayTypes";
+import { StreamItem } from "@/app/build/types/displayTypes";
 
-import {
-  genId,
-  extractText,
-  getToolTitle,
-  normalizeKind,
-  normalizeStatus,
-  getDescription,
-  getCommand,
-  getSubagentType,
-  getRawOutput,
-  getTaskOutput,
-  isTaskTool,
-  isTodoWriteTool,
-  extractTodos,
-  isNewFileOperation,
-  extractDiffData,
-} from "@/app/build/utils/streamItemHelpers";
-
-/**
- * Extract file path from a tool call packet.
- */
-function getFilePath(packet: Record<string, unknown>): string | null {
-  // Handle both snake_case (raw_input) and camelCase (rawInput) variants
-  const rawInput = (packet.raw_input ?? packet.rawInput) as Record<
-    string,
-    unknown
-  > | null;
-  return (rawInput?.file_path ?? rawInput?.filePath ?? rawInput?.path) as
-    | string
-    | null;
-}
+import { genId } from "@/app/build/utils/streamItemHelpers";
+import { parsePacket } from "@/app/build/utils/parsePacket";
 
 /**
  * Hook for handling message streaming in build sessions.
@@ -194,28 +160,25 @@ export function useBuildStreaming() {
           controller.signal
         );
 
-        await processSSEStream(response, (packet) => {
-          const packetData = packet as Record<string, unknown>;
+        await processSSEStream(response, (rawPacket) => {
+          const parsed = parsePacket(rawPacket);
 
-          switch (packet.type) {
+          switch (parsed.type) {
             // Agent message content - accumulate and update/create text item
-            case "agent_message_chunk": {
-              const text = extractText(packetData.content);
-              if (!text) break;
+            case "text_chunk": {
+              if (!parsed.text) break;
 
-              accumulatedText += text;
+              accumulatedText += parsed.text;
 
               if (lastItemType === "text") {
-                // Update existing streaming text item
                 updateLastStreamingText(sessionId, accumulatedText);
               } else {
-                // Finalize previous item and create new text item
                 finalizeStreaming();
-                accumulatedText = text; // Reset accumulator for new item
+                accumulatedText = parsed.text;
                 const item: StreamItem = {
                   type: "text",
                   id: genId("text"),
-                  content: text,
+                  content: parsed.text,
                   isStreaming: true,
                 };
                 appendStreamItem(sessionId, item);
@@ -225,23 +188,20 @@ export function useBuildStreaming() {
             }
 
             // Agent thinking - accumulate and update/create thinking item
-            case "agent_thought_chunk": {
-              const thought = extractText(packetData.content);
-              if (!thought) break;
+            case "thinking_chunk": {
+              if (!parsed.text) break;
 
-              accumulatedThinking += thought;
+              accumulatedThinking += parsed.text;
 
               if (lastItemType === "thinking") {
-                // Update existing streaming thinking item
                 updateLastStreamingThinking(sessionId, accumulatedThinking);
               } else {
-                // Finalize previous item and create new thinking item
                 finalizeStreaming();
-                accumulatedThinking = thought; // Reset accumulator for new item
+                accumulatedThinking = parsed.text;
                 const item: StreamItem = {
                   type: "thinking",
                   id: genId("thinking"),
-                  content: thought,
+                  content: parsed.text,
                   isStreaming: true,
                 };
                 appendStreamItem(sessionId, item);
@@ -250,156 +210,97 @@ export function useBuildStreaming() {
               break;
             }
 
-            // Tool call started - create new tool_call item or todo_list item
+            // Tool call started
             case "tool_call_start": {
-              // Finalize any streaming text/thinking
               finalizeStreaming();
               accumulatedText = "";
               accumulatedThinking = "";
 
-              const toolCallId = (packetData.tool_call_id ||
-                packetData.toolCallId ||
-                genId("tc")) as string;
-              const kind = packetData.kind as string | null;
-              // Backend uses "title" field for tool name (e.g., "glob", "read", "bash")
-              const toolName = (packetData.tool_name ||
-                packetData.toolName ||
-                packetData.title) as string | null;
-
-              // Check if this is a TodoWrite call
-              // Skip tool_call_start for TodoWrite - it has no todos yet
-              // The pill will be created on the first tool_call_progress with actual todo items
-              if (isTodoWriteTool(packetData)) {
-                lastItemType = "tool"; // Still track as tool for finalization
+              // Skip tool_call_start for TodoWrite — pill created on first progress
+              if (parsed.isTodo) {
+                lastItemType = "tool";
                 break;
               }
 
-              // Extract diff data for edit operations (write vs edit distinction)
-              const isNewFile = isNewFileOperation(packetData);
-              const diffData =
-                kind === "edit"
-                  ? extractDiffData(packetData.content)
-                  : { oldText: "", newText: "", isNewFile: true };
-
-              const toolCall: ToolCallState = {
-                id: toolCallId,
-                kind: normalizeKind(kind, packetData), // Pass packet for proper task detection
-                title: getToolTitle(kind, toolName, isNewFile),
-                status: "pending",
-                description: getDescription(packetData),
-                command: getCommand(packetData),
-                rawOutput: "",
-                subagentType: getSubagentType(packetData),
-                // Edit operation fields
-                isNewFile: isNewFile ?? true,
-                oldContent: diffData.oldText,
-                newContent: diffData.newText,
-              };
-
-              const item: StreamItem = {
+              appendStreamItem(sessionId, {
                 type: "tool_call",
-                id: toolCallId,
-                toolCall,
-              };
-              appendStreamItem(sessionId, item);
+                id: parsed.toolCallId,
+                toolCall: {
+                  id: parsed.toolCallId,
+                  kind: parsed.kind,
+                  title: "",
+                  status: "pending",
+                  description: "",
+                  command: "",
+                  rawOutput: "",
+                  subagentType: undefined,
+                  isNewFile: true,
+                  oldContent: "",
+                  newContent: "",
+                },
+              });
               lastItemType = "tool";
               break;
             }
 
-            // Tool call progress - update existing tool_call item or todo_list item
+            // Tool call progress
             case "tool_call_progress": {
-              const toolCallId = (packetData.tool_call_id ||
-                packetData.toolCallId) as string;
-              if (!toolCallId) break;
-
-              // Check if this is a TodoWrite update
-              // Use upsert: creates todo_list on first progress, updates on subsequent
-              if (isTodoWriteTool(packetData)) {
-                const todos = extractTodos(packetData);
-                upsertTodoListStreamItem(sessionId, toolCallId, {
-                  id: toolCallId,
-                  todos,
-                  isOpen: true, // Open by default during streaming
+              if (parsed.isTodo) {
+                upsertTodoListStreamItem(sessionId, parsed.toolCallId, {
+                  id: parsed.toolCallId,
+                  todos: parsed.todos,
+                  isOpen: true,
                 });
                 break;
               }
 
-              const status = normalizeStatus(
-                packetData.status as string | null
-              );
-              const kind = packetData.kind as string | null;
-
-              // Extract diff data for edit operations (write vs edit distinction)
-              const isNewFile = isNewFileOperation(packetData);
-              const diffData =
-                kind === "edit"
-                  ? extractDiffData(packetData.content)
-                  : { oldText: "", newText: "", isNewFile: true };
-
-              const updates: Partial<ToolCallState> = {
-                status,
-                description: getDescription(packetData),
-                command: getCommand(packetData),
-                rawOutput: getRawOutput(packetData),
-                subagentType: getSubagentType(packetData),
-                // Edit operation fields (update when diff data becomes available)
-                ...(kind === "edit" && {
-                  isNewFile: isNewFile ?? true,
-                  oldContent: diffData.oldText,
-                  newContent: diffData.newText,
+              updateToolCallStreamItem(sessionId, parsed.toolCallId, {
+                status: parsed.status,
+                title: parsed.title,
+                description: parsed.description,
+                command: parsed.command,
+                rawOutput: parsed.rawOutput,
+                subagentType: parsed.subagentType ?? undefined,
+                ...(parsed.kind === "edit" && {
+                  isNewFile: parsed.isNewFile,
+                  oldContent: parsed.oldContent,
+                  newContent: parsed.newContent,
                 }),
-              };
+              });
 
-              updateToolCallStreamItem(sessionId, toolCallId, updates);
-
-              // Run output file detectors — first match wins
-              // Strip everything up to /sessions/UUID/ to get session-relative path
-              // e.g. ".../sessions/ID/outputs/f.md" → "outputs/f.md"
-              // Works for both local dev and kube/docker paths
-              const rawFilePath = getFilePath(packetData);
-              const filePath = rawFilePath
-                ? rawFilePath.match(/\/sessions\/[^/]+\/(.+)$/)?.[1] ??
-                  rawFilePath
-                : null;
-              if (filePath && kind) {
+              // Run output file detectors (filePath is pre-sanitized)
+              if (parsed.filePath && parsed.kind) {
                 for (const detector of OUTPUT_FILE_DETECTORS) {
-                  if (detector.match(filePath, kind)) {
-                    detector.onDetect(sessionId, filePath);
+                  if (detector.match(parsed.filePath, parsed.kind)) {
+                    detector.onDetect(sessionId, parsed.filePath);
                     break;
                   }
                 }
               }
 
-              // If task tool completed, extract output and create text StreamItem
-              if (isTaskTool(packetData) && status === "completed") {
-                const taskOutput = getTaskOutput(packetData);
-                if (taskOutput) {
-                  // Create a new text item for the task output
-                  const textItem: StreamItem = {
-                    type: "text",
-                    id: genId("task-output"),
-                    content: taskOutput,
-                    isStreaming: false,
-                  };
-                  appendStreamItem(sessionId, textItem);
-                  // Reset tracking so subsequent text is a new item
-                  lastItemType = "text";
-                  accumulatedText = "";
-                }
+              // Task completion → emit text StreamItem
+              if (parsed.taskOutput) {
+                appendStreamItem(sessionId, {
+                  type: "text",
+                  id: genId("task-output"),
+                  content: parsed.taskOutput,
+                  isStreaming: false,
+                });
+                lastItemType = "text";
+                accumulatedText = "";
               }
               break;
             }
 
             // Artifacts
             case "artifact_created": {
-              const artPacket = packet as ArtifactCreatedPacket;
               const newArtifact: Artifact = {
-                id: artPacket.artifact.id,
+                id: parsed.artifact.id,
                 session_id: sessionId,
-                type: artPacket.artifact.type as ArtifactType,
-                name: artPacket.artifact.name,
-                path: artPacket.artifact.path,
-                preview_url: artPacket.artifact.preview_url || null,
+                type: parsed.artifact.type as ArtifactType,
+                name: parsed.artifact.name,
+                path: parsed.artifact.path,
+                preview_url: parsed.artifact.preview_url || null,
                 created_at: new Date(),
                 updated_at: new Date(),
               };
@@ -431,35 +332,29 @@ export function useBuildStreaming() {
             case "prompt_response": {
               finalizeStreaming();
 
-              // Save the assistant response as a message before clearing stream items
               const session = useBuildSessionStore
                 .getState()
                 .sessions.get(sessionId);
 
               if (session && session.streamItems.length > 0) {
-                // Collect text content for the message content field
                 const textContent = session.streamItems
                   .filter((item) => item.type === "text")
                   .map((item) => item.content)
                   .join("");
 
-                // Check if this is the first assistant message
                 const isFirstAssistantMessage =
                   session.messages.filter((m) => m.type === "assistant")
                     .length === 0;
 
-                // Get first user message for suggestion generation
                 const firstUserMessage = session.messages.find(
                   (m) => m.type === "user"
                 );
 
-                // Generate suggestions asynchronously (don't block) after first response
                 if (
                   isFirstAssistantMessage &&
                   firstUserMessage &&
                   textContent
                 ) {
-                  // Fire and forget - don't await
                   (async () => {
                     try {
                       setSuggestionsLoading(sessionId, true);
@@ -476,7 +371,6 @@ export function useBuildStreaming() {
                   })();
                 }
 
-                // Save the complete stream items in message_metadata for full rendering
                 appendMessageToSession(sessionId, {
                   id: genId("assistant-msg"),
                   type: "assistant",
@@ -485,7 +379,6 @@ export function useBuildStreaming() {
                   message_metadata: {
                     streamItems: session.streamItems.map((item) => ({
                       ...item,
-                      // Mark all items as no longer streaming
                       ...(item.type === "text" || item.type === "thinking"
                         ? { isStreaming: false }
                         : {}),
@@ -496,17 +389,16 @@ export function useBuildStreaming() {
 
               updateSessionData(sessionId, {
                 status: "completed",
-                streamItems: [], // Clear stream items since they're now saved in the message
+                streamItems: [],
               });
               break;
             }
 
             // Error
             case "error": {
-              const errPacket = packet as ErrorPacket;
               updateSessionData(sessionId, {
                 status: "failed",
-                error: errPacket.message || (packetData.message as string),
+                error: parsed.message,
               });
               break;
             }

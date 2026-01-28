@@ -39,21 +39,8 @@ import {
   restoreSession,
 } from "@/app/build/services/apiServices";
 
-import {
-  genId,
-  extractText,
-  getToolTitle,
-  normalizeKind,
-  normalizeStatus,
-  getDescription,
-  getCommand,
-  getSubagentType,
-  getRawOutput,
-  isTodoWriteTool,
-  extractTodos,
-  isNewFileOperation,
-  extractDiffData,
-} from "@/app/build/utils/streamItemHelpers";
+import { genId } from "@/app/build/utils/streamItemHelpers";
+import { parsePacket } from "@/app/build/utils/parsePacket";
 
 /**
  * Convert loaded messages (with message_metadata) to StreamItem[] format.
@@ -68,121 +55,87 @@ import {
  * This function converts assistant messages to StreamItem[] for rendering.
  */
 function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
-  const streamItems: StreamItem[] = [];
+  const items: StreamItem[] = [];
 
   for (const message of messages) {
-    // Skip user messages (rendered separately)
     if (message.type === "user") continue;
 
     const metadata = message.message_metadata;
     if (!metadata || typeof metadata !== "object") continue;
 
-    const packetType = metadata.type as string;
+    // SAME parsePacket — identical classification for both code paths
+    const packet = parsePacket(metadata);
 
-    switch (packetType) {
-      case "agent_message": {
-        const text = extractText(metadata.content);
-        if (text) {
-          streamItems.push({
+    switch (packet.type) {
+      case "text_chunk":
+        if (packet.text) {
+          items.push({
             type: "text",
             id: message.id || genId("text"),
-            content: text,
+            content: packet.text,
             isStreaming: false,
           });
         }
         break;
-      }
 
-      case "agent_thought": {
-        const text = extractText(metadata.content);
-        if (text) {
-          streamItems.push({
+      case "thinking_chunk":
+        if (packet.text) {
+          items.push({
             type: "thinking",
             id: message.id || genId("thinking"),
-            content: text,
+            content: packet.text,
             isStreaming: false,
           });
         }
         break;
-      }
 
-      case "tool_call_progress": {
-        const toolCallId =
-          (metadata.tool_call_id as string) ||
-          (metadata.toolCallId as string) ||
-          message.id ||
-          genId("tool");
-        const kind = metadata.kind as string | null;
-        const toolName = metadata.title as string | null;
-
-        // Handle TodoWrite separately
-        // Pass full metadata to detect TodoWrite even when title changes (e.g., "todowrite" -> "6 todos")
-        if (isTodoWriteTool(metadata as Record<string, unknown>)) {
-          const todos = extractTodos(metadata as Record<string, unknown>);
-
-          // Check if we already have a todo_list item with this ID
-          // If so, update it (keeps latest state); otherwise, add new
-          const existingIndex = streamItems.findIndex(
+      case "tool_call_progress":
+        if (packet.isTodo) {
+          // Upsert: update existing todo_list or create new one
+          const existingIdx = items.findIndex(
             (item) =>
-              item.type === "todo_list" && item.todoList.id === toolCallId
+              item.type === "todo_list" &&
+              item.todoList.id === packet.toolCallId
           );
-
-          if (existingIndex >= 0) {
-            // Update existing todo list with latest todos
-            const existingItem = streamItems[existingIndex];
-            if (existingItem && existingItem.type === "todo_list") {
-              streamItems[existingIndex] = {
-                type: "todo_list",
-                id: existingItem.id,
-                todoList: { ...existingItem.todoList, todos },
+          if (existingIdx >= 0) {
+            const existing = items[existingIdx];
+            if (existing && existing.type === "todo_list") {
+              items[existingIdx] = {
+                ...existing,
+                todoList: { ...existing.todoList, todos: packet.todos },
               };
             }
           } else {
-            // Add new todo list (collapsed by default when loaded from history)
-            streamItems.push({
+            items.push({
               type: "todo_list",
-              id: toolCallId,
+              id: packet.toolCallId,
               todoList: {
-                id: toolCallId,
-                todos,
+                id: packet.toolCallId,
+                todos: packet.todos,
                 isOpen: false,
               },
             });
           }
-          break;
+        } else {
+          items.push({
+            type: "tool_call",
+            id: packet.toolCallId,
+            toolCall: {
+              id: packet.toolCallId,
+              kind: packet.kind,
+              title: packet.title,
+              description: packet.description,
+              command: packet.command,
+              status: packet.status,
+              rawOutput: packet.rawOutput,
+              subagentType: packet.subagentType ?? undefined,
+              isNewFile: packet.isNewFile,
+              oldContent: packet.oldContent,
+              newContent: packet.newContent,
+            },
+          });
         }
-
-        // Extract diff data for edit operations (write vs edit distinction)
-        const isNewFile = isNewFileOperation(
-          metadata as Record<string, unknown>
-        );
-        const diffData =
-          kind === "edit"
-            ? extractDiffData(metadata.content)
-            : { oldText: "", newText: "", isNewFile: true };
-
-        const toolCall: ToolCallState = {
-          id: toolCallId,
-          kind: normalizeKind(kind, toolName),
-          title: getToolTitle(kind, toolName, isNewFile),
-          description: getDescription(metadata as Record<string, unknown>),
-          command: getCommand(metadata as Record<string, unknown>),
-          status: normalizeStatus(metadata.status as string | null),
-          rawOutput: getRawOutput(metadata as Record<string, unknown>),
-          subagentType: getSubagentType(metadata as Record<string, unknown>),
-          // Edit operation fields
-          isNewFile: isNewFile ?? true,
-          oldContent: diffData.oldText,
-          newContent: diffData.newText,
-        };
-
-        streamItems.push({
-          type: "tool_call",
-          id: toolCallId,
-          toolCall,
-        });
         break;
-      }
 
       // agent_plan_update and other packet types are not rendered as stream items
       default:
@@ -190,7 +143,7 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
     }
   }
 
-  return streamItems;
+  return items;
 }
 
 /**

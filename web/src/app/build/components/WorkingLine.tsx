@@ -16,7 +16,6 @@ import {
   SvgCheckSquare,
   SvgAlertCircle,
   SvgSearch,
-  SvgGlobe,
 } from "@opal/icons";
 import RawOutputBlock from "@/app/build/components/RawOutputBlock";
 import DiffView from "@/app/build/components/DiffView";
@@ -27,26 +26,18 @@ interface WorkingLineProps {
 }
 
 /**
- * Get icon based on tool kind and title
+ * Get icon based on tool kind
  */
-function getToolIcon(kind: ToolCallKind, title: string) {
-  // Check title for search-related tools
-  if (
-    title === "Searching files" ||
-    title === "Searching content" ||
-    title === "Searching"
-  ) {
-    return SvgSearch;
-  }
-  if (title === "Searching web" || title === "Fetching web content") {
-    return SvgGlobe;
-  }
-
+function getToolIcon(kind: ToolCallKind) {
   switch (kind) {
+    case "search":
+      return SvgSearch;
     case "execute":
       return SvgTerminalSmall;
     case "read":
       return SvgFileText;
+    case "edit":
+      return SvgEdit;
     case "other":
       return SvgEdit;
     default:
@@ -87,19 +78,14 @@ function getStatusDisplay(status: string) {
  * Get language hint for syntax highlighting
  */
 function getLanguageHint(toolCall: ToolCallState): string | undefined {
-  // Search results - no highlighting for file lists
-  if (
-    toolCall.title === "Searching files" ||
-    toolCall.title === "Searching content" ||
-    toolCall.title === "Searching"
-  ) {
-    return undefined;
-  }
-
   switch (toolCall.kind) {
+    case "search":
+      // Search results - no highlighting for file lists
+      return undefined;
     case "execute":
       return "bash";
     case "read":
+    case "edit":
     case "other":
       // Use description (file path) for syntax detection
       return toolCall.description;
@@ -119,7 +105,7 @@ export default function WorkingLine({ toolCall }: WorkingLineProps) {
 
   const statusDisplay = getStatusDisplay(toolCall.status);
   const StatusIcon = statusDisplay.icon;
-  const ToolIcon = getToolIcon(toolCall.kind, toolCall.title);
+  const ToolIcon = getToolIcon(toolCall.kind);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -198,10 +184,11 @@ export default function WorkingLine({ toolCall }: WorkingLineProps) {
 
         <CollapsibleContent>
           <div className="pl-6 pr-2 pb-2">
-            {/* Show diff view for edit operations (not new files) */}
-            {toolCall.title === "Editing file" &&
-            toolCall.oldContent !== undefined &&
-            toolCall.newContent !== undefined ? (
+            {/* Show diff view for edit operations with actual diff data */}
+            {toolCall.kind === "edit" &&
+            !toolCall.isNewFile &&
+            toolCall.oldContent &&
+            toolCall.newContent ? (
               <DiffView
                 oldContent={toolCall.oldContent}
                 newContent={toolCall.newContent}
