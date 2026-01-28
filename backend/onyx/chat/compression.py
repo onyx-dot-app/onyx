@@ -183,7 +183,10 @@ def get_messages_to_summarize(
     return to_summarize, to_keep
 
 
-def format_messages_for_summary(messages: list[ChatMessage]) -> str:
+def format_messages_for_summary(
+    messages: list[ChatMessage],
+    tool_id_to_name: dict[int, str],
+) -> str:
     """Format messages into a string for the summarization prompt.
 
     Tool call messages are formatted compactly to save tokens.
@@ -192,9 +195,10 @@ def format_messages_for_summary(messages: list[ChatMessage]) -> str:
     for msg in messages:
         # Format assistant messages with tool calls compactly
         if msg.message_type == MessageType.ASSISTANT and msg.tool_calls:
-            tool_names = [tc.tool.display_name for tc in msg.tool_calls if tc.tool]
-            if tool_names:
-                formatted.append(f"[assistant used tools: {', '.join(tool_names)}]")
+            tool_names = [
+                tool_id_to_name.get(tc.tool_id, "unknown") for tc in msg.tool_calls
+            ]
+            formatted.append(f"[assistant used tools: {', '.join(tool_names)}]")
             continue
 
         # Skip standalone tool call/response messages - captured above
@@ -210,6 +214,7 @@ def generate_summary(
     older_messages: list[ChatMessage],
     recent_messages: list[ChatMessage],
     llm: LLM,
+    tool_id_to_name: dict[int, str],
     existing_summary: str | None = None,
 ) -> str:
     """
@@ -222,13 +227,14 @@ def generate_summary(
         older_messages: Messages to compress into summary (before cutoff)
         recent_messages: Messages kept verbatim (after cutoff, for context only)
         llm: LLM to use for summarization
+        tool_id_to_name: Mapping of tool IDs to display names
         existing_summary: Previous summary text to incorporate (progressive)
 
     Returns:
         Summary text
     """
-    older_messages_str = format_messages_for_summary(older_messages)
-    recent_messages_str = format_messages_for_summary(recent_messages)
+    older_messages_str = format_messages_for_summary(older_messages, tool_id_to_name)
+    recent_messages_str = format_messages_for_summary(recent_messages, tool_id_to_name)
 
     # Build user prompt with cutoff marker
     if existing_summary:
@@ -265,6 +271,7 @@ def compress_chat_history(
     chat_history: list[ChatMessage],
     llm: LLM,
     compression_params: CompressionParams,
+    tool_id_to_name: dict[int, str],
 ) -> CompressionResult:
     """
     Main compression function. Creates a summary ChatMessage.
@@ -277,12 +284,18 @@ def compress_chat_history(
         chat_history: Branch-aware list of messages
         llm: LLM to use for summarization
         compression_params: Parameters from get_compression_params
+        tool_id_to_name: Mapping of tool IDs to display names
 
     Returns:
         CompressionResult indicating success/failure
     """
     if not chat_history:
         return CompressionResult(summary_created=False, messages_summarized=0)
+
+    logger.info(
+        f"Starting compression for session {chat_history[0].chat_session_id}, "
+        f"history_len={len(chat_history)}, tokens_for_recent={compression_params.tokens_for_recent}"
+    )
 
     try:
         # Find existing summary for this branch
@@ -296,6 +309,7 @@ def compress_chat_history(
         )
 
         if not to_summarize:
+            logger.debug("No messages to summarize, skipping compression")
             return CompressionResult(summary_created=False, messages_summarized=0)
 
         # Generate summary (incorporate existing summary if present)
@@ -304,12 +318,16 @@ def compress_chat_history(
             older_messages=to_summarize,
             recent_messages=to_keep,
             llm=llm,
+            tool_id_to_name=tool_id_to_name,
             existing_summary=existing_summary_text,
         )
 
         # Calculate token count for the summary
         tokenizer = get_tokenizer(None, None)
         summary_token_count = len(tokenizer.encode(summary_text))
+        logger.debug(
+            f"Generated summary ({summary_token_count} tokens): {summary_text[:200]}..."
+        )
 
         # Create new summary as a ChatMessage
         # Parent is the last message in history - this makes the summary branch-aware

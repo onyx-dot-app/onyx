@@ -642,6 +642,7 @@ def handle_stream_message_objects(
                     chat_history=updated_chat_history,
                     llm=llm,
                     compression_params=compression_params,
+                    tool_id_to_name=tool_id_to_name_map,
                 )
 
         # Run the LLM loop with explicit wrapper for stop signal handling
