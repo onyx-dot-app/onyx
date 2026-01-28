@@ -12,6 +12,7 @@ import { ValidSources } from "@/lib/types";
 import { ProjectFile } from "../projects/projectsService";
 import { BlinkingDot } from "./BlinkingDot";
 import Text from "@/refresh-components/texts/Text";
+import { ensureHrefProtocol } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export const MemoizedAnchor = memo(
@@ -160,15 +161,10 @@ export const MemoizedLink = memo(
     }
 
     let url = href || rest.children?.toString();
-    if (url && !url.includes("://")) {
-      // Only add https:// if the URL doesn't already have a protocol
-      const httpsUrl = `https://${url}`;
-      try {
-        new URL(httpsUrl);
-        url = httpsUrl;
-      } catch {
-        // If not a valid URL, don't modify original url
-      }
+    if (url && !/^mailto:/i.test(url) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url)) {
+      url = `mailto:${url}`;
+    } else {
+      url = ensureHrefProtocol(url);
     }
 
     return (
