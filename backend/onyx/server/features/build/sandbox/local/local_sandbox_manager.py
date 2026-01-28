@@ -815,7 +815,9 @@ class LocalSandboxManager(SandboxManager):
             ValueError: If path traversal attempted or path is not a directory
         """
         session_path = self._get_session_path(sandbox_id, session_id)
-        target_path = session_path / path.lstrip("/")
+        # Security: sanitize path to remove path traversal attempts
+        clean_path = path.lstrip("/").replace("..", "")
+        target_path = session_path / clean_path
 
         # Security check
         if not self._is_path_allowed(session_path, target_path):
@@ -856,7 +858,9 @@ class LocalSandboxManager(SandboxManager):
             ValueError: If path traversal attempted or path is not a file
         """
         session_path = self._get_session_path(sandbox_id, session_id)
-        target_path = session_path / path.lstrip("/")
+        # Security: sanitize path to remove path traversal attempts
+        clean_path = path.lstrip("/").replace("..", "")
+        target_path = session_path / clean_path
 
         # Security check
         if not self._is_path_allowed(session_path, target_path):

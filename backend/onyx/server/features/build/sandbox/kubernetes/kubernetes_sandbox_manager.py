@@ -1481,6 +1481,8 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # Security: sanitize path
         clean_path = path.lstrip("/").replace("..", "")
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
+        # Use shlex.quote to prevent command injection
+        quoted_path = shlex.quote(target_path)
 
         logger.info(f"Listing directory {target_path} in pod {pod_name}")
 
@@ -1488,7 +1490,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         exec_command = [
             "/bin/sh",
             "-c",
-            f'ls -la --time-style=+%s "{target_path}" 2>/dev/null || echo "ERROR_NOT_FOUND"',
+            f"ls -la --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
         ]
 
         try:
@@ -1532,7 +1534,9 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 continue
 
             parts = line.split()
-            if len(parts) < 8:
+            # ls -la --time-style=+%s format: perms links owner group size timestamp name
+            # Minimum 7 parts for a simple filename
+            if len(parts) < 7:
                 continue
 
             # Handle symlinks: format is "name -> target"
@@ -1540,11 +1544,10 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             is_symlink = line.startswith("l")
             if is_symlink and " -> " in line:
                 # Extract name from the "name -> target" portion
-                # Find the position after the timestamp (parts[7] for --time-style=+%s)
-                # The rest is "name -> target"
+                # Filename starts at index 6 (after perms, links, owner, group, size, timestamp)
                 try:
-                    # Rejoin from index 7 onwards to handle names with spaces
-                    name_and_target = " ".join(parts[7:])
+                    # Rejoin from index 6 onwards to handle names with spaces
+                    name_and_target = " ".join(parts[6:])
                     if " -> " in name_and_target:
                         name = name_and_target.split(" -> ")[0]
                     else:
@@ -1552,7 +1555,8 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 except (IndexError, ValueError):
                     name = parts[-1]
             else:
-                name = parts[-1]
+                # For regular files/directories, name is at index 6 or later (with spaces)
+                name = " ".join(parts[6:])
 
             if name in (".", ".."):
                 continue
@@ -1606,13 +1610,15 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # Security: sanitize path
         clean_path = path.lstrip("/").replace("..", "")
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
+        # Use shlex.quote to prevent command injection
+        quoted_path = shlex.quote(target_path)
 
         # Use exec to read file with base64 encoding to handle binary data
         # Base64 encode the output to safely transport binary content
         exec_command = [
             "/bin/sh",
             "-c",
-            f'if [ -f "{target_path}" ]; then base64 "{target_path}"; else echo "ERROR_NOT_FOUND"; fi',
+            f"if [ -f {quoted_path} ]; then base64 {quoted_path}; else echo 'ERROR_NOT_FOUND'; fi",
         ]
 
         try:
