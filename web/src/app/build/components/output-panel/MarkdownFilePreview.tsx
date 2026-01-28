@@ -13,8 +13,8 @@ export interface FileRendererProps {
 
 export default function MarkdownFilePreview({ content }: FileRendererProps) {
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-auto p-6">
+    <div className="relative h-full">
+      <div className="absolute inset-0 overflow-auto default-scrollbar p-6">
         <MinimalMarkdown
           content={content}
           className="max-w-3xl mx-auto"
