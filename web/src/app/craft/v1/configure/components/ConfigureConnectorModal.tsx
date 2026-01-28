@@ -163,7 +163,7 @@ export default function ConfigureConnectorModal({
             title={getStepTitle()}
             description={getStepDescription()}
             onClose={onClose}
-          ></Modal.Header>
+          />
           <Modal.Body>
             {getSourceDocLink(connectorType) && (
               <Section flexDirection="row" justifyContent="end" width="full">
