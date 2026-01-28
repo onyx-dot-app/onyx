@@ -765,6 +765,39 @@ class LocalSandboxManager(SandboxManager):
         for event in client.send_message(message):
             yield event
 
+    def _is_path_allowed(self, session_path: Path, target_path: Path) -> bool:
+        """Check if target_path is allowed for access.
+
+        Allows paths within session_path OR within the files/ symlink.
+        The files/ symlink intentionally points outside session_path to
+        provide access to knowledge files.
+
+        Args:
+            session_path: The session's root directory
+            target_path: The path being accessed
+
+        Returns:
+            True if access is allowed, False otherwise
+        """
+        files_symlink = session_path / "files"
+
+        # Check if path is within the files/ symlink (or is the symlink itself)
+        if files_symlink.is_symlink():
+            try:
+                # Use lexical check (without resolving symlinks)
+                # This handles both the symlink itself (returns '.') and paths within it
+                target_path.relative_to(files_symlink)
+                return True
+            except ValueError:
+                pass
+
+        # Standard check: path must be within session directory
+        try:
+            target_path.resolve().relative_to(session_path.resolve())
+            return True
+        except ValueError:
+            return False
+
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
     ) -> list[FilesystemEntry]:
@@ -784,31 +817,9 @@ class LocalSandboxManager(SandboxManager):
         session_path = self._get_session_path(sandbox_id, session_id)
         target_path = session_path / path.lstrip("/")
 
-        # Security: ensure path is within sessions directory OR is the files/ symlink
-        # The files/ symlink intentionally points outside session_path to knowledge files
-        files_symlink = session_path / "files"
-        is_within_files_symlink = False
-
-        if files_symlink.is_symlink():
-            # Check if target_path is the files/ symlink or inside it
-            try:
-                # Use lexical check (without resolving symlinks) first
-                target_path.relative_to(files_symlink)
-                is_within_files_symlink = True
-            except ValueError:
-                # Not within files/ path
-                pass
-
-            # Also allow the files/ symlink itself
-            if target_path == files_symlink:
-                is_within_files_symlink = True
-
-        if not is_within_files_symlink:
-            # Standard security check for non-files/ paths
-            try:
-                target_path.resolve().relative_to(session_path.resolve())
-            except ValueError:
-                raise ValueError("Path traversal not allowed")
+        # Security check
+        if not self._is_path_allowed(session_path, target_path):
+            raise ValueError("Path traversal not allowed")
 
         if not target_path.is_dir():
             raise ValueError(f"Not a directory: {path}")
@@ -847,25 +858,9 @@ class LocalSandboxManager(SandboxManager):
         session_path = self._get_session_path(sandbox_id, session_id)
         target_path = session_path / path.lstrip("/")
 
-        # Security: ensure path is within sessions directory OR is within files/ symlink
-        # The files/ symlink intentionally points outside session_path to knowledge files
-        files_symlink = session_path / "files"
-        is_within_files_symlink = False
-
-        if files_symlink.is_symlink():
-            # Check if target_path is within the files/ symlink
-            try:
-                target_path.relative_to(files_symlink)
-                is_within_files_symlink = True
-            except ValueError:
-                pass
-
-        if not is_within_files_symlink:
-            # Standard security check for non-files/ paths
-            try:
-                target_path.resolve().relative_to(session_path.resolve())
-            except ValueError:
-                raise ValueError("Path traversal not allowed")
+        # Security check
+        if not self._is_path_allowed(session_path, target_path):
+            raise ValueError("Path traversal not allowed")
 
         if not target_path.is_file():
             raise ValueError(f"Not a file: {path}")

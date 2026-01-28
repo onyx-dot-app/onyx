@@ -35,6 +35,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
 import base64
+import binascii
 import io
 import json
 import mimetypes
@@ -1633,7 +1634,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             # Decode base64 content
             try:
                 content = base64.b64decode(resp.strip())
-            except Exception as e:
+            except binascii.Error as e:
                 logger.error(f"Failed to decode base64 content: {e}")
                 raise RuntimeError(f"Failed to decode file content: {e}") from e
 
