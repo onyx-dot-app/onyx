@@ -168,12 +168,10 @@ class ModelConfiguration(BaseModel):
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
-    display_name: str | None = None
+    display_name: str | None = None  # For dynamic providers, from source API
 
 
 class ModelConfigurationUpsertRequest(ModelConfiguration):
-    # For dynamic providers, display_name comes from source API
-
     @classmethod
     def from_model(
         cls, model_configuration_model: "ModelConfigurationModel"
