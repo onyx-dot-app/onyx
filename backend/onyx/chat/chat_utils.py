@@ -293,8 +293,7 @@ def create_temporary_persona(
         llm_relevance_filter=persona_config.llm_relevance_filter,
         llm_filter_extraction=persona_config.llm_filter_extraction,
         recency_bias=RecencyBiasSetting.BASE_DECAY,
-        llm_model_provider_override=persona_config.llm_model_provider_override,
-        llm_model_version_override=persona_config.llm_model_version_override,
+        model_configuration_id_override=persona_config.model_configuration_id_override,
     )
 
     if persona_config.prompts:

@@ -111,6 +111,15 @@ class DATestUserGroup(BaseModel):
     cc_pair_ids: list[int]
 
 
+class DATestModelConfiguration(BaseModel):
+    id: int
+    name: str
+    is_visible: bool
+    max_input_tokens: int | None
+    supports_image_input: bool | None
+    display_name: str | None
+
+
 class DATestLLMProvider(BaseModel):
     id: int
     name: str
@@ -123,6 +132,7 @@ class DATestLLMProvider(BaseModel):
     personas: list[int]
     api_base: str | None = None
     api_version: str | None = None
+    model_configurations: list[DATestModelConfiguration] = Field(default_factory=list)
 
 
 class DATestImageGenerationConfig(BaseModel):
@@ -157,8 +167,7 @@ class DATestPersona(BaseModel):
     recency_bias: RecencyBiasSetting
     document_set_ids: list[int]
     tool_ids: list[int]
-    llm_model_provider_override: str | None
-    llm_model_version_override: str | None
+    model_configuration_id_override: int | None
     users: list[str]
     groups: list[int]
     label_ids: list[int]

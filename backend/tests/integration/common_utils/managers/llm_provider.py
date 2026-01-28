@@ -6,6 +6,7 @@ import requests
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestLLMProvider
@@ -25,6 +26,7 @@ class LLMProviderManager:
         personas: list[int] | None = None,
         is_public: bool | None = None,
         set_as_default: bool = True,
+        model_configurations: list[ModelConfigurationUpsertRequest] | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
         email = "Unknown"
@@ -44,7 +46,7 @@ class LLMProviderManager:
             is_public=True if is_public is None else is_public,
             groups=groups or [],
             personas=personas or [],
-            model_configurations=[],
+            model_configurations=model_configurations or [],
             api_key_changed=True,
         )
 
@@ -146,3 +148,19 @@ class LLMProviderManager:
                     return
         if not verify_deleted:
             raise ValueError(f"LLM Provider {llm_provider.id} not found")
+
+    @staticmethod
+    def build_model_configuration_upsert_request(
+        name: str,
+        is_visible: bool,
+        max_input_tokens: int | None,
+        supports_image_input: bool,
+        display_name: str | None,
+    ) -> ModelConfigurationUpsertRequest:
+        return ModelConfigurationUpsertRequest(
+            name=name,
+            is_visible=is_visible,
+            max_input_tokens=max_input_tokens,
+            supports_image_input=supports_image_input,
+            display_name=display_name,
+        )

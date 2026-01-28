@@ -145,13 +145,15 @@ class LLMProviderView(LLMProvider):
         )
 
 
-class ModelConfigurationUpsertRequest(BaseModel):
+class ModelConfiguration(BaseModel):
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
 
+
+class ModelConfigurationUpsertRequest(ModelConfiguration):
     @classmethod
     def from_model(
         cls, model_configuration_model: "ModelConfigurationModel"
@@ -166,13 +168,9 @@ class ModelConfigurationUpsertRequest(BaseModel):
         )
 
 
-class ModelConfigurationView(BaseModel):
-    name: str
-    is_visible: bool
-    max_input_tokens: int | None = None
-    supports_image_input: bool
+class ModelConfigurationView(ModelConfiguration):
+    id: int
     supports_reasoning: bool = False
-    display_name: str | None = None
     provider_display_name: str | None = None
     vendor: str | None = None
     version: str | None = None
@@ -182,20 +180,18 @@ class ModelConfigurationView(BaseModel):
     def from_model(
         cls,
         model_configuration_model: "ModelConfigurationModel",
-        provider_name: str,
+        provider: str,
     ) -> "ModelConfigurationView":
         # For dynamic providers (OpenRouter, Bedrock, Ollama), use the display_name
         # stored in DB from the source API. Skip LiteLLM parsing entirely.
-        if (
-            provider_name in DYNAMIC_LLM_PROVIDERS
-            and model_configuration_model.display_name
-        ):
+        if provider in DYNAMIC_LLM_PROVIDERS and model_configuration_model.display_name:
             # Extract vendor from model name for grouping (e.g., "Anthropic", "OpenAI")
             vendor = extract_vendor_from_model_name(
-                model_configuration_model.name, provider_name
+                model_configuration_model.name, provider
             )
 
             return cls(
+                id=model_configuration_model.id,
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
@@ -219,8 +215,8 @@ class ModelConfigurationView(BaseModel):
         # Parse the model name to get display information
         # Include provider prefix if not already present (enrichments use full keys like "vertex_ai/...")
         model_name = model_configuration_model.name
-        if provider_name and not model_name.startswith(f"{provider_name}/"):
-            model_name = f"{provider_name}/{model_name}"
+        if provider and not model_name.startswith(f"{provider}/"):
+            model_name = f"{provider}/{model_name}"
         parsed = parse_litellm_model_name(model_name)
 
         # Include region in display name for Bedrock cross-region models
@@ -231,13 +227,14 @@ class ModelConfigurationView(BaseModel):
         )
 
         return cls(
+            id=model_configuration_model.id,
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
                 model_configuration_model.max_input_tokens
                 or get_max_input_tokens(
                     model_name=model_configuration_model.name,
-                    model_provider=provider_name,
+                    model_provider=provider,
                 )
             ),
             supports_image_input=(
@@ -248,11 +245,11 @@ class ModelConfigurationView(BaseModel):
                 )
                 is not None
                 else litellm_thinks_model_supports_image_input(
-                    model_configuration_model.name, provider_name
+                    model_configuration_model.name, provider
                 )
             ),
             supports_reasoning=model_is_reasoning_model(
-                model_configuration_model.name, provider_name
+                model_configuration_model.name, provider
             ),
             # Populate display fields from parsed model name
             display_name=display_name,

@@ -118,8 +118,7 @@ class PersonaOverrideConfig(BaseModel):
     num_chunks: float | None = None
     llm_relevance_filter: bool = False
     llm_filter_extraction: bool = False
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
+    model_configuration_id_override: int | None = None
 
     prompts: list[PromptOverrideConfig] = Field(default_factory=list)
     # Note: prompt_ids removed - prompts are now embedded in personas

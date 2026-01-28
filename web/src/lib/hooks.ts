@@ -618,9 +618,11 @@ export function useLlmManager(
         setCurrentLlm(
           getValidLlmDescriptor(currentChatSession.current_alternate_model)
         );
-      } else if (liveAssistant?.llm_model_version_override) {
+      } else if (liveAssistant?.model_configuration_id_override) {
         setCurrentLlm(
-          getValidLlmDescriptor(liveAssistant.llm_model_version_override)
+          getValidLlmDescriptorFromModelId(
+            liveAssistant.model_configuration_id_override
+          )
         );
       } else if (userHasManuallyOverriddenLLM) {
         // if the user has an override and there's nothing special about the
@@ -639,6 +641,17 @@ export function useLlmManager(
     _llmUpdate();
     setChatSession(currentChatSession || null);
   };
+
+  function getValidLlmDescriptorFromModelId(
+    modelId: number | null | undefined
+  ): LlmDescriptor {
+    // Get the name of the model
+    const model = llmProviders
+      ?.find((p) => p.model_configurations.find((m) => m.id === modelId))
+      ?.model_configurations.find((m) => m.id === modelId);
+
+    return getValidLlmDescriptor(model?.name);
+  }
 
   function getValidLlmDescriptor(
     modelName: string | null | undefined
