@@ -1,0 +1,67 @@
+/**
+ * Billing page styles
+ *
+ * This file contains custom styles for billing components that cannot be achieved
+ * with built-in component props. Prefer using component props over custom CSS.
+ */
+
+/* Plan Card feature list checkmark icon container */
+.billing-feature-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0.125rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Current plan badge styling */
+.billing-current-plan-badge {
+  background: var(--background-tint-02);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+}
+
+/* Expiration banner variants */
+.billing-banner {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.billing-banner[data-variant="warning"] {
+  background: var(--status-warning-01);
+  border: 1px solid var(--status-warning-02);
+}
+
+.billing-banner[data-variant="error"] {
+  background: var(--status-error-01);
+  border: 1px solid var(--status-error-02);
+}
+
+/* Payment card styling */
+.billing-payment-card {
+  min-width: 17.5rem;
+  flex: 1;
+}
+
+/* License input container */
+.billing-license-input {
+  font-family: var(--font-mono);
+}
+
+/* Plan card price styling */
+.billing-price-main {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+/* Seats adjustment input */
+.billing-seats-input {
+  width: 5rem;
+  text-align: center;
+}
