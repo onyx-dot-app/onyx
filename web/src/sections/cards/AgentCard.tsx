@@ -27,7 +27,7 @@ import {
   SvgShare,
   SvgUser,
 } from "@opal/icons";
-import { useCreateModal } from "./contexts/ModalContext";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 interface IconLabelProps {

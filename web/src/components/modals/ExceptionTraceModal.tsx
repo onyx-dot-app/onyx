@@ -21,6 +21,7 @@ export default function ExceptionTraceModal({
           icon={SvgAlertTriangle}
           title="Full Exception Trace"
           onClose={onOutsideClick}
+          height="fit"
         />
         <Modal.Body>
           <div className="mb-6">
