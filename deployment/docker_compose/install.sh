@@ -752,12 +752,16 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
-# Determine if we're using the latest tag
+# Determine if we're using the latest tag or a craft tag (both should force pull)
 # Read IMAGE_TAG from .env file and remove any quotes or whitespace
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "latest" ]; then
+if [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
     USE_LATEST=true
-    print_info "Using 'latest' tag - will force pull and recreate containers"
+    if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+        print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
+    else
+        print_info "Using 'latest' tag - will force pull and recreate containers"
+    fi
 else
     USE_LATEST=false
 fi
