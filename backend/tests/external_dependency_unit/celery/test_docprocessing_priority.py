@@ -227,7 +227,7 @@ class TestDocprocessingPriorityInDocumentExtraction:
         mock_doc.to_short_descriptor.return_value = "test_doc"
         mock_doc.sections = []
         mock_connector_runner.run.return_value = iter(
-            [([mock_doc], None, mock_final_checkpoint)]
+            [([mock_doc], None, None, mock_final_checkpoint)]
         )
         mock_get_connector_runner.return_value = mock_connector_runner
 
