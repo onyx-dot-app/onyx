@@ -9,7 +9,7 @@ import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "../search/SearchChipList";
-import { getMetadataTags } from "../search";
+import { getMetadataTags } from "../search/searchStateUtils";
 import {
   constructCurrentFetchState,
   INITIAL_URLS_TO_SHOW,

@@ -7,25 +7,23 @@ import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
+import { useTimelineExpansion } from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineExpansion";
+import { useTimelineMetrics } from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineMetrics";
+import { useTimelineHeader } from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineHeader";
 import {
-  useTimelineExpansion,
-  useTimelineMetrics,
-  useTimelineHeader,
   useTimelineUIState,
   TimelineUIState,
-} from "@/app/chat/message/messageComponents/timeline/hooks";
+} from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineUIState";
 import {
   isResearchAgentPackets,
   isSearchToolPackets,
   stepSupportsCompact,
 } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
-import {
-  StreamingHeader,
-  CollapsedHeader,
-  ExpandedHeader,
-  StoppedHeader,
-  ParallelStreamingHeader,
-} from "@/app/chat/message/messageComponents/timeline/headers";
+import { StreamingHeader } from "@/app/chat/message/messageComponents/timeline/headers/StreamingHeader";
+import { CollapsedHeader } from "@/app/chat/message/messageComponents/timeline/headers/CollapsedHeader";
+import { ExpandedHeader } from "@/app/chat/message/messageComponents/timeline/headers/ExpandedHeader";
+import { StoppedHeader } from "@/app/chat/message/messageComponents/timeline/headers/StoppedHeader";
+import { ParallelStreamingHeader } from "@/app/chat/message/messageComponents/timeline/headers/ParallelStreamingHeader";
 import { useStreamingStartTime } from "@/app/chat/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
