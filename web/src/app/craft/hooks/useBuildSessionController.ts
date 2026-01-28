@@ -126,6 +126,10 @@ export function useBuildSessionController({
     async function fetchSession() {
       if (!existingSessionId) return;
 
+      // Set ref BEFORE any async work to prevent duplicate calls
+      // if the effect re-runs while we're still loading
+      loadedSessionIdRef.current = existingSessionId;
+
       // Access sessions via getState() to avoid dependency on Map reference
       const currentState = useBuildSessionStore.getState();
       const cachedSession = currentState.sessions.get(existingSessionId);
@@ -133,13 +137,11 @@ export function useBuildSessionController({
       if (cachedSession?.isLoaded) {
         // Just switch to it
         setCurrentSession(existingSessionId);
-        loadedSessionIdRef.current = existingSessionId;
         return;
       }
 
       // Need to load from API
       await loadSession(existingSessionId);
-      loadedSessionIdRef.current = existingSessionId;
     }
 
     // Only fetch if we haven't already loaded this session
