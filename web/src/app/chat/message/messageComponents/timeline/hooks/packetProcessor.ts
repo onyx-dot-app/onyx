@@ -249,6 +249,7 @@ function handleStreamingStatusPacket(
   // Capture tool processing duration from MESSAGE_START packet
   if (packet.obj.type === PacketType.MESSAGE_START) {
     const messageStart = packet.obj as MessageStart;
+    console.log("messageStart", messageStart);
     if (messageStart.tool_processing_duration_seconds !== undefined) {
       state.toolProcessingDuration =
         messageStart.tool_processing_duration_seconds;

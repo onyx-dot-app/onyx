@@ -25,7 +25,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   isExpanded,
   onToggle,
   streamingStartTime,
-  toolProcessingDuration = 0,
+  toolProcessingDuration,
 }: StreamingHeaderProps) {
   // Use backend duration when available, otherwise continue live timer
   const elapsedSeconds = useStreamingDuration(
