@@ -15,7 +15,7 @@ async function setAutoScroll(page: Page, enabled: boolean) {
 
   // Navigate to Chat Preferences tab
   await page
-    .locator('a[href="/chat/settings/chat-preferences"]')
+    .locator('a[href="/app/settings/chat-preferences"]')
     .click({ force: true });
 
   // Find the auto-scroll switch by locating the label text and then finding
@@ -37,7 +37,7 @@ async function setAutoScroll(page: Page, enabled: boolean) {
     await expect(autoScrollSwitch).toHaveAttribute("data-state", expectedState);
   }
 
-  await page.locator('a[href="/chat"]').click({ force: true });
+  await page.locator('a[href="/app"]').click({ force: true });
 }
 
 /**
@@ -55,7 +55,7 @@ test.describe("Chat Scroll Behavior", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
-    await page.goto("/chat");
+    await page.goto("/app");
     const nameInput = page.getByPlaceholder("Your name");
     await nameInput.waitFor();
     await nameInput.fill("Playwright Tester");

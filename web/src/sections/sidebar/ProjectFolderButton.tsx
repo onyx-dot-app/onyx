@@ -4,7 +4,7 @@ import React, { useState, memo } from "react";
 import {
   Project,
   useProjectsContext,
-} from "@/app/chat/projects/ProjectsContext";
+} from "@/app/app/projects/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";

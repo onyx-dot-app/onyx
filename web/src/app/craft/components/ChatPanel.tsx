@@ -16,6 +16,8 @@ import {
   useSuggestionsLoading,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
+import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
+import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -31,6 +33,7 @@ import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import SuggestionBubbles from "@/app/craft/components/SuggestionBubbles";
 import ConnectorBannersRow from "@/app/craft/components/ConnectorBannersRow";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
+import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
@@ -70,6 +73,20 @@ export default function BuildChatPanel({
   // This prevents the "open panel" button from appearing during the close animation
   const [isOutputPanelFullyClosed, setIsOutputPanelFullyClosed] =
     useState(!outputPanelOpen);
+
+  const { limits, refreshLimits } = useUsageLimits();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const setCurrentError = useBuildSessionStore(
+    (state) => state.setCurrentError
+  );
+
+  useEffect(() => {
+    if (session?.error === SessionErrorCode.RATE_LIMIT_EXCEEDED) {
+      setShowUpgradeModal(true);
+      setCurrentError(null);
+      refreshLimits();
+    }
+  }, [session?.error, refreshLimits, setCurrentError]);
 
   useEffect(() => {
     if (outputPanelOpen) {
@@ -221,6 +238,11 @@ export default function BuildChatPanel({
 
   const handleSubmit = useCallback(
     async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
+      if (limits?.isLimited) {
+        setShowUpgradeModal(true);
+        return;
+      }
+
       if (hasSession && sessionId) {
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
@@ -244,6 +266,7 @@ export default function BuildChatPanel({
         });
         // Stream the response
         await streamMessage(sessionId, message);
+        refreshLimits();
       } else {
         // New session flow - get pre-provisioned session or fall back to creating new one
         const newSessionId = await consumePreProvisionedSession();
@@ -260,6 +283,7 @@ export default function BuildChatPanel({
               );
             }
             await streamMessage(fallbackSessionId, message);
+            refreshLimits();
           }
         } else {
           // Pre-provisioned session flow:
@@ -340,6 +364,7 @@ export default function BuildChatPanel({
 
           // Stream the response (uses session ID directly, not currentSessionId)
           await streamMessage(newSessionId, message);
+          refreshLimits();
         }
       }
     },
@@ -357,12 +382,19 @@ export default function BuildChatPanel({
       nameBuildSession,
       router,
       clearFollowupSuggestions,
+      limits,
+      refreshLimits,
     ]
   );
 
   return (
     <div className="h-full w-full">
       {popup}
+      <UpgradePlanModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        limits={limits}
+      />
       {/* Content wrapper - shrinks when output panel opens */}
       <div
         className={cn(

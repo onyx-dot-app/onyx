@@ -222,7 +222,7 @@ export default function UserAvatarPopover({
           <SettingsPopover
             onUserSettingsClick={() => {
               setPopupState(undefined);
-              router.push("/chat/settings");
+              router.push("/app/settings");
             }}
             onOpenNotifications={() => setPopupState("Notifications")}
           />

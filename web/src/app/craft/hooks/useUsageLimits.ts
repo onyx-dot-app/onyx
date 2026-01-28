@@ -8,6 +8,7 @@ import {
   USAGE_LIMITS_ENDPOINT,
   fetchUsageLimits,
 } from "@/app/craft/services/apiServices";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 // Re-export types for consumers
 export type { UsageLimits, LimitType };
@@ -36,16 +37,15 @@ export interface UseUsageLimitsReturn {
  * useUsageLimits - Hook for managing build mode usage limits
  *
  * Rate limits from API:
- * - Free/unpaid users: 10 messages total (limitType: "total")
- * - Paid users: 50 messages per week (limitType: "weekly")
+ * - Free/unpaid users: 5 messages total (limitType: "total")
+ * - Paid users: 25 messages per week by default (limitType: "weekly")
+ *   (configurable via CRAFT_PAID_USER_RATE_LIMIT env var)
  *
  * Only fetches when NEXT_PUBLIC_CLOUD_ENABLED is true.
  * Automatically fetches limits on mount and provides refresh capability.
  */
 export function useUsageLimits(): UseUsageLimitsReturn {
-  // TODO: Remove this once API is ready
-  // const isEnabled = NEXT_PUBLIC_CLOUD_ENABLED;
-  const isEnabled = true;
+  const isEnabled = NEXT_PUBLIC_CLOUD_ENABLED;
 
   const { data, error, isLoading, mutate } = useSWR<UsageLimits>(
     // Only fetch if cloud is enabled

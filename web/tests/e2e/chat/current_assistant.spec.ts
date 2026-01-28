@@ -9,7 +9,7 @@ test.skip("Assistant Drag and Drop", async ({ page }) => {
   await loginAsRandomUser(page);
 
   // Navigate to the chat page
-  await page.goto("/chat");
+  await page.goto("/app");
 
   // Ensure at least two assistants exist for drag-and-drop
   const ts = Date.now();

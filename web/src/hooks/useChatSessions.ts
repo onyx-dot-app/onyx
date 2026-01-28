@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import useSWR, { KeyedMutator } from "swr";
-import { ChatSession, ChatSessionSharedStatus } from "@/app/chat/interfaces";
+import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import useAppFocus from "./useAppFocus";
