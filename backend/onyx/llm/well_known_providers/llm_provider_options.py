@@ -18,7 +18,7 @@ from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
-from onyx.server.manage.llm.models import ModelConfigurationView
+from onyx.server.manage.llm.models import ModelConfiguration
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -212,11 +212,11 @@ def get_vertexai_model_names() -> list[str]:
 
 def model_configurations_for_provider(
     provider_name: str, llm_recommendations: LLMRecommendations
-) -> list[ModelConfigurationView]:
+) -> list[ModelConfiguration]:
     recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
     recommended_visible_models_names = [m.name for m in recommended_visible_models]
     return [
-        ModelConfigurationView(
+        ModelConfiguration(
             name=model_name,
             is_visible=model_name in recommended_visible_models_names,
             max_input_tokens=get_max_input_tokens(model_name, provider_name),

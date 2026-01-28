@@ -163,12 +163,16 @@ class LLMProviderView(LLMProvider):
         )
 
 
-class ModelConfigurationUpsertRequest(BaseModel):
+class ModelConfiguration(BaseModel):
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
-    display_name: str | None = None  # For dynamic providers, from source API
+    display_name: str | None = None
+
+
+class ModelConfigurationUpsertRequest(ModelConfiguration):
+    # For dynamic providers, display_name comes from source API
 
     @classmethod
     def from_model(
@@ -183,14 +187,9 @@ class ModelConfigurationUpsertRequest(BaseModel):
         )
 
 
-class ModelConfigurationView(BaseModel):
+class ModelConfigurationView(ModelConfiguration):
     id: int
-    name: str
-    is_visible: bool
-    max_input_tokens: int | None = None
-    supports_image_input: bool
     supports_reasoning: bool = False
-    display_name: str | None = None
     provider_display_name: str | None = None
     vendor: str | None = None
     version: str | None = None
