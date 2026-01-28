@@ -8,6 +8,7 @@ import {
   useBuildSessionStore,
   useIsPreProvisioning,
 } from "@/app/craft/hooks/useBuildSessionStore";
+import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import { useBuildLlmSelection } from "@/app/craft/hooks/useBuildLlmSelection";
 import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
@@ -30,7 +31,11 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { getSourceMetadata } from "@/lib/sources";
 import { deleteConnector } from "@/app/craft/services/apiServices";
 import Button from "@/refresh-components/buttons/Button";
-import { OAUTH_STATE_KEY } from "@/app/craft/v1/constants";
+import {
+  OAUTH_STATE_KEY,
+  getDemoDataEnabled,
+  setDemoDataCookie,
+} from "@/app/craft/v1/constants";
 import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -105,13 +110,12 @@ export default function BuildConfigPage() {
   const { selection: llmSelection, updateSelection: updateLlmSelection } =
     useBuildLlmSelection(llmProviders);
 
+  // Read demo data from cookie (single source of truth)
+  const [demoDataEnabled, setDemoDataEnabledLocal] = useState(() =>
+    getDemoDataEnabled()
+  );
+
   // Get store values
-  const demoDataEnabled = useBuildSessionStore(
-    (state) => state.demoDataEnabled
-  );
-  const setDemoDataEnabled = useBuildSessionStore(
-    (state) => state.setDemoDataEnabled
-  );
   const clearPreProvisionedSession = useBuildSessionStore(
     (state) => state.clearPreProvisionedSession
   );
@@ -212,22 +216,24 @@ export default function BuildConfigPage() {
   const handleUpdate = useCallback(async () => {
     setIsUpdating(true);
     try {
-      // 1. Clear pre-provisioned session so it can be recreated with new settings
-      await clearPreProvisionedSession();
-
-      // 2. Apply LLM selection to cookie
+      // 1. Apply cookies FIRST (synchronous) - these are the user's preferences
+      // This ensures settings are persisted even if user navigates away during async operations
       if (pendingLlmSelection) {
         updateLlmSelection(pendingLlmSelection);
         setOriginalLlmSelection(pendingLlmSelection);
       }
-
-      // 3. Apply demo data change to store/cookie
       if (pendingDemoData !== null) {
-        setDemoDataEnabled(pendingDemoData);
+        // Update cookie (single source of truth)
+        setDemoDataCookie(pendingDemoData);
+        // Update local state for UI reactivity
+        setDemoDataEnabledLocal(pendingDemoData);
         setOriginalDemoData(pendingDemoData);
       }
 
-      // 4. Start provisioning a new session with updated settings (in background)
+      // 2. Clear pre-provisioned session (may wait if provisioning in progress)
+      await clearPreProvisionedSession();
+
+      // 3. Start provisioning a new session with updated settings
       ensurePreProvisionedSession();
     } catch (error) {
       console.error("Failed to update settings:", error);
@@ -238,7 +244,6 @@ export default function BuildConfigPage() {
     pendingLlmSelection,
     pendingDemoData,
     updateLlmSelection,
-    setDemoDataEnabled,
     clearPreProvisionedSession,
     ensurePreProvisionedSession,
   ]);
@@ -293,16 +298,24 @@ export default function BuildConfigPage() {
   useEffect(() => {
     if (isLoading) return;
     if (!hasConnectorEverSucceeded && !demoDataEnabled) {
-      setDemoDataEnabled(true);
+      // Update cookie (single source of truth)
+      setDemoDataCookie(true);
+      // Update local state for UI reactivity
+      setDemoDataEnabledLocal(true);
       // Also sync pending state so UI stays consistent
       setPendingDemoData(true);
       setOriginalDemoData(true);
+      // Clear and re-provision with new setting
+      clearPreProvisionedSession().then(() => {
+        ensurePreProvisionedSession();
+      });
     }
   }, [
     isLoading,
     hasConnectorEverSucceeded,
     demoDataEnabled,
-    setDemoDataEnabled,
+    clearPreProvisionedSession,
+    ensurePreProvisionedSession,
   ]);
 
   const handleDeleteConfirm = async () => {
@@ -322,262 +335,273 @@ export default function BuildConfigPage() {
   };
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgPlug}
-        title="Configure Onyx Craft"
-        description="Select data sources and your default LLM"
-        rightChildren={
-          <div className="flex items-center gap-2">
-            <Button
-              secondary
-              onClick={handleRestoreChanges}
-              disabled={!hasChanges || isUpdating}
-            >
-              Restore Changes
-            </Button>
-            <Button
-              onClick={handleUpdate}
-              disabled={!hasChanges || isUpdating || isPreProvisioning}
-            >
-              {isUpdating || isPreProvisioning ? "Updating..." : "Update"}
-            </Button>
-          </div>
-        }
-      />
-      <SettingsLayouts.Body>
-        {isLoading ? (
-          <Card variant="tertiary">
-            <Section alignItems="center" gap={0.5} height="fit">
-              <Text mainContentBody>Loading...</Text>
-            </Section>
-          </Card>
-        ) : (
-          <Section flexDirection="column" gap={2}>
-            <Section
-              flexDirection="column"
-              alignItems="start"
-              gap={0.5}
-              height="fit"
-            >
-              <Card>
-                <InputLayouts.Horizontal
-                  title="Your Demo Persona"
-                  description={
-                    workAreaLabel && levelLabel
-                      ? `${workAreaLabel} ${levelLabel}`
-                      : workAreaLabel || "Not set"
-                  }
-                  center
-                >
-                  <SimpleTooltip
-                    tooltip={
-                      !hasLlmProvider
-                        ? "Configure an LLM provider first"
-                        : undefined
-                    }
-                    disabled={hasLlmProvider}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => openPersonaEditor()}
-                      disabled={!hasLlmProvider}
-                      className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <SvgSettings className="w-5 h-5" />
-                    </button>
-                  </SimpleTooltip>
-                </InputLayouts.Horizontal>
-              </Card>
-              <Card
-                className={isUpdating || isPreProvisioning ? "opacity-50" : ""}
-                title={
-                  isUpdating || isPreProvisioning
-                    ? "Please wait while your session is being provisioned"
-                    : undefined
-                }
+    <div className="relative w-full h-full">
+      {/* Sandbox status indicator - positioned in top-left corner like ChatPanel */}
+      <div className="absolute top-3 left-4 z-20">
+        <SandboxStatusIndicator />
+      </div>
+
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
+          icon={SvgPlug}
+          title="Configure Onyx Craft"
+          description="Select data sources and your default LLM"
+          rightChildren={
+            <div className="flex items-center gap-2">
+              <Button
+                secondary
+                onClick={handleRestoreChanges}
+                disabled={!hasChanges || isUpdating}
               >
-                <div
-                  className={`w-full ${
-                    isUpdating || isPreProvisioning ? "pointer-events-none" : ""
-                  }`}
-                >
+                Restore Changes
+              </Button>
+              <Button
+                onClick={handleUpdate}
+                disabled={!hasChanges || isUpdating || isPreProvisioning}
+              >
+                {isUpdating || isPreProvisioning ? "Updating..." : "Update"}
+              </Button>
+            </div>
+          }
+        />
+        <SettingsLayouts.Body>
+          {isLoading ? (
+            <Card variant="tertiary">
+              <Section alignItems="center" gap={0.5} height="fit">
+                <Text mainContentBody>Loading...</Text>
+              </Section>
+            </Card>
+          ) : (
+            <Section flexDirection="column" gap={2}>
+              <Section
+                flexDirection="column"
+                alignItems="start"
+                gap={0.5}
+                height="fit"
+              >
+                <Card>
                   <InputLayouts.Horizontal
-                    title="Default LLM"
-                    description="Select the language model to craft with"
+                    title="Your Demo Persona"
+                    description={
+                      workAreaLabel && levelLabel
+                        ? `${workAreaLabel} ${levelLabel}`
+                        : workAreaLabel || "Not set"
+                    }
                     center
                   >
-                    <BuildLLMPopover
-                      currentSelection={pendingLlmSelection}
-                      onSelectionChange={handleLlmSelectionChange}
-                      llmProviders={llmProviders}
-                      onOpenOnboarding={(providerKey) =>
-                        openLlmSetup(providerKey)
+                    <SimpleTooltip
+                      tooltip={
+                        !hasLlmProvider
+                          ? "Configure an LLM provider first"
+                          : undefined
                       }
-                      disabled={isUpdating || isPreProvisioning}
+                      disabled={hasLlmProvider}
                     >
                       <button
                         type="button"
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-08 border border-border-01 bg-background-tint-00 hover:bg-background-tint-01 transition-colors"
+                        onClick={() => openPersonaEditor()}
+                        disabled={!hasLlmProvider}
+                        className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {pendingLlmSelection?.provider &&
-                          (() => {
-                            const ProviderIcon = getProviderIcon(
-                              pendingLlmSelection.provider
-                            );
-                            return <ProviderIcon className="w-4 h-4" />;
-                          })()}
-                        <Text mainUiAction>{pendingLlmDisplayName}</Text>
-                        <SvgChevronDown className="w-4 h-4 text-text-03" />
+                        <SvgSettings className="w-5 h-5" />
                       </button>
-                    </BuildLLMPopover>
+                    </SimpleTooltip>
                   </InputLayouts.Horizontal>
-                </div>
-              </Card>
-              <Separator />
-              <div className="w-full flex items-center justify-between">
-                <div className="flex flex-col gap-0.25">
-                  <Text mainContentEmphasis text04>
-                    Connectors
-                  </Text>
-                  <Text secondaryBody text03>
-                    Connect your own data sources
-                  </Text>
-                </div>
-                <div className="w-fit flex-shrink-0">
-                  <SimpleTooltip
-                    tooltip={
+                </Card>
+                <Card
+                  className={
+                    isUpdating || isPreProvisioning ? "opacity-50" : ""
+                  }
+                  title={
+                    isUpdating || isPreProvisioning
+                      ? "Please wait while your session is being provisioned"
+                      : undefined
+                  }
+                >
+                  <div
+                    className={`w-full ${
                       isUpdating || isPreProvisioning
-                        ? "Please wait while your session is being provisioned"
-                        : !hasConnectorEverSucceeded
-                          ? "Connect and sync a data source to disable demo data"
-                          : undefined
-                    }
-                    disabled={
-                      hasConnectorEverSucceeded &&
-                      !isUpdating &&
-                      !isPreProvisioning
-                    }
+                        ? "pointer-events-none"
+                        : ""
+                    }`}
                   >
-                    <Card
-                      padding={0.75}
-                      className={
-                        !hasConnectorEverSucceeded ||
-                        isUpdating ||
-                        isPreProvisioning
-                          ? "opacity-50"
-                          : ""
+                    <InputLayouts.Horizontal
+                      title="Default LLM"
+                      description="Select the language model to craft with"
+                      center
+                    >
+                      <BuildLLMPopover
+                        currentSelection={pendingLlmSelection}
+                        onSelectionChange={handleLlmSelectionChange}
+                        llmProviders={llmProviders}
+                        onOpenOnboarding={(providerKey) =>
+                          openLlmSetup(providerKey)
+                        }
+                        disabled={isUpdating || isPreProvisioning}
+                      >
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-08 border border-border-01 bg-background-tint-00 hover:bg-background-tint-01 transition-colors"
+                        >
+                          {pendingLlmSelection?.provider &&
+                            (() => {
+                              const ProviderIcon = getProviderIcon(
+                                pendingLlmSelection.provider
+                              );
+                              return <ProviderIcon className="w-4 h-4" />;
+                            })()}
+                          <Text mainUiAction>{pendingLlmDisplayName}</Text>
+                          <SvgChevronDown className="w-4 h-4 text-text-03" />
+                        </button>
+                      </BuildLLMPopover>
+                    </InputLayouts.Horizontal>
+                  </div>
+                </Card>
+                <Separator />
+                <div className="w-full flex items-center justify-between">
+                  <div className="flex flex-col gap-0.25">
+                    <Text mainContentEmphasis text04>
+                      Connectors
+                    </Text>
+                    <Text secondaryBody text03>
+                      Connect your own data sources
+                    </Text>
+                  </div>
+                  <div className="w-fit flex-shrink-0">
+                    <SimpleTooltip
+                      tooltip={
+                        isUpdating || isPreProvisioning
+                          ? "Please wait while your session is being provisioned"
+                          : !hasConnectorEverSucceeded
+                            ? "Connect and sync a data source to disable demo data"
+                            : undefined
+                      }
+                      disabled={
+                        hasConnectorEverSucceeded &&
+                        !isUpdating &&
+                        !isPreProvisioning
                       }
                     >
-                      <div
-                        className={`flex items-center gap-3 ${
+                      <Card
+                        padding={0.75}
+                        className={
                           !hasConnectorEverSucceeded ||
                           isUpdating ||
                           isPreProvisioning
-                            ? "pointer-events-none"
+                            ? "opacity-50"
                             : ""
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <SimpleTooltip tooltip="The demo dataset contains 1000 files across various connectors">
-                            <span className="inline-flex items-center cursor-help">
-                              <FiInfo size={16} className="text-text-03" />
-                            </span>
-                          </SimpleTooltip>
-                          <Text mainUiAction>Use Demo Dataset</Text>
-                        </div>
-                        <Switch
-                          checked={pendingDemoData ?? demoDataEnabled}
-                          disabled={
-                            isUpdating ||
-                            isPreProvisioning ||
-                            !hasConnectorEverSucceeded
-                          }
-                          onCheckedChange={(newValue) => {
-                            setPendingDemoDataEnabled(newValue);
-                            setShowDemoDataConfirmModal(true);
-                          }}
-                        />
-                      </div>
-                    </Card>
-                  </SimpleTooltip>
-                </div>
-              </div>
-              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
-                {connectorStates.map(({ type, config }) => (
-                  <ConnectorCard
-                    key={type}
-                    connectorType={type}
-                    config={config}
-                    onConfigure={() => {
-                      // Only open modal for unconfigured connectors
-                      if (!config) {
-                        if (isBasicUser) {
-                          setShowNotAllowedModal(true);
-                        } else {
-                          setSelectedConnector({ type, config });
                         }
-                      }
-                    }}
-                    onDelete={() => config && setConnectorToDelete(config)}
-                  />
-                ))}
-              </div>
-              <ComingSoonConnectors />
+                      >
+                        <div
+                          className={`flex items-center gap-3 ${
+                            !hasConnectorEverSucceeded ||
+                            isUpdating ||
+                            isPreProvisioning
+                              ? "pointer-events-none"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <SimpleTooltip tooltip="The demo dataset contains 1000 files across various connectors">
+                              <span className="inline-flex items-center cursor-help">
+                                <FiInfo size={16} className="text-text-03" />
+                              </span>
+                            </SimpleTooltip>
+                            <Text mainUiAction>Use Demo Dataset</Text>
+                          </div>
+                          <Switch
+                            checked={pendingDemoData ?? demoDataEnabled}
+                            disabled={
+                              isUpdating ||
+                              isPreProvisioning ||
+                              !hasConnectorEverSucceeded
+                            }
+                            onCheckedChange={(newValue) => {
+                              setPendingDemoDataEnabled(newValue);
+                              setShowDemoDataConfirmModal(true);
+                            }}
+                          />
+                        </div>
+                      </Card>
+                    </SimpleTooltip>
+                  </div>
+                </div>
+                <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
+                  {connectorStates.map(({ type, config }) => (
+                    <ConnectorCard
+                      key={type}
+                      connectorType={type}
+                      config={config}
+                      onConfigure={() => {
+                        // Only open modal for unconfigured connectors
+                        if (!config) {
+                          if (isBasicUser) {
+                            setShowNotAllowedModal(true);
+                          } else {
+                            setSelectedConnector({ type, config });
+                          }
+                        }
+                      }}
+                      onDelete={() => config && setConnectorToDelete(config)}
+                    />
+                  ))}
+                </div>
+                <ComingSoonConnectors />
+              </Section>
             </Section>
-          </Section>
+          )}
+
+          {/* Sticky overlay for reprovision warning */}
+          <div className="sticky z-toast bottom-10 w-fit mx-auto">
+            <ReprovisionWarningOverlay visible={hasChanges && !isLoading} />
+          </div>
+
+          {/* Fixed overlay for connector info - centered on screen like the modal */}
+          <ConnectorInfoOverlay visible={!!selectedConnector} />
+        </SettingsLayouts.Body>
+
+        <ConfigureConnectorModal
+          connectorType={selectedConnector?.type || null}
+          existingConfig={selectedConnector?.config || null}
+          open={!!selectedConnector}
+          onClose={() => setSelectedConnector(null)}
+          onSuccess={() => {
+            setSelectedConnector(null);
+            mutate();
+          }}
+        />
+
+        {connectorToDelete && (
+          <ConfirmEntityModal
+            danger
+            entityType="connector"
+            entityName={
+              getSourceMetadata(connectorToDelete.source as ValidSources)
+                .displayName
+            }
+            action="disconnect"
+            actionButtonText="Disconnect"
+            additionalDetails="This will remove access to this data source. You can reconnect it later."
+            onClose={() => setConnectorToDelete(null)}
+            onSubmit={handleDeleteConfirm}
+          />
         )}
 
-        {/* Sticky overlay for reprovision warning */}
-        <div className="sticky z-toast bottom-10 w-fit mx-auto">
-          <ReprovisionWarningOverlay visible={hasChanges && !isLoading} />
-        </div>
-
-        {/* Fixed overlay for connector info - centered on screen like the modal */}
-        <ConnectorInfoOverlay visible={!!selectedConnector} />
-      </SettingsLayouts.Body>
-
-      <ConfigureConnectorModal
-        connectorType={selectedConnector?.type || null}
-        existingConfig={selectedConnector?.config || null}
-        open={!!selectedConnector}
-        onClose={() => setSelectedConnector(null)}
-        onSuccess={() => {
-          setSelectedConnector(null);
-          mutate();
-        }}
-      />
-
-      {connectorToDelete && (
-        <ConfirmEntityModal
-          danger
-          entityType="connector"
-          entityName={
-            getSourceMetadata(connectorToDelete.source as ValidSources)
-              .displayName
-          }
-          action="disconnect"
-          actionButtonText="Disconnect"
-          additionalDetails="This will remove access to this data source. You can reconnect it later."
-          onClose={() => setConnectorToDelete(null)}
-          onSubmit={handleDeleteConfirm}
+        <NotAllowedModal
+          open={showNotAllowedModal}
+          onClose={() => setShowNotAllowedModal(false)}
         />
-      )}
 
-      <NotAllowedModal
-        open={showNotAllowedModal}
-        onClose={() => setShowNotAllowedModal(false)}
-      />
-
-      <DemoDataConfirmModal
-        open={showDemoDataConfirmModal}
-        onClose={() => {
-          setShowDemoDataConfirmModal(false);
-          setPendingDemoDataEnabled(null);
-        }}
-        pendingDemoDataEnabled={pendingDemoDataEnabled}
-        onConfirm={handleDemoDataConfirm}
-      />
-    </SettingsLayouts.Root>
+        <DemoDataConfirmModal
+          open={showDemoDataConfirmModal}
+          onClose={() => {
+            setShowDemoDataConfirmModal(false);
+            setPendingDemoDataEnabled(null);
+          }}
+          pendingDemoDataEnabled={pendingDemoDataEnabled}
+          onConfirm={handleDemoDataConfirm}
+        />
+      </SettingsLayouts.Root>
+    </div>
   );
 }

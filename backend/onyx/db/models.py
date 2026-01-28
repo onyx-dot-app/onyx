@@ -4425,6 +4425,9 @@ class BuildSession(Base):
         nullable=False,
     )
     nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    demo_data_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])

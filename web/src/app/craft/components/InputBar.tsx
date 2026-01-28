@@ -356,8 +356,8 @@ const InputBar = memo(
                 disabled={disabled}
                 onClick={() => fileInputRef.current?.click()}
               />
-              {/* Demo Data indicator pill - only show when demo data is enabled */}
-              {demoDataEnabled && (
+              {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
+              {demoDataEnabled && !sessionId && (
                 <SimpleTooltip
                   tooltip="Switch to your data in the Configure panel!"
                   side="top"
