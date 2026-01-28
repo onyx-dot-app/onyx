@@ -124,7 +124,7 @@ backend = [
     "shapely==2.0.6",
     "stripe==10.12.0",
     "urllib3==2.6.3",
-    "mistune==0.8.4",
+    "mistune==3.2.0",
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
