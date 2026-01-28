@@ -2,6 +2,7 @@ import copy
 import json
 import os
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterable
 from collections.abc import Iterator
 from datetime import datetime
@@ -40,7 +41,6 @@ from onyx.connectors.jira.utils import build_jira_client
 from onyx.connectors.jira.utils import build_jira_url
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.connectors.jira.utils import get_comment_strs
-from onyx.connectors.jira.utils import get_jira_project_key_from_issue
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -50,6 +50,7 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -339,6 +340,7 @@ def process_jira_issue(
     issue: Issue,
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -434,6 +436,7 @@ def process_jira_issue(
         doc_updated_at=time_str_to_utc(issue.fields.updated),
         primary_owners=list(people) or None,
         metadata=metadata_dict,
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
 
 
@@ -480,6 +483,8 @@ class JiraConnector(
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
+        # Track hierarchy nodes we've already yielded to avoid duplicates
+        self._seen_hierarchy_node_ids: set[str] = set()
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -520,6 +525,119 @@ class JiraConnector(
                 add_prefix=add_prefix,
             )
         return self._project_permissions_cache[cache_key]
+
+    def _is_epic(self, issue: Issue) -> bool:
+        """Check if issue is an Epic."""
+        issuetype = best_effort_get_field_from_issue(issue, _FIELD_ISSUETYPE)
+        if issuetype is None:
+            return False
+        return issuetype.name.lower() == "epic"
+
+    def _yield_project_hierarchy_node(
+        self, project_key: str, project_name: str | None
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield a hierarchy node for a project if not already yielded."""
+        if project_key in self._seen_hierarchy_node_ids:
+            return
+
+        self._seen_hierarchy_node_ids.add(project_key)
+
+        yield HierarchyNode(
+            raw_node_id=project_key,
+            raw_parent_id=None,  # Parent is SOURCE
+            display_name=project_name or project_key,
+            link=f"{self.jira_base}/projects/{project_key}",
+            node_type=HierarchyNodeType.PROJECT,
+        )
+
+    def _yield_epic_hierarchy_node(
+        self,
+        issue: Issue,
+        project_key: str,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield a hierarchy node for an Epic issue."""
+        issue_key = issue.key
+        if issue_key in self._seen_hierarchy_node_ids:
+            return
+
+        self._seen_hierarchy_node_ids.add(issue_key)
+
+        yield HierarchyNode(
+            raw_node_id=issue_key,
+            raw_parent_id=project_key,
+            display_name=f"{issue_key}: {issue.fields.summary}",
+            link=build_jira_url(self.jira_base, issue_key),
+            node_type=HierarchyNodeType.FOLDER,  # don't have a separate epic node type
+        )
+
+    def _yield_parent_hierarchy_node_if_epic(
+        self,
+        parent: Any,
+        project_key: str,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield hierarchy node for parent issue if it's an Epic we haven't seen."""
+        parent_key = parent.key
+        if parent_key in self._seen_hierarchy_node_ids:
+            return
+
+        # Check if parent is an Epic
+        parent_issuetype = (
+            getattr(parent.fields, "issuetype", None)
+            if hasattr(parent, "fields")
+            else None
+        )
+        is_epic = parent_issuetype and parent_issuetype.name.lower() == "epic"
+
+        if not is_epic:
+            # Not an epic, don't create hierarchy node for it
+            return
+
+        self._seen_hierarchy_node_ids.add(parent_key)
+
+        # Get summary if available
+        parent_summary = (
+            getattr(parent.fields, "summary", None)
+            if hasattr(parent, "fields")
+            else None
+        )
+        display_name = (
+            f"{parent_key}: {parent_summary}" if parent_summary else parent_key
+        )
+
+        yield HierarchyNode(
+            raw_node_id=parent_key,
+            raw_parent_id=project_key,
+            display_name=display_name,
+            link=build_jira_url(self.jira_base, parent_key),
+            node_type=HierarchyNodeType.FOLDER,  # don't have a separate epic node type
+        )
+
+    def _get_parent_hierarchy_raw_node_id(self, issue: Issue, project_key: str) -> str:
+        """Determine the parent hierarchy node ID for an issue.
+
+        Returns:
+            - Epic key if issue's parent is an Epic
+            - Project key otherwise (for top-level issues or non-epic parents)
+        """
+        parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+        if parent is None:
+            # No parent, directly under project
+            return project_key
+
+        # Check if parent is an Epic
+        parent_issuetype = (
+            getattr(parent.fields, "issuetype", None)
+            if hasattr(parent, "fields")
+            else None
+        )
+        is_parent_epic = parent_issuetype and parent_issuetype.name.lower() == "epic"
+
+        if is_parent_epic:
+            return parent.key
+
+        # For non-epic parents (e.g., story with subtasks),
+        # the document belongs directly under the project in the hierarchy
+        return project_key
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
@@ -616,20 +734,49 @@ class JiraConnector(
         ):
             issue_key = issue.key
             try:
+                # Get project info for hierarchy
+                project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+                project_key = project.key if project else None
+                project_name = project.name if project else None
+
+                # Yield hierarchy nodes BEFORE the document (parent-before-child)
+                if project_key:
+                    # 1. Yield project hierarchy node (if not already yielded)
+                    yield from self._yield_project_hierarchy_node(
+                        project_key, project_name
+                    )
+
+                    # 2. If parent is an Epic, yield hierarchy node for it
+                    parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+                    if parent:
+                        yield from self._yield_parent_hierarchy_node_if_epic(
+                            parent, project_key
+                        )
+
+                    # 3. If this issue IS an Epic, yield it as hierarchy node
+                    if self._is_epic(issue):
+                        yield from self._yield_epic_hierarchy_node(issue, project_key)
+
+                # Determine parent hierarchy node ID for the document
+                parent_hierarchy_raw_node_id = (
+                    self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                    if project_key
+                    else None
+                )
+
                 if document := process_jira_issue(
                     jira_base_url=self.jira_base,
                     issue=issue,
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
+                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
-                        project_key = get_jira_project_key_from_issue(issue=issue)
-                        if project_key:
-                            document.external_access = self._get_project_permissions(
-                                project_key,
-                                add_prefix=True,  # Indexing path - prefix here
-                            )
+                        document.external_access = self._get_project_permissions(
+                            project_key,
+                            add_prefix=True,  # Indexing path - prefix here
+                        )
                     yield document
 
             except Exception as e:
@@ -699,16 +846,41 @@ class JiraConnector(
                 nextPageToken=checkpoint.cursor,
                 ids_done=checkpoint.ids_done,
             ):
-                project_key = get_jira_project_key_from_issue(issue=issue)
+                # Get project info
+                project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+                project_key = project.key if project else None
+                project_name = project.name if project else None
+
                 if not project_key:
                     continue
 
+                # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
+                # 1. Yield project hierarchy node (if not already yielded)
+                for node in self._yield_project_hierarchy_node(
+                    project_key, project_name
+                ):
+                    slim_doc_batch.append(node)
+
+                # 2. If parent is an Epic, yield hierarchy node for it
+                parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+                if parent:
+                    for node in self._yield_parent_hierarchy_node_if_epic(
+                        parent, project_key
+                    ):
+                        slim_doc_batch.append(node)
+
+                # 3. If this issue IS an Epic, yield it as hierarchy node
+                if self._is_epic(issue):
+                    for node in self._yield_epic_hierarchy_node(issue, project_key):
+                        slim_doc_batch.append(node)
+
+                # Now add the slim document
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
-                id = build_jira_url(self.jira_base, issue_key)
+                doc_id = build_jira_url(self.jira_base, issue_key)
 
                 slim_doc_batch.append(
                     SlimDocument(
-                        id=id,
+                        id=doc_id,
                         # Permission sync path - don't prefix, upsert_document_external_perms handles it
                         external_access=self._get_project_permissions(
                             project_key, add_prefix=False
