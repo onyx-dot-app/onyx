@@ -22,6 +22,7 @@ interface PersonaUpsertRequest {
   users?: string[];
   groups: number[];
   tool_ids: number[];
+  callable_persona_ids: number[] | null;
   remove_image?: boolean;
   uploaded_image_id: string | null;
   icon_name: string | null;
@@ -50,6 +51,7 @@ export interface PersonaUpsertParameters {
   users?: string[];
   groups: number[];
   tool_ids: number[];
+  callable_persona_ids: number[];
   remove_image?: boolean;
   search_start_date: Date | null;
   uploaded_image_id: string | null;
@@ -71,6 +73,7 @@ function buildPersonaUpsertRequest({
   datetime_aware,
   users,
   tool_ids,
+  callable_persona_ids,
   remove_image,
   search_start_date,
   user_file_ids,
@@ -97,6 +100,7 @@ function buildPersonaUpsertRequest({
     groups,
     users,
     tool_ids,
+    callable_persona_ids: callable_persona_ids?.length ? callable_persona_ids : null,
     remove_image,
     search_start_date,
     datetime_aware,

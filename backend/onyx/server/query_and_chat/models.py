@@ -92,6 +92,10 @@ class SendMessageRequest(BaseModel):
     allowed_tool_ids: list[int] | None = None
     forced_tool_id: int | None = None
 
+    # Additional personas to make callable as sub-agents at runtime
+    # These are merged with the persona's pre-configured callable_personas
+    runtime_callable_persona_ids: list[int] | None = None
+
     file_descriptors: list[FileDescriptor] = []
 
     internal_search_filters: BaseFilters | None = None

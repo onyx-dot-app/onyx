@@ -27,6 +27,9 @@ BUILT_IN_TOOL_TYPES = Union[
     PythonTool,
 ]
 
+# Note: AgentTool is not included here because it's constructed dynamically
+# based on the persona's callable_personas relationship, not via database
+# tool entries with in_code_tool_id.
 BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     SearchTool.__name__: SearchTool,
     ImageGenerationTool.__name__: ImageGenerationTool,
@@ -35,6 +38,7 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     OpenURLTool.__name__: OpenURLTool,
     PythonTool.__name__: PythonTool,
 }
+
 
 STOPPING_TOOLS_NAMES: list[str] = [ImageGenerationTool.NAME]
 CITEABLE_TOOLS_NAMES: list[str] = [

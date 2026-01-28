@@ -85,6 +85,9 @@ export interface OnSubmitProps {
 
   deepResearch: boolean;
 
+  // Additional persona IDs to make callable as sub-agents at runtime
+  runtimeCallablePersonaIds?: number[];
+
   // optional params
   messageIdToResend?: number;
   queryOverride?: string;
@@ -350,6 +353,7 @@ export function useChatController({
       message,
       currentMessageFiles,
       deepResearch,
+      runtimeCallablePersonaIds,
       messageIdToResend,
       queryOverride,
       forceSearch,
@@ -712,6 +716,7 @@ export function useChatController({
                   .map((tool) => tool.id)
               : undefined,
           forcedToolId: effectiveForcedToolId,
+          runtimeCallablePersonaIds,
           origin: messageOrigin,
         });
 

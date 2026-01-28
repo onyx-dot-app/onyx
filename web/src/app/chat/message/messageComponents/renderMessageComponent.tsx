@@ -20,6 +20,7 @@ import CustomToolRenderer from "./renderers/CustomToolRenderer";
 import { FetchToolRenderer } from "./renderers/FetchToolRenderer";
 import { DeepResearchPlanRenderer } from "./renderers/DeepResearchPlanRenderer";
 import { ResearchAgentRenderer } from "./renderers/ResearchAgentRenderer";
+import { AgentToolRenderer } from "./renderers/AgentToolRenderer";
 import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
 
 // Different types of chat packets using discriminated unions
@@ -81,6 +82,15 @@ function isResearchAgentPacket(packet: Packet) {
   );
 }
 
+function isAgentToolPacket(packet: Packet) {
+  // Check for any packet type that indicates an agent tool (sub-agent delegation) group
+  return (
+    packet.obj.type === PacketType.AGENT_TOOL_START ||
+    packet.obj.type === PacketType.AGENT_TOOL_TASK ||
+    packet.obj.type === PacketType.AGENT_TOOL_RESULT
+  );
+}
+
 export function findRenderer(
   groupedPackets: GroupedPackets
 ): MessageRenderer<any, any> | null {
@@ -98,6 +108,10 @@ export function findRenderer(
   }
   if (groupedPackets.packets.some((packet) => isResearchAgentPacket(packet))) {
     return ResearchAgentRenderer;
+  }
+  // Check for agent tool packets (sub-agent delegation) - priority over custom tools
+  if (groupedPackets.packets.some((packet) => isAgentToolPacket(packet))) {
+    return AgentToolRenderer;
   }
 
   // Standard tool checks

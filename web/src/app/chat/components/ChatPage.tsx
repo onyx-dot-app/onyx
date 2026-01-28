@@ -190,6 +190,11 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
     assistantId: selectedAssistant?.id,
   });
 
+  // State for runtime callable personas (sub-agents selected at chat time)
+  const [runtimeCallablePersonaIds, setRuntimeCallablePersonaIds] = useState<
+    number[]
+  >([]);
+
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
@@ -448,6 +453,10 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
         message,
         currentMessageFiles: currentMessageFiles,
         deepResearch: deepResearchEnabled,
+        runtimeCallablePersonaIds:
+          runtimeCallablePersonaIds.length > 0
+            ? runtimeCallablePersonaIds
+            : undefined,
       });
       if (showOnboarding) {
         finishOnboarding();
@@ -457,6 +466,7 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
+      runtimeCallablePersonaIds,
       showOnboarding,
       finishOnboarding,
     ]
@@ -774,6 +784,10 @@ export default function ChatPage({ firstMessage }: ChatPageProps) {
                     }
                     availableContextTokens={availableContextTokens}
                     selectedAssistant={selectedAssistant || liveAssistant}
+                    runtimeCallablePersonaIds={runtimeCallablePersonaIds}
+                    onRuntimeCallablePersonaIdsChange={
+                      setRuntimeCallablePersonaIds
+                    }
                     handleFileUpload={handleMessageSpecificFileUpload}
                     setPresentingDocument={setPresentingDocument}
                     disabled={

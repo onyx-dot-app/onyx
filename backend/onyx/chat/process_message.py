@@ -78,6 +78,7 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_constructor import AgentToolConfig
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
@@ -532,6 +533,9 @@ def handle_stream_message_objects(
                 message_id=user_message.id if user_message else None,
                 additional_headers=custom_tool_additional_headers,
                 mcp_headers=mcp_headers,
+            ),
+            agent_tool_config=AgentToolConfig(
+                runtime_callable_persona_ids=new_msg_req.runtime_callable_persona_ids,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=project_search_config.search_usage,

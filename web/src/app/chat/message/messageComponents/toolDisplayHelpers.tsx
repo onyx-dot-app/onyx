@@ -11,6 +11,7 @@ import {
   FiUsers,
   FiXCircle,
 } from "react-icons/fi";
+import { FaRobot } from "react-icons/fa";
 import { BrainIcon } from "@/components/icons/icons";
 
 import {
@@ -29,7 +30,7 @@ export function hasToolError(packets: Packet[]): boolean {
 
 /**
  * Check if a tool group is complete.
- * For research agents, we only look at parent-level SECTION_END packets (sub_turn_index is undefined/null),
+ * For research agents and agent tools, we only look at parent-level SECTION_END packets (sub_turn_index is undefined/null),
  * not the SECTION_END packets from nested tools (which have sub_turn_index as a number).
  */
 export function isToolComplete(packets: Packet[]): boolean {
@@ -39,6 +40,17 @@ export function isToolComplete(packets: Packet[]): boolean {
   // For research agents, only parent-level SECTION_END indicates completion
   // Nested tools (search, fetch, etc.) within the research agent have sub_turn_index set
   if (firstPacket.obj.type === PacketType.RESEARCH_AGENT_START) {
+    return packets.some(
+      (p) =>
+        (p.obj.type === PacketType.SECTION_END ||
+          p.obj.type === PacketType.ERROR) &&
+        (p.placement.sub_turn_index === undefined ||
+          p.placement.sub_turn_index === null)
+    );
+  }
+
+  // For agent tools (sub-agent delegation), only parent-level SECTION_END indicates completion
+  if (firstPacket.obj.type === PacketType.AGENT_TOOL_START) {
     return packets.some(
       (p) =>
         (p.obj.type === PacketType.SECTION_END ||
@@ -102,6 +114,13 @@ export function getToolName(packets: Packet[]): string {
       return "Generate plan";
     case PacketType.RESEARCH_AGENT_START:
       return "Research agent";
+    case PacketType.AGENT_TOOL_START:
+      return (
+        (firstPacket.obj as { tool_name?: string }).tool_name || "Call Agent"
+      );
+    case PacketType.AGENT_TOOL_TASK:
+    case PacketType.AGENT_TOOL_RESULT:
+      return `Call ${(firstPacket.obj as { agent_name?: string }).agent_name || "Agent"}`;
     case PacketType.REASONING_START:
       return "Thinking";
     default:
@@ -136,6 +155,10 @@ export function getToolIcon(packets: Packet[]): JSX.Element {
       return <FiList className="w-3.5 h-3.5" />;
     case PacketType.RESEARCH_AGENT_START:
       return <FiUsers className="w-3.5 h-3.5" />;
+    case PacketType.AGENT_TOOL_START:
+    case PacketType.AGENT_TOOL_TASK:
+    case PacketType.AGENT_TOOL_RESULT:
+      return <FaRobot className="w-3.5 h-3.5" />;
     case PacketType.REASONING_START:
       return <BrainIcon className="w-3.5 h-3.5" />;
     default:
@@ -166,6 +189,10 @@ export function getToolIconByName(name: string): JSX.Element {
     case "Thinking":
       return <BrainIcon className="w-3.5 h-3.5" />;
     default:
+      // Agent tools start with "Call " prefix
+      if (name.startsWith("Call ")) {
+        return <FaRobot className="w-3.5 h-3.5" />;
+      }
       // Custom tools or unknown
       return <FiTool className="w-3.5 h-3.5" />;
   }

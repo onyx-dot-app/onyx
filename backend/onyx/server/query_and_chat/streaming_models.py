@@ -45,6 +45,11 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
+    # Agent Tool (sub-agent delegation) packets
+    AGENT_TOOL_START = "agent_tool_start"
+    AGENT_TOOL_TASK = "agent_tool_task"
+    AGENT_TOOL_RESULT = "agent_tool_result"
+
 
 class BaseObj(BaseModel):
     type: str = ""
@@ -285,6 +290,36 @@ class IntermediateReportCitedDocs(BaseObj):
 
 
 ################################################
+# Agent Tool (Sub-Agent Delegation) Packets
+################################################
+class AgentToolStart(BaseObj):
+    """Signal that an agent tool (sub-agent delegation) has started."""
+
+    type: Literal["agent_tool_start"] = StreamingType.AGENT_TOOL_START.value
+
+    tool_name: str  # Display name like "Call Sales Expert"
+    agent_name: str  # Target agent/persona name
+
+
+class AgentToolTask(BaseObj):
+    """The task being delegated to the sub-agent."""
+
+    type: Literal["agent_tool_task"] = StreamingType.AGENT_TOOL_TASK.value
+
+    task: str
+    agent_name: str
+
+
+class AgentToolResult(BaseObj):
+    """The final result from the sub-agent."""
+
+    type: Literal["agent_tool_result"] = StreamingType.AGENT_TOOL_RESULT.value
+
+    answer: str
+    agent_name: str
+
+
+################################################
 # Packet Object
 ################################################
 # Discriminated union of all possible packet object types
@@ -324,6 +359,10 @@ PacketObj = Union[
     IntermediateReportStart,
     IntermediateReportDelta,
     IntermediateReportCitedDocs,
+    # Agent Tool (Sub-Agent Delegation) Packets
+    AgentToolStart,
+    AgentToolTask,
+    AgentToolResult,
 ]
 
 

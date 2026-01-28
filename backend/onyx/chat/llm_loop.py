@@ -135,6 +135,9 @@ def _try_fallback_tool_extraction(
 # Cycle 6: No more tools available, forced to answer
 MAX_LLM_CYCLES = 6
 
+# Maximum number of agent tool calls allowed per turn to prevent runaway delegation
+MAX_AGENT_TOOL_CALLS_PER_TURN = 5
+
 
 def _build_project_file_citation_mapping(
     project_file_metadata: list[ProjectFileMetadata],
@@ -429,10 +432,19 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
+        agent_tool_calls_count: int = 0  # Track agent tool calls to enforce limit
 
         default_base_system_prompt: str = get_default_base_system_prompt(db_session)
         system_prompt = None
         custom_agent_prompt_msg = None
+
+        # Extract sub-agent names for orchestrator reminder (AgentTools have negative IDs)
+        # We check by attribute rather than isinstance to avoid circular import with agent_tool.py
+        sub_agent_names: list[str] = [
+            t.target_persona.name  # type: ignore[attr-defined]
+            for t in tools
+            if t.id < 0 and hasattr(t, "target_persona")
+        ]
 
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
@@ -450,7 +462,11 @@ def run_llm_loop(
                 final_tools = []
             else:
                 tool_choice = ToolChoiceOptions.AUTO
-                final_tools = tools
+                # Filter out AgentTools if we've hit the limit (AgentTools have negative IDs)
+                if agent_tool_calls_count >= MAX_AGENT_TOOL_CALLS_PER_TURN:
+                    final_tools = [t for t in tools if t.id >= 0]
+                else:
+                    final_tools = tools
 
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
@@ -527,6 +543,7 @@ def run_llm_loop(
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
                     is_last_cycle=out_of_cycles,
+                    sub_agent_names=sub_agent_names if sub_agent_names else None,
                 )
 
             reminder_msg = (
@@ -618,6 +635,8 @@ def run_llm_loop(
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
+                # Pass the current persona's ID to prevent recursive agent calls (A → B → A)
+                agent_call_stack=[persona.id] if persona else [],
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -654,6 +673,10 @@ def run_llm_loop(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
                     )
 
+                # Track agent tool calls (AgentTools have negative IDs)
+                if tool.id < 0:
+                    agent_tool_calls_count += 1
+
                 # Extract search_docs if this is a search tool response
                 search_docs = None
                 displayed_docs = None
@@ -688,6 +711,20 @@ def run_llm_loop(
                     else tool_response.llm_facing_response
                 )
 
+                # For AgentTools (negative tool_id), include tool_name and agent_name
+                # in arguments so they can be retrieved when loading chat history
+                tool_call_arguments = tool_call.tool_args.copy()
+                if tool.id < 0:
+                    # AgentTool - store the display name and agent name for UI replay
+                    tool_call_arguments["_tool_name"] = tool.display_name
+                    tool_call_arguments["_agent_name"] = getattr(
+                        tool, "target_persona", None
+                    )
+                    if tool_call_arguments["_agent_name"]:
+                        tool_call_arguments["_agent_name"] = tool_call_arguments[
+                            "_agent_name"
+                        ].name
+
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
                     turn_index=llm_cycle_count + reasoning_cycles,
@@ -696,7 +733,7 @@ def run_llm_loop(
                     tool_call_id=tool_call.tool_call_id,
                     tool_id=tool.id,
                     reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
-                    tool_call_arguments=tool_call.tool_args,
+                    tool_call_arguments=tool_call_arguments,
                     tool_call_response=saved_response,
                     search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,

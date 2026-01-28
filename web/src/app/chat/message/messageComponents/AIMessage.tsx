@@ -281,6 +281,7 @@ const AIMessage = React.memo(function AIMessage({
       PacketType.REASONING_START,
       PacketType.DEEP_RESEARCH_PLAN_START,
       PacketType.RESEARCH_AGENT_START,
+      PacketType.AGENT_TOOL_START,
     ];
     return packets.some((packet) =>
       contentPacketTypes.includes(packet.obj.type as PacketType)

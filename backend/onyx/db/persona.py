@@ -278,6 +278,7 @@ def create_update_persona(
             name=create_persona_request.name,
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
+            callable_persona_ids=create_persona_request.callable_persona_ids,
             is_public=create_persona_request.is_public,
             recency_bias=create_persona_request.recency_bias,
             llm_model_provider_override=create_persona_request.llm_model_provider_override,
@@ -416,6 +417,7 @@ def get_minimal_persona_snapshots_for_user(
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
+        selectinload(Persona.callable_personas),
     )
     results = db_session.scalars(stmt).all()
     return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
@@ -443,6 +445,7 @@ def get_persona_snapshots_for_user(
         selectinload(Persona.user_files),
         selectinload(Persona.users),
         selectinload(Persona.groups),
+        selectinload(Persona.callable_personas),
     )
 
     results = db_session.scalars(stmt).all()
@@ -533,6 +536,7 @@ def get_minimal_persona_snapshots_paginated(
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
+        selectinload(Persona.callable_personas),
     )
 
     results = db_session.scalars(stmt).all()
@@ -591,6 +595,7 @@ def get_persona_snapshots_paginated(
         selectinload(Persona.user_files),
         selectinload(Persona.users),
         selectinload(Persona.groups),
+        selectinload(Persona.callable_personas),
     )
 
     results = db_session.scalars(stmt).all()
@@ -807,6 +812,7 @@ def upsert_persona(
     db_session: Session,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
+    callable_persona_ids: list[int] | None = None,
     persona_id: int | None = None,
     commit: bool = True,
     uploaded_image_id: str | None = None,
@@ -880,6 +886,20 @@ def upsert_persona(
         if not user_files and user_file_ids:
             raise ValueError("user_files not found")
 
+    # Fetch callable personas (sub-agents)
+    callable_personas = None
+    if callable_persona_ids is not None:
+        stmt = select(Persona).where(
+            Persona.id.in_(callable_persona_ids),
+            Persona.deleted.is_(False),
+        )
+        stmt = _add_user_filters(stmt, user, get_editable=False)
+        callable_personas = db_session.scalars(stmt).all()
+        if len(callable_personas) != len(callable_persona_ids):
+            raise ValueError(
+                "Some callable personas not found or have been deleted"
+            )
+
     labels = None
     if label_ids is not None:
         labels = (
@@ -947,6 +967,10 @@ def upsert_persona(
             existing_persona.user_files.clear()
             existing_persona.user_files = user_files or []
 
+        if callable_persona_ids is not None:
+            existing_persona.callable_personas.clear()
+            existing_persona.callable_personas = list(callable_personas) if callable_personas else []
+
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
@@ -986,6 +1010,7 @@ def upsert_persona(
                 is_default_persona if is_default_persona is not None else False
             ),
             user_files=user_files or [],
+            callable_personas=callable_personas or [],
             labels=labels or [],
         )
         db_session.add(new_persona)

@@ -80,6 +80,8 @@ class PersonaUpsertRequest(BaseModel):
     display_priority: int | None = None
     # Accept string UUIDs from frontend
     user_file_ids: list[str] | None = None
+    # IDs of other personas that this persona can call as sub-agents
+    callable_persona_ids: list[int] | None = None
 
     # prompt fields
     system_prompt: str
@@ -122,6 +124,9 @@ class MinimalPersonaSnapshot(BaseModel):
     # Used to display ownership
     owner: MinimalUserSnapshot | None
 
+    # IDs of personas that this persona can call as sub-agents (for chat UI)
+    callable_persona_ids: list[int]
+
     @classmethod
     def from_model(cls, persona: Persona) -> "MinimalPersonaSnapshot":
         return MinimalPersonaSnapshot(
@@ -156,6 +161,7 @@ class MinimalPersonaSnapshot(BaseModel):
                 if persona.user
                 else None
             ),
+            callable_persona_ids=[p.id for p in persona.callable_personas],
         )
 
 
@@ -184,6 +190,8 @@ class PersonaSnapshot(BaseModel):
     llm_model_provider_override: str | None
     llm_model_version_override: str | None
     num_chunks: float | None
+    # IDs of personas that this persona can call as sub-agents
+    callable_persona_ids: list[int]
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
@@ -231,6 +239,7 @@ class PersonaSnapshot(BaseModel):
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
             num_chunks=persona.num_chunks,
+            callable_persona_ids=[p.id for p in persona.callable_personas],
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,
@@ -290,6 +299,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 for document_set_model in persona.document_sets
             ],
             num_chunks=persona.num_chunks,
+            callable_persona_ids=[p.id for p in persona.callable_personas],
             search_start_date=persona.search_start_date,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,

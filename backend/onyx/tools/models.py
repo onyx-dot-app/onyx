@@ -192,6 +192,23 @@ class PythonToolOverrideKwargs(BaseModel):
     chat_files: list[ChatFile] = []
 
 
+class AgentToolOverrideKwargs(BaseModel):
+    """Override kwargs for agent-as-tool calls."""
+
+    agent_call_stack: list[int] = []
+    max_recursion_depth: int = 2
+    starting_citation_num: int = 1
+    citation_mapping: dict[int, str] = {}
+
+
+class AgentCallResult(BaseModel):
+    """Result from a sub-agent execution."""
+
+    answer: str
+    citation_mapping: dict[int, SearchDoc] = {}
+    token_count: int = 0
+
+
 class SearchToolRunContext(BaseModel):
     emitter: Emitter
 

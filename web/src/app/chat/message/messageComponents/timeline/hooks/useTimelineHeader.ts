@@ -5,6 +5,7 @@ import {
   SearchToolPacket,
   StopReason,
   CustomToolStart,
+  AgentToolStart,
 } from "@/app/chat/services/streamingModels";
 import { constructCurrentSearchState } from "@/app/chat/message/messageComponents/timeline/renderers/search/searchStateUtils";
 
@@ -90,6 +91,15 @@ export function useTimelineHeader(
 
     if (packetType === PacketType.RESEARCH_AGENT_START) {
       return { headerText: "Researching", hasPackets, userStopped };
+    }
+
+    if (packetType === PacketType.AGENT_TOOL_START) {
+      const agentName = (firstPacket.obj as AgentToolStart).agent_name;
+      return {
+        headerText: agentName ? `Consulting ${agentName}` : "Calling agent",
+        hasPackets,
+        userStopped,
+      };
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };

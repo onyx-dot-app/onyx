@@ -29,6 +29,10 @@ export function isToolPacket(
     PacketType.INTERMEDIATE_REPORT_START,
     PacketType.INTERMEDIATE_REPORT_DELTA,
     PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
+    // Agent tool (sub-agent delegation) packets
+    PacketType.AGENT_TOOL_START,
+    PacketType.AGENT_TOOL_TASK,
+    PacketType.AGENT_TOOL_RESULT,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
