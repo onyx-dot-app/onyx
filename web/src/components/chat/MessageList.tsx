@@ -195,7 +195,7 @@ const MessageList = React.memo(
               >
                 <AgentMessage
                   rawPackets={message.packets}
-                  packetCount={message.packetsVersion}
+                  packetCount={message.packetCount}
                   chatState={chatStateData}
                   nodeId={message.nodeId}
                   messageId={message.messageId}
