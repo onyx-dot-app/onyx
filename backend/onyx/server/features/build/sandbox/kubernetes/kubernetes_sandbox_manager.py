@@ -34,6 +34,7 @@ All database operations should be handled by the caller (SessionManager, Celery 
 Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
+import base64
 import io
 import json
 import mimetypes
@@ -1512,7 +1513,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             raise RuntimeError(f"Failed to list directory: {e}") from e
 
     def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
-        """Parse ls -la output into FilesystemEntry objects."""
+        """Parse ls -la output into FilesystemEntry objects.
+
+        Handles regular files, directories, and symlinks. Symlinks to directories
+        are treated as directories for navigation purposes.
+        """
         entries = []
         lines = ls_output.strip().split("\n")
 
@@ -1529,11 +1534,32 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             if len(parts) < 8:
                 continue
 
-            name = parts[-1]
+            # Handle symlinks: format is "name -> target"
+            # For symlinks, parts[-1] is the target, not the name
+            is_symlink = line.startswith("l")
+            if is_symlink and " -> " in line:
+                # Extract name from the "name -> target" portion
+                # Find the position after the timestamp (parts[7] for --time-style=+%s)
+                # The rest is "name -> target"
+                try:
+                    # Rejoin from index 7 onwards to handle names with spaces
+                    name_and_target = " ".join(parts[7:])
+                    if " -> " in name_and_target:
+                        name = name_and_target.split(" -> ")[0]
+                    else:
+                        name = parts[-1]
+                except (IndexError, ValueError):
+                    name = parts[-1]
+            else:
+                name = parts[-1]
+
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d")
+            # Directories start with 'd', symlinks start with 'l'
+            # Treat symlinks as directories (they typically point to directories
+            # in our sandbox setup, like files/ -> /workspace/demo-data)
+            is_directory = line.startswith("d") or is_symlink
             size_str = parts[4]
 
             try:
@@ -1580,11 +1606,12 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         clean_path = path.lstrip("/").replace("..", "")
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
 
-        # Use exec to read file (base64 encode to handle binary)
+        # Use exec to read file with base64 encoding to handle binary data
+        # Base64 encode the output to safely transport binary content
         exec_command = [
             "/bin/sh",
             "-c",
-            f'cat "{target_path}" 2>/dev/null || echo "ERROR_NOT_FOUND"',
+            f'if [ -f "{target_path}" ]; then base64 "{target_path}"; else echo "ERROR_NOT_FOUND"; fi',
         ]
 
         try:
@@ -1598,16 +1625,17 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 stdin=False,
                 stdout=True,
                 tty=False,
-                _preload_content=False,  # Return raw bytes
             )
 
-            # Read response
-            content = b""
-            for chunk in resp:
-                content += chunk
-
-            if b"ERROR_NOT_FOUND" in content:
+            if "ERROR_NOT_FOUND" in resp:
                 raise ValueError(f"File not found: {path}")
+
+            # Decode base64 content
+            try:
+                content = base64.b64decode(resp.strip())
+            except Exception as e:
+                logger.error(f"Failed to decode base64 content: {e}")
+                raise RuntimeError(f"Failed to decode file content: {e}") from e
 
             return content
 

@@ -784,11 +784,31 @@ class LocalSandboxManager(SandboxManager):
         session_path = self._get_session_path(sandbox_id, session_id)
         target_path = session_path / path.lstrip("/")
 
-        # Security: ensure path is within sessions directory
-        try:
-            target_path.resolve().relative_to(session_path.resolve())
-        except ValueError:
-            raise ValueError("Path traversal not allowed")
+        # Security: ensure path is within sessions directory OR is the files/ symlink
+        # The files/ symlink intentionally points outside session_path to knowledge files
+        files_symlink = session_path / "files"
+        is_within_files_symlink = False
+
+        if files_symlink.is_symlink():
+            # Check if target_path is the files/ symlink or inside it
+            try:
+                # Use lexical check (without resolving symlinks) first
+                target_path.relative_to(files_symlink)
+                is_within_files_symlink = True
+            except ValueError:
+                # Not within files/ path
+                pass
+
+            # Also allow the files/ symlink itself
+            if target_path == files_symlink:
+                is_within_files_symlink = True
+
+        if not is_within_files_symlink:
+            # Standard security check for non-files/ paths
+            try:
+                target_path.resolve().relative_to(session_path.resolve())
+            except ValueError:
+                raise ValueError("Path traversal not allowed")
 
         if not target_path.is_dir():
             raise ValueError(f"Not a directory: {path}")
@@ -827,11 +847,25 @@ class LocalSandboxManager(SandboxManager):
         session_path = self._get_session_path(sandbox_id, session_id)
         target_path = session_path / path.lstrip("/")
 
-        # Security: ensure path is within sessions directory
-        try:
-            target_path.resolve().relative_to(session_path.resolve())
-        except ValueError:
-            raise ValueError("Path traversal not allowed")
+        # Security: ensure path is within sessions directory OR is within files/ symlink
+        # The files/ symlink intentionally points outside session_path to knowledge files
+        files_symlink = session_path / "files"
+        is_within_files_symlink = False
+
+        if files_symlink.is_symlink():
+            # Check if target_path is within the files/ symlink
+            try:
+                target_path.relative_to(files_symlink)
+                is_within_files_symlink = True
+            except ValueError:
+                pass
+
+        if not is_within_files_symlink:
+            # Standard security check for non-files/ paths
+            try:
+                target_path.resolve().relative_to(session_path.resolve())
+            except ValueError:
+                raise ValueError("Path traversal not allowed")
 
         if not target_path.is_file():
             raise ValueError(f"Not a file: {path}")
