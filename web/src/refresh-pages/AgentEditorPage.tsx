@@ -454,15 +454,20 @@ export default function AgentEditorPage({
   // LLM Model Selection
   const getCurrentLlm = useCallback(
     (values: any, llmProviders: any) =>
-      values.llm_model_version_override && values.llm_model_provider_override
+      values.model_configuration_id_override
         ? (() => {
-            const provider = llmProviders?.find(
-              (p: any) => p.name === values.llm_model_provider_override
+            const provider = llmProviders?.find((p: any) =>
+              p.model_configurations.find(
+                (m: any) => m.id === values.model_configuration_id_override
+              )
+            );
+            const model = provider?.model_configurations?.find(
+              (m: any) => m.id === values.model_configuration_id_override
             );
             return structureValue(
-              values.llm_model_provider_override,
+              provider?.name || "",
               provider?.provider || "",
-              values.llm_model_version_override
+              model?.name || ""
             );
           })()
         : null,
@@ -472,13 +477,16 @@ export default function AgentEditorPage({
   const onLlmSelect = useCallback(
     (selected: string | null, setFieldValue: any) => {
       if (selected === null) {
-        setFieldValue("llm_model_version_override", null);
-        setFieldValue("llm_model_provider_override", null);
+        setFieldValue("model_configuration_id_override", null);
       } else {
         const { modelName, name } = parseLlmDescriptor(selected);
         if (modelName && name) {
-          setFieldValue("llm_model_version_override", modelName);
-          setFieldValue("llm_model_provider_override", name);
+          const model = llmProviders
+            ?.find((p: any) =>
+              p.model_configurations.find((m: any) => m.name === modelName)
+            )
+            ?.model_configurations?.find((m: any) => m.name === modelName);
+          setFieldValue("model_configuration_id_override", model?.id || null);
         }
       }
     },
@@ -568,10 +576,8 @@ export default function AgentEditorPage({
     user_file_ids: existingAgent?.user_file_ids ?? [],
 
     // Advanced
-    llm_model_provider_override:
-      existingAgent?.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      existingAgent?.llm_model_version_override ?? null,
+    model_configuration_id_override:
+      existingAgent?.model_configuration_id_override ?? null,
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
@@ -690,8 +696,7 @@ export default function AgentEditorPage({
       ),
 
     // Advanced
-    llm_model_provider_override: Yup.string().nullable().optional(),
-    llm_model_version_override: Yup.string().nullable().optional(),
+    model_configuration_id_override: Yup.number().nullable().optional(),
     knowledge_cutoff_date: Yup.date().nullable().optional(),
     replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
@@ -794,8 +799,8 @@ export default function AgentEditorPage({
         // recency_bias: ...,
         // llm_filter_extraction: ...,
         llm_relevance_filter: false,
-        llm_model_provider_override: values.llm_model_provider_override || null,
-        llm_model_version_override: values.llm_model_version_override || null,
+        model_configuration_id_override:
+          values.model_configuration_id_override || null,
         starter_messages: finalStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,

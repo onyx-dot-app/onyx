@@ -16,8 +16,7 @@ interface PersonaUpsertRequest {
   recency_bias: string;
   llm_filter_extraction: boolean;
   llm_relevance_filter: boolean | null;
-  llm_model_provider_override: string | null;
-  llm_model_version_override: string | null;
+  model_configuration_id_override: number | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
@@ -44,8 +43,7 @@ export interface PersonaUpsertParameters {
   num_chunks: number | null;
   is_public: boolean;
   llm_relevance_filter: boolean | null;
-  llm_model_provider_override: string | null;
-  llm_model_version_override: string | null;
+  model_configuration_id_override: number | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
@@ -78,8 +76,7 @@ function buildPersonaUpsertRequest({
   uploaded_image_id,
   is_default_persona,
   llm_relevance_filter,
-  llm_model_provider_override,
-  llm_model_version_override,
+  model_configuration_id_override,
   starter_messages,
   label_ids,
   replace_base_system_prompt,
@@ -104,8 +101,7 @@ function buildPersonaUpsertRequest({
     recency_bias: "base_decay",
     llm_filter_extraction: false,
     llm_relevance_filter: llm_relevance_filter ?? null,
-    llm_model_provider_override: llm_model_provider_override ?? null,
-    llm_model_version_override: llm_model_version_override ?? null,
+    model_configuration_id_override: model_configuration_id_override ?? null,
     starter_messages: starter_messages ?? null,
     display_priority: null,
     label_ids: label_ids ?? null,

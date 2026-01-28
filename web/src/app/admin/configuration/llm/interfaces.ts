@@ -14,8 +14,11 @@ export interface ModelConfiguration {
   is_visible: boolean;
   max_input_tokens: number | null;
   supports_image_input: boolean | null;
-  supports_reasoning?: boolean;
   display_name?: string;
+}
+export interface ModelConfigurationView extends ModelConfiguration {
+  id: number;
+  supports_reasoning?: boolean;
   provider_display_name?: string;
   vendor?: string;
   version?: string;
@@ -55,7 +58,7 @@ export interface LLMProvider {
   deployment_name: string | null;
   default_vision_model: string | null;
   is_default_vision_provider: boolean | null;
-  model_configurations: ModelConfiguration[];
+  model_configurations: ModelConfigurationView[];
 }
 
 export interface LLMProviderView extends LLMProvider {
@@ -78,7 +81,7 @@ export interface LLMProviderDescriptor {
   is_public?: boolean;
   groups?: number[];
   personas?: number[];
-  model_configurations: ModelConfiguration[];
+  model_configurations: ModelConfigurationView[];
 }
 
 export interface OllamaModelResponse {
