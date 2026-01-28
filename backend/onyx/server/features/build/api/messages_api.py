@@ -73,7 +73,7 @@ def list_messages(
 
 
 @router.post("/sessions/{session_id}/send-message", tags=PUBLIC_API_TAGS)
-async def send_message(
+def send_message(
     session_id: UUID,
     request: MessageRequest,
     user: User = Depends(current_user),
