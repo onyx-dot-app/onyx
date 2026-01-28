@@ -117,10 +117,6 @@ const AdvancedEmbeddingFormPage = forwardRef<
                   return !enableContextualRag || value !== null;
                 }
               ),
-            disable_rerank_for_streaming: Yup.boolean(),
-            num_rerank: Yup.number()
-              .required("Number of results to rerank is required")
-              .min(1, "Must be at least 1"),
             embedding_precision: Yup.string().nullable(),
             reduced_dimension: Yup.number()
               .nullable()
@@ -188,10 +184,6 @@ const AdvancedEmbeddingFormPage = forwardRef<
                           return !enableContextualRag || value !== null;
                         }
                       ),
-                    disable_rerank_for_streaming: Yup.boolean(),
-                    num_rerank: Yup.number()
-                      .required("Number of results to rerank is required")
-                      .min(1, "Must be at least 1"),
                     embedding_precision: Yup.string().nullable(),
                     reduced_dimension: Yup.number()
                       .nullable()
@@ -231,50 +223,11 @@ const AdvancedEmbeddingFormPage = forwardRef<
         >
           {({ values }) => (
             <Form>
-              <FieldArray name="multilingual_expansion">
-                {({ push, remove }) => (
-                  <div className="w-full">
-                    <Label>Multi-lingual Expansion</Label>
-
-                    <SubLabel>Add additional languages to the search.</SubLabel>
-                    {values.multilingual_expansion.map(
-                      (_: any, index: number) => (
-                        <div key={index} className="w-full flex mb-4">
-                          <Field
-                            name={`multilingual_expansion.${index}`}
-                            className={`w-full bg-input text-sm p-2  border border-border-medium rounded-md
-                                      focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mr-2`}
-                          />
-                          <IconButton
-                            icon={SvgTrash}
-                            danger
-                            onClick={() => remove(index)}
-                          />
-                        </div>
-                      )
-                    )}
-                    <Button
-                      leftIcon={SvgPlusCircle}
-                      onClick={() => push("")}
-                      className="bg-rose-500 hover:bg-rose-600"
-                    >
-                      Add Language
-                    </Button>
-                  </div>
-                )}
-              </FieldArray>
-
               <BooleanFormField
                 subtext="Enable multipass indexing for both mini and large chunks."
                 optional
                 label="Multipass Indexing"
                 name="multipass_indexing"
-              />
-              <BooleanFormField
-                subtext="Disable reranking for streaming to improve response time."
-                optional
-                label="Disable Rerank for Streaming"
-                name="disable_rerank_for_streaming"
               />
               <BooleanFormField
                 subtext={
@@ -331,13 +284,6 @@ const AdvancedEmbeddingFormPage = forwardRef<
                     </div>
                   )}
               </div>
-              <NumberInput
-                description="Number of results to rerank"
-                optional={false}
-                label="Number of Results to Rerank"
-                name="num_rerank"
-              />
-
               <SelectorFormField
                 name="embedding_precision"
                 label="Embedding Precision"
