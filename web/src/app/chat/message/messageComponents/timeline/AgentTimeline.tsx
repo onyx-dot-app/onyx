@@ -239,6 +239,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             isExpanded={isExpanded}
             onToggle={handleToggle}
             streamingStartTime={streamingStartTime}
+            toolProcessingDuration={toolProcessingDuration}
           />
         );
 
@@ -258,6 +259,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             totalSteps={totalSteps}
             collapsible={collapsible}
             onToggle={handleToggle}
+            processingDurationSeconds={
+              toolProcessingDuration ?? processingDurationSeconds
+            }
+            generatedImageCount={generatedImageCount}
           />
         );
 

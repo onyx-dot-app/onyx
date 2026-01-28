@@ -13,6 +13,8 @@ export interface StreamingHeaderProps {
   isExpanded: boolean;
   onToggle: () => void;
   streamingStartTime?: number;
+  /** Tool processing duration from backend (freezes timer when available) */
+  toolProcessingDuration?: number;
 }
 
 /** Header during streaming - shimmer text with current activity */
@@ -23,8 +25,14 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   isExpanded,
   onToggle,
   streamingStartTime,
+  toolProcessingDuration = 0,
 }: StreamingHeaderProps) {
-  const elapsedSeconds = useStreamingDuration(true, streamingStartTime);
+  // Use backend duration when available, otherwise continue live timer
+  const elapsedSeconds = useStreamingDuration(
+    toolProcessingDuration === undefined, // Stop updating when we have backend duration
+    streamingStartTime,
+    toolProcessingDuration
+  );
   const showElapsedTime =
     isExpanded && streamingStartTime && elapsedSeconds > 0;
 

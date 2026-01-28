@@ -871,7 +871,6 @@ export function useChatController({
                   overridden_model: finalMessage?.overridden_model,
                   stopReason: stopReason,
                   packets: packets,
-                  packetsVersion: packetsVersion,
                   packetCount: packets.length,
                   processingDurationSeconds:
                     finalMessage?.processing_duration_seconds ??
