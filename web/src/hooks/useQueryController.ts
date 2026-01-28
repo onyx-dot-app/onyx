@@ -56,7 +56,7 @@ export interface UseQueryControllerReturn {
  * }
  * ```
  */
-export function useQueryController(
+export default function useQueryController(
   onChat: (query: string) => void
 ): UseQueryControllerReturn {
   const { appMode } = useAppMode();

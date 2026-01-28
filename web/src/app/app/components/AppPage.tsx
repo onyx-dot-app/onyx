@@ -41,7 +41,7 @@ import { useAssistantController } from "@/app/app/hooks/useAssistantController";
 import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
 import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
 import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
-import { useQueryController } from "@/hooks/useQueryController";
+import useQueryController from "@/hooks/useQueryController";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import {
