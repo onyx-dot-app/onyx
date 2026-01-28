@@ -241,7 +241,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 			log.Infof("All commits already exist on branch %s", hotfixBranch)
 		} else {
 			// Cherry-pick only the missing commits
-			if err := performCherryPick(commitsToCherry, noVerify); err != nil {
+			if err := performCherryPick(commitsToCherry); err != nil {
 				return "", err
 			}
 		}
@@ -253,7 +253,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 		}
 
 		// Cherry-pick all commits
-		if err := performCherryPick(commitSHAs, noVerify); err != nil {
+		if err := performCherryPick(commitSHAs); err != nil {
 			return "", err
 		}
 	}
@@ -285,8 +285,8 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 	return prURL, nil
 }
 
-// performCherryPick cherry-picks the given commits with optional --no-verify flag
-func performCherryPick(commitSHAs []string, noVerify bool) error {
+// performCherryPick cherry-picks the given commits
+func performCherryPick(commitSHAs []string) error {
 	if len(commitSHAs) == 0 {
 		return nil
 	}
@@ -298,10 +298,8 @@ func performCherryPick(commitSHAs []string, noVerify bool) error {
 	}
 
 	// Build git cherry-pick command with all commits
+	// Note: git cherry-pick does not support --no-verify; hooks run during cherry-pick
 	cherryPickArgs := []string{"cherry-pick"}
-	if noVerify {
-		cherryPickArgs = append(cherryPickArgs, "--no-verify")
-	}
 	cherryPickArgs = append(cherryPickArgs, commitSHAs...)
 
 	if err := git.RunCommandVerboseOnError(cherryPickArgs...); err != nil {
