@@ -26,7 +26,7 @@ class LLMProviderManager:
         personas: list[int] | None = None,
         is_public: bool | None = None,
         set_as_default: bool = True,
-        model_configuarations: list[ModelConfigurationUpsertRequest] | None = None,
+        model_configurations: list[ModelConfigurationUpsertRequest] | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
         email = "Unknown"
@@ -46,7 +46,7 @@ class LLMProviderManager:
             is_public=True if is_public is None else is_public,
             groups=groups or [],
             personas=personas or [],
-            model_configurations=model_configuarations or [],
+            model_configurations=model_configurations or [],
             api_key_changed=True,
         )
 

@@ -125,6 +125,10 @@ def get_llm_for_persona(
             )
             model = model_config.name if model_config else None
 
+        # Fall back to provider's default model if no model was resolved
+        if not model:
+            model = llm_provider.default_model_name
+
     if not model:
         raise ValueError("No model name found")
 

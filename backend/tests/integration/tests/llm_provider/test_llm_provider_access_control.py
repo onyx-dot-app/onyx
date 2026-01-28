@@ -458,7 +458,7 @@ def test_provider_delete_clears_persona_references(reset: None) -> None:
         is_public=False,
         set_as_default=False,
         user_performing_action=admin_user,
-        model_configuarations=[
+        model_configurations=[
             LLMProviderManager.build_model_configuration_upsert_request(
                 name="model-1",
                 is_visible=True,
