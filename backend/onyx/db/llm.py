@@ -478,7 +478,7 @@ def fetch_model_configuration_view(
 
     return ModelConfigurationView.from_model(
         model_configuration_model=model_configuration_model,
-        provider_name=model_configuration_model.llm_provider.name,
+        provider=model_configuration_model.llm_provider.provider,
     )
 
 

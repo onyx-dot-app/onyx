@@ -473,7 +473,7 @@ def get_valid_models_for_persona(
                     valid_models.append(
                         ModelConfigurationView.from_model(
                             model_configuration_model=model_config,
-                            provider_name=llm_provider_model.name,
+                            provider=llm_provider_model.provider,
                         )
                     )
 

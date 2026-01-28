@@ -199,17 +199,14 @@ class ModelConfigurationView(ModelConfiguration):
     def from_model(
         cls,
         model_configuration_model: "ModelConfigurationModel",
-        provider_name: str,
+        provider: str,
     ) -> "ModelConfigurationView":
         # For dynamic providers (OpenRouter, Bedrock, Ollama), use the display_name
         # stored in DB from the source API. Skip LiteLLM parsing entirely.
-        if (
-            provider_name in DYNAMIC_LLM_PROVIDERS
-            and model_configuration_model.display_name
-        ):
+        if provider in DYNAMIC_LLM_PROVIDERS and model_configuration_model.display_name:
             # Extract vendor from model name for grouping (e.g., "Anthropic", "OpenAI")
             vendor = extract_vendor_from_model_name(
-                model_configuration_model.name, provider_name
+                model_configuration_model.name, provider
             )
 
             return cls(
@@ -238,8 +235,8 @@ class ModelConfigurationView(ModelConfiguration):
         # Parse the model name to get display information
         # Include provider prefix if not already present (enrichments use full keys like "vertex_ai/...")
         model_name = model_configuration_model.name
-        if provider_name and not model_name.startswith(f"{provider_name}/"):
-            model_name = f"{provider_name}/{model_name}"
+        if provider and not model_name.startswith(f"{provider}/"):
+            model_name = f"{provider}/{model_name}"
         parsed = parse_litellm_model_name(model_name)
 
         # Include region in display name for Bedrock cross-region models
@@ -257,18 +254,18 @@ class ModelConfigurationView(ModelConfiguration):
                 model_configuration_model.max_input_tokens
                 or get_max_input_tokens(
                     model_name=model_configuration_model.name,
-                    model_provider=provider_name,
+                    model_provider=provider,
                 )
             ),
             supports_image_input=(
                 val
                 if (val := model_configuration_model.supports_image_input) is not None
                 else litellm_thinks_model_supports_image_input(
-                    model_configuration_model.name, provider_name
+                    model_configuration_model.name, provider
                 )
             ),
             supports_reasoning=model_is_reasoning_model(
-                model_configuration_model.name, provider_name
+                model_configuration_model.name, provider
             ),
             # Populate display fields from parsed model name
             display_name=display_name,
