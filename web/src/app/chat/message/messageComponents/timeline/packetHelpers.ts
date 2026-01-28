@@ -6,11 +6,17 @@ export const COMPACT_SUPPORTED_PACKET_TYPES = new Set<PacketType>([
   PacketType.FETCH_TOOL_START,
   PacketType.PYTHON_TOOL_START,
   PacketType.CUSTOM_TOOL_START,
+  PacketType.RESEARCH_AGENT_START,
+  PacketType.REASONING_START,
 ]);
 
 // Check if packets belong to a research agent (handles its own Done indicator)
 export const isResearchAgentPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
+
+// Check if packets belong to a search tool
+export const isSearchToolPackets = (packets: Packet[]): boolean =>
+  packets.some((p) => p.obj.type === PacketType.SEARCH_TOOL_START);
 
 // Check if step supports compact rendering mode
 export const stepSupportsCompact = (packets: Packet[]): boolean =>

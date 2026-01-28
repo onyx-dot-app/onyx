@@ -96,10 +96,12 @@ const AgentMessage = React.memo(function AgentMessage({
     hasSteps,
     stopPacketSeen,
     stopReason,
-    uniqueToolNames,
     isGeneratingImage,
+    generatedImageCount,
     isComplete,
     onRenderComplete,
+    finalAnswerComing,
+    toolProcessingDuration,
   } = usePacketProcessor(rawPackets, nodeId);
 
   // Memoize merged citations separately to avoid creating new object when neither source changed
@@ -156,9 +158,11 @@ const AgentMessage = React.memo(function AgentMessage({
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}
         hasDisplayContent={displayGroups.length > 0}
-        uniqueToolNames={uniqueToolNames}
         processingDurationSeconds={processingDurationSeconds}
         isGeneratingImage={isGeneratingImage}
+        generatedImageCount={generatedImageCount}
+        finalAnswerComing={finalAnswerComing}
+        toolProcessingDuration={toolProcessingDuration}
       />
 
       {/* Row 2: Display content + MessageToolbar */}
@@ -189,7 +193,13 @@ const AgentMessage = React.memo(function AgentMessage({
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
               >
-                {({ content }) => <div>{content}</div>}
+                {(results) => (
+                  <>
+                    {results.map((r, i) => (
+                      <div key={i}>{r.content}</div>
+                    ))}
+                  </>
+                )}
               </RendererComponent>
             ))}
             {/* Show stopped message when user cancelled and no display content */}

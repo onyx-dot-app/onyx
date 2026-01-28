@@ -116,25 +116,27 @@ export const ReasoningRenderer: MessageRenderer<
   );
 
   if (!hasStart && !hasEnd && content.length === 0) {
-    return children({ icon: SvgCircle, status: null, content: <></> });
+    return children([{ icon: SvgCircle, status: null, content: <></> }]);
   }
 
   const reasoningContent = (
     <ExpandableTextDisplay
-      title="Thinking"
+      title="Full text"
       content={content}
-      displayContent={content}
       maxLines={5}
       renderContent={renderMarkdown}
+      isStreaming={!hasEnd}
     />
   );
 
-  return children({
-    icon: SvgCircle,
-    status: THINKING_STATUS,
-    content: reasoningContent,
-    expandedText: reasoningContent,
-  });
+  return children([
+    {
+      icon: SvgCircle,
+      status: null,
+      content: reasoningContent,
+      expandedText: reasoningContent,
+    },
+  ]);
 };
 
 export default ReasoningRenderer;

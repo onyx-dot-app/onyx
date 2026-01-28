@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Modal from "@/refresh-components/Modal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
 import { cn } from "@/lib/utils";
 
@@ -25,12 +24,14 @@ export interface ExpandableTextDisplayProps {
   className?: string;
   /** Optional custom renderer for content (e.g., markdown). Falls back to plain text. */
   renderContent?: (content: string) => React.ReactNode;
+  /** When true, uses scrollable container with auto-scroll instead of line-clamp */
+  isStreaming?: boolean;
 }
 
 /** Calculate content size in human-readable format */
 function getContentSize(text: string): string {
   const bytes = new Blob([text]).size;
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${bytes} Bytes`;
   return `${(bytes / 1024).toFixed(2)} KB`;
 }
 
@@ -55,6 +56,9 @@ function downloadAsTxt(content: string, filename: string) {
   }
 }
 
+/** Approximate line height for max-height calculation in streaming mode */
+const LINE_HEIGHT_PX = 20;
+
 export default function ExpandableTextDisplay({
   title,
   content,
@@ -63,12 +67,44 @@ export default function ExpandableTextDisplay({
   maxLines = 5,
   className,
   renderContent,
+  isStreaming = false,
 }: ExpandableTextDisplayProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const textRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevIsStreamingRef = useRef(isStreaming);
 
   const lineCount = useMemo(() => getLineCount(content), [content]);
   const contentSize = useMemo(() => getContentSize(content), [content]);
   const displaySubtitle = subtitle ?? contentSize;
+
+  useLayoutEffect(() => {
+    // Use scrollRef for streaming mode or when renderContent is provided (max-height approach)
+    // Use textRef only for plain text with line-clamp
+    const el =
+      isStreaming || renderContent ? scrollRef.current : textRef.current;
+    if (el) {
+      setIsTruncated(el.scrollHeight > el.clientHeight);
+    }
+  }, [content, displayContent, maxLines, isStreaming, renderContent]);
+
+  // Auto-scroll to bottom when streaming, reset to top when streaming ends
+  // Use useEffect (not useLayoutEffect) to ensure content is fully rendered before scrolling
+  useEffect(() => {
+    if (isStreaming && scrollRef.current) {
+      // Auto-scroll to bottom during streaming
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    } else if (
+      prevIsStreamingRef.current &&
+      !isStreaming &&
+      scrollRef.current
+    ) {
+      // When streaming just ended, reset scroll to top
+      scrollRef.current.scrollTop = 0;
+    }
+    prevIsStreamingRef.current = isStreaming;
+  }, [isStreaming, content, displayContent]);
 
   const handleDownload = () => {
     const sanitizedTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
@@ -88,31 +124,58 @@ export default function ExpandableTextDisplay({
   return (
     <>
       {/* Collapsed View */}
-      <div className={cn("w-full", className)}>
-        <div
-          className={cn(
-            lineClampClass,
-            !renderContent && "whitespace-pre-wrap"
-          )}
-        >
-          {renderContent ? (
-            renderContent(displayContent ?? content)
-          ) : (
-            <Text as="p" mainUiMuted text03>
-              {displayContent ?? content}
-            </Text>
-          )}
-        </div>
+      <div className={cn("w-full flex", className)}>
+        {(() => {
+          // Build the content element
+          const contentElement =
+            isStreaming || renderContent ? (
+              // Streaming mode: scrollable container with auto-scroll
+              // Rendered content (markdown): use max-height + overflow-hidden
+              // (line-clamp uses display: -webkit-box which conflicts with complex HTML)
+              <div
+                ref={scrollRef}
+                className={cn(
+                  isStreaming
+                    ? "overflow-y-auto no-scrollbar"
+                    : "overflow-hidden",
+                  !renderContent && "whitespace-pre-wrap"
+                )}
+                style={{ maxHeight: `${maxLines * LINE_HEIGHT_PX}px` }}
+              >
+                {renderContent ? (
+                  renderContent(displayContent ?? content)
+                ) : (
+                  <Text as="p" mainUiMuted text03>
+                    {displayContent ?? content}
+                  </Text>
+                )}
+              </div>
+            ) : (
+              // Static mode with plain text: use line-clamp
+              <div
+                ref={textRef}
+                className={cn(lineClampClass, "whitespace-pre-wrap")}
+              >
+                <Text as="p" mainUiMuted text03>
+                  {displayContent ?? content}
+                </Text>
+              </div>
+            );
 
-        {/* Expand button */}
-        <div className="flex justify-end mt-1">
-          <IconButton
-            internal
-            icon={SvgMaximize2}
-            tooltip="View Full Text"
-            onClick={() => setIsModalOpen(true)}
-          />
-        </div>
+          return contentElement;
+        })()}
+
+        {/* Expand button - only show when content is truncated */}
+        {isTruncated && (
+          <div className="flex items-end mt-1">
+            <IconButton
+              internal
+              icon={SvgMaximize2}
+              tooltip="View Full Text"
+              onClick={() => setIsModalOpen(true)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Expanded Modal */}
