@@ -1,5 +1,3 @@
-"""Minimal AgentTool implementation - allows one persona to call another as a tool."""
-
 from collections.abc import Callable
 
 from sqlalchemy.orm import Session
@@ -192,7 +190,7 @@ class AgentTool(Tool[AgentToolOverrideKwargs | None]):
     ) -> AgentCallResult:
         """Run sub-agent LLM loop."""
 
-        # FIXME: Local import to avoid circular dependency through built_in_tools
+        # Local import to avoid circular dependency through built_in_tools
 
         from onyx.chat.llm_loop import construct_message_history
 
