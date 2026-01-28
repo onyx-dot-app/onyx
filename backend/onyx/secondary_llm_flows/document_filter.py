@@ -13,6 +13,8 @@ from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
 from onyx.tools.tool_implementations.search.constants import (
     MAX_CHUNKS_FOR_RELEVANCE,
 )
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -121,13 +123,18 @@ def classify_section_relevance(
     # Default to MAIN_SECTION_ONLY
     default_classification = ContextExpansionType.MAIN_SECTION_ONLY
 
-    # Call LLM for classification
+    # Call LLM for classification with Braintrust tracing
     try:
-        response = llm.invoke(
-            prompt=UserMessage(content=prompt_text),
-            reasoning_effort=ReasoningEffort.OFF,
-        )
-        llm_response = response.choice.message.content
+        prompt_msg = UserMessage(content=prompt_text)
+        with llm_generation_span(
+            llm=llm, flow="classify_section_relevance", input_messages=[prompt_msg]
+        ) as span_generation:
+            response = llm.invoke(
+                prompt=prompt_msg,
+                reasoning_effort=ReasoningEffort.OFF,
+            )
+            llm_response = response.choice.message.content
+            record_llm_span_output(span_generation, llm_response, response.usage)
 
         if not llm_response:
             logger.warning(
@@ -266,12 +273,16 @@ def select_sections_for_expansion(
         )
     )
 
-    # Call LLM for selection
+    # Call LLM for selection with Braintrust tracing
     try:
-        response = llm.invoke(
-            prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
-        )
-        llm_response = response.choice.message.content
+        with llm_generation_span(
+            llm=llm, flow="select_sections_for_expansion", input_messages=[prompt_text]
+        ) as span_generation:
+            response = llm.invoke(
+                prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
+            )
+            llm_response = response.choice.message.content
+            record_llm_span_output(span_generation, llm_response, response.usage)
 
         if not llm_response:
             logger.warning(

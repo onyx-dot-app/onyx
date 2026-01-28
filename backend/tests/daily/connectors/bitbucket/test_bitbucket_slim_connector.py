@@ -5,6 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.bitbucket.connector import BitbucketConnector
+from onyx.connectors.models import HierarchyNode
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
@@ -46,7 +47,9 @@ def test_bitbucket_full_ids_subset_of_slim_ids(
     for (
         slim_doc_batch
     ) in bitbucket_connector_for_slim.retrieve_all_slim_docs_perm_sync():
-        all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
+        all_slim_doc_ids.update(
+            [doc.id for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # The set of full doc IDs should always be a subset of slim doc IDs
     assert all_full_doc_ids.issubset(all_slim_doc_ids)

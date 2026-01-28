@@ -5,6 +5,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -49,6 +50,9 @@ def generic_doc_sync(
             callback.progress(label, 1)
 
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                # TODO: handle hierarchynodes during sync
+                continue
             if not doc.external_access:
                 raise RuntimeError(
                     f"No external access found for document ID; {cc_pair.id=} {doc_source=} {doc.id=}"

@@ -21,6 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
@@ -478,7 +479,7 @@ class TestRailConnector(LoadConnector, PollConnector):
         if not self.base_url or not self.username or not self.api_key:
             raise ConnectorMissingCredentialError("testrail")
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         projects = self._list_projects()
         project_filter: list[int] | None = self.project_ids

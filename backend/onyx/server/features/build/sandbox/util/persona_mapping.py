@@ -21,8 +21,8 @@ class PersonaInfo(TypedDict):
 PERSONA_MAPPING: dict[str, dict[str, PersonaInfo]] = {
     "engineering": {
         "ic": {
-            "name": "Tyler Jenkins",
-            "email": "tyler_jenkins@netherite-extraction.onyx.app",
+            "name": "Jiwon Kang",
+            "email": "jiwon_kang@netherite-extraction.onyx.app",
         },
         "manager": {
             "name": "Javier Morales",

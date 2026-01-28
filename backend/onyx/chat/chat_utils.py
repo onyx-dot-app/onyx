@@ -9,12 +9,6 @@ from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import is_user_admin
-from onyx.background.celery.tasks.kg_processing.kg_indexing import (
-    try_creating_kg_processing_task,
-)
-from onyx.background.celery.tasks.kg_processing.kg_indexing import (
-    try_creating_kg_source_reset_task,
-)
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import PersonaOverrideConfig
@@ -37,7 +31,6 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.projects import check_project_ownership
-from onyx.db.search_settings import get_current_search_settings
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
@@ -359,39 +352,7 @@ def process_kg_commands(
     if not is_kg_config_settings_enabled_valid(kg_config_settings):
         return
 
-    # get Vespa index
-    search_settings = get_current_search_settings(db_session)
-    index_str = search_settings.index_name
-
-    if message == "kg_p":
-        success = try_creating_kg_processing_task(tenant_id)
-        if success:
-            raise KGException("KG processing scheduled")
-        else:
-            raise KGException(
-                "Cannot schedule another KG processing if one is already running "
-                "or there are no documents to process"
-            )
-
-    elif message.startswith("kg_rs_source"):
-        msg_split = [x for x in message.split(":")]
-        if len(msg_split) > 2:
-            raise KGException("Invalid format for a source reset command")
-        elif len(msg_split) == 2:
-            source_name = msg_split[1].strip()
-        elif len(msg_split) == 1:
-            source_name = None
-        else:
-            raise KGException("Invalid format for a source reset command")
-
-        success = try_creating_kg_source_reset_task(tenant_id, source_name, index_str)
-        if success:
-            source_name = source_name or "all"
-            raise KGException(f"KG index reset for source '{source_name}' scheduled")
-        else:
-            raise KGException("Cannot reset index while KG processing is running")
-
-    elif message == "kg_setup":
+    if message == "kg_setup":
         populate_missing_default_entity_types__commit(db_session=db_session)
         raise KGException("KG setup done")
 

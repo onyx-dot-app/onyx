@@ -25,7 +25,6 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
@@ -382,9 +381,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const retrievalEnabled = useMemo(() => {
     if (liveAssistant) {
-      return liveAssistant.tools.some(
-        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
-      );
+      return personaIncludesRetrieval(liveAssistant);
     }
     return false;
   }, [liveAssistant]);
