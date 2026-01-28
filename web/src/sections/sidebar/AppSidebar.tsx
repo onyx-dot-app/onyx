@@ -66,8 +66,9 @@ import {
   SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
-import BuildModeIntroBackground from "@/app/build/components/IntroBackground";
-import BuildModeIntroContent from "@/app/build/components/IntroContent";
+import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
+import BuildModeIntroContent from "@/app/craft/components/IntroContent";
+import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Notification,
@@ -440,7 +441,7 @@ const MemoizedAppSidebarInner = memo(
     const buildButton = useMemo(
       () => (
         <div data-testid="AppSidebar/build">
-          <SidebarTab leftIcon={SvgDevKit} folded={folded} href="/build/v1">
+          <SidebarTab leftIcon={SvgDevKit} folded={folded} href={CRAFT_PATH}>
             Craft
           </SidebarTab>
         </div>
@@ -580,7 +581,7 @@ const MemoizedAppSidebarInner = memo(
                 onTryBuildMode={() => {
                   setShowIntroAnimation(false);
                   dismissBuildModeNotification();
-                  router.push("/build/v1");
+                  router.push(CRAFT_PATH);
                 }}
               />
             </motion.div>
