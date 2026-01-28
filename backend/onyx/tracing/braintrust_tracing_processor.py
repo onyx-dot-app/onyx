@@ -249,10 +249,12 @@ class BraintrustTracingProcessor(TracingProcessor):
             braintrust.flush()
 
 
-def _generation_span_name(span: Span[GenerationSpanData]) -> str:
-    model_config = span.span_data.model_config
-    if isinstance(model_config, dict):
-        flow = model_config.get("flow")
-        if isinstance(flow, str) and flow.strip():
-            return flow
+def _generation_span_name(span: Span[SpanData]) -> str:
+    data = span.span_data
+    if isinstance(data, GenerationSpanData):
+        model_config = data.model_config
+        if isinstance(model_config, dict):
+            flow = model_config.get("flow")
+            if isinstance(flow, str) and flow.strip():
+                return flow
     return _span_name(span)

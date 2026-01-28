@@ -27,7 +27,7 @@ def build_llm_model_config(llm: LLM, flow: str | None = None) -> dict[str, Any]:
 def llm_generation_span(
     llm: LLM,
     flow: str | None,
-    input_messages: Sequence[Mapping[str, Any]] | None = None,
+    input_messages: Sequence[Any] | None = None,
     parent: Any | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     with generation_span(
