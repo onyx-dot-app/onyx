@@ -23,14 +23,13 @@ export function useBuildLlmSelection(
     () => getBuildLlmSelection()
   );
 
-  // Validate that a selection is still valid against current providers
+  // Validate that a selection is still valid against current providers.
+  // Only checks that the provider exists
   const isSelectionValid = useCallback(
     (sel: BuildLlmSelection | null): boolean => {
       if (!sel || !llmProviders) return false;
-      const provider = llmProviders.find((p) => p.name === sel.providerName);
-      if (!provider) return false;
-      return provider.model_configurations.some(
-        (m) => m.name === sel.modelName
+      return llmProviders.some(
+        (p) => p.provider === sel.provider || p.name === sel.providerName
       );
     },
     [llmProviders]
@@ -45,25 +44,17 @@ export function useBuildLlmSelection(
       return selection;
     }
 
-    // 2. Smart default: Anthropic Opus 4.5 if available
+    // 2. Smart default: Anthropic Opus 4.5 if Anthropic provider is configured
     const anthropicProvider = llmProviders.find(
       (p) =>
         p.provider === "anthropic" || p.name.toLowerCase().includes("anthropic")
     );
     if (anthropicProvider) {
-      const opusModel = anthropicProvider.model_configurations.find(
-        (m) =>
-          m.name === RECOMMENDED_BUILD_MODELS.preferred.modelName ||
-          m.name.includes("opus-4-5") ||
-          m.name.includes("opus-4.5")
-      );
-      if (opusModel) {
-        return {
-          providerName: anthropicProvider.name,
-          provider: anthropicProvider.provider,
-          modelName: opusModel.name,
-        };
-      }
+      return {
+        providerName: anthropicProvider.name,
+        provider: anthropicProvider.provider,
+        modelName: RECOMMENDED_BUILD_MODELS.preferred.modelName,
+      };
     }
 
     // 3. Fall back to system default provider
