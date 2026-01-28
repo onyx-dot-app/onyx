@@ -19,6 +19,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -187,7 +188,7 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
     def _iterate_posts(
         self, time_filter: Callable[[datetime], bool] | None = None
     ) -> GenerateDocumentsOutput:
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         if self.slab_bot_token is None:
             raise ConnectorMissingCredentialError("Slab")
@@ -245,7 +246,7 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        slim_doc_batch: list[SlimDocument] = []
+        slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         for post_id in get_all_post_ids(self.slab_bot_token):
             slim_doc_batch.append(
                 SlimDocument(

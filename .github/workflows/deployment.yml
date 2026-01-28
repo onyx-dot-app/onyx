@@ -26,12 +26,14 @@ jobs:
       build-web: ${{ steps.check.outputs.build-web }}
       build-web-cloud: ${{ steps.check.outputs.build-web-cloud }}
       build-backend: ${{ steps.check.outputs.build-backend }}
+      build-backend-craft: ${{ steps.check.outputs.build-backend-craft }}
       build-model-server: ${{ steps.check.outputs.build-model-server }}
       is-cloud-tag: ${{ steps.check.outputs.is-cloud-tag }}
       is-stable: ${{ steps.check.outputs.is-stable }}
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-stable-standalone: ${{ steps.check.outputs.is-stable-standalone }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
+      is-craft-latest: ${{ steps.check.outputs.is-craft-latest }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
@@ -54,15 +56,20 @@ jobs:
           IS_BETA=false
           IS_STABLE_STANDALONE=false
           IS_BETA_STANDALONE=false
+          IS_CRAFT_LATEST=false
           IS_PROD_TAG=false
           IS_TEST_RUN=false
           BUILD_DESKTOP=false
           BUILD_WEB=false
           BUILD_WEB_CLOUD=false
           BUILD_BACKEND=true
+          BUILD_BACKEND_CRAFT=false
           BUILD_MODEL_SERVER=true
 
           # Determine tag type based on pattern matching (do regex checks once)
+          if [[ "$TAG" == craft-latest ]]; then
+            IS_CRAFT_LATEST=true
+          fi
           if [[ "$TAG" == *cloud* ]]; then
             IS_CLOUD=true
           fi
@@ -90,6 +97,12 @@ jobs:
             fi
           fi
 
+          # Craft-latest builds backend with Craft enabled
+          if [[ "$IS_CRAFT_LATEST" == "true" ]]; then
+            BUILD_BACKEND_CRAFT=true
+            BUILD_BACKEND=false
+          fi
+
           # Standalone version checks (for backend/model-server - version excluding cloud tags)
           if [[ "$IS_STABLE" == "true" ]] && [[ "$IS_CLOUD" != "true" ]]; then
             IS_STABLE_STANDALONE=true
@@ -113,12 +126,14 @@ jobs:
             echo "build-web=$BUILD_WEB"
             echo "build-web-cloud=$BUILD_WEB_CLOUD"
             echo "build-backend=$BUILD_BACKEND"
+            echo "build-backend-craft=$BUILD_BACKEND_CRAFT"
             echo "build-model-server=$BUILD_MODEL_SERVER"
             echo "is-cloud-tag=$IS_CLOUD"
             echo "is-stable=$IS_STABLE"
             echo "is-beta=$IS_BETA"
             echo "is-stable-standalone=$IS_STABLE_STANDALONE"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
+            echo "is-craft-latest=$IS_CRAFT_LATEST"
             echo "is-test-run=$IS_TEST_RUN"
             echo "sanitized-tag=$SANITIZED_TAG"
             echo "short-sha=$SHORT_SHA"
@@ -1003,6 +1018,217 @@ jobs:
             $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
+  build-backend-craft-amd64:
+    needs: determine-builds
+    if: needs.determine-builds.outputs.build-backend-craft == 'true'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-backend-craft-amd64
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Build and push AMD64
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONYX_VERSION=${{ github.ref_name }}
+            ENABLE_CRAFT=true
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-amd64
+          cache-to: |
+            type=inline
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-amd64,mode=max
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-backend-craft-arm64:
+    needs: determine-builds
+    if: needs.determine-builds.outputs.build-backend-craft == 'true'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - run-id=${{ github.run_id }}-backend-craft-arm64
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Build and push ARM64
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # ratchet:docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ONYX_VERSION=${{ github.ref_name }}
+            ENABLE_CRAFT=true
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-arm64
+          cache-to: |
+            type=inline
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-arm64,mode=max
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  merge-backend-craft:
+    needs:
+      - determine-builds
+      - build-backend-craft-amd64
+      - build-backend-craft-arm64
+    if: needs.determine-builds.outputs.build-backend-craft == 'true'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-merge-backend-craft
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    env:
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=craft-latest
+            # TODO: Consider aligning craft-latest tags with regular backend builds (e.g., latest, edge, beta)
+            # to keep tagging strategy consistent across all backend images
+
+      - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ env.REGISTRY_IMAGE }}
+          AMD64_DIGEST: ${{ needs.build-backend-craft-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-backend-craft-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          IMAGES="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
+          docker buildx imagetools create \
+            $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
+            $IMAGES
+
   build-model-server-amd64:
     needs: determine-builds
     if: needs.determine-builds.outputs.build-model-server == 'true'
@@ -1466,10 +1692,13 @@ jobs:
       - build-backend-amd64
       - build-backend-arm64
       - merge-backend
+      - build-backend-craft-amd64
+      - build-backend-craft-arm64
+      - merge-backend-craft
       - build-model-server-amd64
       - build-model-server-arm64
       - merge-model-server
-    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || (needs.determine-builds.outputs.build-backend-craft == 'true' && (needs.build-backend-craft-amd64.result == 'failure' || needs.build-backend-craft-arm64.result == 'failure' || needs.merge-backend-craft.result == 'failure')) || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90

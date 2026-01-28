@@ -286,15 +286,24 @@ export default function BuildConfigPage() {
     config: connectors.find((c) => c.source === type) || null,
   }));
 
-  // Auto-enable demo data when no connectors have ever succeeded
+  // Auto-enable demo data when no connectors have ever succeeded.
+  // Guard against loading state to avoid a race condition: before the
+  // connector fetch completes, hasConnectorEverSucceeded is false (empty
+  // array fallback), which would incorrectly re-enable demo data.
   useEffect(() => {
+    if (isLoading) return;
     if (!hasConnectorEverSucceeded && !demoDataEnabled) {
       setDemoDataEnabled(true);
       // Also sync pending state so UI stays consistent
       setPendingDemoData(true);
       setOriginalDemoData(true);
     }
-  }, [hasConnectorEverSucceeded, demoDataEnabled, setDemoDataEnabled]);
+  }, [
+    isLoading,
+    hasConnectorEverSucceeded,
+    demoDataEnabled,
+    setDemoDataEnabled,
+  ]);
 
   const handleDeleteConfirm = async () => {
     if (!connectorToDelete) return;

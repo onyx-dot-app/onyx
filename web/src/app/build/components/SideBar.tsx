@@ -30,10 +30,63 @@ import {
   SvgMoreHorizontal,
   SvgEdit,
   SvgTrash,
+  SvgCheckCircle,
 } from "@opal/icons";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/build/components/TypewriterText";
+import {
+  DELETE_SUCCESS_DISPLAY_DURATION_MS,
+  DELETE_MESSAGE_ROTATION_INTERVAL_MS,
+} from "@/app/build/constants";
+
+// ============================================================================
+// Fun Deleting Messages
+// ============================================================================
+
+const DELETING_MESSAGES = [
+  "Mining away your blocks...",
+  "Returning diamonds to the caves...",
+  "Creeper blew up your save file...",
+  "Throwing items into lava...",
+  "Despawning your entities...",
+  "Breaking bedrock illegally...",
+  "Enderman teleported your data away...",
+  "Falling into the void...",
+  "Your build ran out of hearts...",
+  "Respawning at world spawn...",
+  "Feeding your code to the Ender Dragon...",
+  "Activating TNT chain reaction...",
+  "Zombie horde consumed your bytes...",
+  "Wither withering your session...",
+  "Herobrine deleted your world...",
+];
+
+function DeletingMessage() {
+  const [messageIndex, setMessageIndex] = useState(() =>
+    Math.floor(Math.random() * DELETING_MESSAGES.length)
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIndex((prev) => {
+        let next = Math.floor(Math.random() * DELETING_MESSAGES.length);
+        while (next === prev && DELETING_MESSAGES.length > 1) {
+          next = Math.floor(Math.random() * DELETING_MESSAGES.length);
+        }
+        return next;
+      });
+    }, DELETE_MESSAGE_ROTATION_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <Text as="p" text03 className="animate-subtle-pulse">
+      {DELETING_MESSAGES[messageIndex]}
+    </Text>
+  );
+}
 
 // ============================================================================
 // Build Session Button
@@ -45,6 +98,7 @@ interface BuildSessionButtonProps {
   onLoad: () => void;
   onRename: (newName: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  onDeleteActiveSession?: () => void;
 }
 
 function BuildSessionButton({
@@ -53,10 +107,16 @@ function BuildSessionButton({
   onLoad,
   onRename,
   onDelete,
+  onDeleteActiveSession,
 }: BuildSessionButtonProps) {
   const [renaming, setRenaming] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
   const prevTitleRef = useRef(historyItem.title);
   const [shouldAnimate, setShouldAnimate] = useState(false);
@@ -64,24 +124,53 @@ function BuildSessionButton({
   // Detect when title changes from "Fresh Craft" to a real name (auto-naming)
   useEffect(() => {
     const prevTitle = prevTitleRef.current;
-    const newTitle = historyItem.title;
-
-    // Animate only when transitioning from default name to LLM-generated name
-    if (prevTitle !== newTitle && prevTitle === "Fresh Craft" && !renaming) {
+    if (
+      prevTitle !== historyItem.title &&
+      prevTitle === "Fresh Craft" &&
+      !renaming
+    ) {
       setShouldAnimate(true);
     }
-
-    prevTitleRef.current = newTitle;
+    prevTitleRef.current = historyItem.title;
   }, [historyItem.title, renaming]);
+
+  const closeModal = useCallback(() => {
+    if (deleteTimeoutRef.current) {
+      clearTimeout(deleteTimeoutRef.current);
+      deleteTimeoutRef.current = null;
+    }
+    setIsDeleteModalOpen(false);
+    setPopoverOpen(false);
+    setDeleteSuccess(false);
+    setDeleteError(null);
+    setIsDeleting(false);
+  }, []);
 
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
-      await onDelete();
-      setIsDeleteModalOpen(false);
-      setPopoverOpen(false);
+      setIsDeleting(true);
+      setDeleteError(null);
+
+      try {
+        await onDelete();
+        setIsDeleting(false);
+        setDeleteSuccess(true);
+        // Show success briefly, then close and redirect if needed
+        deleteTimeoutRef.current = setTimeout(() => {
+          closeModal();
+          if (isActive && onDeleteActiveSession) {
+            onDeleteActiveSession();
+          }
+        }, DELETE_SUCCESS_DISPLAY_DURATION_MS);
+      } catch (err) {
+        setIsDeleting(false);
+        setDeleteError(
+          err instanceof Error ? err.message : "Failed to delete session"
+        );
+      }
     },
-    [onDelete]
+    [onDelete, closeModal, isActive, onDeleteActiveSession]
   );
 
   const rightMenu = (
@@ -168,17 +257,51 @@ function BuildSessionButton({
       </Popover>
       {isDeleteModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Build"
-          icon={SvgTrash}
-          onClose={() => setIsDeleteModalOpen(false)}
+          title={
+            deleteSuccess
+              ? "Deleted"
+              : deleteError
+                ? "Delete Failed"
+                : "Delete Build"
+          }
+          icon={deleteSuccess ? SvgCheckCircle : SvgTrash}
+          onClose={isDeleting || deleteSuccess ? undefined : closeModal}
+          hideCancel={isDeleting || deleteSuccess}
+          twoTone={!isDeleting && !deleteSuccess && !deleteError}
           submit={
-            <Button danger onClick={handleConfirmDelete}>
-              Delete
-            </Button>
+            deleteSuccess ? (
+              <Button action disabled leftIcon={SvgCheckCircle}>
+                Done
+              </Button>
+            ) : deleteError ? (
+              <Button danger onClick={closeModal}>
+                Close
+              </Button>
+            ) : (
+              <Button
+                danger
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                leftIcon={isDeleting ? SimpleLoader : undefined}
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            )
           }
         >
-          Are you sure you want to delete this build? This action cannot be
-          undone.
+          {deleteSuccess ? (
+            <Text as="p" text03>
+              Build deleted successfully.
+            </Text>
+          ) : deleteError ? (
+            <Text as="p" text03 className="text-status-error-02">
+              {deleteError}
+            </Text>
+          ) : isDeleting ? (
+            <DeletingMessage />
+          ) : (
+            "Are you sure you want to delete this craft? This action cannot be undone."
+          )}
         </ConfirmationModalLayout>
       )}
     </>
@@ -277,7 +400,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const footer = useMemo(
       () => (
-        <div className="flex flex-col gap-2">
+        <div>
           {backToChatButton}
           <UserAvatarPopover folded={folded} />
         </div>
@@ -288,7 +411,12 @@ const MemoizedBuildSidebarInner = memo(
     return (
       <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
         <SidebarBody
-          actionButtons={[newBuildButton, buildConfigurePanel]}
+          actionButtons={
+            <div className="flex flex-col gap-0.5">
+              {newBuildButton}
+              {buildConfigurePanel}
+            </div>
+          }
           footer={footer}
           scrollKey="build-sidebar"
         >
@@ -314,6 +442,11 @@ const MemoizedBuildSidebarInner = memo(
                       renameBuildSession(historyItem.id, newName)
                     }
                     onDelete={() => deleteBuildSession(historyItem.id)}
+                    onDeleteActiveSession={
+                      session?.id === historyItem.id
+                        ? () => router.push("/build/v1")
+                        : undefined
+                    }
                   />
                 ))
               )}

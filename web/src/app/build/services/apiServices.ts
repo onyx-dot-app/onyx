@@ -523,6 +523,33 @@ export async function deleteFile(
   }
 }
 
+/**
+ * Export a markdown file as DOCX.
+ * Returns a Blob of the converted document.
+ */
+export async function exportDocx(
+  sessionId: string,
+  path: string
+): Promise<Blob> {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  const res = await fetch(
+    `${API_BASE}/sessions/${sessionId}/export-docx/${encodedPath}`
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to export as DOCX: ${res.status}`
+    );
+  }
+
+  return res.blob();
+}
+
 // =============================================================================
 // Connector Management API
 // =============================================================================

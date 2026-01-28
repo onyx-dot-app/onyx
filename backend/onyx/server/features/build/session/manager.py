@@ -76,6 +76,9 @@ from onyx.server.features.build.session.prompts import (
     FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
 )
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -318,20 +321,15 @@ class SessionManager:
                 self._db_session, requested_provider_type
             )
             if provider:
-                # Validate model exists in this provider's configurations
-                valid_models = [m.name for m in provider.model_configurations]
-                if requested_model_name in valid_models:
-                    return LLMProviderConfig(
-                        provider=provider.provider,
-                        model_name=requested_model_name,
-                        api_key=provider.api_key,
-                        api_base=provider.api_base,
-                    )
-                else:
-                    logger.warning(
-                        f"Requested model {requested_model_name} not found in provider "
-                        f"{requested_provider_type}, falling back to default"
-                    )
+                # Use the requested model directly - the provider's API will
+                # reject invalid models. This allows users to use models that
+                # aren't explicitly configured as "visible" in the admin UI.
+                return LLMProviderConfig(
+                    provider=provider.provider,
+                    model_name=requested_model_name,
+                    api_key=provider.api_key,
+                    api_base=provider.api_base,
+                )
             else:
                 logger.warning(
                     f"Requested provider type {requested_provider_type} not found, "
@@ -464,10 +462,15 @@ class SessionManager:
             sandbox = existing_sandbox
             sandbox_id = sandbox.id
 
-            if sandbox.status == SandboxStatus.TERMINATED:
-                # Re-provision terminated sandbox
+            if sandbox.status in (
+                SandboxStatus.TERMINATED,
+                SandboxStatus.SLEEPING,
+                SandboxStatus.FAILED,
+            ):
+                # Re-provision sandbox (pod doesn't exist or failed)
                 logger.info(
-                    f"Re-provisioning terminated sandbox {sandbox_id} for user {user_id}"
+                    f"Re-provisioning {sandbox.status.value} sandbox {sandbox_id} "
+                    f"for user {user_id}"
                 )
                 sandbox_info = self._sandbox_manager.provision(
                     sandbox_id=sandbox_id,
@@ -508,11 +511,14 @@ class SessionManager:
                         f"for new session {session_id}"
                     )
             else:
-                # Handle other statuses (SLEEPING, PROVISIONING, FAILED, etc.)
-                logger.info(
-                    f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
-                    f"for new session {session_id}"
+                # PROVISIONING status - sandbox is being created by another request
+                # Just fail this request
+                msg = (
+                    f"Sandbox {sandbox_id} has status {sandbox.status.value} and is being "
+                    f"created by another request for new session {session_id}"
                 )
+                logger.error(msg)
+                raise RuntimeError(msg)
         else:
             # Create new Sandbox record for the user (uses flush, caller commits)
             sandbox = create_sandbox__no_commit(
@@ -595,6 +601,9 @@ class SessionManager:
         """
         existing = get_empty_session_for_user(user_id, self._db_session)
         if existing:
+            logger.info(
+                f"Existing empty session {existing.id} found for user {user_id}"
+            )
             # Verify sandbox is healthy before returning existing session
             sandbox = get_sandbox_by_user_id(self._db_session, user_id)
 
@@ -657,6 +666,7 @@ class SessionManager:
                 self._sandbox_manager.cleanup_session_workspace(
                     sandbox_id=sandbox.id,
                     session_id=session_id,
+                    nextjs_port=empty_session.nextjs_port,
                 )
                 logger.info(
                     f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
@@ -783,7 +793,7 @@ class SessionManager:
         if not user_message:
             return f"Build Session {str(session_id)[:8]}"
 
-        # Use LLM to generate a concise session name
+        # Use LLM to generate a concise session name with Braintrust tracing
         try:
             llm = get_default_llm()
             prompt_messages: LanguageModelInput = [
@@ -794,8 +804,23 @@ class SessionManager:
                     )
                 ),
             ]
-            response = llm.invoke(prompt_messages, reasoning_effort=ReasoningEffort.OFF)
-            generated_name = llm_response_to_string(response).strip().strip('"')
+            with ensure_trace(
+                "build_session_naming",
+                group_id=str(session_id),
+                metadata={"session_id": str(session_id)},
+            ):
+                with llm_generation_span(
+                    llm=llm,
+                    flow="build_session_naming",
+                    input_messages=prompt_messages,
+                ) as span_generation:
+                    response = llm.invoke(
+                        prompt_messages, reasoning_effort=ReasoningEffort.OFF
+                    )
+                    generated_name = llm_response_to_string(response).strip().strip('"')
+                    record_llm_span_output(
+                        span_generation, generated_name, response.usage
+                    )
 
             # Ensure the name isn't too long (max 50 chars)
             if len(generated_name) > 50:
@@ -840,10 +865,20 @@ class SessionManager:
                     )
                 ),
             ]
-            response = llm.invoke(
-                prompt_messages, reasoning_effort=ReasoningEffort.OFF, max_tokens=500
-            )
-            raw_output = llm_response_to_string(response).strip()
+            # Call LLM with Braintrust tracing
+            with ensure_trace("build_followup_suggestions"):
+                with llm_generation_span(
+                    llm=llm,
+                    flow="build_followup_suggestions",
+                    input_messages=prompt_messages,
+                ) as span_generation:
+                    response = llm.invoke(
+                        prompt_messages,
+                        reasoning_effort=ReasoningEffort.OFF,
+                        max_tokens=500,
+                    )
+                    raw_output = llm_response_to_string(response).strip()
+                    record_llm_span_output(span_generation, raw_output, response.usage)
 
             return self._parse_suggestions(raw_output)
         except Exception as e:
@@ -954,6 +989,7 @@ class SessionManager:
                 self._sandbox_manager.cleanup_session_workspace(
                     sandbox_id=sandbox.id,
                     session_id=session_id,
+                    nextjs_port=session.nextjs_port,
                 )
                 logger.info(
                     f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
@@ -1483,6 +1519,49 @@ class SessionManager:
         mime_type, _ = mimetypes.guess_type(filename)
 
         return (content, mime_type or "application/octet-stream", filename)
+
+    def export_docx(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> tuple[bytes, str] | None:
+        """
+        Export a markdown file as DOCX.
+
+        Reads the markdown file and converts it to DOCX using pypandoc.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the markdown file
+
+        Returns:
+            Tuple of (docx_bytes, filename) or None if not found
+
+        Raises:
+            ValueError: If path traversal attempted, file is not markdown, etc.
+        """
+        result = self.download_artifact(session_id, user_id, path)
+        if result is None:
+            return None
+
+        content_bytes, _mime_type, filename = result
+
+        if not filename.lower().endswith(".md"):
+            raise ValueError("Only markdown (.md) files can be exported as DOCX")
+
+        import tempfile
+        import pypandoc  # type: ignore
+
+        md_text = content_bytes.decode("utf-8")
+
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
+            pypandoc.convert_text(md_text, "docx", format="md", outputfile=tmp.name)
+            docx_bytes = tmp.read()
+
+        docx_filename = filename.rsplit(".", 1)[0] + ".docx"
+        return (docx_bytes, docx_filename)
 
     def get_webapp_info(
         self,

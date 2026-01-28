@@ -453,7 +453,7 @@ const MemoizedAppSidebarInner = memo(
         <ChatSearchCommandMenu
           trigger={
             <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
-              Search chats
+              Search Chats
             </SidebarTab>
           }
         />
@@ -594,8 +594,8 @@ const MemoizedAppSidebarInner = memo(
             actionButtons={
               <div className="flex flex-col gap-0.5">
                 {newSessionButton}
-                {isOnyxCraftEnabled && buildButton}
                 {searchChatsButton}
+                {isOnyxCraftEnabled && buildButton}
               </div>
             }
           >

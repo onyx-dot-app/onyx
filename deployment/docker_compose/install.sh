@@ -63,7 +63,7 @@ NC='\033[0m' # No Color
 
 # Step counter variables
 CURRENT_STEP=0
-TOTAL_STEPS=8
+TOTAL_STEPS=10
 
 # Print colored output
 print_success() {

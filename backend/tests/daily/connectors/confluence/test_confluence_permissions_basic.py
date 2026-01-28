@@ -9,6 +9,7 @@ from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
@@ -55,7 +56,9 @@ def test_confluence_connector_permissions(
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
     for slim_doc_batch in confluence_connector.retrieve_all_slim_docs_perm_sync():
-        all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
+        all_slim_doc_ids.update(
+            [doc.id for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # Find IDs that are in full but not in slim
     difference = all_full_doc_ids - all_slim_doc_ids

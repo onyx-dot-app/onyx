@@ -7,6 +7,7 @@ import {
   getBuildUserPersona,
   getBuildLlmSelection,
 } from "@/app/build/onboarding/constants";
+import { DELETE_SUCCESS_DISPLAY_DURATION_MS } from "@/app/build/constants";
 
 import {
   ApiSandboxResponse,
@@ -370,8 +371,10 @@ export interface BuildSessionData {
   lastAccessed: Date;
   isLoaded: boolean;
   outputPanelOpen: boolean;
-  /** Flag to trigger webapp refresh when web/ files change */
-  webappNeedsRefresh: boolean;
+  /** Counter to trigger webapp refresh when web/ files change (increments on each edit) */
+  webappNeedsRefresh: number;
+  /** Counter to trigger files list refresh when outputs/ directory changes (increments on each write/edit) */
+  filesNeedsRefresh: number;
   /** File preview tabs open in this session */
   filePreviewTabs: FilePreviewTab[];
   /** Active pinned tab in output panel */
@@ -500,10 +503,13 @@ interface BuildSessionStore {
 
   // Webapp Refresh Actions
   triggerWebappRefresh: (sessionId: string) => void;
-  resetWebappRefresh: (sessionId: string) => void;
+  // Files Refresh Actions
+  triggerFilesRefresh: (sessionId: string) => void;
 
   // File Preview Actions
   openFilePreview: (sessionId: string, path: string, fileName: string) => void;
+  /** Atomically open panel + create file tab + set active for a markdown file detected during streaming */
+  openMarkdownPreview: (sessionId: string, filePath: string) => void;
   closeFilePreview: (sessionId: string, path: string) => void;
   setActiveOutputTab: (sessionId: string, tab: OutputTabType) => void;
   setActiveFilePreviewPath: (sessionId: string, path: string | null) => void;
@@ -565,7 +571,8 @@ const createInitialSessionData = (
   lastAccessed: new Date(),
   isLoaded: false,
   outputPanelOpen: false,
-  webappNeedsRefresh: false,
+  webappNeedsRefresh: 0,
+  filesNeedsRefresh: 0,
   filePreviewTabs: [],
   activeOutputTab: "preview",
   activeFilePreviewPath: null,
@@ -1391,27 +1398,25 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const { currentSessionId, abortSession, refreshSessionHistory } = get();
 
     try {
-      // Abort any ongoing requests for this session
       abortSession(sessionId);
-
-      // Call the API to delete the session
       await apiDeleteSession(sessionId);
 
       // Remove session from local state
       set((state) => {
         const newSessions = new Map(state.sessions);
         newSessions.delete(sessionId);
-
         return {
           sessions: newSessions,
-          // Clear current session if it's the one being deleted
           currentSessionId:
             currentSessionId === sessionId ? null : state.currentSessionId,
         };
       });
 
-      // Refresh session history to reflect the deletion
-      await refreshSessionHistory();
+      // Refresh history after UI has shown success state
+      setTimeout(
+        () => refreshSessionHistory(),
+        DELETE_SUCCESS_DISPLAY_DURATION_MS
+      );
     } catch (err) {
       console.error("Failed to delete session:", err);
       throw err;
@@ -1655,11 +1660,26 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // ===========================================================================
 
   triggerWebappRefresh: (sessionId: string) => {
-    get().updateSessionData(sessionId, { webappNeedsRefresh: true });
+    const session = get().sessions.get(sessionId);
+    if (session) {
+      // Increment refresh counter and open panel if not already open
+      // Using a counter ensures each edit triggers a new refresh
+      get().updateSessionData(sessionId, {
+        webappNeedsRefresh: (session.webappNeedsRefresh || 0) + 1,
+        ...(session.outputPanelOpen ? {} : { outputPanelOpen: true }),
+      });
+    }
   },
 
-  resetWebappRefresh: (sessionId: string) => {
-    get().updateSessionData(sessionId, { webappNeedsRefresh: false });
+  triggerFilesRefresh: (sessionId: string) => {
+    const session = get().sessions.get(sessionId);
+    if (session) {
+      // Increment refresh counter to trigger files list refresh
+      // Using a counter ensures each write/edit triggers a new refresh
+      get().updateSessionData(sessionId, {
+        filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
+      });
+    }
   },
 
   // ===========================================================================
@@ -1694,6 +1714,48 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         ...session,
         filePreviewTabs,
         activeFilePreviewPath: path, // Always switch to this tab
+        tabHistory: {
+          entries: newEntries,
+          currentIndex: newEntries.length - 1,
+        },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  openMarkdownPreview: (sessionId: string, filePath: string) => {
+    const fileName = filePath.split("/").pop() || filePath;
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const existingTab = session.filePreviewTabs.find(
+        (t) => t.path === filePath
+      );
+      let filePreviewTabs = session.filePreviewTabs;
+      if (!existingTab) {
+        filePreviewTabs = [
+          ...session.filePreviewTabs,
+          { path: filePath, fileName },
+        ];
+      }
+
+      // Push to history (truncate forward history if navigating from middle)
+      const { tabHistory } = session;
+      const newEntry: TabHistoryEntry = { type: "file", path: filePath };
+      const newEntries = [
+        ...tabHistory.entries.slice(0, tabHistory.currentIndex + 1),
+        newEntry,
+      ];
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        outputPanelOpen: true,
+        filePreviewTabs,
+        activeFilePreviewPath: filePath,
         tabHistory: {
           entries: newEntries,
           currentIndex: newEntries.length - 1,
@@ -2100,8 +2162,16 @@ export const useStreamItems = () =>
 export const useWebappNeedsRefresh = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return false;
-    return sessions.get(currentSessionId)?.webappNeedsRefresh ?? false;
+    if (!currentSessionId) return 0;
+    return sessions.get(currentSessionId)?.webappNeedsRefresh ?? 0;
+  });
+
+// Files refresh selector
+export const useFilesNeedsRefresh = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return 0;
+    return sessions.get(currentSessionId)?.filesNeedsRefresh ?? 0;
   });
 
 // File preview selectors

@@ -40,6 +40,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -435,7 +436,7 @@ class GmailConnector(
         is_slim: bool = False,
     ) -> Iterator[Document | ConnectorFailure] | GenerateSlimDocumentOutput:
         query = _build_time_range_query(time_range_start, time_range_end)
-        slim_doc_batch: list[SlimDocument] = []
+        slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         logger.info(
             f"Fetching {'slim' if is_slim else 'full'} threads for user: {user_email}"
         )

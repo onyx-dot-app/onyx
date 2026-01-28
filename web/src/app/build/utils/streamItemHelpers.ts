@@ -230,6 +230,43 @@ export function normalizeStatus(
 // =============================================================================
 
 /**
+ * Strip sandbox path prefix to get clean relative path
+ * Handles various path formats:
+ * - /outputs/... → extracts path after /outputs/
+ * - /data/sandboxes/[id]/sessions/[id]/... → extracts path after session ID
+ * - /sandboxes/[id]/sessions/[id]/... → extracts path after session ID
+ * - /sandboxes/[id]/... → extracts path after sandbox ID
+ * - Otherwise → extracts filename
+ */
+export function getRelativePath(fullPath: string): string {
+  if (!fullPath) return "";
+
+  // 1. Check for /outputs/ prefix
+  const outputsMatch = fullPath.match(/\/outputs\/(.+)$/);
+  if (outputsMatch?.[1]) return outputsMatch[1];
+
+  // 2. Check for /data/sandboxes/[id]/sessions/[id]/... pattern
+  const dataSandboxSessionMatch = fullPath.match(
+    /\/data\/sandboxes\/[^/]+\/sessions\/[^/]+\/(.+)$/
+  );
+  if (dataSandboxSessionMatch?.[1]) return dataSandboxSessionMatch[1];
+
+  // 3. Check for /sandboxes/[id]/sessions/[id]/... pattern
+  const sandboxSessionMatch = fullPath.match(
+    /\/sandboxes\/[^/]+\/sessions\/[^/]+\/(.+)$/
+  );
+  if (sandboxSessionMatch?.[1]) return sandboxSessionMatch[1];
+
+  // 4. Check for /sandboxes/[id]/... pattern
+  const sandboxMatch = fullPath.match(/\/sandboxes\/[^/]+\/(.+)$/);
+  if (sandboxMatch?.[1]) return sandboxMatch[1];
+
+  // 5. Fallback: extract filename (everything after last slash)
+  const lastSlash = fullPath.lastIndexOf("/");
+  return lastSlash >= 0 ? fullPath.slice(lastSlash + 1) : fullPath;
+}
+
+/**
  * Extract file path from packet (for read/write tools)
  */
 export function getFilePath(packet: Record<string, unknown>): string {
@@ -242,7 +279,7 @@ export function getFilePath(packet: Record<string, unknown>): string {
     const path = (rawInput.file_path || rawInput.filePath || rawInput.path) as
       | string
       | undefined;
-    if (path) return path;
+    if (path) return getRelativePath(path);
   }
 
   // 2. Check content array for diff items (edit packets store path in diff)
@@ -257,14 +294,14 @@ export function getFilePath(packet: Record<string, unknown>): string {
         const diffPath = (item as Record<string, unknown>).path as
           | string
           | undefined;
-        if (diffPath) return diffPath;
+        if (diffPath) return getRelativePath(diffPath);
       }
     }
   }
 
   // 3. Fall back to title (often contains file path for edit packets)
   const title = packet.title as string | undefined;
-  if (title && title.includes("/")) return title;
+  if (title && title.includes("/")) return getRelativePath(title);
   return "";
 }
 
