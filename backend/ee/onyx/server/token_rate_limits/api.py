@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_group
 from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_user
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
@@ -18,7 +19,11 @@ from onyx.server.query_and_chat.token_limit import any_rate_limit_exists
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
 
-router = APIRouter(prefix="/admin/token-rate-limits", tags=PUBLIC_API_TAGS)
+router = APIRouter(
+    prefix="/admin/token-rate-limits",
+    tags=PUBLIC_API_TAGS,
+    dependencies=[Depends(require_ee_license)],
+)
 
 
 """

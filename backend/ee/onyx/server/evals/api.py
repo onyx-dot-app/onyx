@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from fastapi import Depends
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.auth.users import current_cloud_superuser
 from onyx.background.celery.apps.client import celery_app as client_app
 from onyx.configs.constants import OnyxCeleryTask
@@ -11,7 +12,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/evals")
+router = APIRouter(prefix="/evals", dependencies=[Depends(require_ee_license)])
 
 
 @router.post("/eval_run", response_model=EvalRunAck)

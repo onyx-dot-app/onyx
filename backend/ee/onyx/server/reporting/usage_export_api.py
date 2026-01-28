@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.db.usage_export import get_all_usage_reports
 from ee.onyx.db.usage_export import get_usage_report_data
 from ee.onyx.db.usage_export import UsageReportMetadata
@@ -20,7 +21,7 @@ from onyx.db.models import User
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from shared_configs.contextvars import get_current_tenant_id
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_ee_license)])
 
 
 class GenerateUsageReportParams(BaseModel):

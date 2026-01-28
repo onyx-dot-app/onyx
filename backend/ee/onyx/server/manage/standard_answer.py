@@ -3,6 +3,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.db.standard_answer import fetch_standard_answer
 from ee.onyx.db.standard_answer import fetch_standard_answer_categories
 from ee.onyx.db.standard_answer import fetch_standard_answer_category
@@ -20,7 +21,7 @@ from onyx.server.manage.models import StandardAnswerCategory
 from onyx.server.manage.models import StandardAnswerCategoryCreationRequest
 from onyx.server.manage.models import StandardAnswerCreationRequest
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(require_ee_license)])
 
 
 @router.post("/admin/standard-answer")

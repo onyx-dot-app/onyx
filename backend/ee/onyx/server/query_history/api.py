@@ -12,6 +12,7 @@ from fastapi import Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.db.query_history import get_all_query_history_export_tasks
 from ee.onyx.db.query_history import get_page_of_chat_sessions
@@ -52,7 +53,7 @@ from onyx.server.query_and_chat.models import ChatSessionsResponse
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_ee_license)])
 
 ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
 

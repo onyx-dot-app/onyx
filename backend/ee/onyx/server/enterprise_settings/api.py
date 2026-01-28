@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
 from ee.onyx.server.enterprise_settings.store import get_logo_filename
@@ -35,7 +36,10 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
-admin_router = APIRouter(prefix="/admin/enterprise-settings")
+admin_router = APIRouter(
+    prefix="/admin/enterprise-settings",
+    dependencies=[Depends(require_ee_license)],
+)
 basic_router = APIRouter(prefix="/enterprise-settings")
 
 logger = setup_logger()

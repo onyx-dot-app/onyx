@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.db.user_group import add_users_to_user_group
 from ee.onyx.db.user_group import fetch_user_groups
 from ee.onyx.db.user_group import fetch_user_groups_for_user
@@ -26,7 +27,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
+router = APIRouter(
+    prefix="/manage",
+    tags=PUBLIC_API_TAGS,
+    dependencies=[Depends(require_ee_license)],
+)
 
 
 @router.get("/admin/user-group")

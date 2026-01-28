@@ -6,6 +6,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
     try_creating_permissions_sync_task,
 )
@@ -26,7 +27,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(require_ee_license)])
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-permissions")

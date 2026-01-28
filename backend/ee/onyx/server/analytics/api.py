@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ee.onyx.auth.ee_license import require_ee_license
 from ee.onyx.db.analytics import fetch_assistant_message_analytics
 from ee.onyx.db.analytics import fetch_assistant_unique_users
 from ee.onyx.db.analytics import fetch_assistant_unique_users_total
@@ -23,7 +24,11 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 
-router = APIRouter(prefix="/analytics", tags=PUBLIC_API_TAGS)
+router = APIRouter(
+    prefix="/analytics",
+    tags=PUBLIC_API_TAGS,
+    dependencies=[Depends(require_ee_license)],
+)
 
 
 _DEFAULT_LOOKBACK_DAYS = 30
