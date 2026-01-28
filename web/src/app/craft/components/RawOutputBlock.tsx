@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import hljs from "highlight.js/lib/core";
 
 // Import highlight.js theme styles (dark mode Atom One Dark)
-import "@/app/chat/message/custom-code-styles.css";
+import "@/app/app/message/custom-code-styles.css";
 
 // Register common languages
 import javascript from "highlight.js/lib/languages/javascript";
