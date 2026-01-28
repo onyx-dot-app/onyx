@@ -577,7 +577,6 @@ if [ -f "$ENV_FILE" ]; then
         # If using craft image, also enable ENABLE_CRAFT
         if [[ "$VERSION" == craft-* ]]; then
             sed -i.bak 's/^# ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-            sed -i.bak 's/^ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
             print_success "ENABLE_CRAFT set to true"
         fi
         print_success "Configuration updated for upgrade"
