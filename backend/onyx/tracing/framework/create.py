@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from collections.abc import Mapping
 from collections.abc import Sequence
 from contextlib import contextmanager
@@ -72,7 +73,7 @@ def ensure_trace(
     group_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     disabled: bool = False,
-) -> Trace | None:
+) -> Iterator[Trace | None]:
     """
     Ensure a trace exists. If a trace is already active, reuse it.
     Otherwise, create a new trace for the duration of the context.
