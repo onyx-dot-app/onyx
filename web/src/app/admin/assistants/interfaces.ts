@@ -1,5 +1,16 @@
+import { ValidSources } from "@/lib/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
+
+// Represents a hierarchy node (folder, space, channel, etc.) attached to a persona
+export interface HierarchyNodeSnapshot {
+  id: number;
+  raw_node_id: string;
+  display_name: string;
+  link: string | null;
+  source: ValidSources;
+  node_type: string; // HierarchyNodeType enum value
+}
 
 export interface StarterMessageBase {
   message: string;
@@ -37,6 +48,9 @@ export interface Persona extends MinimalPersonaSnapshot {
   users: MinimalUserSnapshot[];
   groups: number[];
   num_chunks?: number;
+  // Hierarchy nodes (folders, spaces, channels) attached for scoped search
+  // TODO: Add UI for selecting hierarchy nodes in a future PR
+  hierarchy_nodes?: HierarchyNodeSnapshot[];
 
   // Embedded prompt fields on persona
   system_prompt: string | null;

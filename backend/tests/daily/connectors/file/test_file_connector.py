@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from onyx.connectors.file.connector import LocalFileConnector
+from onyx.connectors.models import HierarchyNode
 
 
 @pytest.fixture
@@ -65,6 +66,7 @@ def test_single_text_file_with_metadata(
     docs = batches[0]
     assert len(docs) == 1
     doc = docs[0]
+    assert not isinstance(doc, HierarchyNode)
 
     assert doc.sections[0].text == "Test answer is 12345"
     assert doc.sections[0].link == "https://onyx.app"
@@ -125,6 +127,8 @@ def test_two_text_files_with_zip_metadata(
     docs = batches[0]
     assert len(docs) == 2
     doc1, doc2 = docs
+    assert not isinstance(doc1, HierarchyNode)
+    assert not isinstance(doc2, HierarchyNode)
 
     assert doc1.sections[0].text == "File 1 content"
     assert doc1.sections[0].link == "https://onyx.app/1"

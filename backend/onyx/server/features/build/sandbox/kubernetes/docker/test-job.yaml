@@ -1,0 +1,39 @@
+# Kubernetes Job to run sandbox integration tests
+#
+# This runs the test pod inside the cluster so it can access sandbox services.
+#
+# Usage:
+#   kubectl apply -f test-job.yaml
+#   kubectl logs -f job/sandbox-test -n onyx-sandboxes
+#   kubectl delete job sandbox-test -n onyx-sandboxes
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sandbox-test
+  namespace: onyx-sandboxes
+spec:
+  serviceAccountName: sandbox-runner  # Needs permissions to create/delete pods
+  containers:
+  - name: test
+    image: onyxdotapp/onyx-backend:latest
+    imagePullPolicy: Never  # Use local image, don't try to pull from registry
+    command: ["sleep", "infinity"]
+    env:
+    - name: SANDBOX_BACKEND
+      value: "kubernetes"
+    - name: SANDBOX_NAMESPACE
+      value: "onyx-sandboxes"
+    # Add any other required env vars (API keys, DB connection, etc.)
+    # - name: OPENAI_API_KEY
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: openai-secrets
+    #       key: api-key
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"

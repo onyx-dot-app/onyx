@@ -23,7 +23,10 @@ dependencies = [
     "uvicorn==0.35.0",
     "voyageai==0.2.3",
     "brotli>=1.2.0",
+    "claude-agent-sdk>=0.1.19",
+    "agent-client-protocol>=0.7.1",
     "discord-py==2.4.0",
+    "kubernetes>=31.0.0",
 ]
 
 [project.optional-dependencies]
@@ -61,6 +64,7 @@ backend = [
     "inflection==0.5.1",
     "jira==3.10.5",
     "jsonref==1.1.0",
+    "kubernetes==31.0.0",
     "trafilatura==1.12.2",
     "langchain==0.3.23",
     "langchain-core==0.3.81",
@@ -90,6 +94,7 @@ backend = [
     "python-dateutil==2.8.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
+    "pypandoc_binary==1.16.2",
     "pypdf==6.6.0",
     "pytest-mock==3.12.0",
     "pytest-playwright==0.7.0",
@@ -142,7 +147,7 @@ dev = [
     "matplotlib==3.10.8",
     "mypy-extensions==1.0.0",
     "mypy==1.13.0",
-    "onyx-devtools==0.4.0",
+    "onyx-devtools==0.4.1",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",

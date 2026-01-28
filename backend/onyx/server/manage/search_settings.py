@@ -240,7 +240,6 @@ def unstructured_api_key_set(
     _: User | None = Depends(current_admin_user),
 ) -> bool:
     api_key = get_unstructured_api_key()
-    print(api_key)
     return api_key is not None
 
 

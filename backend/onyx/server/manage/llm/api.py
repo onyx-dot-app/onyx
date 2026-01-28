@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 
 import boto3
 import httpx
@@ -75,11 +76,48 @@ admin_router = APIRouter(prefix="/admin/llm")
 basic_router = APIRouter(prefix="/llm")
 
 
-def _mask_provider_api_key(provider_view: LLMProviderView) -> None:
+def _mask_string(value: str) -> str:
+    """Mask a string, showing first 4 and last 4 characters."""
+    if len(value) <= 8:
+        return "****"
+    return value[:4] + "****" + value[-4:]
+
+
+# Keys in custom_config that contain sensitive credentials
+_SENSITIVE_CONFIG_KEYS = {
+    "vertex_credentials",
+    "aws_secret_access_key",
+    "aws_access_key_id",
+    "aws_bearer_token_bedrock",
+    "private_key",
+    "api_key",
+    "secret",
+    "password",
+    "token",
+    "credential",
+}
+
+
+def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
+    """Mask sensitive credentials in provider view including api_key and custom_config."""
+    # Mask the API key
     if provider_view.api_key:
-        provider_view.api_key = (
-            provider_view.api_key[:4] + "****" + provider_view.api_key[-4:]
-        )
+        provider_view.api_key = _mask_string(provider_view.api_key)
+
+    # Mask sensitive values in custom_config
+    if provider_view.custom_config:
+        masked_config: dict[str, Any] = {}
+        for key, value in provider_view.custom_config.items():
+            # Check if key matches any sensitive pattern (case-insensitive)
+            key_lower = key.lower()
+            is_sensitive = any(
+                sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS
+            )
+            if is_sensitive and isinstance(value, str) and value:
+                masked_config[key] = _mask_string(value)
+            else:
+                masked_config[key] = value
+        provider_view.custom_config = masked_config
 
 
 @admin_router.get("/built-in/options")
@@ -180,7 +218,7 @@ def list_llm_providers(
             f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
         )
 
-        _mask_provider_api_key(full_llm_provider)
+        _mask_provider_credentials(full_llm_provider)
         llm_provider_list.append(full_llm_provider)
 
     end_time = datetime.now(timezone.utc)
@@ -276,6 +314,7 @@ def put_llm_provider(
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 
+        _mask_provider_credentials(result)
         return result
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
@@ -361,7 +400,7 @@ def get_vision_capable_providers(
         # Only include providers with at least one vision-capable model
         if vision_models:
             provider_view = LLMProviderView.from_model(provider)
-            _mask_provider_api_key(provider_view)
+            _mask_provider_credentials(provider_view)
 
             vision_providers.append(
                 VisionProviderResponse(
@@ -400,26 +439,20 @@ def list_llm_provider_basics(
 
     all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = fetch_user_group_ids(db_session, user) if user else set()
-    is_admin = user and user.role == UserRole.ADMIN
+    is_admin = user is not None and user.role == UserRole.ADMIN
 
     accessible_providers = []
 
     for provider in all_providers:
-        # Include all public providers
-        if provider.is_public:
-            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-            continue
-
-        # Include restricted providers user has access to via groups
-        if is_admin:
-            # Admins see all providers
-            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-        elif provider.groups:
-            # User must be in at least one of the provider's groups
-            if user_group_ids.intersection({g.id for g in provider.groups}):
-                accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-        elif not provider.personas:
-            # No restrictions = accessible
+        # Use centralized access control logic with persona=None since we're
+        # listing providers without a specific persona context. This correctly:
+        # - Includes all public providers
+        # - Includes providers user can access via group membership
+        # - Excludes persona-only restricted providers (requires specific persona)
+        # - Excludes non-public providers with no restrictions (admin-only)
+        if can_user_access_llm_provider(
+            provider, user_group_ids, persona=None, is_admin=is_admin
+        ):
             accessible_providers.append(LLMProviderDescriptor.from_model(provider))
 
     end_time = datetime.now(timezone.utc)

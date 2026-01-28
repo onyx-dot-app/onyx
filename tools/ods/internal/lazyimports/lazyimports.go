@@ -36,6 +36,7 @@ var ignoreDirectories = map[string]struct{}{
 	".env":        {},
 	"env":         {},
 	"__pycache__": {},
+	"scripts":     {},
 }
 
 // modulePatterns holds pre-compiled regex patterns for a module.

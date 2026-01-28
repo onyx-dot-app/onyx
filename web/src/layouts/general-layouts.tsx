@@ -168,7 +168,7 @@ function Section({
  *
  * @param icon - Optional icon component to display on the left
  * @param title - The main title text (required)
- * @param description - Optional description text below the title
+ * @param description - Optional description content below the title (string or ReactNode)
  * @param rightChildren - Optional content to render on the right side
  * @param variant - Visual variant. Default: "primary"
  * @param strikethrough - If true, applies line-through style to title. Default: false
@@ -183,7 +183,7 @@ type LineItemLayoutVariant =
 export interface LineItemLayoutProps {
   icon?: React.FunctionComponent<IconProps>;
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   middleText?: string;
   rightChildren?: React.ReactNode;
 
@@ -248,9 +248,15 @@ function LineItemLayout({
         {loading && description ? (
           <div className="line-item-layout-skeleton-description" />
         ) : description ? (
-          <Text secondaryBody text03 className="line-item-layout-description">
-            {description}
-          </Text>
+          <div className="line-item-layout-description">
+            {typeof description === "string" ? (
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            ) : (
+              description
+            )}
+          </div>
         ) : undefined}
       </div>
 

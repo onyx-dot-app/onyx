@@ -10,6 +10,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -56,7 +57,7 @@ class AsanaConnector(LoadConnector, PollConnector):
             workspace_gid=self.workspace_id,
             team_gid=self.asana_team_id,
         )
-        docs_batch: list[Document] = []
+        docs_batch: list[Document | HierarchyNode] = []
         tasks = asana.get_tasks(self.project_ids_to_index, start_time)
 
         for task in tasks:
@@ -116,5 +117,8 @@ if __name__ == "__main__":
     latest_docs = connector.poll_source(one_day_ago, current)
     for docs in latest_docs:
         for doc in docs:
-            print(doc.id)
+            if isinstance(doc, HierarchyNode):
+                print("hierarchynode:", doc.display_name)
+            else:
+                print(doc.id)
     logger.notice("Asana connector test completed")

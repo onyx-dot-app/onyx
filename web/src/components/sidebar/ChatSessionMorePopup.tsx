@@ -1,12 +1,12 @@
 "use client";
 
-import { ChatSession } from "@/app/chat/interfaces";
-import { deleteChatSession } from "@/app/chat/services/lib";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { ChatSession } from "@/app/app/interfaces";
+import { deleteChatSession } from "@/app/app/services/lib";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
-} from "@/app/chat/projects/projectsService";
+} from "@/app/app/projects/projectsService";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { FiMoreHorizontal } from "react-icons/fi";
 import useChatSessions from "@/hooks/useChatSessions";

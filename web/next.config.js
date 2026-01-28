@@ -98,6 +98,20 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/chat",
+        destination: "/app",
+        permanent: true,
+      },
+      {
+        source: "/chat/:path*",
+        destination: "/app/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 // Sentry configuration for error monitoring:

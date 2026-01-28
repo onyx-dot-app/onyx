@@ -102,6 +102,7 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.tracing.framework.create import ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -405,7 +406,15 @@ def rename_chat_session(
         max_total_tokens=max_tokens_for_naming,
     )
 
-    new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
+    with ensure_trace(
+        "chat_session_naming",
+        group_id=str(chat_session_id),
+        metadata={
+            "tenant_id": get_current_tenant_id(),
+            "chat_session_id": str(chat_session_id),
+        },
+    ):
+        new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
     update_chat_session(
         db_session=db_session,

@@ -19,6 +19,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
@@ -80,7 +81,7 @@ class DropboxConnector(LoadConnector, PollConnector):
         )
 
         while True:
-            batch: list[Document] = []
+            batch: list[Document | HierarchyNode] = []
             for entry in result.entries:
                 if isinstance(entry, FileMetadata):
                     modified_time = entry.client_modified

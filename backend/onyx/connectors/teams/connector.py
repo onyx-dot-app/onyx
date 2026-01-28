@@ -28,6 +28,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.teams.models import Message
@@ -301,7 +302,7 @@ class TeamsConnector(
                     start=start,
                 )
 
-                slim_doc_buffer = []
+                slim_doc_buffer: list[SlimDocument | HierarchyNode] = []
 
                 for message in messages:
                     slim_doc_buffer.append(

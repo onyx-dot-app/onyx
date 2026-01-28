@@ -14,6 +14,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
@@ -262,7 +263,7 @@ class LocalFileConnector(LoadConnector):
         Iterates over each file path, fetches from Postgres, tries to parse text
         or images, and yields Document batches.
         """
-        documents: list[Document] = []
+        documents: list[Document | HierarchyNode] = []
 
         for file_id in self.file_locations:
             file_store = get_default_file_store()

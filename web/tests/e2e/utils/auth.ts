@@ -75,14 +75,14 @@ export async function loginAs(
   });
 
   try {
-    await page.waitForURL(/\/chat.*/, { timeout: 10000 });
+    await page.waitForURL(/\/app.*/, { timeout: 10000 });
     console.log(
-      `[loginAs] Redirected to /chat for ${userType}. URL: ${page.url()}`
+      `[loginAs] Redirected to /app for ${userType}. URL: ${page.url()}`
     );
   } catch {
-    console.log(`[loginAs] Timeout to /chat. Current URL: ${page.url()}`);
+    console.log(`[loginAs] Timeout to /app. Current URL: ${page.url()}`);
 
-    // If redirect to /chat doesn't happen and we were on login, try signup as fallback
+    // If redirect to /app doesn't happen and we were on login, try signup as fallback
     if (!isOnSignup) {
       console.log(`[loginAs] Navigating to /auth/signup as fallback`);
       await page.goto("/auth/signup");
@@ -98,9 +98,9 @@ export async function loginAs(
       await page.click('button[type="submit"]');
 
       try {
-        await page.waitForURL(/\/chat.*/, { timeout: 10000 });
+        await page.waitForURL(/\/app.*/, { timeout: 10000 });
         console.log(
-          `[loginAs] Fallback redirected to /chat for ${userType}. URL: ${page.url()}`
+          `[loginAs] Fallback redirected to /app for ${userType}. URL: ${page.url()}`
         );
       } catch {
         console.log(
@@ -175,12 +175,12 @@ export async function loginAsRandomUser(page: Page) {
     // Refresh the page to ensure everything is loaded properly
     // await page.reload();
 
-    await page.waitForURL("/chat?new_team=true");
+    await page.waitForURL("/app?new_team=true");
     // Wait for the page to be fully loaded after refresh
     await page.waitForLoadState("networkidle");
   } catch {
     console.log(`Timeout occurred. Current URL: ${page.url()}`);
-    throw new Error("Failed to sign up and redirect to chat page");
+    throw new Error("Failed to sign up and redirect to app page");
   }
 
   return { email, password };
@@ -261,5 +261,5 @@ export async function loginWithCredentials(
   await emailInput.fill(email);
   await passwordInput.fill(password);
   await page.click('button[type="submit"]');
-  await page.waitForURL(/\/chat.*/, { timeout: 15000 });
+  await page.waitForURL(/\/app.*/, { timeout: 15000 });
 }

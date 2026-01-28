@@ -1,6 +1,6 @@
 "use client";
 
-import { FeedbackType } from "@/app/chat/interfaces";
+import { FeedbackType } from "@/app/app/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import useFeedbackController from "@/hooks/useFeedbackController";

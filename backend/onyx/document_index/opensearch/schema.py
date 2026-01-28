@@ -46,6 +46,8 @@ CHUNK_CONTEXT_FIELD_NAME = "chunk_context"
 METADATA_SUFFIX_FIELD_NAME = "metadata_suffix"
 PRIMARY_OWNERS_FIELD_NAME = "primary_owners"
 SECONDARY_OWNERS_FIELD_NAME = "secondary_owners"
+# Hierarchy filtering - list of ancestor hierarchy node IDs
+ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME = "ancestor_hierarchy_node_ids"
 
 
 def get_opensearch_doc_chunk_id(
@@ -133,6 +135,11 @@ class DocumentChunk(BaseModel):
     user_projects: list[int] | None = None
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
+
+    # List of ancestor hierarchy node IDs for hierarchy-based filtering.
+    # None means no hierarchy info (document will be excluded from
+    # hierarchy-filtered searches).
+    ancestor_hierarchy_node_ids: list[int] | None = None
 
     tenant_id: TenantState = Field(
         default_factory=lambda: TenantState(
@@ -452,6 +459,12 @@ class DocumentSchema:
                 CHUNK_INDEX_FIELD_NAME: {"type": "integer"},
                 # The maximum number of tokens this chunk's content can hold.
                 MAX_CHUNK_SIZE_FIELD_NAME: {"type": "integer"},
+                # Hierarchy filtering - list of ancestor hierarchy node IDs.
+                # Used for scoped search within folder/space hierarchies.
+                # OpenSearch's terms query with value_type: "bitmap" can
+                # efficiently check if any value in this array matches a
+                # query bitmap.
+                ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: {"type": "integer"},
             },
         }
 
@@ -476,16 +489,22 @@ class DocumentSchema:
         }
 
     @staticmethod
-    def get_bulk_index_settings() -> dict[str, Any]:
+    def get_index_settings_for_aws_managed_opensearch() -> dict[str, Any]:
         """
-        Optimized settings for bulk indexing: disable refresh and replicas.
+        Settings for AWS-managed OpenSearch.
+
+        Our AWS-managed OpenSearch cluster has 3 data nodes in 3 availability
+        zones.
+          - We use 3 shards to distribute load across all data nodes.
+          - We use 2 replicas to ensure each shard has a copy in each
+            availability zone. This is a hard requirement from AWS. The number
+            of data copies, including the primary (not a replica) copy, must be
+            divisible by the number of AZs.
         """
         return {
             "index": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0,  # No replication during bulk load.
-                # Disables auto-refresh, improves performance in pure indexing (no searching) scenarios.
-                "refresh_interval": "-1",
+                "number_of_shards": 3,
+                "number_of_replicas": 2,
                 # Required for vector search.
                 "knn": True,
                 "knn.algo_param.ef_search": EF_SEARCH,

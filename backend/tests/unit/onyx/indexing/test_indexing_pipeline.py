@@ -1,3 +1,4 @@
+import threading
 from typing import Any
 from typing import cast
 from typing import List
@@ -170,10 +171,12 @@ def test_contextual_rag(
     indexing_documents = process_image_sections([document])
 
     mock_llm_invoke_count = 0
+    counter_lock = threading.Lock()
 
     def mock_llm_invoke(*args: Any, **kwargs: Any) -> ModelResponse:
         nonlocal mock_llm_invoke_count
-        mock_llm_invoke_count += 1
+        with counter_lock:
+            mock_llm_invoke_count += 1
         return ModelResponse(
             id=f"test-{mock_llm_invoke_count}",
             created="2024-01-01T00:00:00Z",

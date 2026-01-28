@@ -25,6 +25,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
@@ -251,7 +252,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
             logger.debug(f"Raw response from Linear: {response_json}")
             edges = response_json["data"]["issues"]["edges"]
 
-            documents: list[Document] = []
+            documents: list[Document | HierarchyNode] = []
             for edge in edges:
                 node = edge["node"]
                 # Create sections for description and comments
@@ -274,6 +275,10 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                 # Cast the sections list to the expected type
                 typed_sections = cast(list[TextSection | ImageSection], sections)
 
+                # Extract team name for hierarchy
+                team_name = (node.get("team") or {}).get("name") or "Unknown Team"
+                identifier = node.get("identifier", node["id"])
+
                 documents.append(
                     Document(
                         id=node["id"],
@@ -282,6 +287,13 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                         semantic_identifier=f"[{node['identifier']}] {node['title']}",
                         title=node["title"],
                         doc_updated_at=time_str_to_utc(node["updatedAt"]),
+                        doc_metadata={
+                            "hierarchy": {
+                                "source_path": [team_name],
+                                "team_name": team_name,
+                                "identifier": identifier,
+                            }
+                        },
                         metadata={
                             k: str(v)
                             for k, v in {

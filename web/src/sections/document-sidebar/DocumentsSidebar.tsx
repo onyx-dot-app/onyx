@@ -4,11 +4,11 @@ import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import ChatDocumentDisplay from "@/sections/document-sidebar/ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
 import { Dispatch, SetStateAction, useMemo, memo } from "react";
-import { getCitations } from "@/app/chat/services/packetUtils";
+import { getCitations } from "@/app/app/services/packetUtils";
 import {
   useCurrentMessageTree,
   useSelectedNodeForDocDisplay,
-} from "@/app/chat/stores/useChatSessionStore";
+} from "@/app/app/stores/useChatSessionStore";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSearchMenu, SvgX } from "@opal/icons";

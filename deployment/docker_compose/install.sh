@@ -9,6 +9,7 @@ EXPECTED_DISK_GB=32
 # Parse command line arguments
 SHUTDOWN_MODE=false
 DELETE_DATA_MODE=false
+INCLUDE_CRAFT=false  # Disabled by default, use --include-craft to enable
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -20,18 +21,24 @@ while [[ $# -gt 0 ]]; do
             DELETE_DATA_MODE=true
             shift
             ;;
+        --include-craft)
+            INCLUDE_CRAFT=true
+            shift
+            ;;
         --help|-h)
             echo "Onyx Installation Script"
             echo ""
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --shutdown     Stop (pause) Onyx containers"
-            echo "  --delete-data  Remove all Onyx data (containers, volumes, and files)"
-            echo "  --help, -h     Show this help message"
+            echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
+            echo "  --shutdown       Stop (pause) Onyx containers"
+            echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
+            echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                    # Install Onyx"
+            echo "  $0 --include-craft    # Install Onyx with Craft enabled"
             echo "  $0 --shutdown         # Pause Onyx services"
             echo "  $0 --delete-data      # Completely remove Onyx and all data"
             exit 0
@@ -56,7 +63,7 @@ NC='\033[0m' # No Color
 
 # Step counter variables
 CURRENT_STEP=0
-TOTAL_STEPS=8
+TOTAL_STEPS=10
 
 # Print colored output
 print_success() {
@@ -212,7 +219,7 @@ else
     echo ""
 fi
 
-# GitHub repo base URL - using docker-compose-easy branch
+# GitHub repo base URL - using main branch
 GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose"
 
 # Check system requirements
@@ -536,12 +543,22 @@ if [ -f "$ENV_FILE" ]; then
         echo "• Press Enter for latest (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        read -p "Enter tag [default: latest]: " -r VERSION
+        # If --include-craft was passed, default to craft-latest
+        if [ "$INCLUDE_CRAFT" = true ]; then
+            read -p "Enter tag [default: craft-latest]: " -r VERSION
+        else
+            read -p "Enter tag [default: latest]: " -r VERSION
+        fi
         echo ""
 
         if [ -z "$VERSION" ]; then
-            VERSION="latest"
-            print_info "Selected: Latest version"
+            if [ "$INCLUDE_CRAFT" = true ]; then
+                VERSION="craft-latest"
+                print_info "Selected: craft-latest (Craft enabled)"
+            else
+                VERSION="latest"
+                print_info "Selected: Latest version"
+            fi
         else
             print_info "Selected: $VERSION"
         fi
@@ -556,6 +573,12 @@ if [ -f "$ENV_FILE" ]; then
             echo "IMAGE_TAG=$VERSION" >> "$ENV_FILE"
         fi
         print_success "Updated IMAGE_TAG to $VERSION in .env file"
+
+        # If using craft image, also enable ENABLE_CRAFT
+        if [[ "$VERSION" == craft-* ]]; then
+            sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
+            print_success "ENABLE_CRAFT set to true"
+        fi
         print_success "Configuration updated for upgrade"
     else
         print_info "Keeping existing configuration..."
@@ -568,15 +591,27 @@ else
     # Ask for version
     print_info "Which tag would you like to deploy?"
     echo ""
-    echo "• Press Enter for latest (recommended)"
-    echo "• Type a specific tag (e.g., v0.1.0)"
-    echo ""
-    read -p "Enter tag [default: latest]: " -r VERSION
+    if [ "$INCLUDE_CRAFT" = true ]; then
+        echo "• Press Enter for craft-latest (recommended for Craft)"
+        echo "• Type a specific tag (e.g., craft-v1.0.0)"
+        echo ""
+        read -p "Enter tag [default: craft-latest]: " -r VERSION
+    else
+        echo "• Press Enter for latest (recommended)"
+        echo "• Type a specific tag (e.g., v0.1.0)"
+        echo ""
+        read -p "Enter tag [default: latest]: " -r VERSION
+    fi
     echo ""
 
     if [ -z "$VERSION" ]; then
-        VERSION="latest"
-        print_info "Selected: Latest tag"
+        if [ "$INCLUDE_CRAFT" = true ]; then
+            VERSION="craft-latest"
+            print_info "Selected: craft-latest (Craft enabled)"
+        else
+            VERSION="latest"
+            print_info "Selected: Latest tag"
+        fi
     else
         print_info "Selected: $VERSION"
     fi
@@ -630,6 +665,16 @@ else
         print_success "Basic authentication enabled in configuration"
     fi
 
+    # Configure Craft based on flag or if using a craft-* image tag
+    # By default, env.template has Craft commented out (disabled)
+    if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
+        # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
+        sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true)"
+    else
+        print_info "Onyx Craft disabled (use --include-craft to enable)"
+    fi
+
     print_success ".env file created with your preferences"
     echo ""
     print_info "IMPORTANT: The .env file has been configured with your selections."
@@ -637,6 +682,7 @@ else
     echo "  • Advanced authentication (OAuth, SAML, etc.)"
     echo "  • AI model configuration"
     echo "  • Domain settings (for production)"
+    echo "  • Onyx Craft (set ENABLE_CRAFT=true)"
     echo ""
 fi
 
@@ -706,12 +752,16 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
-# Determine if we're using the latest tag
+# Determine if we're using the latest tag or a craft tag (both should force pull)
 # Read IMAGE_TAG from .env file and remove any quotes or whitespace
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "latest" ]; then
+if [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
     USE_LATEST=true
-    print_info "Using 'latest' tag - will force pull and recreate containers"
+    if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+        print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
+    else
+        print_info "Using 'latest' tag - will force pull and recreate containers"
+    fi
 else
     USE_LATEST=false
 fi

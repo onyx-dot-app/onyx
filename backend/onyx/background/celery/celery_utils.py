@@ -21,6 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -32,10 +33,16 @@ PRUNING_CHECKPOINTED_BATCH_SIZE = 32
 
 
 def document_batch_to_ids(
-    doc_batch: Iterator[list[Document]] | Iterator[list[SlimDocument]],
+    doc_batch: (
+        Iterator[list[Document | HierarchyNode]]
+        | Iterator[list[SlimDocument | HierarchyNode]]
+    ),
 ) -> Generator[set[str], None, None]:
     for doc_list in doc_batch:
-        yield {doc.id for doc in doc_list}
+        yield {
+            doc.raw_node_id if isinstance(doc, HierarchyNode) else doc.id
+            for doc in doc_list
+        }
 
 
 def extract_ids_from_runnable_connector(
