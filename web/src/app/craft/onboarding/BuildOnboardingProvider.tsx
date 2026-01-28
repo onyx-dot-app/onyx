@@ -51,7 +51,7 @@ export function BuildOnboardingProvider({
       {/* Block non-admin users when no LLM providers are configured */}
       <NoLlmProvidersModal
         open={showNoProvidersModal}
-        onClose={() => router.push("/chat")}
+        onClose={() => router.push("/app")}
       />
 
       {/* Unified onboarding modal - only show if not blocked by no providers */}

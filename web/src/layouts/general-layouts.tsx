@@ -165,6 +165,7 @@ function Section({
  * - `secondary`: Compact size (16px icon) with standard text. Use for denser lists or nested items.
  * - `tertiary`: Compact size (16px icon) with standard text. Use for less prominent items in tight layouts.
  * - `tertiary-muted`: Compact size (16px icon) with muted text styling. Use for de-emphasized or secondary information.
+ * - `mini`: Smallest size (12px icon) with muted secondary text. Use for metadata labels (e.g., owner, action count).
  *
  * @param icon - Optional icon component to display on the left
  * @param title - The main title text (required)
@@ -333,4 +334,73 @@ function AttachmentItemLayout({
   );
 }
 
-export { Section, LineItemLayout, AttachmentItemLayout };
+/**
+ * CardItemLayout - A layout for card headers with icon, title, description, and actions
+ *
+ * Structure:
+ *   Column [
+ *     Row [
+ *       Row [ Icon (18px), Title ],
+ *       rightChildren (action buttons)
+ *     ],
+ *     Description (optional, 2-line clamp)
+ *   ]
+ *
+ * Used for card components that display an entity with:
+ * - An icon on the left (18px, controlled by this layout)
+ * - A title next to the icon
+ * - Optional action buttons on the right
+ * - Optional description below (2-line max)
+ *
+ * @param icon - Icon component to render on the left. Receives `size` prop from layout.
+ *               Use a callback for custom components: `(props) => <AgentAvatar {...props} />`
+ * @param title - The main title text
+ * @param description - Optional description text below the title row (clamped to 2 lines)
+ * @param rightChildren - Optional content on the right (typically action buttons)
+ */
+export interface CardItemLayoutProps {
+  icon: React.FunctionComponent<IconProps>;
+  title: string;
+  description?: string;
+  rightChildren?: React.ReactNode;
+}
+function CardItemLayout({
+  icon: Icon,
+  title,
+  description,
+  rightChildren,
+}: CardItemLayoutProps) {
+  return (
+    <div className="flex flex-col flex-1 self-stretch items-center gap-1 p-1">
+      <div className="flex flex-row self-stretch items-center justify-between gap-1">
+        <div className="flex flex-row items-center self-stretch p-1.5 gap-1.5">
+          <div className="px-0.5">
+            <Icon size={18} />
+          </div>
+          <Truncated mainContentBody>{title}</Truncated>
+        </div>
+
+        {rightChildren && (
+          <div className={cn("flex flex-row p-0.5 items-center")}>
+            {rightChildren}
+          </div>
+        )}
+      </div>
+
+      {description && (
+        <div className="pb-1 px-2 flex self-stretch">
+          <Text
+            as="p"
+            secondaryBody
+            text03
+            className="line-clamp-2 truncate whitespace-normal h-[2.2rem] break-words"
+          >
+            {description}
+          </Text>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export { Section, LineItemLayout, AttachmentItemLayout, CardItemLayout };

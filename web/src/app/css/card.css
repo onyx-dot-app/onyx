@@ -1,5 +1,5 @@
 .card {
-  @apply rounded-16 w-full;
+  @apply rounded-16 w-full overflow-hidden;
 }
 
 .card[data-variant="primary"] {
