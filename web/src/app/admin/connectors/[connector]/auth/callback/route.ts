@@ -9,7 +9,7 @@ import {
 import {
   BUILD_MODE_OAUTH_COOKIE_NAME,
   BUILD_CONFIGURE_PATH,
-} from "@/app/build/v1/constants";
+} from "@/app/craft/v1/constants";
 import { processCookies } from "@/lib/userSS";
 
 export const GET = async (request: NextRequest) => {

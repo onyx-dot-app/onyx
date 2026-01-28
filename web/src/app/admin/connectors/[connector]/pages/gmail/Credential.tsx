@@ -11,7 +11,7 @@ import {
   DOCS_ADMINS_PATH,
   GMAIL_AUTH_IS_ADMIN_COOKIE_NAME,
 } from "@/lib/constants";
-import { BUILD_MODE_OAUTH_COOKIE_NAME } from "@/app/build/v1/constants";
+import { BUILD_MODE_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
