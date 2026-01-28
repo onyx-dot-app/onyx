@@ -72,12 +72,9 @@ export function useQueryController(
   const [searchResults, setSearchResults] = useState<SearchDocWithContent[]>(
     []
   );
-  const [executedQueries, setExecutedQueries] = useState<string[]>([]);
   const [llmSelectedDocIds, setLlmSelectedDocIds] = useState<string[] | null>(
     null
   );
-  const [isSearchLoading, setIsSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Abort controllers for in-flight requests
   const classifyAbortRef = useRef<AbortController | null>(null);
@@ -96,9 +93,6 @@ export function useQueryController(
       const controller = new AbortController();
       searchAbortRef.current = controller;
 
-      setIsSearchLoading(true);
-      setSearchError(null);
-
       try {
         const response: SearchFullResponse = await searchDocuments(
           searchQuery,
@@ -112,15 +106,12 @@ export function useQueryController(
 
         // Check if the response contains an error
         if (response.error) {
-          setSearchError(response.error);
           setSearchResults([]);
-          setExecutedQueries([]);
           setLlmSelectedDocIds(null);
           return;
         }
 
         setSearchResults(response.search_docs);
-        setExecutedQueries(response.all_executed_queries);
         setLlmSelectedDocIds(response.llm_selected_doc_ids ?? null);
       } catch (err) {
         // Don't update state if the request was aborted
@@ -128,18 +119,9 @@ export function useQueryController(
           return;
         }
 
-        const errorMessage =
-          err instanceof Error ? err.message : "Search failed";
         console.error("Document search failed:", err);
-        setSearchError(errorMessage);
         setSearchResults([]);
-        setExecutedQueries([]);
         setLlmSelectedDocIds(null);
-      } finally {
-        // Only update loading state if this is still the active request
-        if (searchAbortRef.current === controller) {
-          setIsSearchLoading(false);
-        }
       }
     },
     []
@@ -197,7 +179,6 @@ export function useQueryController(
       if (appMode === "chat") {
         setClassification("chat");
         setSearchResults([]);
-        setExecutedQueries([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);
         return;
@@ -219,7 +200,6 @@ export function useQueryController(
         } else {
           // Clear any previous search results when going to chat
           setSearchResults([]);
-          setExecutedQueries([]);
           setLlmSelectedDocIds(null);
           onChat(submitQuery);
         }
@@ -231,7 +211,6 @@ export function useQueryController(
 
         // On other errors, default to chat
         setSearchResults([]);
-        setExecutedQueries([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);
       }
@@ -256,18 +235,14 @@ export function useQueryController(
     setQuery(null);
     setClassification(null);
     setSearchResults([]);
-    setExecutedQueries([]);
     setLlmSelectedDocIds(null);
-    setIsSearchLoading(false);
-    setSearchError(null);
   }, []);
 
   // Sync classification state with navigation context
   // When in an existing chat session, classification should be "chat"
   // When switching agents or projects (no session), reset to allow new classification
   useEffect(() => {
-    if (appFocus.isNewSession()) return;
-    else if (appFocus.isChat()) setClassification("chat");
+    if (appFocus.isChat()) setClassification("chat");
     else reset();
   }, [appFocus]);
 

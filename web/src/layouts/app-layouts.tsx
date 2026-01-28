@@ -107,8 +107,7 @@ function AppHeader() {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { currentChatSession, refreshChatSessions, currentChatSessionId } =
-    useChatSessions();
+  const { currentChatSession, refreshChatSessions } = useChatSessions();
   const appFocus = useAppFocus();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
@@ -314,7 +313,13 @@ function AppHeader() {
             />
             {!appFocus.isUserSettings() && (
               <InputSelect
-                value={currentChatSessionId ? "chat" : appMode}
+                value={
+                  appFocus.isChat() ||
+                  appFocus.isAgent() ||
+                  appFocus.isProject()
+                    ? "chat"
+                    : appMode
+                }
                 onValueChange={(value) => setAppMode(value as AppMode)}
                 variant={appFocus.isNewSession() ? "secondary" : "readOnly"}
               >
@@ -355,7 +360,7 @@ function AppHeader() {
 
           {/* Right - contains the share and more-options buttons (only when chat session exists) */}
           <Section flexDirection="row" justifyContent="end">
-            {currentChatSessionId && (
+            {appFocus.isChat() && (
               <>
                 <Button
                   leftIcon={SvgShare}
