@@ -157,8 +157,7 @@ class DATestPersona(BaseModel):
     recency_bias: RecencyBiasSetting
     document_set_ids: list[int]
     tool_ids: list[int]
-    llm_model_provider_override: str | None
-    llm_model_version_override: str | None
+    model_configuration_id_override: int | None
     users: list[str]
     groups: list[int]
     label_ids: list[int]
