@@ -77,7 +77,7 @@ def get_rate_limit(
 
 @router.get("/connectors", response_model=BuildConnectorListResponse)
 def get_build_connectors(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> BuildConnectorListResponse:
     """Get all connectors for the build admin panel.
