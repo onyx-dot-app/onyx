@@ -768,20 +768,18 @@ class LocalSandboxManager(SandboxManager):
     def _is_path_allowed(self, target_path: Path, session_path: Path) -> bool:
         """Check if a path is within allowed directories.
 
-        Allows paths within the session directory OR the demo data directory.
-        The demo data whitelist is needed because sessions may have a symlink
-        to demo_data that points to a path outside the session directory.
+        Allows paths within the session directory or the files/ symlink target.
+        The symlink target check handles both demo data and user file paths.
 
         Args:
-            target_path: The resolved target path to check
-            session_path: The resolved session path
+            target_path: The target path to check
+            session_path: The session path
 
         Returns:
             True if the path is allowed, False otherwise
         """
         resolved_target = target_path.resolve()
         resolved_session = session_path.resolve()
-        resolved_demo_data = Path(DEMO_DATA_PATH).resolve()
 
         # Allow if within session path
         try:
@@ -790,12 +788,14 @@ class LocalSandboxManager(SandboxManager):
         except ValueError:
             pass
 
-        # Allow if within demo data directory (for symlinked files/ directory)
-        try:
-            resolved_target.relative_to(resolved_demo_data)
-            return True
-        except ValueError:
-            pass
+        # Allow if within files/ symlink target (covers demo data and user files)
+        files_link = session_path / "files"
+        if files_link.is_symlink():
+            try:
+                resolved_target.relative_to(files_link.resolve())
+                return True
+            except ValueError:
+                pass
 
         return False
 
