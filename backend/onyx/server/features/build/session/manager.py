@@ -76,6 +76,9 @@ from onyx.server.features.build.session.prompts import (
     FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
 )
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -783,7 +786,7 @@ class SessionManager:
         if not user_message:
             return f"Build Session {str(session_id)[:8]}"
 
-        # Use LLM to generate a concise session name
+        # Use LLM to generate a concise session name with Braintrust tracing
         try:
             llm = get_default_llm()
             prompt_messages: LanguageModelInput = [
@@ -794,8 +797,23 @@ class SessionManager:
                     )
                 ),
             ]
-            response = llm.invoke(prompt_messages, reasoning_effort=ReasoningEffort.OFF)
-            generated_name = llm_response_to_string(response).strip().strip('"')
+            with ensure_trace(
+                "build_session_naming",
+                group_id=str(session_id),
+                metadata={"session_id": str(session_id)},
+            ):
+                with llm_generation_span(
+                    llm=llm,
+                    flow="build_session_naming",
+                    input_messages=prompt_messages,
+                ) as span_generation:
+                    response = llm.invoke(
+                        prompt_messages, reasoning_effort=ReasoningEffort.OFF
+                    )
+                    generated_name = llm_response_to_string(response).strip().strip('"')
+                    record_llm_span_output(
+                        span_generation, generated_name, response.usage
+                    )
 
             # Ensure the name isn't too long (max 50 chars)
             if len(generated_name) > 50:
@@ -840,10 +858,20 @@ class SessionManager:
                     )
                 ),
             ]
-            response = llm.invoke(
-                prompt_messages, reasoning_effort=ReasoningEffort.OFF, max_tokens=500
-            )
-            raw_output = llm_response_to_string(response).strip()
+            # Call LLM with Braintrust tracing
+            with ensure_trace("build_followup_suggestions"):
+                with llm_generation_span(
+                    llm=llm,
+                    flow="build_followup_suggestions",
+                    input_messages=prompt_messages,
+                ) as span_generation:
+                    response = llm.invoke(
+                        prompt_messages,
+                        reasoning_effort=ReasoningEffort.OFF,
+                        max_tokens=500,
+                    )
+                    raw_output = llm_response_to_string(response).strip()
+                    record_llm_span_output(span_generation, raw_output, response.usage)
 
             return self._parse_suggestions(raw_output)
         except Exception as e:
