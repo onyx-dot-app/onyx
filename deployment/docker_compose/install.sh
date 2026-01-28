@@ -576,7 +576,7 @@ if [ -f "$ENV_FILE" ]; then
 
         # If using craft image, also enable ENABLE_CRAFT
         if [[ "$VERSION" == craft-* ]]; then
-            sed -i.bak 's/^# ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
+            sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
             print_success "ENABLE_CRAFT set to true"
         fi
         print_success "Configuration updated for upgrade"
@@ -668,9 +668,8 @@ else
     # Configure Craft based on flag or if using a craft-* image tag
     # By default, env.template has Craft commented out (disabled)
     if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
-        # Set ENABLE_CRAFT=true for runtime configuration
-        sed -i.bak 's/^# ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-        sed -i.bak 's/^ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
+        # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
+        sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
         print_success "Onyx Craft enabled (ENABLE_CRAFT=true)"
     else
         print_info "Onyx Craft disabled (use --include-craft to enable)"
