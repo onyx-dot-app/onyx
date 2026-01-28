@@ -35,70 +35,70 @@ export const MemoizedAnchor = memo(
     children: React.ReactNode;
   }): JSX.Element => {
     const value = children?.toString();
-    if (value?.startsWith("[") && value?.endsWith("]")) {
-      const match = value.match(/\[(D|Q)?(\d+)\]/);
+    const isCitationFormat = value?.startsWith("[") && value?.endsWith("]");
+    const match = (isCitationFormat && value) ? value.match(/\[(D|Q)?(\d+)\]/) : null;
 
-      if (match) {
-        const match_item = match[2];
-        if (match_item !== undefined) {
-          const isSubQuestion = match[1] === "Q";
-          const isDocument = !isSubQuestion;
+    const match_item = match ? match[2] : undefined;
+    const isSubQuestion = match ? match[1] === "Q" : false;
+    const isDocument = match ? !isSubQuestion : false;
+    const citation_num = match_item ? parseInt(match_item, 10) : -1;
 
-          const citation_num = parseInt(match_item, 10);
-
-          // Use citation map to find the correct document
-          // Citations map format: {citation_num: document_id}
-          // e.g., {1: "doc_abc", 2: "doc_xyz", 3: "doc_123"}
-          let associatedDoc: OnyxDocument | null = null;
-          if (isDocument && docs && citations) {
-            const document_id = citations[citation_num];
-            if (document_id) {
-              associatedDoc =
-                docs.find((d) => d.document_id === document_id) || null;
-            }
-          }
-
-          const associatedSubQuestion = isSubQuestion
-            ? subQuestions?.[citation_num - 1]
-            : undefined;
-
-          if (!associatedDoc && !associatedSubQuestion) {
-            return <>{children}</>;
-          }
-
-          let icon: React.ReactNode = null;
-          if (associatedDoc?.source_type === "web") {
-            icon = <WebResultIcon url={associatedDoc.link} />;
-          } else {
-            icon = (
-              <SourceIcon
-                sourceType={associatedDoc?.source_type as ValidSources}
-                iconSize={18}
-              />
-            );
-          }
-          const associatedDocInfo = associatedDoc
-            ? {
-                ...associatedDoc,
-                icon: icon as any,
-                link: associatedDoc.link,
-              }
-            : undefined;
-
-          return (
-            <MemoizedLink
-              updatePresentingDocument={updatePresentingDocument}
-              href={href}
-              document={associatedDocInfo}
-              question={associatedSubQuestion}
-              openQuestion={openQuestion}
-            >
-              {children}
-            </MemoizedLink>
-          );
+    const associatedDoc = useMemo(() => {
+      if (isDocument && docs && citations && citation_num !== -1) {
+        const document_id = citations[citation_num];
+        if (document_id) {
+          return docs.find((d) => d.document_id === document_id) || null;
         }
       }
+      return null;
+    }, [isDocument, docs, citations, citation_num]);
+
+    const associatedSubQuestion = useMemo(() => {
+      return isSubQuestion && citation_num !== -1
+        ? subQuestions?.[citation_num - 1]
+        : undefined;
+    }, [isSubQuestion, citation_num, subQuestions]);
+
+    const associatedDocInfo = useMemo(() => {
+      if (!associatedDoc) return undefined;
+
+      let icon: React.ReactNode = null;
+      if (associatedDoc.source_type === "web") {
+        icon = <WebResultIcon url={associatedDoc.link} />;
+      } else {
+        icon = (
+          <SourceIcon
+            sourceType={associatedDoc.source_type as ValidSources}
+            iconSize={18}
+          />
+        );
+      }
+
+      return {
+        ...associatedDoc,
+        icon: icon as any,
+        link: associatedDoc.link,
+      };
+    }, [associatedDoc]);
+
+    if (match) {
+      if (!associatedDoc && !associatedSubQuestion) {
+        return <>{children}</>;
+      }
+
+      return (
+        <MemoizedLink
+          updatePresentingDocument={updatePresentingDocument}
+          href={href}
+          document={associatedDocInfo}
+          question={associatedSubQuestion}
+          openQuestion={openQuestion}
+        >
+          {children}
+        </MemoizedLink>
+      );
     }
+
     return (
       <MemoizedLink
         updatePresentingDocument={updatePresentingDocument}
@@ -124,22 +124,28 @@ export const MemoizedLink = memo(
     [key: string]: any;
   }) => {
     const value = rest.children;
-    const questionCardProps: QuestionCardProps | undefined =
-      question && openQuestion
-        ? {
+    const questionCardProps: QuestionCardProps | undefined = useMemo(
+      () =>
+        question && openQuestion
+          ? {
             question: question,
             openQuestion: openQuestion,
           }
-        : undefined;
+          : undefined,
+      [question?.level, question?.level_question_num, openQuestion]
+    );
 
-    const documentCardProps: DocumentCardProps | undefined =
-      document && updatePresentingDocument
-        ? {
+    const documentCardProps: DocumentCardProps | undefined = useMemo(
+      () =>
+        document && updatePresentingDocument
+          ? {
             url: document.link,
             document: document as LoadedOnyxDocument,
             updatePresentingDocument: updatePresentingDocument!,
           }
-        : undefined;
+          : undefined,
+      [document?.document_id, document?.link, updatePresentingDocument]
+    );
 
     if (value?.toString().startsWith("*")) {
       return <BlinkingDot addMargin />;
