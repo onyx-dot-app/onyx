@@ -453,11 +453,18 @@ export default function AgentEditorPage({
 
   // LLM Model Selection
   const findProviderAndModel = useCallback(
-    (providers: any[] | undefined, predicate: (m: any) => boolean) => {
-      const provider = providers?.find(
-        (p: any) => p.model_configurations?.find(predicate)
+    (
+      providers: any[] | undefined,
+      modelPredicate: (m: any) => boolean,
+      providerPredicate?: (p: any) => boolean
+    ) => {
+      const candidateProviders = providerPredicate
+        ? providers?.filter(providerPredicate)
+        : providers;
+      const provider = candidateProviders?.find(
+        (p: any) => p.model_configurations?.find(modelPredicate)
       );
-      const model = provider?.model_configurations?.find(predicate);
+      const model = provider?.model_configurations?.find(modelPredicate);
       return { provider, model };
     },
     []
@@ -490,7 +497,8 @@ export default function AgentEditorPage({
         if (modelName && name) {
           const { model } = findProviderAndModel(
             llmProviders,
-            (m: any) => m.name === modelName
+            (m: any) => m.name === modelName,
+            (p: any) => p.name === name
           );
           setFieldValue("model_configuration_id_override", model?.id || null);
         }
