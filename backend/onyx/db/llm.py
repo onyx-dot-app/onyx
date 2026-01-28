@@ -482,26 +482,6 @@ def fetch_model_configuration_view(
     )
 
 
-def fetch_model_configuration_from_names(
-    db_session: Session, provider_name: str, model_name: str
-) -> ModelConfigurationView | None:
-    model_configuration_model = db_session.scalar(
-        select(ModelConfiguration)
-        .join(
-            LLMProviderModel, ModelConfiguration.llm_provider_id == LLMProviderModel.id
-        )
-        .where(
-            ModelConfiguration.name == model_name,
-            LLMProviderModel.name == provider_name,
-        )
-    )
-    if not model_configuration_model:
-        return None
-    return ModelConfigurationView.from_model(
-        model_configuration_model=model_configuration_model, provider_name=provider_name
-    )
-
-
 def fetch_llm_provider_view_from_model_id(
     db_session: Session, model_configuration_id: int
 ) -> LLMProviderView | None:
