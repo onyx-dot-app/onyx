@@ -39,7 +39,7 @@ class TestApplyLicenseStatusToSettings:
     @pytest.mark.parametrize(
         "license_status,expected_status",
         [
-            (None, ApplicationStatus.GATED_ACCESS),  # No license = gated
+            (None, ApplicationStatus.ACTIVE),  # No license = allow community features
             (
                 ApplicationStatus.GATED_ACCESS,
                 ApplicationStatus.GATED_ACCESS,

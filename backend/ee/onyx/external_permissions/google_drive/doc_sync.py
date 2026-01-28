@@ -10,11 +10,15 @@ from ee.onyx.external_permissions.google_drive.permission_retrieval import (
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import DocExternalAccess
+from onyx.access.models import ElementExternalAccess
 from onyx.access.models import ExternalAccess
+from onyx.access.models import NodeExternalAccess
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -167,17 +171,101 @@ def get_external_access_for_raw_gdrive_file(
     )
 
 
+def get_external_access_for_folder(
+    folder: GoogleDriveFileType,
+    google_domain: str,
+    drive_service: GoogleDriveService,
+) -> ExternalAccess:
+    """
+    Extract ExternalAccess from a folder's permissions.
+
+    This fetches permissions using the Drive API (via permissionIds) and extracts
+    user emails, group emails, and public access status.
+
+    Args:
+        folder: The folder metadata from Google Drive API (must include permissionIds field)
+        google_domain: The company's Google Workspace domain (e.g., "company.com")
+        drive_service: Google Drive service for fetching permission details
+
+    Returns:
+        ExternalAccess with extracted permission info
+    """
+    folder_id = folder.get("id")
+    if not folder_id:
+        logger.warning("Folder missing ID, returning empty permissions")
+        return ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+
+    # Get permission IDs from folder metadata
+    permission_ids = folder.get("permissionIds") or []
+    if not permission_ids:
+        logger.debug(f"No permissionIds found for folder {folder_id}")
+        return ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+
+    # Fetch full permission objects using the permission IDs
+    permissions_list = get_permissions_by_ids(
+        drive_service=drive_service,
+        doc_id=folder_id,
+        permission_ids=permission_ids,
+    )
+
+    user_emails: set[str] = set()
+    group_emails: set[str] = set()
+    is_public = False
+
+    for permission in permissions_list:
+        if permission.type == PermissionType.USER:
+            if permission.email_address:
+                user_emails.add(permission.email_address)
+            else:
+                logger.warning(f"User permission without email for folder {folder_id}")
+        elif permission.type == PermissionType.GROUP:
+            # Groups are represented as email addresses in Google Drive
+            if permission.email_address:
+                group_emails.add(permission.email_address)
+            else:
+                logger.warning(f"Group permission without email for folder {folder_id}")
+        elif permission.type == PermissionType.DOMAIN:
+            # Domain permission - check if it matches company domain
+            if permission.domain == google_domain:
+                # Only public if discoverable (allowFileDiscovery is not False)
+                # If allowFileDiscovery is False, it's "link only" access
+                is_public = permission.allow_file_discovery is not False
+            else:
+                logger.debug(
+                    f"Domain permission for {permission.domain} does not match "
+                    f"company domain {google_domain} for folder {folder_id}"
+                )
+        elif permission.type == PermissionType.ANYONE:
+            # Only public if discoverable (allowFileDiscovery is not False)
+            # If allowFileDiscovery is False, it's "link only" access
+            is_public = permission.allow_file_discovery is not False
+
+    return ExternalAccess(
+        external_user_emails=user_emails,
+        external_user_group_ids=group_emails,
+        is_public=is_public,
+    )
+
+
 def gdrive_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None,
-) -> Generator[DocExternalAccess, None, None]:
+) -> Generator[ElementExternalAccess, None, None]:
     """
-    Adds the external permissions to the documents in postgres
-    if the document doesn't already exists in postgres, we create
+    Adds the external permissions to the documents and hierarchy nodes in postgres.
+    If the document doesn't already exist in postgres, we create
     it in postgres so that when it gets created later, the permissions are
-    already populated
+    already populated.
     """
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
@@ -195,7 +283,15 @@ def gdrive_doc_sync(
                     raise RuntimeError("gdrive_doc_sync: Stop signal detected")
 
                 callback.progress("gdrive_doc_sync", 1)
-
+            if isinstance(slim_doc, HierarchyNode):
+                # Yield hierarchy node permissions to be processed in outer layer
+                if slim_doc.external_access:
+                    yield NodeExternalAccess(
+                        external_access=slim_doc.external_access,
+                        raw_node_id=slim_doc.raw_node_id,
+                        source=DocumentSource.GOOGLE_DRIVE.value,
+                    )
+                continue
             if slim_doc.external_access is None:
                 raise ValueError(
                     f"Drive perm sync: No external access for document {slim_doc.id}"

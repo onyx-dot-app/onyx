@@ -19,6 +19,8 @@ from onyx.natural_language_processing.english_stopwords import ENGLISH_STOPWORDS
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.prompts.federated_search import SLACK_DATE_EXTRACTION_PROMPT
 from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -192,7 +194,15 @@ def extract_date_range_from_query(
 
     try:
         prompt = SLACK_DATE_EXTRACTION_PROMPT.format(query=query)
-        response = llm_response_to_string(llm.invoke(UserMessage(content=prompt)))
+        prompt_msg = UserMessage(content=prompt)
+
+        # Call LLM with Braintrust tracing
+        with llm_generation_span(
+            llm=llm, flow="slack_date_extraction", input_messages=[prompt_msg]
+        ) as span_generation:
+            llm_response = llm.invoke(prompt_msg)
+            response = llm_response_to_string(llm_response)
+            record_llm_span_output(span_generation, response, llm_response.usage)
 
         response_clean = _parse_llm_code_block_response(response)
 
@@ -591,7 +601,13 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
     )
 
     try:
-        response = llm_response_to_string(llm.invoke(prompt))
+        # Call LLM with Braintrust tracing
+        with llm_generation_span(
+            llm=llm, flow="slack_query_expansion", input_messages=[prompt]
+        ) as span_generation:
+            llm_response = llm.invoke(prompt)
+            response = llm_response_to_string(llm_response)
+            record_llm_span_output(span_generation, response, llm_response.usage)
 
         response_clean = _parse_llm_code_block_response(response)
 

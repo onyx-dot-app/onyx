@@ -115,12 +115,15 @@ export default function CraftingLoader() {
             <div className="flex items-center text-neutral-300">
               <span className="text-emerald-500 mr-2">/&gt;</span>
               <span>{currentText}</span>
+              <span className="w-2 h-5 bg-emerald-500 animate-pulse ml-0.5" />
             </div>
           )}
-          <div className="flex items-center text-neutral-300">
-            <span className="text-emerald-500 mr-2">/&gt;</span>
-            <span className="w-2 h-5 bg-emerald-500 animate-pulse" />
-          </div>
+          {!hasCurrentText && (
+            <div className="flex items-center text-neutral-300">
+              <span className="text-emerald-500 mr-2">/&gt;</span>
+              <span className="w-2 h-5 bg-emerald-500 animate-pulse" />
+            </div>
+          )}
         </div>
       </div>
 

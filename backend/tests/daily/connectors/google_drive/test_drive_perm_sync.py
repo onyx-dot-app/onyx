@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
+from onyx.access.models import DocExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow
@@ -117,6 +118,8 @@ def test_gdrive_perm_sync_with_real_data(
     public_doc_ids: set[str] = set()
 
     for doc_access in doc_access_list:
+        if not isinstance(doc_access, DocExternalAccess):
+            continue
         doc_id = doc_access.doc_id
         # make sure they are new sets to avoid mutating the original
         doc_to_email_mapping[doc_id] = copy.deepcopy(

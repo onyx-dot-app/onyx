@@ -9,6 +9,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 
 
 def load_test_data(file_name: str = "test_fireflies_data.json") -> dict[str, Any]:
@@ -32,10 +33,12 @@ def fireflies_connector() -> FirefliesConnector:
 def test_fireflies_connector_basic(fireflies_connector: FirefliesConnector) -> None:
     test_data = load_test_data()
 
-    connector_return_data: list[Document] = next(
+    connector_return_data: list[Document | HierarchyNode] = next(
         fireflies_connector.poll_source(0, time.time())
     )
-    target_doc: Document = connector_return_data[0]
+    target_doc: Document | HierarchyNode = connector_return_data[0]
+    if isinstance(target_doc, HierarchyNode):
+        raise ValueError("Hierarchy node returned from connector")
 
     assert target_doc is not None, "No documents were retrieved from the connector"
     assert (

@@ -62,6 +62,9 @@ from onyx.natural_language_processing.utils import tokenizer_trim_middle
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT1
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_PROMPT2
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_PROMPT
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
@@ -493,9 +496,15 @@ def add_document_summaries(
     # Note: For document summarization, there's no cacheable prefix since the document changes
     # So we just pass the full prompt without caching
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-    doc_summary = llm_response_to_string(
-        llm.invoke(UserMessage(content=summary_prompt), max_tokens=MAX_CONTEXT_TOKENS)
-    )
+    prompt_msg = UserMessage(content=summary_prompt)
+
+    # Call LLM with Braintrust tracing
+    with llm_generation_span(
+        llm=llm, flow="indexing_document_summary", input_messages=[prompt_msg]
+    ) as span_generation:
+        response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+        doc_summary = llm_response_to_string(response)
+        record_llm_span_output(span_generation, doc_summary, response.usage)
 
     for chunk in chunks_by_doc:
         chunk.doc_summary = doc_summary
@@ -534,14 +543,17 @@ def add_chunk_summaries(
     if not doc_info:
         # This happens if the document is too long AND document summaries are turned off
         # In this case we compute a doc summary using the LLM
-        doc_info = llm_response_to_string(
-            llm.invoke(
-                UserMessage(
-                    content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-                ),
-                max_tokens=MAX_CONTEXT_TOKENS,
-            )
+        fallback_prompt = UserMessage(
+            content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
         )
+        with llm_generation_span(
+            llm=llm,
+            flow="indexing_fallback_document_summary",
+            input_messages=[fallback_prompt],
+        ) as span_generation:
+            response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            doc_info = llm_response_to_string(response)
+            record_llm_span_output(span_generation, doc_info, response.usage)
 
     from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
@@ -559,12 +571,17 @@ def add_chunk_summaries(
                 continuation=True,  # Append chunk to the document context
             )
 
-            chunk.chunk_context = llm_response_to_string(
-                llm.invoke(
-                    processed_prompt,
-                    max_tokens=MAX_CONTEXT_TOKENS,
+            # Call LLM with Braintrust tracing
+            with llm_generation_span(
+                llm=llm,
+                flow="indexing_chunk_context",
+                input_messages=[processed_prompt],
+            ) as span_generation:
+                response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+                chunk.chunk_context = llm_response_to_string(response)
+                record_llm_span_output(
+                    span_generation, chunk.chunk_context, response.usage
                 )
-            )
 
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue
@@ -858,15 +875,20 @@ def run_indexing_pipeline(
         # after every doc, update status in case there are a bunch of really long docs
     )
 
-    return index_doc_batch_with_handler(
-        chunker=chunker,
-        embedder=embedder,
-        document_indices=document_indices,
-        document_batch=document_batch,
-        request_id=request_id,
-        tenant_id=tenant_id,
-        adapter=adapter,
-        enable_contextual_rag=enable_contextual_rag,
-        llm=llm,
-        ignore_time_skip=ignore_time_skip,
-    )
+    with ensure_trace(
+        "indexing_pipeline",
+        group_id=request_id,
+        metadata={"tenant_id": tenant_id, "request_id": request_id},
+    ):
+        return index_doc_batch_with_handler(
+            chunker=chunker,
+            embedder=embedder,
+            document_indices=document_indices,
+            document_batch=document_batch,
+            request_id=request_id,
+            tenant_id=tenant_id,
+            adapter=adapter,
+            enable_contextual_rag=enable_contextual_rag,
+            llm=llm,
+            ignore_time_skip=ignore_time_skip,
+        )

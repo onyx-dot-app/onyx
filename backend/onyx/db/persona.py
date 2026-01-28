@@ -25,6 +25,7 @@ from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.models import DocumentSet
+from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
@@ -298,6 +299,7 @@ def create_update_persona(
             is_default_persona=create_persona_request.is_default_persona,
             user_file_ids=converted_user_file_ids,
             commit=False,
+            hierarchy_node_ids=create_persona_request.hierarchy_node_ids,
         )
 
         versioned_update_persona_access = fetch_versioned_implementation(
@@ -414,6 +416,7 @@ def get_minimal_persona_snapshots_for_user(
         selectinload(Persona.tools),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
+        selectinload(Persona.hierarchy_nodes),
         selectinload(Persona.user),
     )
     results = db_session.scalars(stmt).all()
@@ -436,6 +439,7 @@ def get_persona_snapshots_for_user(
     )
     stmt = stmt.options(
         selectinload(Persona.tools),
+        selectinload(Persona.hierarchy_nodes),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -529,6 +533,7 @@ def get_minimal_persona_snapshots_paginated(
     # need.
     stmt = stmt.options(
         selectinload(Persona.tools),
+        selectinload(Persona.hierarchy_nodes),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -584,6 +589,7 @@ def get_persona_snapshots_paginated(
     # Do eager loading of columns we know PersonaSnapshot.from_model will need.
     stmt = stmt.options(
         selectinload(Persona.tools),
+        selectinload(Persona.hierarchy_nodes),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -817,6 +823,7 @@ def upsert_persona(
     is_default_persona: bool | None = None,
     label_ids: list[int] | None = None,
     user_file_ids: list[UUID] | None = None,
+    hierarchy_node_ids: list[int] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
     replace_base_system_prompt: bool = False,
@@ -884,6 +891,17 @@ def upsert_persona(
             db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
         )
 
+    # Fetch and attach hierarchy_nodes by IDs
+    hierarchy_nodes = None
+    if hierarchy_node_ids:
+        hierarchy_nodes = (
+            db_session.query(HierarchyNode)
+            .filter(HierarchyNode.id.in_(hierarchy_node_ids))
+            .all()
+        )
+        if not hierarchy_nodes and hierarchy_node_ids:
+            raise ValueError("hierarchy_nodes not found")
+
     # ensure all specified tools are valid
     if tools:
         validate_persona_tools(tools, db_session)
@@ -946,6 +964,10 @@ def upsert_persona(
             existing_persona.user_files.clear()
             existing_persona.user_files = user_files or []
 
+        if hierarchy_node_ids is not None:
+            existing_persona.hierarchy_nodes.clear()
+            existing_persona.hierarchy_nodes = hierarchy_nodes or []
+
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
@@ -985,6 +1007,7 @@ def upsert_persona(
             ),
             user_files=user_files or [],
             labels=labels or [],
+            hierarchy_nodes=hierarchy_nodes or [],
         )
         db_session.add(new_persona)
         persona = new_persona

@@ -7,6 +7,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slab.connector import SlabConnector
 
 
@@ -41,6 +42,8 @@ def test_slab_connector_basic(slab_connector: SlabConnector) -> None:
     target_test_doc: Document | None = None
     for doc_batch in slab_connector.poll_source(0, time.time()):
         for doc in doc_batch:
+            if not isinstance(doc, Document):
+                continue
             all_docs.append(doc)
             if doc.id == target_test_doc_id:
                 target_test_doc = doc
@@ -78,12 +81,16 @@ def test_slab_connector_slim(slab_connector: SlabConnector) -> None:
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
     for doc_batch in slab_connector.load_from_state():
-        all_full_doc_ids.update([doc.id for doc in doc_batch])
+        all_full_doc_ids.update(
+            [doc.id for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
     for slim_doc_batch in slab_connector.retrieve_all_slim_docs_perm_sync():
-        all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
+        all_slim_doc_ids.update(
+            [doc.id for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # The set of full doc IDs should be always be a subset of the slim doc IDs
     assert all_full_doc_ids.issubset(all_slim_doc_ids)

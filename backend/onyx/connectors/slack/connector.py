@@ -52,6 +52,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.slack.access import get_channel_access
@@ -501,7 +502,7 @@ def _get_all_doc_ids(
         )
 
         for message_batch in channel_message_batches:
-            slim_doc_batch: list[SlimDocument] = []
+            slim_doc_batch: list[SlimDocument | HierarchyNode] = []
             for message in message_batch:
                 filter_reason = msg_filter_func(message)
                 if filter_reason:

@@ -34,6 +34,8 @@ All database operations should be handled by the caller (SessionManager, Celery 
 Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
+import base64
+import binascii
 import io
 import json
 import mimetypes
@@ -229,9 +231,21 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Failed to load Kubernetes configuration: {e}"
                 ) from e
 
-        self._core_api = client.CoreV1Api()
-        self._batch_api = client.BatchV1Api()
-        self._networking_api = client.NetworkingV1Api()
+        # IMPORTANT: We use separate ApiClient instances for REST vs streaming operations.
+        # The kubernetes.stream.stream function monkey-patches the ApiClient's request
+        # method to use WebSocket. If we share the same ApiClient for both REST and
+        # streaming, the patching can leak, causing REST calls to erroneously use
+        # WebSocket (resulting in "Handshake status 200 OK" errors).
+        self._rest_api_client = client.ApiClient()
+        self._stream_api_client = client.ApiClient()
+
+        # Use the REST client for standard CRUD operations
+        self._core_api = client.CoreV1Api(api_client=self._rest_api_client)
+        self._batch_api = client.BatchV1Api(api_client=self._rest_api_client)
+        self._networking_api = client.NetworkingV1Api(api_client=self._rest_api_client)
+
+        # Use a separate client for streaming/exec operations
+        self._stream_core_api = client.CoreV1Api(api_client=self._stream_api_client)
 
         self._namespace = SANDBOX_NAMESPACE
         self._image = SANDBOX_CONTAINER_IMAGE
@@ -279,6 +293,7 @@ class KubernetesSandboxManager(SandboxManager):
         user_name: str | None = None,
         user_role: str | None = None,
         use_demo_data: bool = False,
+        include_org_info: bool = False,
     ) -> str:
         """Load and populate agent instructions from template file.
 
@@ -290,6 +305,7 @@ class KubernetesSandboxManager(SandboxManager):
             user_name: User's name for personalization
             user_role: User's role/title for personalization
             use_demo_data: If True, exclude user context from AGENTS.md
+            include_org_info: Whether to include the org_info section (demo data mode)
 
         Returns:
             Populated agent instructions content
@@ -310,6 +326,7 @@ class KubernetesSandboxManager(SandboxManager):
             user_name=user_name,
             user_role=user_role,
             use_demo_data=use_demo_data,
+            include_org_info=include_org_info,
         )
 
     def _create_sandbox_pod(
@@ -433,7 +450,7 @@ sleep infinity
             containers=[sandbox_container, file_sync_container],
             volumes=volumes,
             restart_policy="Never",
-            termination_grace_period_seconds=600,
+            termination_grace_period_seconds=10,  # Fast pod termination
             # Node selection for sandbox nodes
             node_selector={"onyx.app/workload": "sandbox"},
             tolerations=[
@@ -942,6 +959,7 @@ sleep infinity
             user_name=user_name,
             user_role=user_role,
             use_demo_data=use_demo_data,
+            include_org_info=use_demo_data,
         )
 
         # Build opencode config JSON using shared config builder
@@ -1052,7 +1070,7 @@ echo "Session workspace setup complete"
         try:
             # Execute setup script in the pod
             exec_response = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", setup_script],
@@ -1081,6 +1099,7 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace (on session delete).
 
@@ -1089,6 +1108,8 @@ echo "Session workspace setup complete"
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
+            nextjs_port: Optional port where Next.js server is running (unused in K8s,
+                        we use PID file instead)
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
@@ -1114,7 +1135,7 @@ echo "Session cleanup complete"
 
         try:
             exec_response = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", cleanup_script],
@@ -1182,7 +1203,7 @@ echo "Session cleanup complete"
         try:
             # Use exec to run snapshot command in sandbox container
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1241,7 +1262,7 @@ echo "Session cleanup complete"
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1322,7 +1343,7 @@ set -e
 mkdir -p {safe_session_path}/outputs
 """
             k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1350,7 +1371,7 @@ cd {safe_session_path}
 echo '{tar_b64}' | base64 -d | tar -xzf -
 """
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1369,7 +1390,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 safe_session_path, nextjs_port, check_node_modules=True
             )
             k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1469,9 +1490,13 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # _get_pod_name needs string
         pod_name = self._get_pod_name(str(sandbox_id))
 
-        # Security: sanitize path
-        clean_path = path.lstrip("/").replace("..", "")
+        # Security: sanitize path by removing '..' components individually
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        clean_path = str(Path(*clean_parts)) if clean_parts else "."
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
+        # Use shlex.quote to prevent command injection
+        quoted_path = shlex.quote(target_path)
 
         logger.info(f"Listing directory {target_path} in pod {pod_name}")
 
@@ -1479,12 +1504,12 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         exec_command = [
             "/bin/sh",
             "-c",
-            f'ls -la --time-style=+%s "{target_path}" 2>/dev/null || echo "ERROR_NOT_FOUND"',
+            f"ls -la --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
         ]
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1505,7 +1530,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             raise RuntimeError(f"Failed to list directory: {e}") from e
 
     def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
-        """Parse ls -la output into FilesystemEntry objects."""
+        """Parse ls -la output into FilesystemEntry objects.
+
+        Handles regular files, directories, and symlinks. Symlinks to directories
+        are treated as directories for navigation purposes.
+        """
         entries = []
         lines = ls_output.strip().split("\n")
 
@@ -1519,14 +1548,37 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 continue
 
             parts = line.split()
-            if len(parts) < 8:
+            # ls -la --time-style=+%s format: perms links owner group size timestamp name
+            # Minimum 7 parts for a simple filename
+            if len(parts) < 7:
                 continue
 
-            name = parts[-1]
+            # Handle symlinks: format is "name -> target"
+            # For symlinks, parts[-1] is the target, not the name
+            is_symlink = line.startswith("l")
+            if is_symlink and " -> " in line:
+                # Extract name from the "name -> target" portion
+                # Filename starts at index 6 (after perms, links, owner, group, size, timestamp)
+                try:
+                    # Rejoin from index 6 onwards to handle names with spaces
+                    name_and_target = " ".join(parts[6:])
+                    if " -> " in name_and_target:
+                        name = name_and_target.split(" -> ")[0]
+                    else:
+                        name = parts[-1]
+                except (IndexError, ValueError):
+                    name = parts[-1]
+            else:
+                # For regular files/directories, name is at index 6 or later (with spaces)
+                name = " ".join(parts[6:])
+
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d")
+            # Directories start with 'd', symlinks start with 'l'
+            # Treat symlinks as directories (they typically point to directories
+            # in our sandbox setup, like files/ -> /workspace/demo-data)
+            is_directory = line.startswith("d") or is_symlink
             size_str = parts[4]
 
             try:
@@ -1569,20 +1621,25 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         # _get_pod_name needs string
         pod_name = self._get_pod_name(str(sandbox_id))
 
-        # Security: sanitize path
-        clean_path = path.lstrip("/").replace("..", "")
+        # Security: sanitize path by removing '..' components individually
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        clean_path = str(Path(*clean_parts)) if clean_parts else "."
         target_path = f"/workspace/sessions/{session_id}/{clean_path}"
+        # Use shlex.quote to prevent command injection
+        quoted_path = shlex.quote(target_path)
 
-        # Use exec to read file (base64 encode to handle binary)
+        # Use exec to read file with base64 encoding to handle binary data
+        # Base64 encode the output to safely transport binary content
         exec_command = [
             "/bin/sh",
             "-c",
-            f'cat "{target_path}" 2>/dev/null || echo "ERROR_NOT_FOUND"',
+            f"if [ -f {quoted_path} ]; then base64 {quoted_path}; else echo 'ERROR_NOT_FOUND'; fi",
         ]
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1591,16 +1648,17 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
                 stdin=False,
                 stdout=True,
                 tty=False,
-                _preload_content=False,  # Return raw bytes
             )
 
-            # Read response
-            content = b""
-            for chunk in resp:
-                content += chunk
-
-            if b"ERROR_NOT_FOUND" in content:
+            if "ERROR_NOT_FOUND" in resp:
                 raise ValueError(f"File not found: {path}")
+
+            # Decode base64 content
+            try:
+                content = base64.b64decode(resp.strip())
+            except binascii.Error as e:
+                logger.error(f"Failed to decode base64 content: {e}")
+                raise RuntimeError(f"Failed to decode file content: {e}") from e
 
             return content
 
@@ -1650,7 +1708,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             f'aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/" /workspace/files/',
         ]
         resp = k8s_stream(
-            self._core_api.connect_get_namespaced_pod_exec,
+            self._stream_core_api.connect_get_namespaced_pod_exec,
             pod_name,
             self._namespace,
             container="file-sync",  # Execute in sidecar, not sandbox container
@@ -1735,7 +1793,7 @@ echo "$base"
         try:
             # Open WebSocket connection with stdin enabled
             ws_client = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1835,7 +1893,7 @@ echo "$base"
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",
@@ -1896,7 +1954,7 @@ fi
 
         try:
             resp = k8s_stream(
-                self._core_api.connect_get_namespaced_pod_exec,
+                self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container="sandbox",

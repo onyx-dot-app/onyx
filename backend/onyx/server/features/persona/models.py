@@ -4,7 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import RecencyBiasSetting
+from onyx.db.enums import HierarchyNodeType
+from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import StarterMessage
@@ -16,6 +19,28 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+class HierarchyNodeSnapshot(BaseModel):
+    """Minimal representation of a hierarchy node for persona responses."""
+
+    id: int
+    raw_node_id: str
+    display_name: str
+    link: str | None
+    source: DocumentSource
+    node_type: HierarchyNodeType
+
+    @classmethod
+    def from_model(cls, node: HierarchyNode) -> "HierarchyNodeSnapshot":
+        return HierarchyNodeSnapshot(
+            id=node.id,
+            raw_node_id=node.raw_node_id,
+            display_name=node.display_name,
+            link=node.link,
+            source=node.source,
+            node_type=node.node_type,
+        )
 
 
 class PromptSnapshot(BaseModel):
@@ -79,6 +104,8 @@ class PersonaUpsertRequest(BaseModel):
     display_priority: int | None = None
     # Accept string UUIDs from frontend
     user_file_ids: list[str] | None = None
+    # Hierarchy nodes (folders, spaces, channels) attached for scoped search
+    hierarchy_node_ids: list[int] = Field(default_factory=list)
 
     # prompt fields
     system_prompt: str
@@ -104,8 +131,8 @@ class MinimalPersonaSnapshot(BaseModel):
     # only show document sets in the UI that the assistant has access to
     document_sets: list[DocumentSetSummary]
     model_configuration_id_override: int | None
+    hierarchy_nodes: list[HierarchyNodeSnapshot]
 
-    uploaded_image_id: str | None
     icon_name: str | None
 
     is_public: bool
@@ -140,6 +167,10 @@ class MinimalPersonaSnapshot(BaseModel):
                 for document_set in persona.document_sets
             ],
             model_configuration_id_override=persona.model_configuration_id_override,
+            hierarchy_nodes=[
+                HierarchyNodeSnapshot.from_model(node)
+                for node in persona.hierarchy_nodes
+            ],
             uploaded_image_id=persona.uploaded_image_id,
             icon_name=persona.icon_name,
             is_public=persona.is_public,
@@ -180,6 +211,8 @@ class PersonaSnapshot(BaseModel):
     document_sets: list[DocumentSetSummary]
     model_configuration_id_override: int | None
     num_chunks: float | None
+    # Hierarchy nodes attached for scoped search
+    hierarchy_nodes: list[HierarchyNodeSnapshot] = Field(default_factory=list)
 
     # Embedded prompt fields (no longer separate prompt_ids)
     system_prompt: str | None = None
@@ -210,6 +243,10 @@ class PersonaSnapshot(BaseModel):
                 if should_expose_tool_to_fe(tool)
             ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            hierarchy_nodes=[
+                HierarchyNodeSnapshot.from_model(node)
+                for node in persona.hierarchy_nodes
+            ],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
                 if persona.user
@@ -275,6 +312,10 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 if should_expose_tool_to_fe(tool)
             ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            hierarchy_nodes=[
+                HierarchyNodeSnapshot.from_model(node)
+                for node in persona.hierarchy_nodes
+            ],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
                 if persona.user

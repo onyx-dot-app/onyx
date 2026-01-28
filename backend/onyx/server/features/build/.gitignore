@@ -1,2 +1,2 @@
-sandbox/kubernetes/docker/templates/outputs/venv/**
+sandbox/kubernetes/docker/templates/venv/**
 sandbox/kubernetes/docker/demo_data/**

@@ -13,6 +13,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -230,7 +231,7 @@ class GitbookConnector(LoadConnector, PollConnector):
         try:
             content = self.client.get(f"/spaces/{self.space_id}/content/pages")
             pages: list[dict[str, Any]] = content.get("pages", [])
-            current_batch: list[Document] = []
+            current_batch: list[Document | HierarchyNode] = []
 
             logger.info(f"Found {len(pages)} root pages.")
             logger.info(
