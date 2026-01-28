@@ -27,7 +27,7 @@ def build_llm_model_config(llm: LLM, flow: str | None = None) -> dict[str, Any]:
 def llm_generation_span(
     llm: LLM,
     flow: str | None,
-    input_messages: Sequence[Any] | None = None,
+    input_messages: Sequence[Any] | Any | None = None,
     parent: Any | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     with generation_span(
@@ -36,7 +36,15 @@ def llm_generation_span(
         parent=parent,
     ) as span:
         if input_messages is not None:
-            span.span_data.input = cast(Sequence[Mapping[str, Any]], input_messages)
+            if isinstance(input_messages, Sequence) and not isinstance(
+                input_messages, (str, bytes)
+            ):
+                normalized_messages = input_messages
+            else:
+                normalized_messages = [input_messages]
+            span.span_data.input = cast(
+                Sequence[Mapping[str, Any]], normalized_messages
+            )
         yield span
 
 
