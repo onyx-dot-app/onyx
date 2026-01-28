@@ -177,7 +177,7 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
 
   // --- Step 6: Create Assistant and Verify Tool Availability ---
   // Navigate to the assistant creation page
-  await page.goto("/chat/agents/create");
+  await page.goto("/app/agents/create");
   await page.waitForLoadState("networkidle");
 
   // Fill in basic assistant details
@@ -210,8 +210,8 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await createButton.scrollIntoViewIfNeeded();
   await createButton.click();
 
-  // Verify redirection to chat page with the new assistant ID
-  await page.waitForURL(/.*\/chat\?assistantId=\d+.*/, { timeout: 10000 });
+  // Verify redirection to app page with the new assistant ID
+  await page.waitForURL(/.*\/app\?assistantId=\d+.*/, { timeout: 10000 });
   const assistantUrl = page.url();
   const assistantIdMatch = assistantUrl.match(/assistantId=(\d+)/);
   expect(assistantIdMatch).toBeTruthy();

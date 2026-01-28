@@ -77,6 +77,7 @@ const useModalContext = () => {
 const widthClasses = {
   lg: "w-[80dvw]",
   md: "w-[60rem]",
+  "md-sm": "w-[40rem]",
   sm: "w-[32rem]",
 };
 
@@ -120,6 +121,7 @@ interface ModalContentProps
   height?: keyof typeof heightClasses;
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
+  background?: "default" | "gray";
 }
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
@@ -132,6 +134,7 @@ const ModalContent = React.forwardRef<
       height = "fit",
       preventAccidentalClose = true,
       skipOverlay = false,
+      background = "default",
       ...props
     },
     ref
@@ -273,7 +276,10 @@ const ModalContent = React.forwardRef<
             className={cn(
               "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden",
               "z-modal",
-              "bg-background-tint-00 border rounded-16 shadow-2xl",
+              background === "gray"
+                ? "bg-background-tint-01"
+                : "bg-background-tint-00",
+              "border rounded-16 shadow-2xl",
               "flex flex-col",
               // Never exceed viewport on small screens
               "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",

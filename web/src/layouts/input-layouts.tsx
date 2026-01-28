@@ -4,6 +4,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
+import { cn } from "@/lib/utils";
 
 interface OrientationLayoutProps extends LabelLayoutProps {
   children?: React.ReactNode;
@@ -88,17 +89,24 @@ function VerticalInputLayout({
  * ```
  */
 export interface HorizontalLayoutProps extends OrientationLayoutProps {
+  /* There are certain input-layouts which are "static" and should not have the pointer-cursor appear on them. */
+  cursorPointer?: boolean;
   /** Align input to the center (middle) of the label/description */
   center?: boolean;
 }
 function HorizontalInputLayout({
-  children,
+  cursorPointer = true,
   center,
+
+  children,
   name,
   ...fieldLabelProps
 }: HorizontalLayoutProps) {
   return (
-    <label htmlFor={name} className="cursor-pointer w-full">
+    <label
+      htmlFor={name}
+      className={cn(cursorPointer && "cursor-pointer", "w-full")}
+    >
       <Section gap={0.25} alignItems="start">
         <Section
           flexDirection="row"
@@ -161,14 +169,14 @@ function LabelLayout({
       <Section
         flexDirection="row"
         justifyContent={center ? "center" : "start"}
-        gap={0}
+        gap={0.25}
       >
         <Text mainContentEmphasis text04>
           {title}
         </Text>
         {optional && (
           <Text text03 mainContentMuted>
-            {" (Optional)"}
+            (Optional)
           </Text>
         )}
       </Section>

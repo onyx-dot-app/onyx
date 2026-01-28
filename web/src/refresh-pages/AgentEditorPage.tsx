@@ -6,7 +6,7 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
-import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -31,7 +31,7 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
-} from "@/app/chat/components/tools/constants";
+} from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -40,17 +40,17 @@ import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { FileCard } from "@/app/chat/components/input/FileCard";
+import { FileCard } from "@/app/app/components/input/FileCard";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import {
   ProjectFile,
   UserFileStatus,
-} from "@/app/chat/projects/projectsService";
+} from "@/app/app/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -75,7 +75,7 @@ import {
   updatePersona,
   PersonaUpsertParameters,
 } from "@/app/admin/assistants/lib";
-import useMcpServers from "@/hooks/useMcpServers";
+import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
@@ -494,7 +494,7 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData } = useMcpServers();
+  const { mcpData } = useMcpServersForAgentEditor();
   const { openApiTools: openApiToolsRaw } = useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];
@@ -883,11 +883,10 @@ export default function AgentEditorPage({
         message: "Agent deleted successfully",
       });
 
+      deleteAgentModal.toggle(false);
       await refreshAgents();
-      router.push("/chat/agents");
+      router.push("/app/agents");
     }
-
-    deleteAgentModal.toggle(false);
   }
 
   // FilePickerPopover callbacks - defined outside render to avoid inline functions
@@ -1048,15 +1047,18 @@ export default function AgentEditorPage({
 
                 <shareAgentModal.Provider>
                   <ShareAgentModal
-                    agent={existingAgent}
+                    agentId={existingAgent?.id}
+                    userIds={values.shared_user_ids}
+                    groupIds={values.shared_group_ids}
+                    isPublic={values.is_public}
                     onShare={(userIds, groupIds, isPublic) => {
                       setFieldValue("shared_user_ids", userIds);
                       setFieldValue("shared_group_ids", groupIds);
                       setFieldValue("is_public", isPublic);
+                      shareAgentModal.toggle(false);
                     }}
                   />
                 </shareAgentModal.Provider>
-
                 <deleteAgentModal.Provider>
                   {deleteAgentModal.isOpen && (
                     <ConfirmationModalLayout
@@ -1303,6 +1305,7 @@ export default function AgentEditorPage({
                                       wrap
                                       gap={0.5}
                                       justifyContent="start"
+                                      alignItems="start"
                                     >
                                       {values.user_file_ids.map((fileId) => {
                                         const file = allRecentFiles.find(
@@ -1479,7 +1482,7 @@ export default function AgentEditorPage({
                           <Card>
                             <InputLayouts.Horizontal
                               title="Share This Agent"
-                              description="Share this agent with other users, groups, or everyone in your organization. "
+                              description="Share this agent with other users, groups, or everyone in your organization."
                               center
                             >
                               <Button

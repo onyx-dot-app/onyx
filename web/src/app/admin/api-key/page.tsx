@@ -22,7 +22,10 @@ import Modal from "@/refresh-components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "@/app/admin/api-key/lib";
 import OnyxApiKeyForm from "@/app/admin/api-key/OnyxApiKeyForm";
-import { APIKey } from "@/app/admin/api-key/types";
+import {
+  APIKey,
+  DISCORD_SERVICE_API_KEY_NAME,
+} from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -61,6 +64,11 @@ function Main() {
     );
   }
 
+  // Filter out the discord service key from the displayed list
+  const filteredApiKeys = apiKeys.filter(
+    (key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME
+  );
+
   const introSection = (
     <div className="flex flex-col items-start gap-4">
       <Text as="p">
@@ -73,7 +81,7 @@ function Main() {
     </div>
   );
 
-  if (apiKeys.length === 0) {
+  if (filteredApiKeys.length === 0) {
     return (
       <div>
         {popup}
@@ -136,7 +144,7 @@ function Main() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {apiKeys.map((apiKey) => (
+          {filteredApiKeys.map((apiKey) => (
             <TableRow key={apiKey.api_key_id}>
               <TableCell>
                 <Button

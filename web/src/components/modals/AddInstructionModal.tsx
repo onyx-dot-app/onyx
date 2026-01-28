@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines } from "@opal/icons";

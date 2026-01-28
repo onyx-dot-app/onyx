@@ -821,20 +821,36 @@ def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User | None) ->
 
 
 def _db_mcp_server_to_api_mcp_server(
-    db_server: DbMCPServer, email: str, db: Session, include_auth_config: bool = False
+    db_server: DbMCPServer,
+    db: Session,
+    request_user: User | None,
+    include_auth_config: bool = False,
 ) -> MCPServer:
     """Convert database MCP server to API model"""
+
+    email = request_user.email if request_user else ""
 
     # Check if user has authentication configured and extract credentials
     auth_performer = db_server.auth_performer
     user_authenticated: bool | None = None
     user_credentials = None
     admin_credentials = None
+    can_view_admin_credentials = bool(include_auth_config) and (
+        request_user is not None
+        and (
+            request_user.role == UserRole.ADMIN
+            or (request_user.email and request_user.email == db_server.owner)
+        )
+    )
     if db_server.auth_type == MCPAuthenticationType.NONE:
         user_authenticated = True  # No auth required
     elif auth_performer == MCPAuthenticationPerformer.ADMIN:
         user_authenticated = db_server.admin_connection_config is not None
-        if include_auth_config and db_server.admin_connection_config is not None:
+        if (
+            can_view_admin_credentials
+            and db_server.admin_connection_config is not None
+            and include_auth_config
+        ):
             if db_server.auth_type == MCPAuthenticationType.API_TOKEN:
                 admin_credentials = {
                     "api_key": db_server.admin_connection_config.config["headers"][
@@ -890,11 +906,12 @@ def _db_mcp_server_to_api_mcp_server(
             if client_info:
                 if not client_info.client_id or not client_info.client_secret:
                     raise ValueError("Stored client info had empty client ID or secret")
-                admin_credentials = {
-                    "client_id": client_info.client_id,
-                    "client_secret": client_info.client_secret,
-                }
-            else:
+                if can_view_admin_credentials:
+                    admin_credentials = {
+                        "client_id": client_info.client_id,
+                        "client_secret": client_info.client_secret,
+                    }
+            elif can_view_admin_credentials:
                 admin_credentials = {}
                 logger.warning(f"No client info found for server {db_server.name}")
 
@@ -961,14 +978,13 @@ def get_mcp_servers_for_assistant(
 
     logger.info(f"Fetching MCP servers for assistant: {assistant_id}")
 
-    email = user.email if user else ""
     try:
         persona_id = int(assistant_id)
         db_mcp_servers = get_mcp_servers_for_persona(persona_id, db, user)
 
         # Convert to API model format with opportunistic token refresh for OAuth
         mcp_servers = [
-            _db_mcp_server_to_api_mcp_server(db_server, email, db)
+            _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
             for db_server in db_mcp_servers
         ]
 
@@ -979,6 +995,25 @@ def get_mcp_servers_for_assistant(
     except Exception as e:
         logger.error(f"Failed to fetch MCP servers: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
+
+
+@router.get("/servers", response_model=MCPServersResponse)
+def get_mcp_servers_for_user(
+    db: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> MCPServersResponse:
+    """List all MCP servers for use in agent configuration and chat UI.
+
+    This endpoint is intentionally available to all authenticated users so they
+    can attach MCP actions to assistants. Sensitive admin credentials are never
+    returned.
+    """
+    db_mcp_servers = get_all_mcp_servers(db)
+    mcp_servers = [
+        _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
+        for db_server in db_mcp_servers
+    ]
+    return MCPServersResponse(mcp_servers=mcp_servers)
 
 
 def _get_connection_config(
@@ -1528,8 +1563,6 @@ def get_mcp_server_detail(
 
     _ensure_mcp_server_owner_or_admin(server, user)
 
-    email = user.email if user else ""
-
     # TODO: user permissions per mcp server not yet implemented, for now
     # permissions are based on access to assistants
     # # Quick permission check – admin or user has access
@@ -1537,7 +1570,10 @@ def get_mcp_server_detail(
     #     raise HTTPException(status_code=403, detail="Forbidden")
 
     return _db_mcp_server_to_api_mcp_server(
-        server, email, db_session, include_auth_config=True
+        server,
+        db_session,
+        include_auth_config=True,
+        request_user=user,
     )
 
 
@@ -1596,13 +1632,12 @@ def get_mcp_servers_for_admin(
 
     logger.info("Fetching all MCP servers for admin display")
 
-    email = user.email if user else ""
     try:
         db_mcp_servers = get_all_mcp_servers(db)
 
         # Convert to API model format
         mcp_servers = [
-            _db_mcp_server_to_api_mcp_server(db_server, email, db)
+            _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
             for db_server in db_mcp_servers
         ]
 
@@ -1845,7 +1880,9 @@ def update_mcp_server_simple(
     db_session.commit()
 
     # Return the updated server in API format
-    return _db_mcp_server_to_api_mcp_server(updated_server, user.email, db_session)
+    return _db_mcp_server_to_api_mcp_server(
+        updated_server, db_session, request_user=user
+    )
 
 
 @admin_router.delete("/server/{server_id}")

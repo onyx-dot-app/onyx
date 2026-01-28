@@ -17,6 +17,7 @@ from onyx.db.notification import get_notifications
 from onyx.db.notification import update_notification_last_shown
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.features.build.utils import is_onyx_craft_enabled
 from onyx.server.settings.models import Notification
 from onyx.server.settings.models import Settings
 from onyx.server.settings.models import UserSettings
@@ -68,10 +69,14 @@ def fetch_settings(
     )
     general_settings = apply_fn(general_settings)
 
+    # Check if Onyx Craft is enabled for this user (used for server-side redirects)
+    onyx_craft_enabled_for_user = is_onyx_craft_enabled(user) if user else False
+
     return UserSettings(
         **general_settings.model_dump(),
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
+        onyx_craft_enabled=onyx_craft_enabled_for_user,
     )
 
 

@@ -4,28 +4,43 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Onyx</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      :root {
+        --background-900: #f5f5f5;
+        --background-800: #ffffff;
+        --text-light-05: rgba(0, 0, 0, 0.95);
+        --text-light-03: rgba(0, 0, 0, 0.6);
+        --white-10: rgba(0, 0, 0, 0.1);
+        --white-15: rgba(0, 0, 0, 0.15);
+        --white-20: rgba(0, 0, 0, 0.2);
+        --white-30: rgba(0, 0, 0, 0.3);
+        --font-hanken-grotesk: "Hanken Grotesk", -apple-system,
+          BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
       * {
+        box-sizing: border-box;
         margin: 0;
         padding: 0;
-        box-sizing: border-box;
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Oxygen, Ubuntu, sans-serif;
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        color: #fff;
+        font-family: var(--font-hanken-grotesk);
+        background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);
         min-height: 100vh;
+        color: var(--text-light-05);
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
+        padding: 20px;
         -webkit-user-select: none;
         user-select: none;
       }
 
-      /* Draggable titlebar area for macOS */
       .titlebar {
         position: fixed;
         top: 0;
@@ -33,198 +48,451 @@
         right: 0;
         height: 28px;
         -webkit-app-region: drag;
+        z-index: 10000;
       }
 
-      .container {
-        text-align: center;
-        padding: 2rem;
+      .settings-container {
+        max-width: 500px;
+        width: 100%;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition:
+          opacity 0.18s ease,
+          transform 0.18s ease;
       }
 
-      .logo {
-        width: 80px;
-        height: 80px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 20px;
-        margin: 0 auto 1.5rem;
+      body.show-settings .settings-container {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+
+      .settings-panel {
+        background: linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0.95),
+          rgba(245, 245, 245, 0.95)
+        );
+        backdrop-filter: blur(24px);
+        border-radius: 16px;
+        border: 1px solid var(--white-10);
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+
+      .settings-header {
+        padding: 24px;
+        border-bottom: 1px solid var(--white-10);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .settings-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: white;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 2.5rem;
-        font-weight: bold;
+        overflow: hidden;
       }
 
-      h1 {
-        font-size: 2rem;
-        margin-bottom: 0.5rem;
+      .settings-icon svg {
+        width: 24px;
+        height: 24px;
+        color: #000;
+      }
+
+      .settings-title {
+        font-size: 20px;
         font-weight: 600;
+        color: var(--text-light-05);
       }
 
-      p {
-        color: #a0a0a0;
-        margin-bottom: 2rem;
+      .settings-content {
+        padding: 24px;
       }
 
-      .loading {
+      .settings-section {
+        margin-bottom: 32px;
+      }
+
+      .settings-section:last-child {
+        margin-bottom: 0;
+      }
+
+      .section-title {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-light-03);
+        margin-bottom: 12px;
+      }
+
+      .settings-group {
+        background: rgba(0, 0, 0, 0.03);
+        border-radius: 16px;
+        padding: 4px;
+      }
+
+      .setting-row {
         display: flex;
-        gap: 0.5rem;
-        justify-content: center;
-        margin-bottom: 2rem;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
       }
 
-      .loading span {
-        width: 10px;
-        height: 10px;
-        background: #667eea;
-        border-radius: 50%;
-        animation: bounce 1.4s ease-in-out infinite;
+      .setting-row-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1;
       }
 
-      .loading span:nth-child(1) {
-        animation-delay: 0s;
-      }
-      .loading span:nth-child(2) {
-        animation-delay: 0.2s;
-      }
-      .loading span:nth-child(3) {
-        animation-delay: 0.4s;
+      .setting-label {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--text-light-05);
       }
 
-      @keyframes bounce {
-        0%,
-        80%,
-        100% {
-          transform: scale(0.8);
-          opacity: 0.5;
-        }
-        40% {
-          transform: scale(1.2);
-          opacity: 1;
-        }
+      .setting-description {
+        font-size: 12px;
+        color: var(--text-light-03);
       }
 
-      .btn {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 0.75rem 2rem;
+      .setting-divider {
+        height: 1px;
+        background: var(--white-10);
+        margin: 0 4px;
+      }
+
+      .input-field {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--white-10);
         border-radius: 8px;
-        font-size: 1rem;
-        cursor: pointer;
-        transition:
-          transform 0.2s,
-          box-shadow 0.2s;
+        font-size: 14px;
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--text-light-05);
+        font-family: var(--font-hanken-grotesk);
+        transition: all 0.2s;
         -webkit-app-region: no-drag;
       }
 
-      .btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+      .input-field:focus {
+        outline: none;
+        border-color: var(--white-30);
+        background: rgba(0, 0, 0, 0.08);
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.05);
       }
 
-      .shortcuts {
-        margin-top: 3rem;
-        padding: 1.5rem;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        text-align: left;
+      .input-field::placeholder {
+        color: var(--text-light-03);
       }
 
-      .shortcuts h3 {
-        font-size: 0.875rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #a0a0a0;
-        margin-bottom: 1rem;
+      .input-field.error {
+        border-color: #ef4444;
       }
 
-      .shortcut {
-        display: flex;
-        justify-content: space-between;
-        padding: 0.5rem 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      .error-message {
+        color: #ef4444;
+        font-size: 12px;
+        margin-top: 4px;
+        padding-left: 12px;
+        display: none;
       }
 
-      .shortcut:last-child {
-        border-bottom: none;
+      .error-message.visible {
+        display: block;
       }
 
-      .shortcut-key {
-        font-family:
-          SF Mono,
-          Monaco,
-          monospace;
-        background: rgba(255, 255, 255, 0.1);
-        padding: 0.25rem 0.5rem;
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.15);
+        transition: 0.3s;
+        border-radius: 24px;
+      }
+
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        transition: 0.3s;
+        border-radius: 50%;
+      }
+
+      input:checked + .toggle-slider {
+        background-color: rgba(0, 0, 0, 0.3);
+      }
+
+      input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+      }
+
+      .button {
+        padding: 12px 24px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s;
+        font-family: var(--font-hanken-grotesk);
+        width: 100%;
+        margin-top: 24px;
+        -webkit-app-region: no-drag;
+      }
+
+      .button.primary {
+        background: #286df8;
+        color: white;
+      }
+
+      .button.primary:hover {
+        background: #1e5cd6;
+        box-shadow: 0 4px 12px rgba(40, 109, 248, 0.3);
+      }
+
+      .button.primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      kbd {
+        background: rgba(0, 0, 0, 0.1);
+        border: 1px solid var(--white-10);
         border-radius: 4px;
-        font-size: 0.75rem;
+        padding: 2px 6px;
+        font-family: monospace;
+        font-weight: 500;
+        color: var(--text-light-05);
+        font-size: 11px;
       }
     </style>
   </head>
   <body>
     <div class="titlebar"></div>
 
-    <div class="container">
-      <div class="logo">O</div>
-      <h1>Onyx</h1>
-      <p>Connecting to Onyx Cloud...</p>
+    <div class="settings-container">
+      <div class="settings-panel">
+        <div class="settings-header">
+          <div class="settings-icon">
+            <svg
+              viewBox="0 0 56 56"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                clip-rule="evenodd"
+                d="M28 0 10.869 7.77 28 15.539l17.131-7.77L28 0Zm0 40.461-17.131 7.77L28 56l17.131-7.77L28 40.461Zm20.231-29.592L56 28.001l-7.769 17.131L40.462 28l7.769-17.131ZM15.538 28 7.77 10.869 0 28l7.769 17.131L15.538 28Z"
+              />
+            </svg>
+          </div>
+          <h1 class="settings-title">Settings</h1>
+        </div>
 
-      <div class="loading">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
+        <div class="settings-content">
+          <section class="settings-section">
+            <div class="section-title">GENERAL</div>
+            <div class="settings-group">
+              <div class="setting-row">
+                <div class="setting-row-content">
+                  <label class="setting-label" for="onyxDomain"
+                    >Root Domain</label
+                  >
+                  <div class="setting-description">
+                    The root URL for your Onyx instance
+                  </div>
+                </div>
+              </div>
+              <div class="setting-divider"></div>
+              <div class="setting-row" style="padding: 12px">
+                <input
+                  type="text"
+                  id="onyxDomain"
+                  class="input-field"
+                  placeholder="https://cloud.onyx.app"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="error-message" id="errorMessage">
+                Please enter a valid URL starting with http:// or https://
+              </div>
+            </div>
+          </section>
 
-      <button
-        class="btn"
-        onclick="window.location.href='https://cloud.onyx.app'"
-      >
-        Open Onyx Cloud
-      </button>
-
-      <p style="margin-top: 1.5rem; font-size: 0.875rem; color: #666">
-        Self-hosted? Press
-        <span
-          class="shortcut-key"
-          style="display: inline; padding: 0.15rem 0.4rem"
-          >⌘ ,</span
-        >
-        to configure your server URL.
-      </p>
-
-      <div class="shortcuts">
-        <h3>Keyboard Shortcuts</h3>
-        <div class="shortcut">
-          <span>New Chat</span>
-          <span class="shortcut-key">⌘ N</span>
-        </div>
-        <div class="shortcut">
-          <span>New Window</span>
-          <span class="shortcut-key">⌘ ⇧ N</span>
-        </div>
-        <div class="shortcut">
-          <span>Reload</span>
-          <span class="shortcut-key">⌘ R</span>
-        </div>
-        <div class="shortcut">
-          <span>Back</span>
-          <span class="shortcut-key">⌘ [</span>
-        </div>
-        <div class="shortcut">
-          <span>Forward</span>
-          <span class="shortcut-key">⌘ ]</span>
-        </div>
-        <div class="shortcut">
-          <span>Settings / Config</span>
-          <span class="shortcut-key">⌘ ,</span>
+          <button class="button primary" id="saveBtn">Save & Connect</button>
         </div>
       </div>
     </div>
 
     <script>
-      // Auto-redirect to Onyx Cloud after a short delay
-      setTimeout(() => {
-        window.location.href = "https://cloud.onyx.app";
-      }, 1500);
+      // Import Tauri API
+      const { invoke } = window.__TAURI__.core;
+
+      // Configuration
+      const DEFAULT_DOMAIN = "https://cloud.onyx.app";
+      let currentServerUrl = "";
+
+      // DOM elements
+      const domainInput = document.getElementById("onyxDomain");
+      const errorMessage = document.getElementById("errorMessage");
+      const saveBtn = document.getElementById("saveBtn");
+
+      function showSettings() {
+        document.body.classList.add("show-settings");
+      }
+
+      // Initialize the app
+      async function init() {
+        try {
+          const bootstrap = await invoke("get_bootstrap_state");
+          currentServerUrl = bootstrap.server_url;
+
+          // Set the input value
+          domainInput.value = currentServerUrl || DEFAULT_DOMAIN;
+
+          // Check if user came here explicitly (via Settings menu/shortcut)
+          const urlParams = new URLSearchParams(window.location.search);
+          const isExplicitSettings =
+            window.location.hash === "#settings" ||
+            urlParams.get("settings") === "true";
+
+          // If user explicitly opened settings, show modal
+          if (isExplicitSettings) {
+            // Modal is already visible, user can edit and save
+            showSettings();
+            return;
+          }
+
+          // Otherwise, check if this is first launch
+          // First launch = config doesn't exist
+          if (!bootstrap.config_exists || !currentServerUrl) {
+            // First launch - show modal, require user to configure
+            showSettings();
+            return;
+          }
+
+          // Not first launch and not explicit settings
+          // Auto-redirect to configured domain
+          window.location.href = currentServerUrl;
+        } catch (error) {
+          // On error, default to cloud
+          domainInput.value = DEFAULT_DOMAIN;
+          showSettings();
+        }
+      }
+
+      // Validate URL
+      function validateUrl(url) {
+        const trimmedUrl = url.trim();
+        if (!trimmedUrl) {
+          return { valid: false, error: "URL cannot be empty" };
+        }
+        if (
+          !trimmedUrl.startsWith("http://") &&
+          !trimmedUrl.startsWith("https://")
+        ) {
+          return {
+            valid: false,
+            error: "URL must start with http:// or https://",
+          };
+        }
+        try {
+          new URL(trimmedUrl);
+          return { valid: true, url: trimmedUrl };
+        } catch {
+          return { valid: false, error: "Please enter a valid URL" };
+        }
+      }
+
+      // Show error
+      function showError(message) {
+        domainInput.classList.add("error");
+        errorMessage.textContent = message;
+        errorMessage.classList.add("visible");
+      }
+
+      // Clear error
+      function clearError() {
+        domainInput.classList.remove("error");
+        errorMessage.classList.remove("visible");
+      }
+
+      // Save configuration
+      async function saveConfiguration() {
+        clearError();
+
+        const validation = validateUrl(domainInput.value);
+        if (!validation.valid) {
+          showError(validation.error);
+          return;
+        }
+
+        try {
+          saveBtn.disabled = true;
+          saveBtn.textContent = "Saving...";
+
+          // Call Tauri command to save the URL
+          await invoke("set_server_url", { url: validation.url });
+
+          // Success - redirect to the new URL (login page)
+          window.location.href = validation.url;
+        } catch (error) {
+          showError(error || "Failed to save configuration");
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save & Connect";
+        }
+      }
+
+      // Event listeners
+      domainInput.addEventListener("input", clearError);
+      domainInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          saveConfiguration();
+        }
+      });
+      saveBtn.addEventListener("click", saveConfiguration);
+
+      // Initialize when DOM is ready
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+      } else {
+        init();
+      }
     </script>
   </body>
 </html>

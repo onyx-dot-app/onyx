@@ -47,7 +47,7 @@ class UserFileDeleteResult(BaseModel):
     assistant_names: list[str] = []
 
 
-@router.get("/", tags=PUBLIC_API_TAGS)
+@router.get("", tags=PUBLIC_API_TAGS)
 def get_projects(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),

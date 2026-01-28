@@ -18,6 +18,7 @@ from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import ProcessingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -483,6 +484,7 @@ class ConnectorCredentialPairMetadata(BaseModel):
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
     groups: list[int] = Field(default_factory=list)
+    processing_mode: ProcessingMode = ProcessingMode.REGULAR
 
 
 class CCStatusUpdateRequest(BaseModel):
@@ -521,6 +523,10 @@ class RunConnectorRequest(BaseModel):
     connector_id: int
     credential_ids: list[int] | None = None
     from_beginning: bool = False
+
+
+class ConnectorRequestSubmission(BaseModel):
+    connector_name: str
 
 
 class CCPropertyUpdateRequest(BaseModel):

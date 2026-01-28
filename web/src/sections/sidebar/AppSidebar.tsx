@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
+import useSWR from "swr";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -36,9 +37,9 @@ import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarCo
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { removeChatSessionFromProject } from "@/app/chat/projects/projectsService";
-import type { Project } from "@/app/chat/projects/projectsService";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
+import type { Project } from "@/app/app/projects/projectsService";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -50,20 +51,32 @@ import {
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
+  SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
+  SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
+import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
+import BuildModeIntroContent from "@/app/craft/components/IntroContent";
+import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Notification,
+  NotificationType,
+} from "@/app/admin/settings/interfaces";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -132,6 +145,7 @@ interface AppSidebarInnerProps {
 const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const combinedSettings = useSettingsContext();
     const { popup, setPopup } = usePopup();
 
@@ -173,6 +187,56 @@ const MemoizedAppSidebarInner = memo(
     >(null);
     const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
       useState(false);
+
+    // Fetch notifications for build mode intro
+    const { data: notifications, mutate: mutateNotifications } = useSWR<
+      Notification[]
+    >("/api/notifications", errorHandlingFetcher);
+
+    // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
+    // Only explicit true enables the feature; false or undefined = disabled
+    const isOnyxCraftEnabled =
+      combinedSettings?.settings?.onyx_craft_enabled === true;
+
+    // Find build_mode feature announcement notification (only if Onyx Craft is enabled)
+    const buildModeNotification = isOnyxCraftEnabled
+      ? notifications?.find(
+          (n) =>
+            n.notif_type === NotificationType.FEATURE_ANNOUNCEMENT &&
+            n.additional_data?.feature === "build_mode" &&
+            !n.dismissed
+        )
+      : undefined;
+
+    // State for intro animation overlay
+    const [showIntroAnimation, setShowIntroAnimation] = useState(false);
+    // Track if auto-trigger has fired (prevents race condition during dismiss)
+    const hasAutoTriggeredRef = useRef(false);
+
+    // Auto-show intro once when there's an undismissed notification
+    useEffect(() => {
+      if (
+        isOnyxCraftEnabled &&
+        buildModeNotification &&
+        !hasAutoTriggeredRef.current
+      ) {
+        hasAutoTriggeredRef.current = true;
+        setShowIntroAnimation(true);
+      }
+    }, [buildModeNotification, isOnyxCraftEnabled]);
+
+    // Dismiss the build mode notification
+    const dismissBuildModeNotification = useCallback(async () => {
+      if (!buildModeNotification) return;
+      try {
+        await fetch(`/api/notifications/${buildModeNotification.id}/dismiss`, {
+          method: "POST",
+        });
+        mutateNotifications();
+      } catch (error) {
+        console.error("Error dismissing notification:", error);
+      }
+    }, [buildModeNotification, mutateNotifications]);
 
     const [visibleAgents, currentAgentIsPinned] = useMemo(
       () => buildVisibleAgents(pinnedAgents, currentAgent),
@@ -358,8 +422,8 @@ const MemoizedAppSidebarInner = memo(
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
-          ? `/chat?assistantId=${currentAgent.id}`
-          : "/chat";
+          ? `/app?assistantId=${currentAgent.id}`
+          : "/app";
       return (
         <div data-testid="AppSidebar/new-session">
           <SidebarTab
@@ -373,6 +437,30 @@ const MemoizedAppSidebarInner = memo(
         </div>
       );
     }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+
+    const buildButton = useMemo(
+      () => (
+        <div data-testid="AppSidebar/build">
+          <SidebarTab leftIcon={SvgDevKit} folded={folded} href={CRAFT_PATH}>
+            Craft
+          </SidebarTab>
+        </div>
+      ),
+      [folded]
+    );
+
+    const searchChatsButton = useMemo(
+      () => (
+        <ChatSearchCommandMenu
+          trigger={
+            <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
+              Search Chats
+            </SidebarTab>
+          }
+        />
+      ),
+      [folded]
+    );
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -382,7 +470,7 @@ const MemoizedAppSidebarInner = memo(
                 ? SvgOnyxOctagon
                 : SvgMoreHorizontal
             }
-            href="/chat/agents"
+            href="/app/agents"
             folded={folded}
             transient={activeSidebarTab.isMoreAgents()}
             lowlight={!folded}
@@ -407,6 +495,10 @@ const MemoizedAppSidebarInner = memo(
       ),
       [folded, createProjectModal.toggle, createProjectModal.isOpen]
     );
+    const handleShowBuildIntro = useCallback(() => {
+      setShowIntroAnimation(true);
+    }, []);
+
     const settingsButton = useMemo(
       () => (
         <div>
@@ -419,10 +511,15 @@ const MemoizedAppSidebarInner = memo(
               {isAdmin ? "Admin Panel" : "Curator Panel"}
             </SidebarTab>
           )}
-          <UserAvatarPopover folded={folded} />
+          <UserAvatarPopover
+            folded={folded}
+            onShowBuildIntro={
+              isOnyxCraftEnabled ? handleShowBuildIntro : undefined
+            }
+          />
         </div>
       ),
-      [folded, isAdmin, isCurator]
+      [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
     );
 
     return (
@@ -465,11 +562,43 @@ const MemoizedAppSidebarInner = memo(
           />
         )}
 
+        {/* Intro animation overlay */}
+        <AnimatePresence>
+          {showIntroAnimation && (
+            <motion.div
+              className="fixed inset-0 z-[9999]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <BuildModeIntroBackground />
+              <BuildModeIntroContent
+                onClose={() => {
+                  setShowIntroAnimation(false);
+                  dismissBuildModeNotification();
+                }}
+                onTryBuildMode={() => {
+                  setShowIntroAnimation(false);
+                  dismissBuildModeNotification();
+                  router.push(CRAFT_PATH);
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <SidebarWrapper folded={folded} onFoldClick={onFoldClick}>
           <SidebarBody
             scrollKey="app-sidebar"
             footer={settingsButton}
-            actionButton={newSessionButton}
+            actionButtons={
+              <div className="flex flex-col gap-0.5">
+                {newSessionButton}
+                {searchChatsButton}
+                {isOnyxCraftEnabled && buildButton}
+              </div>
+            }
           >
             {/* When folded, show icons immediately without waiting for data */}
             {folded ? (

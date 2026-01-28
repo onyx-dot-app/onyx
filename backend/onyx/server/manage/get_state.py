@@ -10,9 +10,11 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import user_needs_to_be_verified
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
+from onyx.configs.constants import AuthType
 from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import STABLE_VERSION_PATTERN
+from onyx.db.auth import get_user_count
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
@@ -28,12 +30,21 @@ def healthcheck() -> StatusResponse:
 
 
 @router.get("/auth/type", tags=PUBLIC_API_TAGS)
-def get_auth_type() -> AuthTypeResponse:
+async def get_auth_type() -> AuthTypeResponse:
+    # NOTE: This endpoint is critical for the multi-tenant flow and is hit before there is a tenant context
+    # The reason is this is used during the login flow, but we don't know which tenant the user is supposed to be
+    # associated with until they auth.
+    has_users = True
+    if AUTH_TYPE != AuthType.CLOUD:
+        user_count = await get_user_count()
+        has_users = user_count > 0
+
     return AuthTypeResponse(
         auth_type=AUTH_TYPE,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
         password_min_length=PASSWORD_MIN_LENGTH,
+        has_users=has_users,
     )
 
 

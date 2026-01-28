@@ -32,7 +32,7 @@ import { ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { deleteAllChatSessions } from "@/app/chat/services/lib";
+import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import { AuthType } from "@/lib/constants";
@@ -48,11 +48,17 @@ import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Code from "@/refresh-components/Code";
-import { InputPrompt } from "@/app/chat/interfaces";
+import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
+import {
+  CHAT_BACKGROUND_OPTIONS,
+  CHAT_BACKGROUND_NONE,
+} from "@/lib/constants/chatBackgrounds";
+import { SvgCheck } from "@opal/icons";
+import { cn } from "@/lib/utils";
 
 interface PAT {
   id: number;
@@ -169,8 +175,12 @@ function PATModal({
 }
 
 function GeneralSettings() {
-  const { user, updateUserPersonalization, updateUserThemePreference } =
-    useUser();
+  const {
+    user,
+    updateUserPersonalization,
+    updateUserThemePreference,
+    updateUserChatBackground,
+  } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
   const { popup, setPopup } = usePopup();
   const { refreshChatSessions } = useChatSessions();
@@ -368,6 +378,56 @@ function GeneralSettings() {
                 </InputSelect.Content>
               </InputSelect>
             </InputLayouts.Horizontal>
+            <InputLayouts.Vertical title="Chat Background">
+              <div className="flex flex-wrap gap-2">
+                {CHAT_BACKGROUND_OPTIONS.map((bg) => {
+                  const currentBackgroundId =
+                    user?.preferences?.chat_background ?? "none";
+                  const isSelected = currentBackgroundId === bg.id;
+                  const isNone = bg.url === CHAT_BACKGROUND_NONE;
+
+                  return (
+                    <button
+                      key={bg.id}
+                      onClick={() =>
+                        updateUserChatBackground(
+                          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+                        )
+                      }
+                      className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
+                      title={bg.label}
+                      aria-label={`${bg.label} background${
+                        isSelected ? " (selected)" : ""
+                      }`}
+                    >
+                      {isNone ? (
+                        <div className="absolute inset-0 bg-background flex items-center justify-center">
+                          <span className="text-xs text-text-02">None</span>
+                        </div>
+                      ) : (
+                        <div
+                          className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+                          style={{ backgroundImage: `url(${bg.thumbnail})` }}
+                        />
+                      )}
+                      <div
+                        className={cn(
+                          "absolute inset-0 transition-all rounded-lg",
+                          isSelected
+                            ? "ring-2 ring-inset ring-theme-primary-05"
+                            : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
+                        )}
+                      />
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
+                          <SvgCheck className="w-2.5 h-2.5 stroke-text-inverted-05" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </InputLayouts.Vertical>
           </Card>
         </Section>
 
@@ -982,7 +1042,6 @@ function AccountsAccessSettings() {
   const { popup, setPopup } = usePopup();
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  // const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
   const passwordValidationSchema = Yup.object().shape({
     currentPassword: Yup.string().required("Current password is required"),
@@ -1148,16 +1207,6 @@ function AccountsAccessSettings() {
     [setPopup]
   );
 
-  if (!showPasswordSection && !showTokensSection) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-sm text-muted-foreground">
-          No account settings available.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <>
       {popup}
@@ -1311,6 +1360,7 @@ function AccountsAccessSettings() {
               title="Email"
               description="Your account email address."
               center
+              cursorPointer={false}
             >
               <Text>{user?.email ?? "anonymous"}</Text>
             </InputLayouts.Horizontal>
@@ -1454,6 +1504,8 @@ function FederatedConnectorCard({
 }: FederatedConnectorCardProps) {
   const { popup, setPopup } = usePopup();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
+    useState(false);
   const sourceMetadata = getSourceMetadata(connector.source as ValidSources);
 
   const handleDisconnect = useCallback(async () => {
@@ -1469,6 +1521,7 @@ function FederatedConnectorCard({
           message: "Disconnected successfully",
           type: "success",
         });
+        setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
@@ -1487,6 +1540,35 @@ function FederatedConnectorCard({
     <>
       {popup}
 
+      {showDisconnectConfirmation && (
+        <ConfirmationModalLayout
+          icon={SvgUnplug}
+          title={`Disconnect ${sourceMetadata.displayName}`}
+          onClose={() => setShowDisconnectConfirmation(false)}
+          submit={
+            <Button
+              danger
+              onClick={() => void handleDisconnect()}
+              disabled={isDisconnecting}
+            >
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          }
+        >
+          <Section gap={0.5} alignItems="start">
+            <Text>
+              Onyx will no longer be able to access or search content from your{" "}
+              <Text className="!font-bold">{sourceMetadata.displayName}</Text>{" "}
+              account.
+            </Text>
+            <Text>
+              You can still continue existing sessions referencing{" "}
+              {sourceMetadata.displayName} content.
+            </Text>
+          </Section>
+        </ConfirmationModalLayout>
+      )}
+
       <Card padding={0.5}>
         <LineItemLayout
           icon={sourceMetadata.icon}
@@ -1499,7 +1581,7 @@ function FederatedConnectorCard({
               <IconButton
                 icon={SvgUnplug}
                 internal
-                onClick={() => void handleDisconnect()}
+                onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}
               />
             ) : connector.authorize_url ? (

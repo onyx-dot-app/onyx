@@ -1,3 +1,4 @@
+from onyx.configs.app_configs import DEV_MODE
 from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.utils.variable_functionality import (
@@ -19,7 +20,7 @@ def get_default_feature_flag_provider() -> FeatureFlagProvider:
     Returns:
         FeatureFlagProvider: The configured feature flag provider instance
     """
-    if MULTI_TENANT:
+    if MULTI_TENANT or DEV_MODE:
         return fetch_versioned_implementation_with_fallback(
             module="onyx.feature_flags.factory",
             attribute="get_posthog_feature_flag_provider",

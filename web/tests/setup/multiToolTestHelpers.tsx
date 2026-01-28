@@ -4,8 +4,8 @@
  */
 
 import { render } from "@tests/setup/test-utils";
-import { PacketType, Packet } from "@/app/chat/services/streamingModels";
-import MultiToolRenderer from "@/app/chat/message/messageComponents/MultiToolRenderer";
+import { PacketType, Packet } from "@/app/app/services/streamingModels";
+import MultiToolRenderer from "@/app/app/message/messageComponents/MultiToolRenderer";
 
 /**
  * Create a tool packet with sensible defaults

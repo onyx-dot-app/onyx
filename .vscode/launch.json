@@ -150,6 +150,24 @@
       "consoleTitle": "Slack Bot Console"
     },
     {
+      "name": "Discord Bot",
+      "consoleName": "Discord Bot",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "onyx/onyxbot/discord/client.py",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Discord Bot Console"
+    },
+    {
       "name": "MCP Server",
       "consoleName": "MCP Server",
       "type": "debugpy",
@@ -397,7 +415,6 @@
         "onyx.background.celery.versioned_apps.docfetching",
         "worker",
         "--pool=threads",
-        "--concurrency=1",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docfetching@%n",
@@ -428,7 +445,6 @@
         "onyx.background.celery.versioned_apps.docprocessing",
         "worker",
         "--pool=threads",
-        "--concurrency=6",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
@@ -575,6 +591,137 @@
       "console": "integratedTerminal",
       "presentation": {
         "group": "3"
+      }
+    },
+    {
+      "name": "Build Sandbox Templates",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "onyx.server.features.build.sandbox.build_templates",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
+      },
+      "consoleTitle": "Build Sandbox Templates"
+    },
+    {
+      // Dummy entry used to label the group
+      "name": "--- Database ---",
+      "type": "node",
+      "request": "launch",
+      "presentation": {
+        "group": "4",
+        "order": 0
+      }
+    },
+    {
+      "name": "Restore seeded database dump",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--fetch-seeded",
+        "--yes"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
+      "name": "Clean restore seeded database dump (destructive)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--fetch-seeded",
+        "--clean",
+        "--yes"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
+      "name": "Create database snapshot",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "dump",
+        "backup.dump"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
+      "name": "Clean restore database snapshot (destructive)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "restore",
+        "--clean",
+        "--yes",
+        "backup.dump"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
+      }
+    },
+    {
+      "name": "Upgrade database to head revision",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--with",
+        "onyx-devtools",
+        "ods",
+        "db",
+        "upgrade"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "4"
       }
     },
     {

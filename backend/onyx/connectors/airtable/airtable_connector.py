@@ -17,6 +17,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -419,7 +420,7 @@ class AirtableConnector(LoadConnector):
         # Process records in parallel batches using ThreadPoolExecutor
         PARALLEL_BATCH_SIZE = 8
         max_workers = min(PARALLEL_BATCH_SIZE, len(records))
-        record_documents: list[Document] = []
+        record_documents: list[Document | HierarchyNode] = []
 
         # Process records in batches
         for i in range(0, len(records), PARALLEL_BATCH_SIZE):

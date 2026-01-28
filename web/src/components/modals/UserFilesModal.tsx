@@ -2,12 +2,12 @@
 
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { ProjectFile } from "@/app/chat/projects/ProjectsContext";
-import { formatRelativeTime } from "@/app/chat/components/projects/project_utils";
+import { ProjectFile } from "@/app/app/projects/ProjectsContext";
+import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
-import { UserFileStatus } from "@/app/chat/projects/projectsService";
+import { UserFileStatus } from "@/app/app/projects/projectsService";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";

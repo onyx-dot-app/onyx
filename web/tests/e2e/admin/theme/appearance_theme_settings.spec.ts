@@ -154,7 +154,7 @@ test.describe("Appearance Theme Settings", () => {
     await page.evaluate(() => {
       localStorage.removeItem("allUsersInitialPopupFlowCompleted");
     });
-    await page.goto("http://localhost:3000/chat");
+    await page.goto("http://localhost:3000/app");
     await page.waitForLoadState("networkidle");
 
     // 16. Handle consent modal

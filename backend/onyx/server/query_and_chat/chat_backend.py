@@ -102,6 +102,7 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.usage_limits import check_usage_and_raise
 from onyx.server.usage_limits import is_usage_limits_enabled
 from onyx.server.utils import get_json_line
+from onyx.tracing.framework.create import ensure_trace
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -405,7 +406,15 @@ def rename_chat_session(
         max_total_tokens=max_tokens_for_naming,
     )
 
-    new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
+    with ensure_trace(
+        "chat_session_naming",
+        group_id=str(chat_session_id),
+        metadata={
+            "tenant_id": get_current_tenant_id(),
+            "chat_session_id": str(chat_session_id),
+        },
+    ):
+        new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
     update_chat_session(
         db_session=db_session,
@@ -530,7 +539,30 @@ def handle_new_chat_message(
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@router.post("/send-chat-message", response_model=None, tags=PUBLIC_API_TAGS)
+@router.post(
+    "/send-chat-message",
+    response_model=ChatFullResponse,
+    tags=PUBLIC_API_TAGS,
+    responses={
+        200: {
+            "description": (
+                "If `stream=true`, returns `text/event-stream`.\n"
+                "If `stream=false`, returns `application/json` (ChatFullResponse)."
+            ),
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                    "examples": {
+                        "stream": {
+                            "summary": "Stream of NDJSON AnswerStreamPart's",
+                            "value": "string",
+                        }
+                    },
+                },
+            },
+        }
+    },
+)
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,

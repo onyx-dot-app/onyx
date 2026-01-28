@@ -116,6 +116,8 @@ class UserFileFilters(BaseModel):
 
 
 class IndexFilters(BaseFilters, UserFileFilters):
+    # NOTE: These strings must be formatted in the same way as the output of
+    # DocumentAccess::to_acl.
     access_control_list: list[str] | None
     tenant_id: str | None = None
 
@@ -370,6 +372,10 @@ class SearchDocsResponse(BaseModel):
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
 
+    # For cases where the frontend only needs to display a subset of the search docs
+    # The whole list is typically still needed for later steps but this set should be saved separately
+    displayed_docs: list[SearchDoc] | None = None
+
 
 class SavedSearchDoc(SearchDoc):
     db_doc_id: int
@@ -426,11 +432,6 @@ class SavedSearchDoc(SearchDoc):
         self_score = self.score if self.score is not None else 0.0
         other_score = other.score if other.score is not None else 0.0
         return self_score < other_score
-
-
-class CitationDocInfo(BaseModel):
-    search_doc: SearchDoc
-    citation_number: int | None
 
 
 class SavedSearchDocWithContent(SavedSearchDoc):

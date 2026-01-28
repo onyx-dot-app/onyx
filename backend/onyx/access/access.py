@@ -97,10 +97,14 @@ def get_access_for_documents(
 
 
 def _get_acl_for_user(user: User | None, db_session: Session) -> set[str]:
-    """Returns a list of ACL entries that the user has access to. This is meant to be
-    used downstream to filter out documents that the user does not have access to. The
-    user should have access to a document if at least one entry in the document's ACL
-    matches one entry in the returned set.
+    """Returns a list of ACL entries that the user has access to.
+
+    This is meant to be used downstream to filter out documents that the user
+    does not have access to. The user should have access to a document if at
+    least one entry in the document's ACL matches one entry in the returned set.
+
+    NOTE: These strings must be formatted in the same way as the output of
+    DocumentAccess::to_acl.
     """
     if user:
         return {prefix_user_email(user.email), PUBLIC_DOC_PAT}

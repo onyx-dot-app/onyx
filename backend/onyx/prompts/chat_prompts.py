@@ -96,7 +96,7 @@ ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
 CHAT_NAMING_SYSTEM_PROMPT = """
 Given the conversation history, provide a SHORT name for the conversation. Focus the name on the important keywords to convey the topic of the conversation. \
-Make sure the name is in the same language as the user's language.
+Make sure the name is in the same language as the user's first message.
 
 IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()

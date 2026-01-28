@@ -9,6 +9,7 @@ import pytest
 from onyx.connectors.discord.connector import DiscordConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
+from onyx.connectors.models import HierarchyNode
 
 
 def load_test_data(file_name: str = "test_discord_data.json") -> dict[str, Any]:
@@ -39,6 +40,8 @@ def test_discord_connector_basic(discord_connector: DiscordConnector) -> None:
 
     for doc_batch in discord_connector.poll_source(0, time.time()):
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             if "Channel" in doc.metadata:
                 assert isinstance(doc.metadata["Channel"], str)
                 channels.add(doc.metadata["Channel"])

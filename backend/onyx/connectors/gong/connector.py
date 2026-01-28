@@ -21,6 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -181,7 +182,7 @@ class GongConnector(LoadConnector, PollConnector):
         for transcript_batch in self._get_transcript_batches(
             start_datetime, end_datetime
         ):
-            doc_batch: list[Document] = []
+            doc_batch: list[Document | HierarchyNode] = []
 
             transcript_call_ids = cast(
                 list[str],
