@@ -24,7 +24,7 @@
 .switch-disabled {
   background-color: var(--background-neutral-04);
   border: 1px solid transparent;
-  cursor: not-allowed;
+  cursor: not-allowed !important;
 }
 .switch-disabled[data-state="checked"] {
   background-color: var(--action-link-03);

@@ -2,9 +2,12 @@
 
 import React, { useState } from "react";
 import { cn } from "@/lib/utils";
+import { WithoutStyles } from "@/types";
 
 export interface SwitchProps
-  extends Omit<React.ComponentPropsWithoutRef<"button">, "onChange"> {
+  extends WithoutStyles<
+    Omit<React.ComponentPropsWithoutRef<"button">, "onChange">
+  > {
   // Switch variants
   disabled?: boolean;
 
@@ -22,7 +25,6 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
       defaultChecked,
       onCheckedChange,
 
-      className,
       onClick,
       ...props
     },
@@ -54,8 +56,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         data-state={checked ? "checked" : "unchecked"}
         className={cn(
           "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none",
-          disabled ? "switch-disabled" : "switch-normal",
-          className
+          disabled ? "switch-disabled" : "switch-normal"
         )}
         disabled={disabled}
         onClick={handleClick}
