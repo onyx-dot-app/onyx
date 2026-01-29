@@ -497,8 +497,9 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData } = useMcpServersForAgentEditor();
-  const { openApiTools: openApiToolsRaw } = useOpenApiTools();
+  const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
+  const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
+    useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -508,7 +509,8 @@ export default function AgentEditorPage({
   // - image-gen
   // - web-search
   // - code-interpreter
-  const { tools: availableTools } = useAvailableTools();
+  const { tools: availableTools, isLoading: isToolsLoading } =
+    useAvailableTools();
   const searchTool = availableTools?.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -957,6 +959,14 @@ export default function AgentEditorPage({
     } catch (error) {
       console.error("Upload error:", error);
     }
+  }
+
+  // Wait for async tool data before rendering the form. Formik captures
+  // initialValues on mount — if tools haven't loaded yet, the initial values
+  // won't include MCP tool fields. Later, toggling those fields would make
+  // the form permanently dirty since they have no baseline to compare against.
+  if (isToolsLoading || isMcpLoading || isOpenApiLoading) {
+    return null;
   }
 
   return (
