@@ -420,8 +420,6 @@ class TestSlackBotFederatedSearch:
             name=f"test-llm-provider-{uuid4().hex[:8]}",
             provider=LlmProviderNames.OPENAI,
             api_key=api_key,
-            default_model_name="gpt-4o",
-            is_default_provider=True,
             is_public=True,
         )
         db_session.add(llm_provider)

@@ -49,11 +49,6 @@ def _create_llm_provider(
         default_model_name=default_model_name,
         deployment_name=None,
         is_public=is_public,
-        # Use None instead of False to avoid unique constraint violation
-        # The is_default_provider column has unique=True, so only one True and one False allowed
-        is_default_provider=is_default if is_default else None,
-        is_default_vision_provider=False,
-        default_vision_model=None,
     )
     db_session.add(provider)
     db_session.flush()
