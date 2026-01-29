@@ -268,7 +268,7 @@ def upsert_llm_provider(
                 model_provider=llm_provider_upsert_request.provider,
             )
 
-        insert_new_model_configuration(
+        insert_new_model_configuration__no_commit(
             db_session=db_session,
             llm_provider_id=existing_llm_provider.id,
             model_name=model_configuration.name,
@@ -333,7 +333,7 @@ def sync_model_configurations(
         model_name = model["name"]
         if model_name not in existing_names:
             # Insert new model with is_visible=False (user must explicitly enable)
-            insert_new_model_configuration(
+            insert_new_model_configuration__no_commit(
                 db_session=db_session,
                 llm_provider_id=provider.id,
                 model_name=model_name,
@@ -344,6 +344,8 @@ def sync_model_configurations(
             )
             new_count += 1
 
+    if new_count > 0:
+        db_session.commit()
     return new_count
 
 
@@ -727,12 +729,17 @@ def sync_auto_mode_models(
     return changes
 
 
-def create_new_flow_mapping(
+def create_new_flow_mapping__no_commit(
     db_session: Session,
     model_configuration_id: int,
     flow_type: ModelFlowType,
     is_default: bool = False,
 ) -> FlowMapping:
+    """Create a new flow mapping without committing.
+
+    Uses flush() to get the ID while keeping the transaction open,
+    allowing callers like upsert_llm_provider to maintain atomicity.
+    """
     flow_mapping = FlowMapping(
         model_configuration_id=model_configuration_id,
         flow_type=flow_type,
@@ -740,12 +747,12 @@ def create_new_flow_mapping(
     )
 
     db_session.add(flow_mapping)
-    db_session.commit()
+    db_session.flush()
     db_session.refresh(flow_mapping)
     return flow_mapping
 
 
-def insert_new_model_configuration(
+def insert_new_model_configuration__no_commit(
     db_session: Session,
     llm_provider_id: int,
     model_name: str,
@@ -772,7 +779,7 @@ def insert_new_model_configuration(
     if not model_config_id:
         return None
 
-    create_new_flow_mapping(
+    create_new_flow_mapping__no_commit(
         db_session=db_session,
         model_configuration_id=model_config_id,
         flow_type=ModelFlowType.TEXT,
@@ -780,7 +787,7 @@ def insert_new_model_configuration(
     )
 
     if supports_image_input:
-        create_new_flow_mapping(
+        create_new_flow_mapping__no_commit(
             db_session=db_session,
             model_configuration_id=model_config_id,
             flow_type=ModelFlowType.VISION,

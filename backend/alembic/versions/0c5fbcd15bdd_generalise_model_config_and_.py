@@ -31,6 +31,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["model_configuration_id"], ["model_configuration.id"], ondelete="CASCADE"
         ),
+        sa.UniqueConstraint(
+            "flow_type",
+            "model_configuration_id",
+            name="uq_flow_mapping_flow_type_model_configuration",
+        ),
     )
 
     # Partial unique index so that there is at most one default for each flow type

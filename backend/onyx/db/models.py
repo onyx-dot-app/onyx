@@ -2711,6 +2711,11 @@ class FlowMapping(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint(
+            "flow_type",
+            "model_configuration_id",
+            name="uq_flow_mapping_flow_type_model_configuration",
+        ),
         Index(
             "ix_one_default_per_flow",
             "flow_type",

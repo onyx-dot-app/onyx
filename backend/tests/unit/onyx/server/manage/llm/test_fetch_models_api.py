@@ -109,7 +109,9 @@ class TestGetOllamaAvailableModels:
 
             # Verify DB operations were called
             assert mock_session.execute.call_count == 3  # 3 models inserted
-            mock_session.commit.call_count == 6  # 3 for model config + 3 for flow mapping
+            assert (
+                mock_session.commit.call_count == 6
+            )  # 3 for model config + 3 for flow mapping
 
     def test_no_sync_when_provider_name_not_specified(
         self, mock_ollama_tags_response: dict, mock_ollama_show_response: dict
