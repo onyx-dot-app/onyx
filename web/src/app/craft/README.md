@@ -12,6 +12,7 @@
   <a href="https://docs.onyx.app/overview/core_features/craft"><img alt="Documentation" src="https://img.shields.io/badge/docs-onyx.app-blue?style=flat-square" /></a>
   <a href="https://github.com/onyx-dot-app/onyx/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green?style=flat-square" /></a>
   <a href="https://discord.gg/TDJ59cGV2X"><img alt="Discord" src="https://img.shields.io/discord/1234567890?style=flat-square&label=discord" /></a>
+  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/onyx-dot-app/onyx" />
 </p>
 
 ---
@@ -37,7 +38,6 @@ For detailed documentation, visit [our docs](https://docs.onyx.app/overview/core
 
 - **Web Applications** — Build Next.js applications with React, shadcn/ui, and Recharts for interactive dashboards and tools
 - **Documents & Reports** — Generate polished markdown documents with DOCX export
-- **Presentations** — Create slide decks with AI-generated visuals using nanobanana
 - **Knowledge Integration** — Access indexed documents from your connectors (Linear, Slack, Google Drive, Confluence, etc.)
 - **Real-time Preview** — Watch the agent build with live output streaming and tool call visibility
 - **Session Management** — Pre-provisioned sandboxes, automatic snapshots, and session restore
@@ -59,6 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/d
 ```
 
 This will:
+
 - Set `ENABLE_CRAFT=true` in the `.env` file
 - Set `IMAGE_TAG=craft-latest` to use Craft-enabled images
 - Run template setup on container startup
@@ -74,6 +75,7 @@ ENABLE_CRAFT=true IMAGE_TAG=craft-latest docker compose up -d
 ### Verify Installation
 
 After installation:
+
 - The `/craft/v1` route should be accessible in the UI
 
 ## How It Works
@@ -91,12 +93,14 @@ After installation:
 Craft supports two sandbox backends controlled by `SANDBOX_BACKEND`:
 
 **Self-Hosted**
+
 - Filesystem-based sandboxes under `SANDBOX_BASE_PATH` (default: `/tmp/onyx-sandboxes`)
 - No container isolation (process-level only)
 - No automatic cleanup or snapshots
 - Direct file access via symlinks to user's knowledge files
 
 **Cloud** (Production)
+
 - Pod-based isolation with ClusterIP services
 - S3-based snapshots for session persistence
 - Automatic cleanup of idle sandboxes (default: 1 hour timeout)
@@ -108,14 +112,14 @@ Craft supports two sandbox backends controlled by `SANDBOX_BACKEND`:
 
 Sessions go through these states:
 
-| State | Description |
-|-------|-------------|
-| **Provisioning** | Sandbox being created when user visits /craft |
-| **Ready** | Sandbox ready, waiting for first message |
-| **Running** | Active session with agent processing |
-| **Idle** | No recent activity |
-| **Sleeping** | Idle timeout reached, pod terminated (K8s only), snapshot saved |
-| **Restored** | User returns, snapshot loaded, session continues |
+| State            | Description                                                     |
+| ---------------- | --------------------------------------------------------------- |
+| **Provisioning** | Sandbox being created when user visits /craft                   |
+| **Ready**        | Sandbox ready, waiting for first message                        |
+| **Running**      | Active session with agent processing                            |
+| **Idle**         | No recent activity                                              |
+| **Sleeping**     | Idle timeout reached, pod terminated (K8s only), snapshot saved |
+| **Restored**     | User returns, snapshot loaded, session continues                |
 
 ### Sandbox Workspace Structure
 
@@ -155,29 +159,40 @@ Key configuration categories (see source for full reference):
 ## Tech Stack
 
 **Frontend**
+
 - Next.js, React, TypeScript
 - Zustand for state management
 - shadcn/ui components
 
 **Backend**
+
 - FastAPI, SQLAlchemy, Celery
 - PostgreSQL for session/sandbox metadata
 - S3-compatible storage for snapshots
 
 **Agent**
+
 - OpenCode CLI with ACP (Agent Communication Protocol)
 - JSON-RPC 2.0 over stdin/stdout
 
 **Sandbox Environment**
+
 - Next.js 16, React 19
 - shadcn/ui, Tailwind CSS, Recharts
 - Python 3.11 with numpy, pandas, matplotlib
+
+## Coming Soon
+
+- **Presentations** — Create slide decks with AI-generated visuals using nanobanana
+- **Spreadsheets**
+- **HTML Dashboards**
 
 ## Contributing
 
 See the main [CONTRIBUTING.md](../../../../CONTRIBUTING.md) for guidelines.
 
 For Craft-specific development:
+
 1. Set `ENABLE_CRAFT=true` in your environment
 2. Ensure templates are available at `/templates/outputs` and `/templates/venv`
 3. For local development, sandboxes are created under `/tmp/onyx-sandboxes`
