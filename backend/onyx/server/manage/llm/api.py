@@ -19,9 +19,9 @@ from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_model
-from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_persona_with_groups
@@ -230,8 +230,12 @@ def list_llm_providers(
     duration = (end_time - start_time).total_seconds()
     logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
 
-    default_text = fetch_default_model(db_session)
-    default_vision = fetch_default_vision_model(db_session)
+    default_text = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.TEXT
+    )
+    default_vision = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.VISION
+    )
 
     return LLMProviderResponse[LLMProviderView].from_models(
         default_text=default_text,
@@ -471,8 +475,12 @@ def list_llm_provider_basics(
         f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
     )
 
-    default_text = fetch_default_model(db_session)
-    default_vision = fetch_default_vision_model(db_session)
+    default_text = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.TEXT
+    )
+    default_vision = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.VISION
+    )
 
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=accessible_providers,

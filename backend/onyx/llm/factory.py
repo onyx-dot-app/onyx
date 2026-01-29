@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_model
-from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
@@ -203,7 +203,9 @@ def get_default_llm_with_vision(
 
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
-        default_model = fetch_default_vision_model(db_session)
+        default_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.VISION
+        )
         if default_model:
             provider_view = fetch_llm_provider_view_from_id(
                 db_session, default_model.provider_id
@@ -280,7 +282,9 @@ def get_default_llm(
     long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        default_model = fetch_default_model(db_session)
+        default_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.TEXT
+        )
 
     if not default_model:
         raise ValueError("No default LLM provider found")

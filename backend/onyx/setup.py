@@ -21,6 +21,7 @@ from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.credentials import create_initial_public_credential
 from onyx.db.document import check_docs_exist
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import ModelFlowType
 from onyx.db.index_attempt import cancel_indexing_attempts_past_model
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_model
@@ -289,7 +290,7 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    if GEN_AI_API_KEY and fetch_default_model(db_session) is None:
+    if GEN_AI_API_KEY and fetch_default_model(db_session, ModelFlowType.TEXT) is None:
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 

@@ -429,27 +429,12 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_model(db_session: Session) -> DefaultModel | None:
+def fetch_default_model(
+    db_session: Session, flow_type: ModelFlowType
+) -> DefaultModel | None:
     flow_mapping = db_session.scalar(
         select(FlowMapping).where(
-            FlowMapping.flow_type == ModelFlowType.TEXT,
-            FlowMapping.is_default == True,  # noqa: E712
-        )
-    )
-
-    if not flow_mapping:
-        return None
-
-    return DefaultModel(
-        provider_id=flow_mapping.model_configuration.llm_provider.id,
-        model_name=flow_mapping.model_configuration.name,
-    )
-
-
-def fetch_default_vision_model(db_session: Session) -> DefaultModel | None:
-    flow_mapping = db_session.scalar(
-        select(FlowMapping).where(
-            FlowMapping.flow_type == ModelFlowType.VISION,
+            FlowMapping.flow_type == flow_type,
             FlowMapping.is_default == True,  # noqa: E712
         )
     )
@@ -752,7 +737,7 @@ def sync_auto_mode_models(
 
     # In Auto mode, default model is always set from GitHub config
     # Check if this provider is the set default provider
-    default_model = fetch_default_model(db_session)
+    default_model = fetch_default_model(db_session, ModelFlowType.TEXT)
     if not default_model or default_model.provider_id != provider.id:
         return changes
 
