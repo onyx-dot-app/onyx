@@ -3,15 +3,15 @@
  *
  * New code should import directly from:
  * - @/lib/billing/interfaces (types)
- * - @/lib/billing/actions (mutations)
- * - @/lib/hooks/useBillingInformation (hook)
- * - @/lib/hooks/useLicense (hook)
+ * - @/lib/billing/svc (mutations)
+ * - @/hooks/useBillingInformation (hook)
+ * - @/hooks/useLicense (hook)
  */
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 // Re-export hook
-export { useBillingInformation } from "@/lib/hooks/useBillingInformation";
+export { useBillingInformation } from "@/hooks/useBillingInformation";
 
 // Re-export utilities and types
 export { statusToDisplay, hasActiveSubscription } from "./interfaces";

@@ -9,7 +9,7 @@ import {
   fetchLicense,
   refreshLicenseCache,
   uploadLicense,
-} from "./actions";
+} from "./svc";
 
 // Mock NEXT_PUBLIC_CLOUD_ENABLED
 jest.mock("@/lib/constants", () => ({
@@ -241,7 +241,7 @@ describe("billing actions (cloud mode)", () => {
 
   test("uses cloud endpoint for checkout session", async () => {
     // Re-import with cloud mode
-    const { createCheckoutSession: cloudCheckout } = await import("./actions");
+    const { createCheckoutSession: cloudCheckout } = await import("./svc");
 
     // Mock POST /api/tenants/create-checkout-session
     fetchSpy.mockResolvedValueOnce({
@@ -259,7 +259,7 @@ describe("billing actions (cloud mode)", () => {
 
   test("fetchLicense throws error in cloud mode", async () => {
     // Re-import with cloud mode
-    const { fetchLicense: cloudFetchLicense } = await import("./actions");
+    const { fetchLicense: cloudFetchLicense } = await import("./svc");
 
     await expect(cloudFetchLicense()).rejects.toThrow(
       "only available for self-hosted"
@@ -268,7 +268,7 @@ describe("billing actions (cloud mode)", () => {
 
   test("uploadLicense throws error in cloud mode", async () => {
     // Re-import with cloud mode
-    const { uploadLicense: cloudUploadLicense } = await import("./actions");
+    const { uploadLicense: cloudUploadLicense } = await import("./svc");
 
     await expect(cloudUploadLicense("test-key")).rejects.toThrow(
       "only available for self-hosted"

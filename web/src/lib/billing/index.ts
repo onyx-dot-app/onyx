@@ -5,9 +5,9 @@
 // Types and interfaces
 export * from "./interfaces";
 
-// Action functions
-export * from "./actions";
+// Service functions
+export * from "./svc";
 
 // Hooks
-export { useBillingInformation } from "@/lib/hooks/useBillingInformation";
-export { useLicense } from "@/lib/hooks/useLicense";
+export { useBillingInformation } from "@/hooks/useBillingInformation";
+export { useLicense } from "@/hooks/useLicense";
