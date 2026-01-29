@@ -605,7 +605,7 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
         assert kwargs["metadata"]["foo"] == "bar"
 
 
-def test_temporary_env_cleanup() -> None:
+def test_temporary_env_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
     # Assign some environment variables
     EXPECTED_ENV_VARS = {
         "TEST_ENV_VAR": "test_value",
@@ -620,7 +620,7 @@ def test_temporary_env_cleanup() -> None:
     }
 
     for env_var, value in EXPECTED_ENV_VARS.items():
-        os.environ[env_var] = value
+        monkeypatch.setenv(env_var, value)
 
     model_provider = LlmProviderNames.OPENAI
     model_name = "gpt-3.5-turbo"
@@ -686,7 +686,7 @@ def test_temporary_env_cleanup() -> None:
         assert "THIS_IS_RANDOM" not in os.environ
 
 
-def test_temporary_env_cleanup_on_exception() -> None:
+def test_temporary_env_cleanup_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify env vars are restored even when an exception occurs during LLM invocation."""
     # Assign some environment variables
     EXPECTED_ENV_VARS = {
@@ -702,7 +702,7 @@ def test_temporary_env_cleanup_on_exception() -> None:
     }
 
     for env_var, value in EXPECTED_ENV_VARS.items():
-        os.environ[env_var] = value
+        monkeypatch.setenv(env_var, value)
 
     model_provider = LlmProviderNames.OPENAI
     model_name = "gpt-3.5-turbo"
