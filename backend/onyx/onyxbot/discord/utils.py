@@ -36,4 +36,6 @@ def get_bot_token() -> str | None:
     except Exception as e:
         logger.error(f"Failed to get bot token from database: {e}")
         return None
-    return config.bot_token if config else None
+    if config and config.bot_token:
+        return config.bot_token.get_value(apply_mask=False)
+    return None

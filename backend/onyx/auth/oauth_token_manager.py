@@ -33,7 +33,10 @@ class OAuthTokenManager:
         if not user_token:
             return None
 
-        token_data = user_token.token_data
+        if not user_token.token_data:
+            return None
+
+        token_data = user_token.token_data.get_value(apply_mask=False)
 
         # Check if token is expired
         if OAuthTokenManager.is_token_expired(token_data):
@@ -51,7 +54,10 @@ class OAuthTokenManager:
 
     def refresh_token(self, user_token: OAuthUserToken) -> str:
         """Refresh access token using refresh token"""
-        token_data = user_token.token_data
+        if not user_token.token_data:
+            raise ValueError("No token data available for refresh")
+
+        token_data = user_token.token_data.get_value(apply_mask=False)
 
         response = requests.post(
             self.oauth_config.token_url,

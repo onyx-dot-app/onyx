@@ -352,10 +352,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         )
 
                     if tenant_slack_bot:
-                        bot_token = tenant_slack_bot.bot_token
-                        access_token = (
-                            tenant_slack_bot.user_token or tenant_slack_bot.bot_token
+                        bot_token = (
+                            tenant_slack_bot.bot_token.get_value(apply_mask=False)
+                            if tenant_slack_bot.bot_token
+                            else None
                         )
+                        user_token = (
+                            tenant_slack_bot.user_token.get_value(apply_mask=False)
+                            if tenant_slack_bot.user_token
+                            else None
+                        )
+                        access_token = user_token or bot_token
                 except Exception as e:
                     logger.warning(f"Could not fetch Slack bot tokens: {e}")
 
@@ -375,8 +382,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         None,
                     )
 
-                    if slack_oauth_token:
-                        access_token = slack_oauth_token.token
+                    if slack_oauth_token and slack_oauth_token.token:
+                        access_token = slack_oauth_token.token.get_value(
+                            apply_mask=False
+                        )
                         entities = slack_oauth_token.federated_connector.config or {}
                 except Exception as e:
                     logger.warning(f"Could not fetch Slack OAuth token: {e}")

@@ -119,7 +119,16 @@ def get_federated_retrieval_functions(
                 federated_retrieval_infos_slack = []
 
                 # Use user_token if available, otherwise fall back to bot_token
-                access_token = tenant_slack_bot.user_token or tenant_slack_bot.bot_token
+                # Unwrap SensitiveValue for backend API calls
+                access_token = (
+                    tenant_slack_bot.user_token.get_value(apply_mask=False)
+                    if tenant_slack_bot.user_token
+                    else (
+                        tenant_slack_bot.bot_token.get_value(apply_mask=False)
+                        if tenant_slack_bot.bot_token
+                        else ""
+                    )
+                )
                 if not tenant_slack_bot.user_token:
                     logger.warning(
                         f"Using bot_token for Slack search (limited functionality): {tenant_slack_bot.name}"
@@ -138,7 +147,12 @@ def get_federated_retrieval_functions(
                 )
 
                 # Capture variables by value to avoid lambda closure issues
-                bot_token = tenant_slack_bot.bot_token
+                # Unwrap SensitiveValue for backend API calls
+                bot_token = (
+                    tenant_slack_bot.bot_token.get_value(apply_mask=False)
+                    if tenant_slack_bot.bot_token
+                    else ""
+                )
 
                 # Use connector config for channel filtering (guaranteed to exist at this point)
                 connector_entities = slack_federated_connector_config
@@ -252,11 +266,11 @@ def get_federated_retrieval_functions(
 
         connector = get_federated_connector(
             oauth_token.federated_connector.source,
-            oauth_token.federated_connector.credentials,
+            oauth_token.federated_connector.credentials.get_value(apply_mask=False),
         )
 
         # Capture variables by value to avoid lambda closure issues
-        access_token = oauth_token.token
+        access_token = oauth_token.token.get_value(apply_mask=False)
 
         def create_retrieval_function(
             conn: FederatedConnector,
