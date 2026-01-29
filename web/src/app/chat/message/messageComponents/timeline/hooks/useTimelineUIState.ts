@@ -37,12 +37,12 @@ export interface TimelineUIStateInput {
   lastTurnGroup: TurnGroup | undefined;
   /** The last step */
   lastStep: TransformedStep | undefined;
-  /** Whether the last step supports compact rendering */
-  lastStepSupportsCompact: boolean;
+  /** Whether the last step supports collapsed streaming rendering */
+  lastStepSupportsCollapsedStreaming: boolean;
   /** Whether the last step is a research agent */
   lastStepIsResearchAgent: boolean;
-  /** Whether the parallel active step supports compact rendering */
-  parallelActiveStepSupportsCompact: boolean;
+  /** Whether the parallel active step supports collapsed streaming rendering */
+  parallelActiveStepSupportsCollapsedStreaming: boolean;
   /** Whether image generation is in progress */
   isGeneratingImage: boolean;
   /** Whether final answer is coming (MESSAGE_START received) */
@@ -98,9 +98,9 @@ export function useTimelineUIState(
       isExpanded,
       lastTurnGroup,
       lastStep,
-      lastStepSupportsCompact,
+      lastStepSupportsCollapsedStreaming,
       lastStepIsResearchAgent,
-      parallelActiveStepSupportsCompact,
+      parallelActiveStepSupportsCollapsedStreaming,
       isGeneratingImage,
       finalAnswerComing,
     } = input;
@@ -149,11 +149,13 @@ export function useTimelineUIState(
       !isExpanded &&
       !!lastStep &&
       !lastTurnGroup?.isParallel &&
-      lastStepSupportsCompact;
+      lastStepSupportsCollapsedStreaming;
 
-    // Collapsed parallel compact content
+    // Collapsed parallel streaming content
     const showCollapsedParallel =
-      showParallelTabs && !isExpanded && parallelActiveStepSupportsCompact;
+      showParallelTabs &&
+      !isExpanded &&
+      parallelActiveStepSupportsCollapsedStreaming;
 
     // Done step: shown when expanded and completed (either normally or with display content)
     // Also shown when finalAnswerComing is true (MESSAGE_START received)

@@ -1,22 +1,17 @@
 import React from "react";
-import { SvgSearch, SvgGlobe, SvgSearchMenu, SvgCircle } from "@opal/icons";
+import { SvgSearch, SvgGlobe } from "@opal/icons";
 import { SearchToolPacket } from "@/app/chat/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-  RendererResult,
 } from "@/app/chat/message/messageComponents/interfaces";
 import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
-import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
   constructCurrentSearchState,
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
-  INITIAL_RESULTS_TO_SHOW,
-  RESULTS_PER_EXPANSION,
-  getMetadataTags,
 } from "./searchStateUtils";
 import Text from "@/refresh-components/texts/Text";
 
@@ -27,28 +22,16 @@ const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   icon: SvgSearch,
 });
 
-const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
-  id: doc.document_id,
-  title:
-    typeof doc.semantic_identifier === "string" ? doc.semantic_identifier : "",
-  sourceType: doc.source_type,
-  sourceUrl: doc.link,
-  description: doc.blurb,
-  metadata: {
-    date: doc.updated_at || undefined,
-    tags: getMetadataTags(doc.metadata),
-  },
-});
-
 /**
  * WebSearchToolRenderer - Renders web search tool execution steps
  *
+ * Only shows queries - results are handled by the fetch tool.
+ *
  * RenderType modes:
- * - FULL: Shows 2 timeline steps (queries list, then results).
- *         Used when step is expanded in timeline.
- * - HIGHLIGHT: Shows only results with header embedded directly in content.
+ * - FULL: Shows queries timeline step. Used when step is expanded in timeline.
+ * - HIGHLIGHT: Shows queries with header embedded directly in content.
  *              No StepContainer wrapper. Used for parallel streaming preview.
- * - INLINE: Phase-based (queries -> results) for collapsed streaming view.
+ * - INLINE: Shows queries for collapsed streaming view.
  */
 export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   packets,
@@ -59,14 +42,12 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   children,
 }) => {
   const searchState = constructCurrentSearchState(packets);
-  const { queries, results } = searchState;
+  const { queries } = searchState;
 
   const isHighlight = renderType === RenderType.HIGHLIGHT;
   const isInline = renderType === RenderType.INLINE;
 
-  const hasResults = results.length > 0;
-
-  const queriesHeader = "Searching the web for:";
+  const queriesHeader = "Searching the web";
 
   if (queries.length === 0) {
     return children([
@@ -92,37 +73,6 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               {queriesHeader}
             </Text>
             <SearchChipList
-              items={results}
-              initialCount={INITIAL_RESULTS_TO_SHOW}
-              expansionCount={RESULTS_PER_EXPANSION}
-              getKey={(doc: OnyxDocument, index: number) =>
-                doc.document_id ?? `result-${index}`
-              }
-              toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-              onClick={(doc: OnyxDocument) => {
-                if (doc.link) {
-                  window.open(doc.link, "_blank");
-                }
-              }}
-              emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-            />
-          </div>
-        ),
-      },
-    ]);
-  }
-
-  // INLINE mode: dynamic phase-based content for collapsed streaming view
-  if (isInline) {
-    // Querying phase: show queries
-    if (!hasResults) {
-      return children([
-        {
-          icon: null,
-          status: queriesHeader,
-          supportsCollapsible: false,
-          content: (
-            <SearchChipList
               items={queries}
               initialCount={INITIAL_QUERIES_TO_SHOW}
               expansionCount={QUERIES_PER_EXPANSION}
@@ -132,43 +82,40 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               showDetailsCard={false}
               isQuery={true}
             />
-          ),
-        },
-      ]);
-    }
+          </div>
+        ),
+      },
+    ]);
+  }
 
-    // Reading results phase: show results
+  // INLINE mode: show queries for collapsed streaming view
+  if (isInline) {
     return children([
       {
         icon: null,
-        status: "Reading results",
+        status: queriesHeader,
         supportsCollapsible: false,
         content: (
           <SearchChipList
-            items={results}
-            initialCount={INITIAL_RESULTS_TO_SHOW}
-            expansionCount={RESULTS_PER_EXPANSION}
-            getKey={(doc: OnyxDocument, index: number) =>
-              doc.document_id ?? `result-${index}`
-            }
-            toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-            onClick={(doc: OnyxDocument) => {
-              if (doc.link) {
-                window.open(doc.link, "_blank");
-              }
-            }}
+            items={queries}
+            initialCount={INITIAL_QUERIES_TO_SHOW}
+            expansionCount={QUERIES_PER_EXPANSION}
+            getKey={(_, index) => index}
+            toSourceInfo={queryToSourceInfo}
             emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
+            showDetailsCard={false}
+            isQuery={true}
           />
         ),
       },
     ]);
   }
 
-  // FULL mode: return 2 separate timeline steps
-  const steps: RendererResult[] = [
+  // FULL mode: return queries timeline step
+  return children([
     {
       icon: SvgGlobe,
-      status: "Searching the web for:",
+      status: "Searching the web",
       content: (
         <SearchChipList
           items={queries}
@@ -176,42 +123,12 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
           expansionCount={QUERIES_PER_EXPANSION}
           getKey={(_, index) => index}
           toSourceInfo={queryToSourceInfo}
-          emptyState={
-            !stopPacketSeen && !hasResults ? <BlinkingDot /> : undefined
-          }
+          emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
           showDetailsCard={false}
           isQuery={true}
         />
       ),
       supportsCollapsible: false,
     },
-  ];
-
-  // Add results step when results arrive
-  if (hasResults) {
-    steps.push({
-      icon: SvgCircle,
-      status: "Reading results:",
-      content: (
-        <SearchChipList
-          items={results}
-          initialCount={INITIAL_RESULTS_TO_SHOW}
-          expansionCount={RESULTS_PER_EXPANSION}
-          getKey={(doc: OnyxDocument, index: number) =>
-            doc.document_id ?? `result-${index}`
-          }
-          toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
-          onClick={(doc: OnyxDocument) => {
-            if (doc.link) {
-              window.open(doc.link, "_blank");
-            }
-          }}
-          emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
-        />
-      ),
-      supportsCollapsible: false,
-    });
-  }
-
-  return children(steps);
+  ]);
 };

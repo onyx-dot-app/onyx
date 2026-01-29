@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import TruncateMarkup from "react-truncate-markup";
 import Modal from "@/refresh-components/Modal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -56,7 +57,7 @@ function downloadAsTxt(content: string, filename: string) {
   }
 }
 
-/** Approximate line height for max-height calculation in streaming mode */
+/** Approximate line height for max-height calculation */
 const LINE_HEIGHT_PX = 20;
 
 export default function ExpandableTextDisplay({
@@ -71,7 +72,6 @@ export default function ExpandableTextDisplay({
 }: ExpandableTextDisplayProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
-  const textRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevIsStreamingRef = useRef(isStreaming);
 
@@ -79,18 +79,23 @@ export default function ExpandableTextDisplay({
   const contentSize = useMemo(() => getContentSize(content), [content]);
   const displaySubtitle = subtitle ?? contentSize;
 
+  // Detect truncation for renderContent mode (both streaming and static)
+  // (TruncateMarkup's onTruncate handles plain text static mode)
   useLayoutEffect(() => {
-    // Use scrollRef for streaming mode or when renderContent is provided (max-height approach)
-    // Use textRef only for plain text with line-clamp
-    const el =
-      isStreaming || renderContent ? scrollRef.current : textRef.current;
-    if (el) {
-      setIsTruncated(el.scrollHeight > el.clientHeight);
+    if (renderContent && scrollRef.current) {
+      // For renderContent, always use scrollRef (same container for streaming and static)
+      setIsTruncated(
+        scrollRef.current.scrollHeight > scrollRef.current.clientHeight
+      );
+    } else if (isStreaming && scrollRef.current) {
+      // Plain text streaming mode
+      setIsTruncated(
+        scrollRef.current.scrollHeight > scrollRef.current.clientHeight
+      );
     }
-  }, [content, displayContent, maxLines, isStreaming, renderContent]);
+  }, [isStreaming, renderContent, content, displayContent, maxLines]);
 
   // Auto-scroll to bottom when streaming, reset to top when streaming ends
-  // Use useEffect (not useLayoutEffect) to ensure content is fully rendered before scrolling
   useEffect(() => {
     if (isStreaming && scrollRef.current) {
       // Auto-scroll to bottom during streaming
@@ -106,64 +111,78 @@ export default function ExpandableTextDisplay({
     prevIsStreamingRef.current = isStreaming;
   }, [isStreaming, content, displayContent]);
 
+  // Handle truncation callback from TruncateMarkup (static mode only)
+  const handleTruncate = (wasTruncated: boolean) => {
+    setIsTruncated(wasTruncated);
+  };
+
   const handleDownload = () => {
     const sanitizedTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
     downloadAsTxt(content, sanitizedTitle);
   };
 
-  const lineClampClassMap: Record<number, string> = {
+  // Map maxLines to Tailwind line-clamp classes
+  const lineClampClass = {
     1: "line-clamp-1",
     2: "line-clamp-2",
     3: "line-clamp-3",
     4: "line-clamp-4",
     5: "line-clamp-5",
     6: "line-clamp-6",
-  };
-  const lineClampClass = lineClampClassMap[maxLines] ?? "line-clamp-5";
+  }[maxLines];
+
+  // Single container for renderContent mode (both streaming and static)
+  // Keeps scrollRef alive across the streaming → static transition so scroll reset works
+  const renderContentWithRef = () => (
+    <div
+      ref={scrollRef}
+      className={cn(
+        "no-scrollbar",
+        isStreaming ? "overflow-y-auto" : lineClampClass
+      )}
+      style={
+        isStreaming
+          ? { maxHeight: `${maxLines * LINE_HEIGHT_PX}px` }
+          : undefined
+      }
+    >
+      {renderContent!(displayContent ?? content)}
+    </div>
+  );
+
+  // Render plain text streaming (scrollable)
+  const renderPlainTextStreaming = () => (
+    <div
+      ref={scrollRef}
+      className="overflow-y-auto no-scrollbar"
+      style={{ maxHeight: `${maxLines * LINE_HEIGHT_PX}px` }}
+    >
+      <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
+        {displayContent ?? content}
+      </Text>
+    </div>
+  );
+
+  // Render plain text static (TruncateMarkup for reliable truncation)
+  const renderPlainTextStatic = () => (
+    <TruncateMarkup lines={maxLines} ellipsis="…" onTruncate={handleTruncate}>
+      <div className="whitespace-pre-wrap">
+        <Text as="p" mainUiMuted text03>
+          {displayContent ?? content}
+        </Text>
+      </div>
+    </TruncateMarkup>
+  );
 
   return (
     <>
       {/* Collapsed View */}
       <div className={cn("w-full flex", className)}>
-        {(() => {
-          // Build the content element
-          const contentElement =
-            isStreaming || renderContent ? (
-              // Streaming mode: scrollable container with auto-scroll
-              // Rendered content (markdown): use max-height + overflow-hidden
-              // (line-clamp uses display: -webkit-box which conflicts with complex HTML)
-              <div
-                ref={scrollRef}
-                className={cn(
-                  isStreaming
-                    ? "overflow-y-auto no-scrollbar"
-                    : "overflow-hidden",
-                  !renderContent && "whitespace-pre-wrap"
-                )}
-                style={{ maxHeight: `${maxLines * LINE_HEIGHT_PX}px` }}
-              >
-                {renderContent ? (
-                  renderContent(displayContent ?? content)
-                ) : (
-                  <Text as="p" mainUiMuted text03>
-                    {displayContent ?? content}
-                  </Text>
-                )}
-              </div>
-            ) : (
-              // Static mode with plain text: use line-clamp
-              <div
-                ref={textRef}
-                className={cn(lineClampClass, "whitespace-pre-wrap")}
-              >
-                <Text as="p" mainUiMuted text03>
-                  {displayContent ?? content}
-                </Text>
-              </div>
-            );
-
-          return contentElement;
-        })()}
+        {renderContent
+          ? renderContentWithRef()
+          : isStreaming
+            ? renderPlainTextStreaming()
+            : renderPlainTextStatic()}
 
         {/* Expand button - only show when content is truncated */}
         {isTruncated && (
