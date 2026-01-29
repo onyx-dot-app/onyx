@@ -227,7 +227,13 @@ def test_include_my_drives_only(
     )
 
     # Verify hierarchy nodes - My Drive should yield folder_3 as a hierarchy node
-    expected_ids = {FOLDER_3_ID}
+    # Also includes admin's My Drive root and folders shared with admin
+    expected_ids = {
+        FOLDER_3_ID,
+        ADMIN_MY_DRIVE_ID,
+        PILL_FOLDER_ID,
+        TEST_USER_1_EXTRA_FOLDER_ID,
+    }
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
