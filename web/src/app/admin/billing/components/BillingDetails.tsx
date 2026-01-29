@@ -1,21 +1,18 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Section } from "@/layouts/general-layouts";
 import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import ExpirationBanner from "./ExpirationBanner";
 import SubscriptionCard from "./SubscriptionCard";
 import SeatsCard from "./SeatsCard";
 import PaymentSection from "./PaymentSection";
-import FooterLinks from "./FooterLinks";
 import { humanReadableFormatShort } from "@/lib/time";
 
 interface BillingDetailsProps {
   billing: BillingInformation;
   license?: LicenseStatus;
   onViewPlans: () => void;
-  onRefresh?: () => void;
+  onRefresh?: () => Promise<void>;
 }
 
 // Grace period for data deletion after expiration (30 days)
@@ -137,14 +134,7 @@ export default function BillingDetails({
   onViewPlans,
   onRefresh,
 }: BillingDetailsProps) {
-  const router = useRouter();
-  const isSelfHosted = !NEXT_PUBLIC_CLOUD_ENABLED;
-
   const expirationState = getExpirationState(billing, license);
-
-  const handleActivateLicense = () => {
-    router.push("/admin/billing/activate" as any);
-  };
 
   return (
     <Section gap={1} height="auto" width="full">
@@ -166,12 +156,6 @@ export default function BillingDetails({
 
       {/* Payment section - only show if has payment info */}
       {billing.payment_method_enabled && <PaymentSection billing={billing} />}
-
-      {/* Footer links */}
-      <FooterLinks
-        hasSubscription
-        onActivateLicense={isSelfHosted ? handleActivateLicense : undefined}
-      />
     </Section>
   );
 }

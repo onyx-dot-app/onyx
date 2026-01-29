@@ -18,7 +18,7 @@ import { formatDateShort } from "@/lib/dateUtils";
 interface SeatsCardProps {
   billing?: BillingInformation;
   license?: LicenseStatus;
-  onRefresh?: () => void;
+  onRefresh?: () => Promise<void>;
 }
 
 export default function SeatsCard({
@@ -80,8 +80,9 @@ export default function SeatsCard({
       if (!NEXT_PUBLIC_CLOUD_ENABLED) {
         await claimLicense();
       }
+      // Wait for data refresh before closing edit mode
+      await onRefresh?.();
       setIsEditing(false);
-      onRefresh?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update seats");
     } finally {
@@ -105,7 +106,9 @@ export default function SeatsCard({
           height="auto"
         >
           <Section gap={0.25} alignItems="start" height="auto" width="fit">
-            <Text mainContentEmphasis>Update Seats</Text>
+            <Text headingH3Muted text04>
+              Update Seats
+            </Text>
             <Text secondaryBody text03>
               Add or remove seats to reflect your team size.
             </Text>

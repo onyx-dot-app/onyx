@@ -31,8 +31,6 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.auth.users import current_admin_user
 from ee.onyx.db.license import get_license
-from ee.onyx.db.license import update_license_cache
-from ee.onyx.db.license import upsert_license
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
@@ -53,18 +51,13 @@ from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
-from ee.onyx.server.license.models import LicenseSource
-from ee.onyx.utils.license import verify_license_signature
 from onyx.auth.users import User
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
-from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
-
-logger = setup_logger()
 
 router = APIRouter(prefix="/admin/billing")
 
@@ -202,15 +195,9 @@ async def update_seats(
             tenant_id=tenant_id,
         )
 
-        # Self-hosted: store regenerated license if returned
-        if not MULTI_TENANT and result.license:
-            try:
-                payload = verify_license_signature(result.license)
-                upsert_license(db_session, result.license)
-                update_license_cache(payload, source=LicenseSource.AUTO_FETCH)
-                logger.info(f"License updated after seat change: seats={payload.seats}")
-            except Exception as e:
-                logger.warning(f"Failed to store updated license: {e}")
+        # Note: Don't store license here - the control plane may still be processing
+        # the subscription update. The frontend should call /license/claim after a
+        # short delay to get the freshly generated license.
 
         return result
     except BillingServiceError as e:

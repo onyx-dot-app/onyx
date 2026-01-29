@@ -3,8 +3,9 @@
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
+import { useUser } from "@/components/user/UserProvider";
 
-const BILLING_HELP_URL = "https://docs.onyx.app/billing";
+const SUPPORT_EMAIL = "support@onyx.app";
 
 interface FooterLinksProps {
   hasSubscription?: boolean;
@@ -15,9 +16,15 @@ export default function FooterLinks({
   hasSubscription,
   onActivateLicense,
 }: FooterLinksProps) {
+  const { user } = useUser();
+
   const licenseText = hasSubscription
     ? "Update License Key"
     : "Activate License Key";
+
+  const billingHelpHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+    `[Billing] support for ${user?.email ?? "unknown"}`
+  )}`;
 
   return (
     <Section flexDirection="row" justifyContent="center" gap={1} height="auto">
@@ -26,7 +33,7 @@ export default function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
-          <Button tertiary onClick={onActivateLicense}>
+          <Button action tertiary onClick={onActivateLicense}>
             <Text secondaryBody text03 underline>
               {licenseText}
             </Text>
@@ -36,8 +43,7 @@ export default function FooterLinks({
       <Button
         action
         tertiary
-        href={BILLING_HELP_URL}
-        target="_blank"
+        href={billingHelpHref}
         className="billing-text-link"
       >
         <Text secondaryBody text03 underline>

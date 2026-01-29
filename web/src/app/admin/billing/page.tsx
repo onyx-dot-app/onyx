@@ -110,11 +110,11 @@ export default function BillingPage() {
     }
   }, [searchParams, router, refreshBilling, refreshLicense]);
 
-  const handleRefresh = () => {
-    refreshBilling();
-    if (isSelfHosted) {
-      refreshLicense();
-    }
+  const handleRefresh = async () => {
+    await Promise.all([
+      refreshBilling(),
+      isSelfHosted ? refreshLicense() : Promise.resolve(),
+    ]);
   };
 
   const handleLicenseActivated = () => {
@@ -159,9 +159,9 @@ export default function BillingPage() {
 
   const viewConfig = getViewConfig();
 
-  // Footer links - shown on plans and checkout views
+  // Footer links - shown on all views (plans, checkout, details)
   const renderFooterLinks = () => {
-    if (isLoading || view === "details") return null;
+    if (isLoading) return null;
 
     return (
       <>
@@ -176,7 +176,7 @@ export default function BillingPage() {
             <LicenseActivationCard
               isOpen={showLicenseActivationInput}
               onSuccess={handleLicenseActivated}
-              isUpdate={!!hasSubscription}
+              license={licenseData ?? undefined}
               onClose={() => setShowLicenseActivationInput(false)}
             />
           </div>
