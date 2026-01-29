@@ -69,7 +69,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     }, 1000);
 
     const timer = setTimeout(() => {
-      const target = redirectPath || config.defaultRedirectPath || "/chat";
+      const target = redirectPath || config.defaultRedirectPath || "/app";
       router.push(target as Route);
     }, delayMs);
 
@@ -163,7 +163,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
           responseData.redirect_url ||
             searchParams?.get("return_path") ||
             config.defaultRedirectPath ||
-            "/chat"
+            "/app"
         );
         setStatusMessage(config.successMessage || "Success!");
 
@@ -257,7 +257,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
                   <Button
                     onClick={() => {
                       const target =
-                        redirectPath || config.defaultRedirectPath || "/chat";
+                        redirectPath || config.defaultRedirectPath || "/app";
                       router.push(target as Route);
                     }}
                     className="w-full"

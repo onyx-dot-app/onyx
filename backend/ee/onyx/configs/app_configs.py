@@ -122,6 +122,9 @@ SUPER_CLOUD_API_KEY = os.environ.get("SUPER_CLOUD_API_KEY", "api_key")
 # when the capture is called. These defaults prevent Posthog issues from breaking the Onyx app
 POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY") or "FooBar"
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
+POSTHOG_DEBUG_LOGS_ENABLED = (
+    os.environ.get("POSTHOG_DEBUG_LOGS_ENABLED", "").lower() == "true"
+)
 
 MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 
@@ -132,4 +135,10 @@ GATED_TENANTS_KEY = "gated_tenants"
 # License enforcement - when True, blocks API access for gated/expired licenses
 LICENSE_ENFORCEMENT_ENABLED = (
     os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "").lower() == "true"
+)
+
+# Cloud data plane URL - self-hosted instances call this to reach cloud proxy endpoints
+# Used when MULTI_TENANT=false (self-hosted mode)
+CLOUD_DATA_PLANE_URL = os.environ.get(
+    "CLOUD_DATA_PLANE_URL", "https://cloud.onyx.app/api"
 )

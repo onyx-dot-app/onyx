@@ -103,9 +103,6 @@ def setup_onyx(
         logger.notice(f'Passage embedding prefix: "{search_settings.passage_prefix}"')
 
     if search_settings:
-        if not search_settings.disable_rerank_for_streaming:
-            logger.notice("Reranking is enabled.")
-
         if search_settings.multilingual_expansion:
             logger.notice(
                 f"Multilingual query expansion is enabled with {search_settings.multilingual_expansion}."

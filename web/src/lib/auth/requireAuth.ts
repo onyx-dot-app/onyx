@@ -114,7 +114,7 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
     return {
       user,
       authTypeMetadata,
-      redirect: "/chat",
+      redirect: "/app",
     };
   }
 

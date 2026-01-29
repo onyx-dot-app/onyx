@@ -59,24 +59,6 @@ beat_task_templates: list[dict] = [
         },
     },
     {
-        "name": "check-for-kg-processing",
-        "task": OnyxCeleryTask.CHECK_KG_PROCESSING,
-        "schedule": timedelta(seconds=60),
-        "options": {
-            "priority": OnyxCeleryPriority.MEDIUM,
-            "expires": BEAT_EXPIRES_DEFAULT,
-        },
-    },
-    {
-        "name": "check-for-kg-processing-clustering-only",
-        "task": OnyxCeleryTask.CHECK_KG_PROCESSING_CLUSTERING_ONLY,
-        "schedule": timedelta(seconds=600),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-        },
-    },
-    {
         "name": "check-for-indexing",
         "task": OnyxCeleryTask.CHECK_FOR_INDEXING,
         "schedule": timedelta(seconds=15),
@@ -131,6 +113,15 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-hierarchy-fetching",
+        "task": OnyxCeleryTask.CHECK_FOR_HIERARCHY_FETCHING,
+        "schedule": timedelta(hours=1),  # Check hourly, but only fetch once per day
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
         "name": "monitor-background-processes",
         "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
         "schedule": timedelta(minutes=5),
@@ -138,6 +129,27 @@ beat_task_templates: list[dict] = [
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
             "queue": OnyxCeleryQueues.MONITORING,
+        },
+    },
+    # Sandbox cleanup tasks
+    {
+        "name": "cleanup-idle-sandboxes",
+        "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
+        "schedule": timedelta(minutes=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.SANDBOX,
+        },
+    },
+    {
+        "name": "cleanup-old-snapshots",
+        "task": OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
+        "schedule": timedelta(hours=24),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.SANDBOX,
         },
     },
 ]

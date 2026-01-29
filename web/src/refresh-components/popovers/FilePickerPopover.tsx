@@ -8,11 +8,11 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
   ProjectFile,
   UserFileStatus,
-} from "@/app/chat/projects/projectsService";
+} from "@/app/app/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import { isImageFile } from "@/lib/utils";

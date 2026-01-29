@@ -19,6 +19,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.retry_wrapper import retry_builder
@@ -119,7 +120,7 @@ class Document360Connector(LoadConnector, PollConnector):
         workspace_id = self._get_workspace_id_by_name()
         articles = self._get_articles_with_category(workspace_id)
 
-        doc_batch: List[Document] = []
+        doc_batch: List[Document | HierarchyNode] = []
 
         for article in articles:
             article_details = self._make_request(

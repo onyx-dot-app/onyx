@@ -1,6 +1,7 @@
 """Database and cache operations for the license table."""
 
 from datetime import datetime
+from typing import NamedTuple
 
 from sqlalchemy import func
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import LicenseSource
+from onyx.auth.schemas import UserRole
 from onyx.db.models import License
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
@@ -21,6 +23,13 @@ logger = setup_logger()
 
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
+
+
+class SeatAvailabilityResult(NamedTuple):
+    """Result of a seat availability check."""
+
+    available: bool
+    error_message: str | None = None
 
 
 # -----------------------------------------------------------------------------
@@ -95,23 +104,30 @@ def delete_license(db_session: Session) -> bool:
 
 def get_used_seats(tenant_id: str | None = None) -> int:
     """
-    Get current seat usage.
+    Get current seat usage directly from database.
 
     For multi-tenant: counts users in UserTenantMapping for this tenant.
-    For self-hosted: counts all active users (includes both Onyx UI users
-    and Slack users who have been converted to Onyx users).
+    For self-hosted: counts all active users (excludes EXT_PERM_USER role).
+
+    TODO: Exclude API key dummy users from seat counting. API keys create
+    users with emails like `__DANSWER_API_KEY_*` that should not count toward
+    seat limits. See: https://linear.app/onyx-app/issue/ENG-3518
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count
 
         return get_tenant_count(tenant_id or get_current_tenant_id())
     else:
-        # Self-hosted: count all active users (Onyx + converted Slack users)
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
         with get_session_with_current_tenant() as db_session:
             result = db_session.execute(
-                select(func.count()).select_from(User).where(User.is_active)  # type: ignore
+                select(func.count())
+                .select_from(User)
+                .where(
+                    User.is_active == True,  # type: ignore  # noqa: E712
+                    User.role != UserRole.EXT_PERM_USER,
+                )
             )
             return result.scalar() or 0
 
@@ -276,3 +292,43 @@ def get_license_metadata(
 
     # Refresh from database
     return refresh_license_cache(db_session, tenant_id)
+
+
+def check_seat_availability(
+    db_session: Session,
+    seats_needed: int = 1,
+    tenant_id: str | None = None,
+) -> SeatAvailabilityResult:
+    """
+    Check if there are enough seats available to add users.
+
+    Args:
+        db_session: Database session
+        seats_needed: Number of seats needed (default 1)
+        tenant_id: Tenant ID (for multi-tenant deployments)
+
+    Returns:
+        SeatAvailabilityResult with available=True if seats are available,
+        or available=False with error_message if limit would be exceeded.
+        Returns available=True if no license exists (self-hosted = unlimited).
+    """
+    metadata = get_license_metadata(db_session, tenant_id)
+
+    # No license = no enforcement (self-hosted without license)
+    if metadata is None:
+        return SeatAvailabilityResult(available=True)
+
+    # Calculate current usage directly from DB (not cache) for accuracy
+    current_used = get_used_seats(tenant_id)
+    total_seats = metadata.seats
+
+    # Use > (not >=) to allow filling to exactly 100% capacity
+    would_exceed_limit = current_used + seats_needed > total_seats
+    if would_exceed_limit:
+        return SeatAvailabilityResult(
+            available=False,
+            error_message=f"Seat limit would be exceeded: {current_used} of {total_seats} seats used, "
+            f"cannot add {seats_needed} more user(s).",
+        )
+
+    return SeatAvailabilityResult(available=True)

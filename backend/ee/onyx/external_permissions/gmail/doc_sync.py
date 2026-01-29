@@ -5,8 +5,12 @@ from datetime import timezone
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import DocExternalAccess
+from onyx.access.models import ElementExternalAccess
+from onyx.access.models import NodeExternalAccess
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -38,12 +42,12 @@ def gmail_doc_sync(
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None,
-) -> Generator[DocExternalAccess, None, None]:
+) -> Generator[ElementExternalAccess, None, None]:
     """
-    Adds the external permissions to the documents in postgres
-    if the document doesn't already exists in postgres, we create
+    Adds the external permissions to the documents and hierarchy nodes in postgres.
+    If the document doesn't already exist in postgres, we create
     it in postgres so that when it gets created later, the permissions are
-    already populated
+    already populated.
     """
     gmail_connector = GmailConnector(**cc_pair.connector.connector_specific_config)
     gmail_connector.load_credentials(cc_pair.credential.credential_json)
@@ -60,6 +64,15 @@ def gmail_doc_sync(
 
                 callback.progress("gmail_doc_sync", 1)
 
+            if isinstance(slim_doc, HierarchyNode):
+                # Yield hierarchy node permissions to be processed in outer layer
+                if slim_doc.external_access:
+                    yield NodeExternalAccess(
+                        external_access=slim_doc.external_access,
+                        raw_node_id=slim_doc.raw_node_id,
+                        source=DocumentSource.GMAIL.value,
+                    )
+                continue
             if slim_doc.external_access is None:
                 logger.warning(f"No permissions found for document {slim_doc.id}")
                 continue

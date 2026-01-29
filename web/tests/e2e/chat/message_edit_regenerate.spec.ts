@@ -9,7 +9,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await loginAsRandomUser(page);
 
     // Navigate to the chat page
-    await page.goto("/chat");
+    await page.goto("/app");
     await page.waitForLoadState("networkidle");
   });
 

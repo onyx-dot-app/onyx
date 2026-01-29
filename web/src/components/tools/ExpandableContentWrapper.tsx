@@ -4,7 +4,7 @@ import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import { FileDescriptor } from "@/app/chat/interfaces";
+import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@/lib/utils";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";

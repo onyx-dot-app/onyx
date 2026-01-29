@@ -345,12 +345,12 @@ export default function AdminSidebar({
     <SidebarWrapper>
       <SidebarBody
         scrollKey="admin-sidebar"
-        actionButton={
+        actionButtons={
           <SidebarTab
             leftIcon={({ className }) => (
               <CgArrowsExpandUpLeft className={className} size={16} />
             )}
-            href="/chat"
+            href="/app"
           >
             Exit Admin
           </SidebarTab>

@@ -326,6 +326,7 @@ def test_retrieve_all_slim_docs_perm_sync(
     assert len(batches) == 1
     assert len(batches[0]) == 2
     assert isinstance(batches[0][0], SlimDocument)
+    assert isinstance(batches[0][1], SlimDocument)
     assert batches[0][0].id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/1"
     assert batches[0][1].id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/2"
 

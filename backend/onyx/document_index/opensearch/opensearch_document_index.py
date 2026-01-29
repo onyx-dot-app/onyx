@@ -199,6 +199,8 @@ def _convert_onyx_chunk_to_opensearch_document(
         # instance variable. One source of truth -> less chance of a very bad
         # bug in prod.
         tenant_id=TenantState(tenant_id=chunk.tenant_id, multitenant=MULTI_TENANT),
+        # Store ancestor hierarchy node IDs for hierarchy-based filtering.
+        ancestor_hierarchy_node_ids=chunk.ancestor_hierarchy_node_ids or None,
     )
 
 
