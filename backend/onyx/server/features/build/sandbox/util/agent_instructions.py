@@ -25,31 +25,56 @@ PROVIDER_DISPLAY_NAMES = {
     "vertex": "Google Vertex AI",
 }
 
-# Connector directory structure descriptions (condensed for token efficiency)
+# Connector information for generating knowledge sources section
 # Keys are normalized (lowercase, underscores) directory names
+# Each entry has: summary (with optional {subdirs}), file_pattern, scan_depth
 # NOTE: This is duplicated in kubernetes/docker/generate_agents_md.py to avoid circular imports
-CONNECTOR_DESCRIPTIONS = {
-    "google_drive": "**Google Drive**: Files stored as `FILE_NAME.json`.",
-    "gmail": "**Gmail**: Files stored as `FILE_NAME.json`.",
-    "linear": "**Linear**: `[TEAM]/[TICKET_ID]_TICKET_TITLE.json`.",
-    "slack": "**Slack**: `[CHANNEL]/[AUTHOR]_in_[CHANNEL]__[MSG].json`.",
-    "github": "**Github**: `[ORG]/[REPO]/pull_requests/[PR_NUMBER]__[PR_TITLE].json`.",
-    "fireflies": "**Fireflies**: `[YYYY-MM]/CALL_TITLE.json` organized by month.",
-    "hubspot": "**HubSpot**: `Tickets/`, `Companies/`, `Deals/`, `Contacts/` folders.",
-    "notion": "**Notion**: Hierarchical pages as `PAGE_TITLE.json`.",
-}
-
-# Per-connector directory scan depth (0 = just connector name, 1 = one level, 2 = two levels)
-CONNECTOR_SCAN_DEPTH = {
-    "google_drive": 0,  # Don't look into folders
-    "gmail": 0,  # Don't look into folders
-    "fireflies": 1,  # Show YYYY-MM folders only
-    "linear": 2,  # Linear/TEAM/issues
-    "github": 2,  # Github/ORG/pull_requests
-    "slack": 1,  # Show channels
-    "hubspot": 1,  # Show Tickets/, Companies/, etc.
-    "notion": 1,  # Show top-level pages
-    "org_info": 0,  # Don't look into folders
+CONNECTOR_INFO = {
+    "google_drive": {
+        "summary": "Documents and files from Google Drive. This may contain information about a user and work they have done",
+        "file_pattern": "`FILE_NAME.json`",
+        "scan_depth": 0,
+    },
+    "gmail": {
+        "summary": "Email conversations and threads",
+        "file_pattern": "`FILE_NAME.json`",
+        "scan_depth": 0,
+    },
+    "linear": {
+        "summary": "Engineering tickets from teams: {subdirs}",
+        "file_pattern": "`[TEAM]/[TICKET_ID]_TICKET_TITLE.json`",
+        "scan_depth": 2,
+    },
+    "slack": {
+        "summary": "Team messages from channels: {subdirs}",
+        "file_pattern": "`[CHANNEL]/[AUTHOR]_in_[CHANNEL]__[MSG].json`",
+        "scan_depth": 1,
+    },
+    "github": {
+        "summary": "Pull requests and code from: {subdirs}",
+        "file_pattern": "`[ORG]/[REPO]/pull_requests/[PR_NUMBER]__[PR_TITLE].json`",
+        "scan_depth": 2,
+    },
+    "fireflies": {
+        "summary": "Meeting transcripts from: {subdirs}",
+        "file_pattern": "`[YYYY-MM]/CALL_TITLE.json`",
+        "scan_depth": 1,
+    },
+    "hubspot": {
+        "summary": "CRM data including: {subdirs}",
+        "file_pattern": "`[TYPE]/[RECORD_NAME].json`",
+        "scan_depth": 1,
+    },
+    "notion": {
+        "summary": "Documentation and notes: {subdirs}",
+        "file_pattern": "`PAGE_TITLE.json`",
+        "scan_depth": 1,
+    },
+    "org_info": {
+        "summary": "Organizational structure and user identity",
+        "file_pattern": "Various JSON files",
+        "scan_depth": 0,
+    },
 }
 DEFAULT_SCAN_DEPTH = 1
 
@@ -319,14 +344,19 @@ def _scan_directory_to_depth(
     return lines
 
 
-def build_file_structure_section(files_path: Path) -> str:
-    """Build the file structure section with per-connector depth rules.
+def build_knowledge_sources_section(files_path: Path) -> str:
+    """Build combined knowledge sources section with summary, structure, and file patterns.
+
+    This creates a single section per connector that includes:
+    - What kind of data it contains (with actual subdirectory names)
+    - The directory structure
+    - The file naming pattern
 
     Args:
         files_path: Path to the files directory (symlink to knowledge sources)
 
     Returns:
-        Formatted file structure section string describing available sources
+        Formatted knowledge sources section
     """
     if not files_path.exists():
         return "No knowledge sources available."
@@ -339,78 +369,65 @@ def build_file_structure_section(files_path: Path) -> str:
     except Exception:
         actual_path = files_path
 
-    sources: list[str] = []
+    sections: list[str] = []
     try:
-        for item in sorted(actual_path.iterdir()):
+        for item in sorted(files_path.iterdir()):
             if not item.is_dir() or item.name.startswith("."):
                 continue
 
-            sources.append(f"- **{item.name}/**")
-
-            # Get scan depth for this connector
             normalized = _normalize_connector_name(item.name)
-            max_depth = CONNECTOR_SCAN_DEPTH.get(normalized, DEFAULT_SCAN_DEPTH)
+            info = CONNECTOR_INFO.get(normalized, {})
 
-            # Scan subdirectories up to max_depth
-            nested = _scan_directory_to_depth(item, 0, max_depth, "  ")
-            sources.extend(nested)
+            # Get subdirectory names
+            subdirs: list[str] = []
+            try:
+                subdirs = sorted(
+                    d.name
+                    for d in item.iterdir()
+                    if d.is_dir() and not d.name.startswith(".")
+                )[:5]
+            except Exception:
+                pass
+
+            # Build summary with subdirs
+            summary_template = info.get("summary", f"Data from {item.name}")
+            if "{subdirs}" in summary_template and subdirs:
+                subdir_str = ", ".join(subdirs)
+                if len(subdirs) == 5:
+                    subdir_str += ", ..."
+                summary = summary_template.format(subdirs=subdir_str)
+            elif "{subdirs}" in summary_template:
+                summary = summary_template.replace(": {subdirs}", "").replace(
+                    " {subdirs}", ""
+                )
+            else:
+                summary = summary_template
+
+            # Build connector section
+            file_pattern = info.get("file_pattern", "")
+            scan_depth = info.get("scan_depth", DEFAULT_SCAN_DEPTH)
+
+            lines = [f"### {item.name}/"]
+            lines.append(f"{summary}.\n")
+            # Add directory structure if depth > 0
+            if scan_depth > 0:
+                lines.append("Directory structure:\n")
+                nested = _scan_directory_to_depth(item, 0, scan_depth, "")
+                if nested:
+                    lines.append("")
+                    lines.extend(nested)
+
+            lines.append(f"\nFile format: {file_pattern}")
+
+            sections.append("\n".join(lines))
     except Exception as e:
-        logger.warning(f"Error scanning files directory: {e}")
+        logger.warning(f"Error building knowledge sources section: {e}")
         return "Error scanning knowledge sources."
 
-    if not sources:
+    if not sections:
         return "No knowledge sources available."
 
-    header = "The `files/` directory contains:\n\n"
-    return header + "\n".join(sources)
-
-
-def build_connector_descriptions_section(files_path: Path) -> str:
-    """Build connector-specific descriptions for available data sources.
-
-    Only includes descriptions for connectors that are actually present
-    in the files/ directory.
-
-    Args:
-        files_path: Path to the files directory (symlink to knowledge sources)
-
-    Returns:
-        Formatted connector descriptions section
-    """
-    if not files_path.exists():
-        return ""
-
-    # Resolve the symlink to get the actual path
-    try:
-        actual_path = files_path.resolve()
-        if not actual_path.exists():
-            return ""
-    except Exception:
-        actual_path = files_path
-
-    descriptions: list[str] = []
-    try:
-        for item in sorted(actual_path.iterdir()):
-            if not item.is_dir():
-                continue
-            if item.name.startswith("."):
-                continue
-
-            # Look up connector description
-            normalized_name = _normalize_connector_name(item.name)
-            if normalized_name in CONNECTOR_DESCRIPTIONS:
-                descriptions.append(f"- {CONNECTOR_DESCRIPTIONS[normalized_name]}")
-    except Exception as e:
-        logger.warning(
-            f"Error scanning files directory for connector descriptions: {e}"
-        )
-        return ""
-
-    if not descriptions:
-        return ""
-
-    header = "### Connector Structures\n\n"
-    return header + "\n".join(descriptions)
+    return "\n\n".join(sections)
 
 
 def generate_agent_instructions(
@@ -492,13 +509,9 @@ def generate_agent_instructions(
     # When files_path is None (e.g., Kubernetes), leave placeholders intact
     # so the container can replace them after files are synced.
     if files_path:
-        file_structure_section = build_file_structure_section(files_path)
-        connector_descriptions_section = build_connector_descriptions_section(
-            files_path
-        )
-        content = content.replace("{{FILE_STRUCTURE_SECTION}}", file_structure_section)
+        knowledge_sources_section = build_knowledge_sources_section(files_path)
         content = content.replace(
-            "{{CONNECTOR_DESCRIPTIONS_SECTION}}", connector_descriptions_section
+            "{{KNOWLEDGE_SOURCES_SECTION}}", knowledge_sources_section
         )
 
     return content
