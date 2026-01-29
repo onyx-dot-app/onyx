@@ -283,25 +283,22 @@ def get_default_llm(
             db_session=db_session, flow_type=ModelFlowType.TEXT
         )
 
-    if not default_model:
-        raise ValueError("No default LLM provider found")
+        if not default_model:
+            raise ValueError("No default LLM provider found")
 
-    model_name = default_model.model_name
-    if not model_name:
-        raise ValueError("No default model name found")
-
-    llm_provider = fetch_existing_llm_provider_by_id(
-        default_model.provider_id, db_session
-    )
-
-    if not llm_provider:
-        raise ValueError(
-            "No LLM provider found with id {}".format(default_model.provider_id)
+        llm_provider = fetch_existing_llm_provider_by_id(
+            default_model.provider_id, db_session
         )
+
+        if not llm_provider:
+            raise ValueError(
+                "No LLM provider found with id {}".format(default_model.provider_id)
+            )
+
     llm_provider_view = LLMProviderView.from_model(llm_provider)
 
     return llm_from_provider(
-        model_name=model_name,
+        model_name=default_model.model_name,
         llm_provider=llm_provider_view,
         timeout=timeout,
         temperature=temperature,
