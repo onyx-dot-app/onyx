@@ -128,9 +128,6 @@ def enable_or_disable_kg(
             pass
 
     # Create KG Beta persona (private to the admin who enabled KG)
-    user_ids = [user.id]
-    is_public = False
-
     persona_request = PersonaUpsertRequest(
         name=TMP_DRALPHA_PERSONA_NAME,
         description=KG_BETA_ASSISTANT_DESCRIPTION,
@@ -139,7 +136,7 @@ def enable_or_disable_kg(
         datetime_aware=False,
         num_chunks=25,
         llm_relevance_filter=False,
-        is_public=is_public,
+        is_public=False,
         llm_filter_extraction=False,
         recency_bias=RecencyBiasSetting.NO_DECAY,
         document_set_ids=[],
@@ -147,7 +144,7 @@ def enable_or_disable_kg(
         llm_model_provider_override=None,
         llm_model_version_override=None,
         starter_messages=None,
-        users=user_ids,
+        users=[user.id],
         groups=[],
         label_ids=[],
         is_default_persona=False,
