@@ -8,7 +8,66 @@ export interface BuildLlmSelection {
   modelName: string; // e.g., "claude-opus-4-5"
 }
 
-// Recommended models config
+// Priority order for smart default LLM selection
+const LLM_SELECTION_PRIORITY = [
+  { provider: "anthropic", modelName: "claude-opus-4-5" },
+  { provider: "openai", modelName: "gpt-5.2" },
+  { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
+] as const;
+
+// Minimal provider interface for selection logic
+interface MinimalLlmProvider {
+  name: string;
+  provider: string;
+  default_model_name: string;
+  is_default_provider: boolean | null;
+}
+
+/**
+ * Get the best default LLM selection based on available providers.
+ * Priority: Anthropic > OpenAI > OpenRouter > system default > first available
+ */
+export function getDefaultLlmSelection(
+  llmProviders: MinimalLlmProvider[] | undefined
+): BuildLlmSelection | null {
+  if (!llmProviders || llmProviders.length === 0) return null;
+
+  // Try each priority provider in order
+  for (const { provider, modelName } of LLM_SELECTION_PRIORITY) {
+    const matchingProvider = llmProviders.find((p) => p.provider === provider);
+    if (matchingProvider) {
+      return {
+        providerName: matchingProvider.name,
+        provider: matchingProvider.provider,
+        modelName,
+      };
+    }
+  }
+
+  // Fallback: use the default provider's default model
+  const defaultProvider = llmProviders.find((p) => p.is_default_provider);
+  if (defaultProvider) {
+    return {
+      providerName: defaultProvider.name,
+      provider: defaultProvider.provider,
+      modelName: defaultProvider.default_model_name,
+    };
+  }
+
+  // Final fallback: first available provider
+  const firstProvider = llmProviders[0];
+  if (firstProvider) {
+    return {
+      providerName: firstProvider.name,
+      provider: firstProvider.provider,
+      modelName: firstProvider.default_model_name,
+    };
+  }
+
+  return null;
+}
+
+// Recommended models config (for UI display)
 export const RECOMMENDED_BUILD_MODELS = {
   preferred: {
     provider: "anthropic",
