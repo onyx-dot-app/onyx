@@ -13,6 +13,60 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
+    created: "2026-01-29T21:44:14.006915404Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: vespa.enabled
+      name: vespa
+      repository: https://onyx-dot-app.github.io/vespa-helm-charts
+      version: 0.2.25
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.4.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/code-interpreter/
+      version: 0.2.0
+    description: A Helm chart for Kubernetes
+    digest: 77b9abcfdcd42614f08d1a1e4a8b8d17ca9c9cd181f8e8ffe2c922bbed969ea6
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.4.22.tgz
+    version: 0.4.22
+  - annotations:
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+        - name: vespa
+          image: vespaengine/vespa:8.609.39
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
     created: "2026-01-29T20:58:14.307216284Z"
     dependencies:
     - alias: postgresql
@@ -1778,4 +1832,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-01-29T20:58:14.288832203Z"
+generated: "2026-01-29T21:44:13.988471689Z"
