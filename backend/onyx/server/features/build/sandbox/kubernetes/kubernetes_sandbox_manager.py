@@ -320,6 +320,7 @@ class KubernetesSandboxManager(SandboxManager):
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
             files_path=None,  # Files are synced after pod creation
+            attachments_path=None,  # Attachments won't exist until session workspace is created
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
