@@ -123,10 +123,7 @@ def _seed_llms(
             upsert_llm_provider(llm_upsert_request, db_session)
             for llm_upsert_request in llm_upsert_requests
         ]
-        if (
-            len(seeded_providers) > 0
-            and len(seeded_providers[0].model_configurations) > 0
-        ):
+        if len(seeded_providers[0].model_configurations) > 0:
             update_default_text_provider(
                 provider_id=seeded_providers[0].id,
                 model=seeded_providers[0].model_configurations[0].name,
