@@ -2,6 +2,7 @@
 
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
+import Button from "@/refresh-components/buttons/Button";
 
 const BILLING_HELP_URL = "https://docs.onyx.app/billing";
 
@@ -25,30 +26,24 @@ export default function FooterLinks({
           <Text secondaryBody text03>
             Have a license key?
           </Text>
-          <button
-            type="button"
-            onClick={onActivateLicense}
-            className="bg-transparent border-none cursor-pointer p-0 underline"
-          >
-            <Text secondaryBody text02>
+          <Button tertiary onClick={onActivateLicense}>
+            <Text secondaryBody text03 underline>
               {licenseText}
             </Text>
-          </button>
-          <Text secondaryBody text03>
-            |
-          </Text>
+          </Button>
         </>
       )}
-      <a
+      <Button
+        action
+        tertiary
         href={BILLING_HELP_URL}
         target="_blank"
-        rel="noopener noreferrer"
-        className="underline"
+        className="billing-text-link"
       >
-        <Text secondaryBody text02>
+        <Text secondaryBody text03 underline>
           Billing Help
         </Text>
-      </a>
+      </Button>
     </Section>
   );
 }

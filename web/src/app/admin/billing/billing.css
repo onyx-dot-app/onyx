@@ -71,29 +71,6 @@
 }
 
 /* -----------------------------------------------------------------------------
- * Billing Banners
- * -------------------------------------------------------------------------- */
-
-.billing-banner {
-  padding: 1rem;
-  border-radius: 0.75rem;
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.billing-banner[data-variant="warning"] {
-  background: var(--status-warning-01);
-  border: 1px solid var(--status-warning-02);
-}
-
-.billing-banner[data-variant="error"] {
-  background: var(--status-error-01);
-  border: 1px solid var(--status-error-02);
-}
-
-/* -----------------------------------------------------------------------------
  * Other Billing Components
  * -------------------------------------------------------------------------- */
 
@@ -106,9 +83,96 @@
   font-family: var(--font-mono);
 }
 
-.billing-seats-input {
+.billing-error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+  color: var(--status-error-05);
+}
+
+.billing-content-area {
+  background: var(--background-tint-01);
+}
+
+.billing-success-message {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--status-success-01);
+  border: 1px solid var(--status-success-02);
+  border-radius: 0.5rem;
+  color: var(--status-success-05);
+}
+
+/* .billing-seats-input {
   width: 5rem;
   text-align: center;
+}
+
+.billing-seats-edit-input {
+  min-width: 0;
+} */
+/*
+.billing-stepper-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+} */
+
+/* -----------------------------------------------------------------------------
+ * Checkout View
+ * -------------------------------------------------------------------------- */
+
+.billing-option {
+  width: 14rem;
+  min-width: 10rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-01);
+  background: var(--background-neutral-00);
+  text-align: left;
+  transition: border-color 0.15s ease;
+  cursor: pointer;
+}
+
+.billing-option:hover {
+  border-color: var(--border-02);
+}
+
+.billing-option[data-selected="true"] {
+  border-color: var(--action-link-05);
+  background: var(--action-link-01);
+}
+
+.billing-option-title {
+  color: var(--text-04);
+}
+
+.billing-option-price {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.billing-option[data-selected="true"] .billing-option-title {
+  color: var(--action-link-05);
+}
+
+.billing-option-badge {
+  color: var(--action-link-05);
+}
+
+.billing-option-check {
+  width: 1rem;
+  height: 1rem;
+  stroke: var(--action-link-05);
+}
+
+.billing-error-text {
+  color: var(--status-error-05);
 }
 
 /* -----------------------------------------------------------------------------
@@ -126,49 +190,18 @@
   }
 }
 
-@keyframes billing-slide-down {
-  from {
-    opacity: 0;
-    transform: translateY(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes billing-expand-from-card {
-  from {
-    clip-path: inset(0 52% 50% 0);
-    opacity: 0.8;
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-    opacity: 1;
-  }
-}
-
-@keyframes billing-collapse-to-cards {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 .billing-view-enter {
   animation: billing-fade-in 0.25s ease-out;
 }
 
 .billing-view-expand {
-  animation: billing-expand-from-card 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: billing-fade-in 0.25s ease-out;
 }
 
 .billing-view-collapse {
-  animation: billing-collapse-to-cards 0.25s ease-out;
+  animation: billing-fade-in 0.25s ease-out;
 }
 
 .billing-card-enter {
-  animation: billing-slide-down 0.2s ease-out;
+  animation: billing-fade-in 0.25s ease-out;
 }

@@ -18,6 +18,9 @@ interface BillingDetailsProps {
   onRefresh?: () => void;
 }
 
+// Grace period for data deletion after expiration (30 days)
+const GRACE_PERIOD_DAYS = 30;
+
 function getExpirationState(
   billing: BillingInformation,
   license?: LicenseStatus
@@ -31,16 +34,39 @@ function getExpirationState(
     );
 
     if (daysRemaining <= 0 || license.status === "expired") {
+      // Calculate days until deletion from grace period end
+      const gracePeriodEnd = license.grace_period_end
+        ? new Date(license.grace_period_end)
+        : new Date(
+            expiresAt.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000
+          );
+      const daysUntilDeletion = Math.max(
+        0,
+        Math.ceil(
+          (gracePeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      );
+
       return {
         variant: "error" as const,
         daysRemaining: 0,
+        daysUntilDeletion,
+        expirationDate: humanReadableFormatShort(gracePeriodEnd),
+      };
+    }
+
+    if (daysRemaining <= 14) {
+      return {
+        variant: "warning" as const,
+        daysRemaining,
         expirationDate: humanReadableFormatShort(expiresAt),
       };
     }
 
-    if (daysRemaining <= 30) {
+    // Show info banner for subscriptions expiring within 60 days
+    if (daysRemaining <= 60) {
       return {
-        variant: "warning" as const,
+        variant: "info" as const,
         daysRemaining,
         expirationDate: humanReadableFormatShort(expiresAt),
       };
@@ -56,16 +82,37 @@ function getExpirationState(
     );
 
     if (daysRemaining <= 0) {
+      // Calculate days until deletion (grace period after expiration)
+      const gracePeriodEnd = new Date(
+        expiresAt.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000
+      );
+      const daysUntilDeletion = Math.max(
+        0,
+        Math.ceil(
+          (gracePeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      );
+
       return {
         variant: "error" as const,
         daysRemaining: 0,
+        daysUntilDeletion,
+        expirationDate: humanReadableFormatShort(gracePeriodEnd),
+      };
+    }
+
+    if (daysRemaining <= 14) {
+      return {
+        variant: "warning" as const,
+        daysRemaining,
         expirationDate: humanReadableFormatShort(expiresAt),
       };
     }
 
-    if (daysRemaining <= 30) {
+    // Show info banner for subscriptions expiring within 60 days
+    if (daysRemaining <= 60) {
       return {
-        variant: "warning" as const,
+        variant: "info" as const,
         daysRemaining,
         expirationDate: humanReadableFormatShort(expiresAt),
       };
@@ -76,6 +123,7 @@ function getExpirationState(
     return {
       variant: "error" as const,
       daysRemaining: 0,
+      daysUntilDeletion: GRACE_PERIOD_DAYS,
       expirationDate: "",
     };
   }
@@ -106,6 +154,7 @@ export default function BillingDetails({
           variant={expirationState.variant}
           daysRemaining={expirationState.daysRemaining}
           expirationDate={expirationState.expirationDate}
+          daysUntilDeletion={expirationState.daysUntilDeletion}
         />
       )}
 

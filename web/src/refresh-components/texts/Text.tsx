@@ -58,6 +58,7 @@ const colors = {
 
 export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   nowrap?: boolean;
+  underline?: boolean;
 
   // Fonts
   headingH1?: boolean;
@@ -97,6 +98,7 @@ export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
 
 export default function Text({
   nowrap,
+  underline,
   headingH1,
   headingH2,
   headingH3,
@@ -197,6 +199,7 @@ export default function Text({
         fonts[font],
         inverted ? colors.inverted[color] : colors[color],
         nowrap && "whitespace-nowrap",
+        underline && "underline",
         className
       )}
     >

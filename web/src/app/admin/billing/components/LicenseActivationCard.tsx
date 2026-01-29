@@ -1,24 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { Card } from "@/components/ui/card";
+import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
+import InputFile from "@/refresh-components/inputs/InputFile";
+import { Section } from "@/layouts/general-layouts";
+import * as InputLayouts from "@/layouts/input-layouts";
+import { SvgXCircle } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/actions";
 
-interface LicenseActivationModalProps {
+const BILLING_HELP_URL = "https://docs.onyx.app/more/billing";
+
+interface LicenseActivationCardProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   isUpdate?: boolean;
 }
 
-export default function LicenseActivationInput({
+export default function LicenseActivationCard({
   isOpen,
   onClose,
   onSuccess,
   isUpdate,
-}: LicenseActivationModalProps) {
+}: LicenseActivationCardProps) {
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,61 +66,91 @@ export default function LicenseActivationInput({
   if (!isOpen) return null;
 
   return (
-    <Card className="w-full">
+    <Card padding={0} alignItems="stretch" gap={0}>
       {/* Header */}
-      <div className="flex flex-col gap-1 p-4">
-        <div className="flex items-center justify-between">
+      <Section flexDirection="column" alignItems="stretch" gap={0} padding={1}>
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="center"
+        >
           <Text headingH3>
             {isUpdate ? "Update License Key" : "Activate License Key"}
           </Text>
-          <Button tertiary onClick={handleClose} disabled={isActivating}>
+          <Button secondary onClick={handleClose} disabled={isActivating}>
             Cancel
           </Button>
-        </div>
+        </Section>
         <Text secondaryBody text03>
-          Enter your 64-character license key to{" "}
-          {isUpdate ? "update your license" : "activate premium features"}
+          Manually add and activate a license for this Onyx instance.
         </Text>
-      </div>
+      </Section>
 
       {/* Content */}
-      <div className="flex flex-col gap-2 p-4 bg-background-tint-01">
-        {/* Success message */}
-        {success && (
-          <div className="w-full p-3 bg-status-success-01 border border-status-success-02 rounded-lg">
-            <Text secondaryBody className="text-status-success-05">
-              License {isUpdate ? "updated" : "activated"} successfully!
-            </Text>
-          </div>
-        )}
+      <div className="billing-content-area">
+        <Section
+          flexDirection="column"
+          alignItems="stretch"
+          gap={0.5}
+          padding={1}
+        >
+          {/* Success message */}
+          {success && (
+            <div className="billing-success-message">
+              <Text secondaryBody>
+                License {isUpdate ? "updated" : "activated"} successfully!
+              </Text>
+            </div>
+          )}
 
-        <Text secondaryBody text02>
-          License Key
-        </Text>
-        <input
-          type="text"
-          value={licenseKey}
-          onChange={(e) => {
-            setLicenseKey(e.target.value);
-            setError(null);
-          }}
-          placeholder="64-character key string"
-          className="w-full p-3 border border-border-01 rounded-lg bg-background-neutral-00 text-text-01 font-mono text-sm focus:outline-none focus:border-action-link-05"
-        />
-        <Text secondaryBody text03>
-          Find your license key in your purchase confirmation email
-        </Text>
-
-        {/* Error message */}
-        {error && (
-          <Text secondaryBody className="text-status-error-05">
-            {error}
-          </Text>
-        )}
+          {/* License Key Input */}
+          <InputLayouts.Vertical
+            title="License Key"
+            subDescription={
+              error
+                ? undefined
+                : "Paste or attach your license key file you received from Onyx."
+            }
+          >
+            <InputFile
+              placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
+              setValue={(value) => {
+                setLicenseKey(value);
+                setError(null);
+              }}
+              error={!!error}
+              className="billing-license-input"
+            />
+            {error && (
+              <Section
+                flexDirection="row"
+                alignItems="center"
+                justifyContent="start"
+                gap={0.25}
+                height="auto"
+              >
+                <div className="billing-error-icon">
+                  <SvgXCircle />
+                </div>
+                <Text secondaryBody text04>
+                  {error}.{" "}
+                  <a
+                    href={BILLING_HELP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="billing-help-link"
+                  >
+                    Billing Help
+                  </a>
+                </Text>
+              </Section>
+            )}
+          </InputLayouts.Vertical>
+        </Section>
       </div>
 
       {/* Footer */}
-      <div className="flex justify-end p-4">
+      <Section flexDirection="row" justifyContent="end" padding={1}>
         <Button
           main
           primary
@@ -127,7 +163,7 @@ export default function LicenseActivationInput({
               ? "Update License"
               : "Activate License"}
         </Button>
-      </div>
+      </Section>
     </Card>
   );
 }

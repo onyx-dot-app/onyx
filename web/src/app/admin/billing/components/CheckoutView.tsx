@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Section } from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
@@ -8,11 +8,11 @@ import Card from "@/refresh-components/cards/Card";
 import Separator from "@/refresh-components/Separator";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgUsers, SvgCheck } from "@opal/icons";
-import { cn } from "@/lib/utils";
 import { createCheckoutSession } from "@/lib/billing/actions";
 import { useUser } from "@/components/user/UserProvider";
 import * as InputLayouts from "@/layouts/input-layouts";
-
+import { formatDateShort } from "@/lib/dateUtils";
+import type { PlanType } from "@/lib/billing/interfaces";
 interface BillingOptionProps {
   selected: boolean;
   onClick: () => void;
@@ -30,20 +30,16 @@ function BillingOption({
 }: BillingOptionProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={cn(
-        "w-[200px] min-w-[160px] p-1.5 rounded-08 border text-left transition-colors",
-        selected
-          ? "border-action-link-05 bg-action-link-01"
-          : "border-border-01 bg-background-neutral-00 hover:border-border-02"
-      )}
+      className="billing-option"
+      data-selected={selected}
     >
       <Section
         flexDirection="row"
-        gap={0.25}
-        padding={0.125}
+        gap={0.5}
         height="fit"
-        justifyContent="start"
+        justifyContent="between"
         alignItems="start"
       >
         <Section
@@ -51,18 +47,16 @@ function BillingOption({
           justifyContent="center"
           gap={0}
           height="fit"
+          width="fit"
         >
-          <Text
-            mainUiAction
-            className={cn(selected ? "text-action-link-05" : "text-text-04")}
-          >
+          <Text mainUiAction className="billing-option-title">
             {title}
           </Text>
-          <div className="flex flex-row gap-1 items-baseline">
+          <div className="billing-option-price">
             <Text mainContentEmphasis text04>
               ${price}
             </Text>
-            <Text secondaryBody text03 className="whitespace-nowrap">
+            <Text secondaryBody text03 nowrap>
               per seat/month
             </Text>
           </div>
@@ -70,16 +64,16 @@ function BillingOption({
         {selected && badge && (
           <Section
             flexDirection="row"
-            gap={0.375}
+            gap={0.25}
             alignItems="center"
             justifyContent="end"
             width="fit"
             height="fit"
           >
-            <Text secondaryAction className="text-action-link-05">
+            <Text secondaryAction className="billing-option-badge">
               {badge}
             </Text>
-            <SvgCheck className="w-4 h-4 stroke-action-link-05" />
+            <SvgCheck className="billing-option-check" />
           </Section>
         )}
       </Section>
@@ -93,15 +87,21 @@ interface CheckoutViewProps {
 
 export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const { user } = useUser();
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">(
-    "annual"
-  );
+  const [billingPeriod, setBillingPeriod] = useState<PlanType>("monthly");
   const [seats, setSeats] = useState("5");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const monthlyPrice = 25;
   const annualPrice = 20;
+  let annualPriceSelected = Boolean(billingPeriod === "annual");
+
+  // Calculate trial end date (1 month from now)
+  const trialEndDate = useMemo(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + 1);
+    return formatDateShort(date.toISOString());
+  }, []);
 
   const handleSeatsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -142,155 +142,114 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   };
 
   return (
-    <div className="w-full">
-      <Card padding={0}>
-        {/* Header */}
+    <Card padding={0} alignItems="stretch">
+      {/* Header */}
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        alignItems="start"
+        padding={1}
+        height="auto"
+      >
         <Section
-          flexDirection="row"
-          justifyContent="between"
+          flexDirection="column"
           alignItems="start"
-          padding={1}
-          height="fit"
+          gap={0.25}
+          height="auto"
+          width="fit"
         >
-          <div className="flex flex-col gap-1">
-            <SvgUsers size={24} className="stroke-text-04" />
-            <Text headingH2 text04>
-              Business
-            </Text>
-          </div>
-          <Button secondary onClick={onAdjustPlan}>
-            Adjust Plan
-          </Button>
+          <SvgUsers size={24} />
+          <Text headingH2 text04>
+            Business
+          </Text>
         </Section>
+        <Button secondary onClick={onAdjustPlan}>
+          Adjust Plan
+        </Button>
+      </Section>
 
-        {/* Content area */}
-        <div className="bg-background-tint-01 w-full">
-          <Section
-            alignItems="start"
-            justifyContent="center"
-            gap={1}
-            padding={1}
-            height="fit"
-            width="full"
+      {/* Content area */}
+      <div className="billing-content-area">
+        <Section
+          flexDirection="column"
+          alignItems="stretch"
+          gap={1}
+          padding={1}
+          height="auto"
+        >
+          {/* Billing Cycle Row */}
+          <InputLayouts.Horizontal
+            title="Billing Cycle"
+            description="after your 1-month free trial"
+            cursorPointer={false}
           >
-            {/* Billing Row */}
             <Section
               flexDirection="row"
-              alignItems="start"
-              height="fit"
+              gap={0.25}
+              width="fit"
+              height="auto"
               justifyContent="start"
-              width="full"
             >
-              <div className="flex flex-1 max-w-[480px] pr-2 pt-2">
-                <Section alignItems="start" gap={0} height="fit">
-                  <Text mainUiAction text04>
-                    Billing Cycle
-                  </Text>
-                  <Text secondaryBody text03>
-                    after your 1-month free trial
-                  </Text>
-                </Section>
-              </div>
-              <Section
-                flexDirection="row"
-                gap={0.25}
-                width="fit"
-                height="fit"
-                justifyContent="start"
-              >
-                <BillingOption
-                  selected={billingPeriod === "monthly"}
-                  onClick={() => setBillingPeriod("monthly")}
-                  title="Monthly"
-                  price={monthlyPrice}
-                />
-                <BillingOption
-                  selected={billingPeriod === "annual"}
-                  onClick={() => setBillingPeriod("annual")}
-                  title="Annual"
-                  price={annualPrice}
-                  badge="Save 20%"
-                />
-              </Section>
-            </Section>
-
-            <Separator noPadding />
-
-            {/* Seats Row */}
-            {/* Use  */}
-            <InputLayouts.Horizontal
-              // name="seats"
-              title="Seats"
-              description="applies to both user accounts and Slack integration accounts."
-            >
-              <InputTypeIn
-                type="number"
-                min={1}
-                value={seats}
-                onChange={handleSeatsChange}
-                showClearButton={false}
+              <BillingOption
+                selected={billingPeriod === "monthly"}
+                onClick={() => setBillingPeriod("monthly")}
+                title="Monthly"
+                price={monthlyPrice}
               />
-            </InputLayouts.Horizontal>
-            {/* <Section
-              flexDirection="row"
-              alignItems="start"
-              justifyContent="between"
-              height="fit"
-              width="full"
-            >
-              <div className="flex flex-1 max-w-[480px] pr-2">
-                <Section alignItems="start" gap={0} height="fit">
-                  <Text mainUiAction text04>
-                    Seats
-                  </Text>
-                  <Text secondaryBody text03>
-                    applies to both user accounts and Slack integration
-                    accounts.
-                  </Text>
-                </Section>
-              </div>
-              <div className="flex flex-1 max-w-[240px]">
-                <InputTypeIn
-                  type="number"
-                  min={1}
-                  value={seats}
-                  onChange={handleSeatsChange}
-                  showClearButton={false}
-                  className="min-w-[160px]"
-                />
-              </div>
-            </Section> */}
-          </Section>
-        </div>
+              <BillingOption
+                selected={billingPeriod === "annual"}
+                onClick={() => setBillingPeriod("annual")}
+                title="Annual"
+                price={annualPrice}
+                badge="Save 20%"
+              />
+            </Section>
+          </InputLayouts.Horizontal>
 
-        {/* Footer */}
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="end"
-          gap={0.5}
-          padding={1}
-          height="fit"
-          width="full"
-        >
-          <div className="flex flex-1 items-center">
-            {error ? (
-              <Text secondaryBody className="text-status-error-05">
-                {error}
-              </Text>
-            ) : (
-              <Text secondaryBody text03>
-                You will be billed after the free trial ends.
-              </Text>
-            )}
-          </div>
-          <div className="shrink-0">
-            <Button main primary onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? "Loading..." : "Continue to Payment"}
-            </Button>
-          </div>
+          <Separator noPadding />
+
+          {/* Seats Row */}
+          <InputLayouts.Horizontal
+            title="Seats"
+            description="applies to both user accounts and Slack integration accounts."
+            cursorPointer={false}
+          >
+            <InputTypeIn
+              value={seats}
+              onChange={handleSeatsChange}
+              showClearButton={false}
+            />
+          </InputLayouts.Horizontal>
         </Section>
-      </Card>
-    </div>
+      </div>
+
+      {/* Footer */}
+      <Section
+        flexDirection="row"
+        alignItems="center"
+        justifyContent="between"
+        padding={1}
+        height="auto"
+      >
+        {error ? (
+          <Text secondaryBody className="billing-error-text">
+            {error}
+          </Text>
+        ) : !annualPriceSelected ? (
+          <Text secondaryBody text03>
+            You will be billed on{" "}
+            <Text secondaryBody text04>
+              {trialEndDate}
+            </Text>{" "}
+            After your 1-month free trial ends.
+          </Text>
+        ) : (
+          <div></div>
+        )}
+        <Button main primary onClick={handleSubmit} disabled={isSubmitting}>
+          {isSubmitting ? "Loading..." : "Continue to Payment"}
+        </Button>
+      </Section>
+    </Card>
   );
 }

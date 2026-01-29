@@ -7,16 +7,11 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgUsers, SvgExternalLink } from "@opal/icons";
 import { BillingInformation } from "@/lib/billing/interfaces";
 import { createCustomerPortalSession } from "@/lib/billing/actions";
-import { humanReadableFormatShort } from "@/lib/time";
+import { formatDateShort } from "@/lib/dateUtils";
 
 interface SubscriptionCardProps {
   billing: BillingInformation;
   onViewPlans: () => void;
-}
-
-function getBillingPeriodText(period: string | null): string {
-  if (!period) return "";
-  return period === "annual" ? "Annual billing" : "Monthly billing";
 }
 
 export default function SubscriptionCard({
@@ -29,8 +24,7 @@ export default function SubscriptionCard({
       )} Plan`
     : "Business Plan";
 
-  const billingPeriod = getBillingPeriodText(billing.billing_period);
-  const nextPaymentDate = humanReadableFormatShort(billing.current_period_end);
+  const nextPaymentDate = formatDateShort(billing.current_period_end);
 
   const isExpired =
     billing.status === "expired" || billing.status === "cancelled";
@@ -40,9 +34,9 @@ export default function SubscriptionCard({
   if (isExpired) {
     subtitle = "Expired";
   } else if (isCanceling) {
-    subtitle = `${billingPeriod} \u2022 Valid until ${nextPaymentDate}`;
+    subtitle = `Valid until ${nextPaymentDate}`;
   } else {
-    subtitle = `${billingPeriod} \u2022 Next payment on ${nextPaymentDate}`;
+    subtitle = `Next payment on ${nextPaymentDate}`;
   }
 
   const handleManagePlan = async () => {
@@ -61,45 +55,40 @@ export default function SubscriptionCard({
       <Section
         flexDirection="row"
         justifyContent="between"
-        alignItems="center"
+        alignItems="start"
         height="auto"
       >
         {/* Left side - Icon and plan info */}
-        <Section
-          flexDirection="row"
-          gap={0.75}
-          justifyContent="start"
-          alignItems="center"
-          height="auto"
-          width="auto"
-        >
-          <SvgUsers className="w-5 h-5 stroke-text-04" />
-          <Section gap={0.25} alignItems="start" height="auto" width="auto">
-            <Text mainContentEmphasis>{planName}</Text>
-            <Text secondaryBody text03>
-              {subtitle}
-            </Text>
-          </Section>
+        <Section gap={0.25} alignItems="start" height="auto" width="auto">
+          <SvgUsers className="w-5 h-5 stroke-text-03" />
+          <Text headingH3Muted text04>
+            {planName}
+          </Text>
+          <Text secondaryBody text03>
+            {subtitle}
+          </Text>
         </Section>
 
         {/* Right side - Actions */}
         <Section
-          flexDirection="row"
-          gap={0.5}
-          justifyContent="end"
+          flexDirection="column"
+          gap={0.25}
+          alignItems="end"
           height="auto"
-          width="auto"
+          width="fit"
         >
-          <Button main secondary onClick={handleManagePlan}>
-            Manage Plan
-          </Button>
           <Button
             main
-            tertiary
-            onClick={onViewPlans}
+            primary
+            onClick={handleManagePlan}
             rightIcon={SvgExternalLink}
           >
-            View Plan Details
+            Manage Plan
+          </Button>
+          <Button tertiary onClick={onViewPlans} className="billing-text-link">
+            <Text secondaryBody text03>
+              View Plan Details
+            </Text>
           </Button>
         </Section>
       </Section>
