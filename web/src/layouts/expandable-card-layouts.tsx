@@ -54,6 +54,10 @@ import { cn } from "@/lib/utils";
 import { WithoutStyles } from "@/types";
 import ShadowDiv from "@/refresh-components/ShadowDiv";
 import { Section, SectionProps } from "@/layouts/general-layouts";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "@/refresh-components/Collapsible";
 
 /**
  * Expandable Card Context
@@ -210,7 +214,7 @@ function ExpandableCardHeader({
     <div
       {...props}
       className={cn(
-        "border bg-background-neutral-00 w-full",
+        "border bg-background-neutral-00 w-full transition-[border-radius] duration-200 ease-out",
         shouldFullyRound ? "rounded-16" : "rounded-t-16"
       )}
     >
@@ -224,7 +228,7 @@ function ExpandableCardHeader({
  *
  * The expandable content section of the card. This is a pure container that:
  * - Self-registers with context to inform Header about its presence
- * - Renders nothing when folded
+ * - Animates open/closed using Radix Collapsible (slide down/up)
  * - Has side and bottom borders that connect to the header
  * - Has a max-height with scrollable overflow via ShadowDiv
  *
@@ -260,19 +264,24 @@ function ExpandableCardContent({
     return registerContent();
   }, [registerContent]);
 
-  if (isFolded) {
-    return null;
-  }
-
   return (
-    <div className="border-x border-b rounded-b-16 overflow-hidden w-full">
-      <ShadowDiv
-        className="flex flex-col rounded-b-16 max-h-[20rem]"
-        {...props}
-      >
-        {children}
-      </ShadowDiv>
-    </div>
+    <Collapsible open={!isFolded}>
+      <CollapsibleContent>
+        <div
+          className={cn(
+            "border-x border-b rounded-b-16 overflow-hidden w-full transition-opacity duration-200 ease-out",
+            isFolded ? "opacity-0" : "opacity-100"
+          )}
+        >
+          <ShadowDiv
+            className="flex flex-col rounded-b-16 max-h-[20rem]"
+            {...props}
+          >
+            {children}
+          </ShadowDiv>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
