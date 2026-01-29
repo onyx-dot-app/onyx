@@ -20,7 +20,7 @@ export const NonSelectableConnectors = ({
 
   return (
     <div className="mt-6 mb-4">
-      <InputLayouts.Label title={title} description={description} />
+      <InputLayouts.Title title={title} description={description} />
 
       <div className="p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01">
         <div className="mb-2 flex items-center gap-1.5">

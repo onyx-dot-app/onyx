@@ -1191,7 +1191,7 @@ export default function AgentEditorPage({
 
                       <GeneralLayouts.Section>
                         <GeneralLayouts.Section gap={1}>
-                          <InputLayouts.Label
+                          <InputLayouts.Title
                             title="Knowledge"
                             description="Add specific connectors and documents for this agent to use to inform its responses."
                           />

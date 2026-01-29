@@ -6,7 +6,8 @@ import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
 import Label from "@/refresh-components/form/Label";
 
-interface OrientationLayoutProps extends LabelLayoutProps {
+interface OrientationLayoutProps extends TitleLayoutProps {
+  nonInteractable?: boolean;
   children?: React.ReactNode;
 }
 
@@ -36,16 +37,16 @@ export interface VerticalLayoutProps extends OrientationLayoutProps {
   subDescription?: React.ReactNode;
 }
 function VerticalInputLayout({
+  nonInteractable = false,
   children,
   subDescription,
-  name,
-  ...fieldLabelProps
+  ...props
 }: VerticalLayoutProps) {
-  return (
+  const content = (
     <Section gap={0.25} alignItems="start">
-      <LabelLayout name={name} {...fieldLabelProps} />
+      <TitleLayout name={props.name} {...props} />
       {children}
-      {name && <ErrorLayout name={name} />}
+      {props.name && <ErrorLayout name={props.name} />}
       {subDescription && (
         <Text secondaryBody text03>
           {subDescription}
@@ -53,6 +54,12 @@ function VerticalInputLayout({
       )}
     </Section>
   );
+
+  if (nonInteractable) return content;
+
+  // We wrap an empty, no-`name` `<Label>` around the actual contents to make it easily interactable.
+  // Interacting with the entire section - NOT just the input itself - will redirect interactions to the input.
+  return <Label>{content}</Label>;
 }
 
 /**
@@ -89,45 +96,45 @@ function VerticalInputLayout({
  * ```
  */
 export interface HorizontalLayoutProps extends OrientationLayoutProps {
-  /* There are certain input-layouts which are "static" and should not have the pointer-cursor appear on them. */
-  cursorPointer?: boolean;
   /** Align input to the center (middle) of the label/description */
   center?: boolean;
 }
 function HorizontalInputLayout({
-  cursorPointer = true,
-  center,
-
+  nonInteractable,
   children,
-  name,
-  ...fieldLabelProps
+  center,
+  ...props
 }: HorizontalLayoutProps) {
-  return (
-    <Label name={name}>
-      <Section gap={0.25} alignItems="start">
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems={center ? "center" : "start"}
-        >
-          <LabelLayout {...fieldLabelProps} />
-          <Section alignItems="end" width="fit">
-            {children}
-          </Section>
+  const content = (
+    <Section gap={0.25} alignItems="start">
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        alignItems={center ? "center" : "start"}
+      >
+        <TitleLayout {...props} />
+        <Section alignItems="end" width="fit">
+          {children}
         </Section>
-        {name && <ErrorLayout name={name} />}
       </Section>
-    </Label>
+      {props.name && <ErrorLayout name={props.name} />}
+    </Section>
   );
+
+  if (nonInteractable) return content;
+
+  // We wrap an empty, no-`name` `<Label>` around the actual contents to make it easily interactable.
+  // Interacting with the entire section - NOT just the input itself - will redirect interactions to the input.
+  return <Label>{content}</Label>;
 }
 
 /**
- * LabelLayout - A reusable label component for form fields
+ * TitleLayout - A reusable label component for form fields
  *
  * Renders a semantic label element with optional description and "Optional" indicator.
  * If no `name` prop is provided, renders a `div` instead of a `label` element.
  *
- * Exported as `Label` for convenient usage.
+ * Exported as `Title` for convenient usage.
  *
  * @param name - The field name to associate the label with (renders as `<Label>` if provided)
  * @param title - The main label text
@@ -137,9 +144,9 @@ function HorizontalInputLayout({
  *
  * @example
  * ```tsx
- * import { Label } from "@/layouts/input-layouts";
+ * import { Title } from "@/layouts/input-layouts";
  *
- * <Label
+ * <Title
  *   name="username"
  *   title="Username"
  *   description="Choose a unique username"
@@ -147,20 +154,20 @@ function HorizontalInputLayout({
  * />
  * ```
  */
-export interface LabelLayoutProps {
+export interface TitleLayoutProps {
   name?: string;
   title: string;
   description?: string;
   optional?: boolean;
   center?: boolean;
 }
-function LabelLayout({
+function TitleLayout({
   name,
   title,
   optional,
   description,
   center,
-}: LabelLayoutProps) {
+}: TitleLayoutProps) {
   const content = (
     <Section gap={0} height="fit">
       <Section
@@ -214,10 +221,10 @@ function LabelLayout({
  * This component uses Formik's `useField` hook internally and requires
  * the component to be rendered within a Formik context.
  */
-interface FieldErrorLayoutProps {
+interface ErrorLayoutProps {
   name: string;
 }
-function ErrorLayout({ name }: FieldErrorLayoutProps) {
+function ErrorLayout({ name }: ErrorLayoutProps) {
   const [, meta] = useField(name);
   const { status } = useFormikContext();
   const warning = status?.warnings?.[name];
@@ -262,7 +269,7 @@ function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {
 export {
   VerticalInputLayout as Vertical,
   HorizontalInputLayout as Horizontal,
-  LabelLayout as Label,
+  TitleLayout as Title,
   ErrorLayout as Error,
   ErrorTextLayout,
 };
