@@ -684,3 +684,69 @@ def test_temporary_env_cleanup() -> None:
 
         # Check that temporary env var from CUSTOM_CONFIG is no longer set
         assert "THIS_IS_RANDOM" not in os.environ
+
+
+def test_temporary_env_cleanup_on_exception() -> None:
+    """Verify env vars are restored even when an exception occurs during LLM invocation."""
+    # Assign some environment variables
+    EXPECTED_ENV_VARS = {
+        "TEST_ENV_VAR": "test_value",
+        "ANOTHER_ONE": "1",
+        "THIRD_ONE": "2",
+    }
+
+    CUSTOM_CONFIG = {
+        "TEST_ENV_VAR": "fdsfsdf",
+        "ANOTHER_ONE": "3",
+        "THIS_IS_RANDOM": "123213",
+    }
+
+    for env_var, value in EXPECTED_ENV_VARS.items():
+        os.environ[env_var] = value
+
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={"metadata": {"foo": "bar"}},
+        custom_config=CUSTOM_CONFIG,
+    )
+
+    def on_litellm_completion_raises(**kwargs: dict[str, Any]) -> None:
+        # Validate that the environment variables are those in custom config
+        for env_var, value in CUSTOM_CONFIG.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        # Simulate an error during LLM call
+        raise RuntimeError("Simulated LLM API failure")
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_completion.side_effect = on_litellm_completion_raises
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        with pytest.raises(RuntimeError, match="Simulated LLM API failure"):
+            llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+
+        # Check that the environment variables are back to the original values
+        for env_var, value in EXPECTED_ENV_VARS.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        # Check that temporary env var from CUSTOM_CONFIG is no longer set
+        assert "THIS_IS_RANDOM" not in os.environ
