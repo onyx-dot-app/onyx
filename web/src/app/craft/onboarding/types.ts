@@ -2,7 +2,7 @@ import { WorkArea, Level } from "./constants";
 
 export interface BuildUserInfo {
   firstName: string;
-  lastName: string;
+  lastName?: string;
   workArea: WorkArea;
   level?: Level;
 }
