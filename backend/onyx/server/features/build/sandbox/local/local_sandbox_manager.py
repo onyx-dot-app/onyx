@@ -752,18 +752,48 @@ class LocalSandboxManager(SandboxManager):
         Yields:
             Typed ACP schema event objects
         """
+        from onyx.server.features.build.api.packet_logger import get_packet_logger
+
+        packet_logger = get_packet_logger()
+
         # Get or create ACP client for this session
         client_key = (sandbox_id, session_id)
         client = self._acp_clients.get(client_key)
+
         if client is None or not client.is_running:
             session_path = self._get_session_path(sandbox_id, session_id)
+
+            # Log client creation
+            packet_logger.log_acp_client_start(
+                sandbox_id, session_id, str(session_path), context="local"
+            )
+            logger.info(
+                f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
+            )
 
             # Create and start ACP client for this session
             client = ACPAgentClient(cwd=str(session_path))
             self._acp_clients[client_key] = client
 
-        for event in client.send_message(message):
-            yield event
+        # Log the send_message call at sandbox manager level
+        packet_logger.log_session_start(session_id, sandbox_id, message)
+
+        events_count = 0
+        try:
+            for event in client.send_message(message):
+                events_count += 1
+                yield event
+
+            # Log successful completion
+            packet_logger.log_session_end(
+                session_id, success=True, events_count=events_count
+            )
+        except Exception as e:
+            # Log failure
+            packet_logger.log_session_end(
+                session_id, success=False, error=str(e), events_count=events_count
+            )
+            raise
 
     def _sanitize_path(self, path: str) -> str:
         """Sanitize a user-provided path to prevent path traversal attacks.

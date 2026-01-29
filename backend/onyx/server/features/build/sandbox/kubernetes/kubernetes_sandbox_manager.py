@@ -56,6 +56,7 @@ from kubernetes.client.rest import ApiException  # type: ignore
 from kubernetes.stream import stream as k8s_stream  # type: ignore
 
 from onyx.db.enums import SandboxStatus
+from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
@@ -1455,19 +1456,45 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         Yields:
             Typed ACP schema event objects
         """
+        packet_logger = get_packet_logger()
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
+
+        # Log ACP client creation
+        packet_logger.log_acp_client_start(
+            sandbox_id, session_id, session_path, context="k8s"
+        )
+
         exec_client = ACPExecClient(
             pod_name=pod_name,
             namespace=self._namespace,
             container="sandbox",
         )
+
+        # Log the send_message call at sandbox manager level
+        packet_logger.log_session_start(session_id, sandbox_id, message)
+
+        events_count = 0
         try:
             exec_client.start(cwd=session_path)
             for event in exec_client.send_message(message):
+                events_count += 1
                 yield event
+
+            # Log successful completion
+            packet_logger.log_session_end(
+                session_id, success=True, events_count=events_count
+            )
+        except Exception as e:
+            # Log failure
+            packet_logger.log_session_end(
+                session_id, success=False, error=str(e), events_count=events_count
+            )
+            raise
         finally:
             exec_client.stop()
+            # Log client stop
+            packet_logger.log_acp_client_stop(sandbox_id, session_id, context="k8s")
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str

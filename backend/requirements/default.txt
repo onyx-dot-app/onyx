@@ -585,7 +585,7 @@ mcp==1.25.0
     #   onyx
 mdurl==0.1.2
     # via markdown-it-py
-mistune==0.8.4
+mistune==3.2.0
     # via onyx
 more-itertools==10.8.0
     # via
@@ -865,7 +865,7 @@ pypandoc-binary==1.16.2
     # via onyx
 pyparsing==3.2.5
     # via httplib2
-pypdf==6.6.0
+pypdf==6.6.2
     # via
     #   onyx
     #   unstructured-client

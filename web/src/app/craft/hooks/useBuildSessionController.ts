@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
-import { useUser } from "@/components/user/UserProvider";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */
@@ -23,6 +22,7 @@ interface UseBuildSessionControllerProps {
  * - Switch current session based on URL (single source of truth)
  * - Trigger pre-provisioning when on new build page
  * - Track session loading state
+ * - Re-validate pre-provisioned session on tab focus (multi-tab support)
  *
  * IMPORTANT: This is the ONLY place that should call setCurrentSession.
  * Other components should navigate to URLs and let this controller handle state.
@@ -36,22 +36,14 @@ export function useBuildSessionController({
   const { llmProviders } = useLLMProviders();
   const hasAnyProvider = !!(llmProviders && llmProviders.length > 0);
 
-  // Get user state - this updates when refreshUser() is called after onboarding
-  const { user } = useUser();
-
   // Check if user has completed onboarding (persona cookie is set)
-  // Re-evaluate when user changes (refreshUser is called after onboarding completes)
-  const hasCompletedOnboarding = useMemo(() => {
-    const persona = getBuildUserPersona();
-    return persona !== null;
-  }, [user]);
+  // Read directly from cookie on every render - cookie reads are cheap and this
+  // ensures we always have the current value, especially important after onboarding
+  // completes when the cookie is set synchronously but other state updates are async
+  const hasCompletedOnboarding = getBuildUserPersona() !== null;
 
-  // Refs to track previous session state
-  const priorSessionIdRef = useRef<string | null>(null);
-  const loadedSessionIdRef = useRef<string | null>(null);
-  // Track whether we've already triggered pre-provisioning for this "new build" visit
-  // Prevents re-triggering when consuming a session (state goes idle → triggers effect)
-  const hasTriggeredProvisioningRef = useRef(false);
+  // Track previous existingSessionId to detect navigation transitions
+  const prevExistingSessionIdRef = useRef<string | null>(existingSessionId);
 
   // Access store state and actions individually like chat does
   const currentSessionId = useBuildSessionStore(
@@ -61,6 +53,17 @@ export function useBuildSessionController({
     (state) => state.setCurrentSession
   );
   const loadSession = useBuildSessionStore((state) => state.loadSession);
+
+  // Controller state from Zustand (replaces refs for better race condition handling)
+  const controllerState = useBuildSessionStore(
+    (state) => state.controllerState
+  );
+  const setControllerTriggered = useBuildSessionStore(
+    (state) => state.setControllerTriggered
+  );
+  const setControllerLoaded = useBuildSessionStore(
+    (state) => state.setControllerLoaded
+  );
 
   // Pre-provisioning state (discriminated union)
   const preProvisioning = useBuildSessionStore(
@@ -89,46 +92,55 @@ export function useBuildSessionController({
 
   // Effect: Handle session changes based on URL
   useEffect(() => {
-    const priorSessionId = priorSessionIdRef.current;
-    priorSessionIdRef.current = existingSessionId;
+    const prevExistingSessionId = prevExistingSessionIdRef.current;
+    prevExistingSessionIdRef.current = existingSessionId;
 
     // Handle navigation to "new build" (no session ID in URL)
     if (existingSessionId === null) {
-      // Only reset currentSessionId if we're not in the middle of consuming a pre-provisioned session
-      // This prevents the race condition where we set a session and it gets immediately reset
+      // Clear current session
       if (currentSessionId !== null) {
         setCurrentSession(null);
       }
 
-      // Trigger pre-provisioning if:
-      // 1. We haven't already triggered for this "visit" to new build page
-      // 2. Status is idle (not already provisioning or ready)
-      // 3. User has completed onboarding (persona cookie is set)
-      // 4. At least one LLM provider is available
-      // This prevents pre-provisioning before onboarding is complete
-      if (
-        !hasTriggeredProvisioningRef.current &&
-        preProvisioning.status === "idle" &&
+      // Reset trigger state when transitioning FROM a session TO new build
+      // This ensures we can re-provision when returning to the new build page
+      if (prevExistingSessionId !== null) {
+        setControllerTriggered(null);
+      }
+
+      // Trigger pre-provisioning if conditions are met
+      const canTrigger =
+        controllerState.lastTriggeredForUrl !== "new-build" &&
+        (preProvisioning.status === "idle" ||
+          preProvisioning.status === "failed") &&
         hasCompletedOnboarding &&
-        hasAnyProvider
-      ) {
-        hasTriggeredProvisioningRef.current = true;
+        hasAnyProvider;
+
+      // Also trigger retry if failed and retry time has passed
+      const shouldRetry =
+        preProvisioning.status === "failed" &&
+        Date.now() >= preProvisioning.retryAt &&
+        hasCompletedOnboarding &&
+        hasAnyProvider;
+
+      if (canTrigger || shouldRetry) {
+        setControllerTriggered("new-build");
         ensurePreProvisionedSession();
       }
       return;
     }
 
-    // Navigating to a session - reset the provisioning trigger flag
-    // so we can trigger again when returning to new build page
-    hasTriggeredProvisioningRef.current = false;
+    // Navigating to a session - reset the trigger state for next new build visit
+    if (controllerState.lastTriggeredForUrl === "new-build") {
+      setControllerTriggered(null);
+    }
 
     // Handle navigation to existing session
     async function fetchSession() {
       if (!existingSessionId) return;
 
-      // Set ref BEFORE any async work to prevent duplicate calls
-      // if the effect re-runs while we're still loading
-      loadedSessionIdRef.current = existingSessionId;
+      // Mark as loaded BEFORE any async work to prevent duplicate calls
+      setControllerLoaded(existingSessionId);
 
       // Access sessions via getState() to avoid dependency on Map reference
       const currentState = useBuildSessionStore.getState();
@@ -145,7 +157,6 @@ export function useBuildSessionController({
     }
 
     // Only fetch if we haven't already loaded this session
-    // Access current session via getState() to avoid dependency on object reference
     const currentState = useBuildSessionStore.getState();
     const currentSessionData = currentState.currentSessionId
       ? currentState.sessions.get(currentState.currentSessionId)
@@ -155,7 +166,7 @@ export function useBuildSessionController({
       currentSessionData?.status === "creating";
 
     if (
-      loadedSessionIdRef.current !== existingSessionId &&
+      controllerState.loadedSessionId !== existingSessionId &&
       !isCurrentlyStreaming
     ) {
       fetchSession();
@@ -172,7 +183,82 @@ export function useBuildSessionController({
     ensurePreProvisionedSession,
     hasCompletedOnboarding,
     hasAnyProvider,
+    controllerState.lastTriggeredForUrl,
+    controllerState.loadedSessionId,
+    setControllerTriggered,
+    setControllerLoaded,
   ]);
+
+  // Effect: Auto-retry provisioning after backoff period
+  // When provisioning fails, we set a retryAt timestamp. This effect schedules
+  // a timer to retry after the backoff period elapses.
+  useEffect(() => {
+    // Only set up timer if in failed state and on new-build page
+    if (
+      preProvisioning.status !== "failed" ||
+      existingSessionId !== null ||
+      !hasCompletedOnboarding ||
+      !hasAnyProvider
+    ) {
+      return;
+    }
+
+    const msUntilRetry = preProvisioning.retryAt - Date.now();
+
+    // If retry time has already passed, trigger immediately
+    if (msUntilRetry <= 0) {
+      console.info("[PreProvision] Retry time passed, retrying now...");
+      ensurePreProvisionedSession();
+      return;
+    }
+
+    // Schedule retry after backoff period
+    console.info(
+      `[PreProvision] Scheduling retry in ${Math.round(msUntilRetry / 1000)}s`
+    );
+    const timerId = setTimeout(() => {
+      console.info("[PreProvision] Backoff elapsed, retrying...");
+      ensurePreProvisionedSession();
+    }, msUntilRetry);
+
+    return () => clearTimeout(timerId);
+  }, [
+    preProvisioning,
+    existingSessionId,
+    hasCompletedOnboarding,
+    hasAnyProvider,
+    ensurePreProvisionedSession,
+  ]);
+
+  // Effect: Re-validate pre-provisioned session on tab focus (multi-tab support)
+  // The backend's createSession does "get or create empty session" - it returns
+  // the same session if still valid, or a new one if consumed by another tab.
+  useEffect(() => {
+    const handleFocus = async () => {
+      const { preProvisioning } = useBuildSessionStore.getState();
+
+      // Only re-validate if we have a "ready" pre-provisioned session
+      if (preProvisioning.status === "ready") {
+        const cachedSessionId = preProvisioning.sessionId;
+
+        // Reset to idle and re-provision - backend will return same session if
+        // still valid, or create new one if it was consumed by another tab
+        useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
+        const newSessionId = await useBuildSessionStore
+          .getState()
+          .ensurePreProvisionedSession();
+
+        if (newSessionId && newSessionId !== cachedSessionId) {
+          console.info(
+            `[PreProvision] Session changed on focus: ${cachedSessionId} -> ${newSessionId}`
+          );
+        }
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, []);
 
   /**
    * Navigate to a specific session
