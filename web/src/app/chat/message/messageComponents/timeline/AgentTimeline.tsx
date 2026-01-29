@@ -17,7 +17,7 @@ import {
 import {
   isResearchAgentPackets,
   isSearchToolPackets,
-  stepSupportsCompact,
+  stepSupportsCollapsedStreaming,
 } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
 import { StreamingHeader } from "@/app/chat/message/messageComponents/timeline/headers/StreamingHeader";
 import { CollapsedHeader } from "@/app/chat/message/messageComponents/timeline/headers/CollapsedHeader";
@@ -148,7 +148,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
-    lastStepSupportsCompact,
+    lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
   // Check if last step is a search tool for INLINE render type
@@ -172,9 +172,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     );
   }, [lastTurnGroup, parallelActiveTab]);
 
-  const parallelActiveStepSupportsCompact = useMemo(() => {
+  const parallelActiveStepSupportsCollapsedStreaming = useMemo(() => {
     if (!parallelActiveStep) return false;
-    return stepSupportsCompact(parallelActiveStep.packets);
+    return stepSupportsCollapsedStreaming(parallelActiveStep.packets);
   }, [parallelActiveStep]);
 
   // Derive all UI state from inputs
@@ -196,9 +196,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     isExpanded,
     lastTurnGroup,
     lastStep,
-    lastStepSupportsCompact,
+    lastStepSupportsCollapsedStreaming,
     lastStepIsResearchAgent,
-    parallelActiveStepSupportsCompact,
+    parallelActiveStepSupportsCollapsedStreaming,
     isGeneratingImage,
     finalAnswerComing,
   });
