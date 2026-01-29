@@ -397,12 +397,18 @@ def test_folders_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - specific folders requested
+    # Verify hierarchy nodes - specific folders requested plus their parent nodes
+    # The connector walks up the hierarchy to include parent drives/folders
     expected_ids = {
+        SHARED_DRIVE_1_ID,
+        FOLDER_1_ID,
         FOLDER_1_1_ID,
         FOLDER_1_2_ID,
+        SHARED_DRIVE_2_ID,
+        FOLDER_2_ID,
         FOLDER_2_1_ID,
         FOLDER_2_2_ID,
+        ADMIN_MY_DRIVE_ID,
         FOLDER_3_ID,
     }
     assert_hierarchy_nodes_match_expected(

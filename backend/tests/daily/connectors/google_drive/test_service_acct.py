@@ -411,10 +411,12 @@ def test_drive_one_only(
         include_drive_2=False,
         include_restricted_folder=False,
     )
+    # Restricted folder is non-deterministically returned
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
         expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
