@@ -26,12 +26,6 @@ export default async function Page() {
   }
 
   if (!currentUser) {
-<<<<<<< HEAD
-    if (authTypeMetadata?.authType === AuthType.DISABLED) {
-      return redirect("/app");
-    }
-=======
->>>>>>> 82e7f7d32 (auth)
     return redirect("/auth/login");
   }
 

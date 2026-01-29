@@ -39,14 +39,6 @@ export default async function Page(props: PageProps) {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-<<<<<<< HEAD
-  // simply take the user to the home page if Auth is disabled
-  if (authTypeMetadata?.authType === AuthType.DISABLED) {
-    return redirect("/app");
-  }
-
-=======
->>>>>>> 82e7f7d32 (auth)
   // if there are no users, redirect to signup page for initial setup
   // (only for auth types that support self-service signup)
   if (
