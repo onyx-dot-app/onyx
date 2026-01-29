@@ -19,7 +19,11 @@
 
 ---
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/Hvjn76YSIRY?si=3JMg17-ky_EV_Wd3" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=Hvjn76YSIRY">
+    <img src="https://img.youtube.com/vi/Hvjn76YSIRY/hqdefault.jpg" alt="Watch the video" />
+  </a>
+</p>
 
 ---
 
