@@ -12,6 +12,10 @@ global:
 
 postgresql:
   enabled: true
+  # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
+  # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
+  # but since the subchart is aliased as "postgresql", Helm defaults to that name.
+  nameOverride: cloudnative-pg
   cluster:
     instances: 1
     storage:
