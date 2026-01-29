@@ -28,7 +28,7 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
-from onyx.server.utils import mask_credential_dict
+from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
