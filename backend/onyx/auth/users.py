@@ -1354,6 +1354,7 @@ def get_anonymous_user() -> User:
         is_verified=True,
         is_superuser=False,
         role=UserRole.LIMITED,
+        use_memories=False,
     )
     return user
 
