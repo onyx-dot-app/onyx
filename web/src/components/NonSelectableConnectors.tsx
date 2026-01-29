@@ -1,7 +1,6 @@
-import React from "react";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import Label from "@/refresh-components/form/Label";
+import * as InputLayouts from "@/layouts/input-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";
 interface NonSelectableConnectorsProps {
@@ -21,10 +20,8 @@ export const NonSelectableConnectors = ({
 
   return (
     <div className="mt-6 mb-4">
-      <Label>{title}</Label>
-      <Text as="p" mainUiMuted text03 className="mb-3">
-        {description}
-      </Text>
+      <InputLayouts.Label title={title} description={description} />
+
       <div className="p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01">
         <div className="mb-2 flex items-center gap-1.5">
           <SvgLock className="h-3.5 w-3.5 stroke-text-03" />

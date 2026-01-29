@@ -128,7 +128,11 @@ export const FederatedConnectorSelector = ({
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">
-      {label && <Label>{label}</Label>}
+      {label && (
+        <Label>
+          <Text>{label}</Text>
+        </Label>
+      )}
 
       <Text as="p" mainUiMuted text03>
         Documents from selected federated connectors will be searched in

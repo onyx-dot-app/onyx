@@ -4,7 +4,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useField, useFormikContext } from "formik";
 import { Section } from "@/layouts/general-layouts";
-import { cn } from "@/lib/utils";
+import Label from "@/refresh-components/form/Label";
 
 interface OrientationLayoutProps extends LabelLayoutProps {
   children?: React.ReactNode;
@@ -103,10 +103,7 @@ function HorizontalInputLayout({
   ...fieldLabelProps
 }: HorizontalLayoutProps) {
   return (
-    <label
-      htmlFor={name}
-      className={cn(cursorPointer && "cursor-pointer", "w-full")}
-    >
+    <Label name={name}>
       <Section gap={0.25} alignItems="start">
         <Section
           flexDirection="row"
@@ -120,7 +117,7 @@ function HorizontalInputLayout({
         </Section>
         {name && <ErrorLayout name={name} />}
       </Section>
-    </label>
+    </Label>
   );
 }
 
@@ -132,7 +129,7 @@ function HorizontalInputLayout({
  *
  * Exported as `Label` for convenient usage.
  *
- * @param name - The field name to associate the label with (renders as `<label>` if provided)
+ * @param name - The field name to associate the label with (renders as `<Label>` if provided)
  * @param title - The main label text
  * @param description - Additional helper text shown below the title
  * @param optional - Whether to show "(Optional)" indicator
@@ -192,11 +189,7 @@ function LabelLayout({
   );
 
   if (!name) return content;
-  return (
-    <label htmlFor={name} className="w-full">
-      {content}
-    </label>
-  );
+  return <Label name={name}>{content}</Label>;
 }
 
 /**
