@@ -451,7 +451,7 @@ const MemoizedAppSidebarInner = memo(
             leftIcon={SvgDevKit}
             folded={folded}
             href={CRAFT_PATH}
-            onClick={() => posthog?.capture("clicked craft in sidebar")}
+            onClick={() => posthog?.capture("clicked_craft_in_sidebar")}
           >
             Craft
           </SidebarTab>
