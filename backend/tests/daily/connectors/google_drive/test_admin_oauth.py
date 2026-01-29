@@ -325,11 +325,13 @@ def test_folder_and_shared_drive(
     )
 
     # Verify hierarchy nodes - shared_drive_1 and folder_2 with children
+    # SHARED_DRIVE_2_ID is included because folder_2's parent is shared_drive_2
     expected_ids = {
         SHARED_DRIVE_1_ID,
         FOLDER_1_ID,
         FOLDER_1_1_ID,
         FOLDER_1_2_ID,
+        SHARED_DRIVE_2_ID,
         FOLDER_2_ID,
         FOLDER_2_1_ID,
         FOLDER_2_2_ID,
@@ -339,14 +341,17 @@ def test_folder_and_shared_drive(
         FOLDER_1_ID: SHARED_DRIVE_1_ID,
         FOLDER_1_1_ID: FOLDER_1_ID,
         FOLDER_1_2_ID: FOLDER_1_ID,
+        SHARED_DRIVE_2_ID: None,
         FOLDER_2_ID: SHARED_DRIVE_2_ID,
         FOLDER_2_1_ID: FOLDER_2_ID,
         FOLDER_2_2_ID: FOLDER_2_ID,
     }
+    # Restricted folder is non-deterministically returned
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
         expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
