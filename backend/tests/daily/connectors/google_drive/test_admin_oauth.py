@@ -446,8 +446,8 @@ def test_personal_folders_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - only folder_3 from admin's My Drive
-    expected_ids = {FOLDER_3_ID}
+    # Verify hierarchy nodes - folder_3 and its parent (admin's My Drive root)
+    expected_ids = {FOLDER_3_ID, ADMIN_MY_DRIVE_ID}
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
