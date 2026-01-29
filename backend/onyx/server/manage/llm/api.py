@@ -339,6 +339,23 @@ def delete_llm_provider(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
+        default_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.TEXT
+        )
+        if default_model and default_model.provider_id == provider_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete default provider. Select another provider as default",
+            )
+        default_vision_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.VISION
+        )
+        if default_vision_model and default_vision_model.provider_id == provider_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete default vision provider. Select another provider as default",
+            )
+
         remove_llm_provider(db_session, provider_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
