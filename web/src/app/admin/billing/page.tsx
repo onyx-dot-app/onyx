@@ -180,13 +180,8 @@ export default function BillingPage() {
   // Render content based on view
   const renderContent = () => {
     if (isLoading) {
-      return (
-        <div className="flex items-center justify-center h-32">
-          <span className="text-text-03">Loading...</span>
-        </div>
-      );
+      return null;
     }
-
     const animationClass =
       transitionType === "expand"
         ? "billing-view-expand"

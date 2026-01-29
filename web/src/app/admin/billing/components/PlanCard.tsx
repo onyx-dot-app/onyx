@@ -1,23 +1,13 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
+import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
-
-// -----------------------------------------------------------------------------
-// Types
-// -----------------------------------------------------------------------------
-
 export interface PlanFeature {
   icon: React.FunctionComponent<IconProps>;
   text: string;
-}
-
-export interface PlanPricing {
-  amount: string;
-  details: string[];
 }
 
 export interface PlanButton {
@@ -30,7 +20,7 @@ export interface PlanButton {
 interface PlanCardProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;
-  pricing?: PlanPricing;
+  pricing?: string;
   description?: string;
   button: PlanButton;
   features: PlanFeature[];
@@ -38,10 +28,6 @@ interface PlanCardProps {
   isCurrentPlan?: boolean;
   hideFeatures?: boolean;
 }
-
-// -----------------------------------------------------------------------------
-// PlanCard Component
-// -----------------------------------------------------------------------------
 
 export function PlanCard({
   icon: Icon,
@@ -55,41 +41,52 @@ export function PlanCard({
   hideFeatures,
 }: PlanCardProps) {
   return (
-    <Card className="plan-card">
-      <div className="plan-card-content">
-        <div className="plan-card-info">
-          {/* Plan title */}
-          <Section flexDirection="column" alignItems="start" gap={0.25}>
-            <Icon size={24} />
-            <Text headingH3 text04>
-              {title}
-            </Text>
-          </Section>
+    <Card
+      padding={0}
+      gap={0}
+      alignItems="stretch"
+      aria-label={title + " plan card"}
+      className="plan-card"
+    >
+      <Section
+        flexDirection="column"
+        alignItems="stretch"
+        padding={1}
+        height="auto"
+        aria-label={title + " upper content of plan card"}
+      >
+        {/* Title */}
+        <Section
+          flexDirection="column"
+          alignItems="start"
+          gap={0.25}
+          width="full"
+        >
+          <Icon size={24} />
+          <Text headingH3 text04>
+            {title}
+          </Text>
+        </Section>
 
-          {/* Plan pricing details */}
+        {/* Pricing description */}
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="center"
+          gap={0.5}
+          height="auto"
+        >
           {pricing && (
-            <Section flexDirection="row" gap={0.5}>
-              <Text headingH2 text04>
-                {pricing.amount}
-              </Text>
-              <Section flexDirection="column" alignItems="start" gap={0.25}>
-                {pricing.details.map((detail, index) => (
-                  <Text key={index} secondaryBody text03>
-                    {detail}
-                  </Text>
-                ))}
-              </Section>
-            </Section>
+            <Text headingH2 text04>
+              {pricing}
+            </Text>
           )}
-
           {description && (
-            <div className="plan-card-description">
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            </div>
+            <Text mainUiBody text03>
+              {description}
+            </Text>
           )}
-        </div>
+        </Section>
 
         <div className="plan-card-button">
           {isCurrentPlan ? (
@@ -99,54 +96,67 @@ export function PlanCard({
               </Text>
             </div>
           ) : button.href ? (
+            /* External link button  - i.e. Contact Sales button */
             <Button
               main
-              secondary={button.variant === "secondary"}
-              primary={button.variant === "primary"}
+              secondary
               href={button.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full"
             >
               {button.label}
             </Button>
           ) : (
-            <Button
-              main
-              secondary={button.variant === "secondary"}
-              primary={button.variant === "primary"}
-              onClick={button.onClick}
-              className="w-full"
-            >
+            <Button main primary onClick={button.onClick}>
               {button.label}
             </Button>
           )}
         </div>
-      </div>
+      </Section>
 
       <div
         className="plan-card-features-container"
         data-hidden={hideFeatures ? "true" : "false"}
+        aria-label={title + " features section of plan card"}
       >
-        <div className="plan-card-features">
+        <Section
+          flexDirection="column"
+          alignItems="start"
+          justifyContent="start"
+          gap={1}
+          padding={1}
+        >
           {featuresPrefix && (
             <Text mainUiBody text03>
               {featuresPrefix}
             </Text>
           )}
-          <div className="plan-card-feature-list">
+          <Section
+            flexDirection="column"
+            alignItems="start"
+            gap={0.5}
+            height="auto"
+          >
             {features.map((feature) => (
-              <div key={feature.text} className="plan-card-feature-item">
+              <Section
+                key={feature.text}
+                flexDirection="row"
+                alignItems="start"
+                justifyContent="start"
+                gap={0.25}
+                width="fit"
+                height="auto"
+              >
                 <div className="plan-card-feature-icon">
                   <feature.icon size={16} />
                 </div>
                 <Text mainUiBody text03>
                   {feature.text}
                 </Text>
-              </div>
+              </Section>
             ))}
-          </div>
-        </div>
+          </Section>
+        </Section>
       </div>
     </Card>
   );
