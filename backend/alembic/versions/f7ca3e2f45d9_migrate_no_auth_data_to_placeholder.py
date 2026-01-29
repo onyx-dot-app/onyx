@@ -8,7 +8,7 @@ A database trigger is installed that automatically transfers all data from
 the placeholder user to the first real user who registers, then drops itself.
 
 Revision ID: f7ca3e2f45d9
-Revises: 81c22b1e2e78
+Revises: 849b21c732f8
 Create Date: 2026-01-15 12:49:53.802741
 
 """
@@ -23,7 +23,7 @@ from shared_configs.configs import MULTI_TENANT
 
 # revision identifiers, used by Alembic.
 revision = "f7ca3e2f45d9"
-down_revision = "81c22b1e2e78"
+down_revision = "849b21c732f8"
 branch_labels = None
 depends_on = None
 
