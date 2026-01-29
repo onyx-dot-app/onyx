@@ -13,11 +13,14 @@ import os
 import sys
 from pathlib import Path
 
+# Type alias for connector info entries
+ConnectorInfoEntry = dict[str, str | int]
+
 # Connector information for generating knowledge sources section
 # Keys are normalized (lowercase, underscores) directory names
 # Each entry has: summary (with optional {subdirs}), file_pattern, scan_depth
 # NOTE: This is duplicated from agent_instructions.py to avoid circular imports
-CONNECTOR_INFO = {
+CONNECTOR_INFO: dict[str, ConnectorInfoEntry] = {
     "google_drive": {
         "summary": "Documents and files from Google Drive. This may contain information about a user and work they have done.",
         "file_pattern": "`FILE_NAME.json`",
@@ -186,7 +189,7 @@ def build_knowledge_sources_section(files_path: Path) -> str:
                 pass
 
             # Build summary with subdirs
-            summary_template = info.get("summary", f"Data from {item.name}")
+            summary_template = str(info.get("summary", f"Data from {item.name}"))
             if "{subdirs}" in summary_template and subdirs:
                 subdir_str = ", ".join(subdirs)
                 if len(subdirs) == 5:
@@ -200,8 +203,8 @@ def build_knowledge_sources_section(files_path: Path) -> str:
                 summary = summary_template
 
             # Build connector section
-            file_pattern = info.get("file_pattern", "")
-            scan_depth = info.get("scan_depth", DEFAULT_SCAN_DEPTH)
+            file_pattern = str(info.get("file_pattern", ""))
+            scan_depth = int(info.get("scan_depth", DEFAULT_SCAN_DEPTH))
 
             lines = [f"### {item.name}/"]
             lines.append(f"{summary}.\n")
