@@ -263,7 +263,10 @@ def put_llm_provider(
             (llm_provider_upsert_request.api_base != existing_provider.api_base)
             or (
                 llm_provider_upsert_request.custom_config
-                != existing_provider.custom_config
+                and (
+                    llm_provider_upsert_request.custom_config
+                    != existing_provider.custom_config
+                )
             )
         )
         and not llm_provider_upsert_request.api_key_changed
