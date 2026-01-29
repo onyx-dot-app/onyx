@@ -132,7 +132,7 @@ export const ReasoningRenderer: MessageRenderer<
   return children([
     {
       icon: SvgCircle,
-      status: null,
+      status: THINKING_STATUS,
       content: reasoningContent,
       expandedText: reasoningContent,
     },
