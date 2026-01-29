@@ -1,3 +1,5 @@
+import os
+from typing import Any
 from unittest.mock import patch
 
 import litellm
@@ -601,3 +603,84 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
         kwargs = mock_completion.call_args.kwargs
         assert "user" not in kwargs
         assert kwargs["metadata"]["foo"] == "bar"
+
+
+def test_temporary_env_cleanup() -> None:
+    # Assign some environment variables
+    EXPECTED_ENV_VARS = {
+        "TEST_ENV_VAR": "test_value",
+        "ANOTHER_ONE": "1",
+        "THIRD_ONE": "2",
+    }
+
+    CUSTOM_CONFIG = {
+        "TEST_ENV_VAR": "fdsfsdf",
+        "ANOTHER_ONE": "3",
+        "THIS_IS_RANDOM": "123213",
+    }
+
+    for env_var, value in EXPECTED_ENV_VARS.items():
+        os.environ[env_var] = value
+
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+        model_kwargs={"metadata": {"foo": "bar"}},
+        custom_config=CUSTOM_CONFIG,
+    )
+
+    mock_response = litellm.ModelResponse(
+        id="chatcmpl-123",
+        choices=[
+            litellm.Choices(
+                finish_reason="stop",
+                index=0,
+                message=litellm.Message(
+                    content="Hello",
+                    role="assistant",
+                ),
+            )
+        ],
+        model="gpt-3.5-turbo",
+    )
+
+    def on_litellm_completion(**kwargs: dict[str, Any]) -> litellm.ModelResponse:
+        # Validate that the environment variables are those in custom config
+        for env_var, value in CUSTOM_CONFIG.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        return mock_response
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
+        mock_completion.side_effect = on_litellm_completion
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+
+        llm.invoke(messages, user_identity=identity)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert "user" not in kwargs
+        assert kwargs["metadata"]["foo"] == "bar"
+
+        # Check that the environment variables are back to the original values
+        for env_var, value in EXPECTED_ENV_VARS.items():
+            assert env_var in os.environ
+            assert os.environ[env_var] == value
+
+        # Check that temporary env var from CUSTOM_CONFIG is no longer set
+        assert "THIS_IS_RANDOM" not in os.environ

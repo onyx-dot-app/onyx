@@ -515,27 +515,19 @@ class LitellmLLM(LLM):
 def temporary_env(env_variables: dict[str, str]) -> Iterator[None]:
     """
     Temporarily sets the environment variables to the given values.
-
     Then cleans up to the original values.
     """
-    old: dict[str, str] = {}
-    missing = set()
-
-    for k in env_variables:
-        if k in os.environ:
-            old[k] = os.environ[k]
-        else:
-            missing.add(k)
+    # Store original values (None if key didn't exist)
+    original_values: dict[str, str | None] = {
+        key: os.environ.get(key) for key in env_variables
+    }
 
     try:
-        for k, v in env_variables.items():
-            os.environ[k] = str(v)
-
+        os.environ.update(env_variables)
         yield
     finally:
-        # Restore original state
-        for k in env_variables:
-            if k in missing:
-                os.environ.pop(k, None)
+        for key, original_value in original_values.items():
+            if original_value is None:
+                os.environ.pop(key, None)  # Remove if it didn't exist before
             else:
-                os.environ[k] = old[k]
+                os.environ[key] = original_value  # Restore original value
