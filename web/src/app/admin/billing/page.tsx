@@ -85,6 +85,31 @@ export default function BillingPage() {
     }
   }, [searchParams, router, refreshBilling, refreshLicense]);
 
+  // Handle return from customer portal (may have updated subscription/seats)
+  useEffect(() => {
+    const portalReturn = searchParams.get("portal_return");
+    if (portalReturn) {
+      router.replace("/admin/billing", { scroll: false });
+
+      const handlePortalReturn = async () => {
+        if (!NEXT_PUBLIC_CLOUD_ENABLED) {
+          try {
+            await claimLicense();
+            refreshLicense();
+          } catch (error) {
+            console.error(
+              "Failed to claim license after portal return:",
+              error
+            );
+          }
+        }
+        refreshBilling();
+      };
+
+      handlePortalReturn();
+    }
+  }, [searchParams, router, refreshBilling, refreshLicense]);
+
   const handleRefresh = () => {
     refreshBilling();
     if (isSelfHosted) {
@@ -197,6 +222,7 @@ export default function BillingPage() {
           return (
             <Plans
               currentPlan={currentPlan}
+              hasSubscription={!!hasSubscription}
               onCheckout={() => changeView("checkout")}
               hideFeatures={showLicenseActivationInput}
             />

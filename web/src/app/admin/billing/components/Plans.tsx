@@ -20,16 +20,22 @@ const SALES_URL = "https://www.onyx.app/contact-sales";
 
 interface PlansProps {
   currentPlan?: string;
+  hasSubscription?: boolean;
   onCheckout: () => void;
   hideFeatures?: boolean;
 }
 
 export default function Plans({
   currentPlan,
+  hasSubscription,
   onCheckout,
   hideFeatures,
 }: PlansProps) {
-  const isBusinessPlan = currentPlan?.toLowerCase() === "business";
+  // Consider it a business plan if:
+  // 1. plan_type explicitly says "business", OR
+  // 2. user has an active subscription (we only offer business plan)
+  const isBusinessPlan =
+    currentPlan?.toLowerCase() === "business" || hasSubscription;
 
   const BUSINESS_FEATURES: PlanFeature[] = [
     { icon: SvgSearch, text: "Enterprise Search" },

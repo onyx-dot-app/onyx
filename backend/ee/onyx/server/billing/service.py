@@ -14,7 +14,6 @@ from typing import Literal
 
 import httpx
 
-from ee.onyx.configs.app_configs import AIR_GAPPED
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
@@ -104,9 +103,6 @@ async def _make_billing_request(
     Raises:
         BillingServiceError: If request fails
     """
-    if AIR_GAPPED:
-        logger.info(f"Air-gapped mode: skipping billing service call to {path}")
-        raise BillingServiceError("Billing service unavailable in air-gapped mode", 503)
 
     base_url = _get_base_url()
     url = f"{base_url}{path}"
@@ -269,4 +265,5 @@ async def update_seat_count(
         current_seats=data.get("current_seats", 0),
         used_seats=data.get("used_seats", 0),
         message=data.get("message"),
+        license=data.get("license"),
     )

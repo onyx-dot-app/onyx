@@ -79,12 +79,15 @@ async function selfHostedPost<T>(endpoint: string): Promise<T> {
 }
 
 /**
- * Claim a license from the control plane after Stripe checkout.
- * The session_id is passed as a query parameter to verify the checkout.
+ * Claim a license from the control plane (self-hosted only).
+ *
+ * Two modes:
+ * - With sessionId: After Stripe checkout, exchange session_id for license
+ * - Without sessionId: Re-claim using existing license for auth
  */
-export const claimLicense = (sessionId: string) =>
-  selfHostedPost<{ success: boolean; message?: string }>(
-    `/claim?session_id=${encodeURIComponent(sessionId)}`
+export const claimLicense = (sessionId?: string) =>
+  selfHostedPost<{ success: boolean; license?: unknown }>(
+    sessionId ? `/claim?session_id=${encodeURIComponent(sessionId)}` : "/claim"
   );
 
 export const refreshLicenseCache = () =>

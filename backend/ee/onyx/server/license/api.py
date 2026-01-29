@@ -90,24 +90,21 @@ async def get_seat_usage(
 
 @router.post("/claim")
 async def claim_license(
-    session_id: str,
+    session_id: str | None = None,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> LicenseResponse:
     """
-    Claim a license after Stripe checkout (self-hosted only).
+    Claim a license from the control plane (self-hosted only).
 
-    After a user completes Stripe checkout, they're redirected back with a
-    session_id. This endpoint exchanges that session_id for a signed license
-    via the cloud data plane proxy.
+    Two modes:
+    1. With session_id: After Stripe checkout, exchange session_id for license
+    2. Without session_id: Re-claim using existing license for auth
 
-    Flow:
-    1. Self-hosted frontend redirects to Stripe checkout (via cloud proxy)
-    2. User completes payment
-    3. Stripe redirects back to self-hosted instance with session_id
-    4. Frontend calls this endpoint with session_id
-    5. We call cloud data plane /proxy/claim-license to get the signed license
-    6. License is stored locally and cached
+    Use without session_id after:
+    - Updating seats via the billing API
+    - Returning from the Stripe customer portal
+    - Any operation that regenerates the license on control plane
     """
     if MULTI_TENANT:
         raise HTTPException(
@@ -116,14 +113,42 @@ async def claim_license(
         )
 
     try:
-        # Call cloud data plane to claim the license
-        url = f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license"
-        response = requests.post(
-            url,
-            json={"session_id": session_id},
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
+        if session_id:
+            # Claim license after checkout using session_id
+            url = f"{CLOUD_DATA_PLANE_URL}/proxy/claim-license"
+            response = requests.post(
+                url,
+                json={"session_id": session_id},
+                headers={"Content-Type": "application/json"},
+                timeout=30,
+            )
+        else:
+            # Re-claim using existing license for auth
+            from ee.onyx.db.license import get_license
+
+            metadata = get_license_metadata(db_session)
+            if not metadata or not metadata.tenant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No license found. Provide session_id after checkout.",
+                )
+
+            license_row = get_license(db_session)
+            if not license_row or not license_row.license_data:
+                raise HTTPException(
+                    status_code=400, detail="No license found in database"
+                )
+
+            url = f"{CLOUD_DATA_PLANE_URL}/proxy/license/{metadata.tenant_id}"
+            response = requests.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {license_row.license_data}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30,
+            )
+
         response.raise_for_status()
 
         data = response.json()

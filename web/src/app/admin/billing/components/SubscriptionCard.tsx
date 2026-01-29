@@ -41,9 +41,11 @@ export default function SubscriptionCard({
 
   const handleManagePlan = async () => {
     try {
-      const response = await createCustomerPortalSession();
-      if (response.url) {
-        window.location.href = response.url;
+      const response = await createCustomerPortalSession({
+        return_url: `${window.location.origin}/admin/billing?portal_return=true`,
+      });
+      if (response.stripe_customer_portal_url) {
+        window.location.href = response.stripe_customer_portal_url;
       }
     } catch (error) {
       console.error("Failed to open customer portal:", error);

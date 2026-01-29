@@ -67,6 +67,7 @@ class SeatUpdateResponse(BaseModel):
     current_seats: int
     used_seats: int
     message: str | None = None
+    license: str | None = None  # Regenerated license (self-hosted stores this)
 
 
 class StripePublishableKeyResponse(BaseModel):

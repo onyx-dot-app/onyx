@@ -97,7 +97,7 @@ export interface CreateCustomerPortalSessionRequest {
 }
 
 export interface CreateCustomerPortalSessionResponse {
-  url: string;
+  stripe_customer_portal_url: string;
 }
 
 // ----------------------------------------------------------------------------

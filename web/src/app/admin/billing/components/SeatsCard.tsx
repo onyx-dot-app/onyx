@@ -1,21 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import {
-  SvgExternalLink,
-  SvgPlus,
-  SvgRevert,
-  SvgChevronUp,
-  SvgChevronDown,
-} from "@opal/icons";
+import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { SvgExternalLink, SvgPlus, SvgXOctagon } from "@opal/icons";
 import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
-import { updateSeatCount } from "@/lib/billing/actions";
+import { updateSeatCount, claimLicense } from "@/lib/billing/actions";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useUsers from "@/hooks/useUsers";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { formatDateShort } from "@/lib/dateUtils";
@@ -36,18 +31,23 @@ export default function SeatsCard({
   const [error, setError] = useState<string | null>(null);
 
   // Fetch users data (includes both accepted and invited)
-  const { data: usersData } = useUsers({ includeApiKeys: false });
+  const { data: usersData, isLoading: isLoadingUsers } = useUsers({
+    includeApiKeys: false,
+  });
 
   // Get seat data from either billing or license
   const totalSeats = billing?.seats ?? license?.seats ?? 0;
-  // Use license used_seats if available, otherwise count accepted users
-  const usedSeats = license?.used_seats ?? usersData?.accepted?.length ?? 0;
+  const usedSeats = usersData?.accepted?.length ?? 0;
+  const pendingSeats = usersData?.invited?.length ?? 0;
 
   const [newSeatCount, setNewSeatCount] = useState(totalSeats);
 
-  // Calculate pending and remaining seats
-  const pendingSeats = usersData?.invited?.length ?? 0;
+  // Calculate remaining seats
   const remainingSeats = Math.max(0, totalSeats - usedSeats - pendingSeats);
+
+  // Minimum seats is used + pending (can't go below active users)
+  const minRequiredSeats = usedSeats + pendingSeats;
+  const isBelowMinimum = newSeatCount < minRequiredSeats;
 
   const handleStartEdit = () => {
     setNewSeatCount(totalSeats);
@@ -66,8 +66,8 @@ export default function SeatsCard({
       return;
     }
 
-    if (newSeatCount < usedSeats) {
-      setError(`Cannot reduce below ${usedSeats} seats (currently in use)`);
+    // Don't allow confirming if below minimum
+    if (isBelowMinimum) {
       return;
     }
 
@@ -76,6 +76,10 @@ export default function SeatsCard({
 
     try {
       await updateSeatCount({ new_seat_count: newSeatCount });
+      // Re-claim license from control plane to get updated seat count (self-hosted only)
+      if (!NEXT_PUBLIC_CLOUD_ENABLED) {
+        await claimLicense();
+      }
       setIsEditing(false);
       onRefresh?.();
     } catch (err) {
@@ -83,20 +87,6 @@ export default function SeatsCard({
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleReset = () => {
-    setNewSeatCount(totalSeats);
-  };
-
-  const handleDecrement = () => {
-    if (newSeatCount > usedSeats) {
-      setNewSeatCount(newSeatCount - 1);
-    }
-  };
-
-  const handleIncrement = () => {
-    setNewSeatCount(newSeatCount + 1);
   };
 
   const seatDifference = newSeatCount - totalSeats;
@@ -135,57 +125,52 @@ export default function SeatsCard({
             height="auto"
           >
             <InputLayouts.Vertical title="Seats">
-              <InputTypeIn
-                value={newSeatCount.toString()}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  if (!isNaN(val) && val >= 0) {
-                    setNewSeatCount(val);
-                  }
-                }}
-                showClearButton={false}
-                className="billing-seats-edit-input"
-                rightSection={
-                  <Section
-                    flexDirection="row"
-                    gap={0.5}
-                    width="fit"
-                    height="auto"
-                    alignItems="center"
-                  >
-                    <IconButton
-                      icon={SvgRevert}
-                      onClick={handleReset}
-                      disabled={newSeatCount === totalSeats}
-                      internal
-                    />
-                    <div className="billing-stepper-container">
-                      <IconButton
-                        icon={SvgChevronUp}
-                        onClick={handleIncrement}
-                        internal
-                        // iconClassName="w-3 h-3"
-                      />
-                      <IconButton
-                        icon={SvgChevronDown}
-                        onClick={handleDecrement}
-                        disabled={newSeatCount <= usedSeats}
-                        internal
-                        // iconClassName="w-3 h-3"
-                      />
-                    </div>
-                  </Section>
-                }
+              <InputNumber
+                value={newSeatCount}
+                onChange={setNewSeatCount}
+                min={1}
+                defaultValue={totalSeats}
+                showReset
+                variant={isBelowMinimum ? "error" : "primary"}
               />
             </InputLayouts.Vertical>
 
-            {seatDifference !== 0 && (
+            {isBelowMinimum ? (
+              <Section
+                flexDirection="row"
+                gap={0.25}
+                alignItems="start"
+                height="auto"
+              >
+                <SvgXOctagon
+                  size={12}
+                  className="stroke-status-error-05 mt-0.5 flex-shrink-0"
+                />
+                <Text secondaryBody className="text-status-error-05">
+                  You cannot set seats below current{" "}
+                  <Text
+                    secondaryBody
+                    className="text-status-error-05 font-semibold"
+                  >
+                    {minRequiredSeats}
+                  </Text>{" "}
+                  seats in use/pending.{" "}
+                  <Link
+                    href="/admin/users"
+                    className="underline hover:no-underline"
+                  >
+                    Remove users
+                  </Link>{" "}
+                  first before adjusting seats.
+                </Text>
+              </Section>
+            ) : seatDifference !== 0 ? (
               <Text secondaryBody text03>
                 {Math.abs(seatDifference)} seat
                 {Math.abs(seatDifference) !== 1 ? "s" : ""} to be{" "}
                 {isAdding ? "added" : "removed"}
               </Text>
-            )}
+            ) : null}
 
             {error && (
               <Text secondaryBody className="billing-error-text">
@@ -245,7 +230,9 @@ export default function SeatsCard({
             main
             primary
             onClick={handleConfirm}
-            disabled={isSubmitting || newSeatCount === totalSeats}
+            disabled={
+              isSubmitting || newSeatCount === totalSeats || isBelowMinimum
+            }
           >
             {isSubmitting ? "Saving..." : "Confirm Change"}
           </Button>
@@ -285,7 +272,13 @@ export default function SeatsCard({
             View Users
           </Button>
           {billing && (
-            <Button main secondary onClick={handleStartEdit} leftIcon={SvgPlus}>
+            <Button
+              main
+              secondary
+              onClick={handleStartEdit}
+              leftIcon={SvgPlus}
+              disabled={isLoadingUsers}
+            >
               Update Seats
             </Button>
           )}

@@ -106,21 +106,6 @@
   color: var(--status-success-05);
 }
 
-/* .billing-seats-input {
-  width: 5rem;
-  text-align: center;
-}
-
-.billing-seats-edit-input {
-  min-width: 0;
-} */
-/*
-.billing-stepper-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-} */
-
 /* -----------------------------------------------------------------------------
  * Checkout View
  * -------------------------------------------------------------------------- */
@@ -173,6 +158,11 @@
 
 .billing-error-text {
   color: var(--status-error-05);
+}
+
+.billing-payment-section {
+  padding-top: 1rem;
+  width: 100%;
 }
 
 /* -----------------------------------------------------------------------------
