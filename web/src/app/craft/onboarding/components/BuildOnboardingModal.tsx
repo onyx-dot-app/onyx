@@ -505,7 +505,19 @@ export default function BuildOnboardingModal({
             {currentStep === "user-info" && (
               <button
                 type="button"
-                onClick={isLastStep ? handleSubmit : handleNext}
+                onClick={() => {
+                  posthog?.capture("completed_craft_user_info", {
+                    first_name: firstName.trim(),
+                    last_name: lastName.trim() || undefined,
+                    work_area: workArea,
+                    level: level,
+                  });
+                  if (isLastStep) {
+                    handleSubmit();
+                  } else {
+                    handleNext();
+                  }
+                }}
                 disabled={!canProceedUserInfo || isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
