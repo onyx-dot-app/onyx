@@ -240,8 +240,10 @@ const Content = React.forwardRef<
   WithoutStyles<React.HTMLAttributes<HTMLDivElement>>
 >(({ children, ...props }, ref) => {
   return (
-    <CollapsibleContent ref={ref} className="pt-4" {...props}>
-      {children}
+    <CollapsibleContent>
+      <div ref={ref} className="pt-4" {...props}>
+        {children}
+      </div>
     </CollapsibleContent>
   );
 });
