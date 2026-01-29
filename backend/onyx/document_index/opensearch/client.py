@@ -226,19 +226,23 @@ class OpenSearchClient:
         # TODO(andrei): Implement this.
         raise NotImplementedError
 
-    def index_document(self, document: DocumentChunk) -> None:
+    def index_document(
+        self, document: DocumentChunk, update_if_exists: bool = False
+    ) -> None:
         """Indexes a document.
-
-        Indexing will fail if a document with the same ID already exists.
 
         Args:
             document: The document to index. In Onyx this is a chunk of a
                 document, OpenSearch simply refers to this as a document as
                 well.
+            update_if_exists: Whether to update the document if it already
+                exists. If False, will raise an exception if the document
+                already exists. Defaults to False.
 
         Raises:
             Exception: There was an error indexing the document. This includes
-                the case where a document with the same ID already exists.
+                the case where a document with the same ID already exists if
+                update_if_exists is False.
         """
         document_chunk_id: str = get_opensearch_doc_chunk_id(
             document_id=document.document_id,
@@ -248,9 +252,14 @@ class OpenSearchClient:
         body: dict[str, Any] = document.model_dump(exclude_none=True)
         # client.create will raise if a doc with the same ID exists.
         # client.index does not do this.
-        result = self._client.create(
-            index=self._index_name, id=document_chunk_id, body=body
-        )
+        if update_if_exists:
+            result = self._client.index(
+                index=self._index_name, id=document_chunk_id, body=body
+            )
+        else:
+            result = self._client.create(
+                index=self._index_name, id=document_chunk_id, body=body
+            )
         result_id = result.get("_id", "")
         # Sanity check.
         if result_id != document_chunk_id:

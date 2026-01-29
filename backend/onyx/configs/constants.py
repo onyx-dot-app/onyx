@@ -398,6 +398,7 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
+    OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
@@ -555,6 +556,13 @@ class OnyxCeleryTask:
     KG_CLUSTERING_ONLY = "kg_clustering_only"
     CHECK_KG_PROCESSING_CLUSTERING_ONLY = "check_kg_processing_clustering_only"
     KG_RESET_SOURCE_INDEX = "kg_reset_source_index"
+
+    CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
+        "check_for_documents_for_opensearch_migration_task"
+    )
+    MIGRATE_DOCUMENT_FROM_VESPA_TO_OPENSEARCH_TASK = (
+        "migrate_document_from_vespa_to_opensearch_task"
+    )
 
 
 # this needs to correspond to the matching entry in supervisord

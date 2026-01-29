@@ -194,3 +194,28 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
+
+
+class OpenSearchDocumentMigrationStatus(str, PyEnum):
+    """Status for Vespa to OpenSearch migration per document."""
+
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PERMANENTLY_FAILED = "permanently_failed"
+
+    def is_terminal(self) -> bool:
+        return self in {
+            OpenSearchDocumentMigrationStatus.COMPLETED,
+            OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED,
+        }
+
+    def needs_retry(self) -> bool:
+        return self == OpenSearchDocumentMigrationStatus.FAILED
+
+
+class OpenSearchTenantMigrationStatus(str, PyEnum):
+    """Status for tenant-level OpenSearch migration."""
+
+    PENDING = "pending"
+    COMPLETED = "completed"
