@@ -11,7 +11,9 @@
 <p align="center">
   <a href="https://docs.onyx.app/overview/core_features/craft"><img alt="Documentation" src="https://img.shields.io/badge/docs-onyx.app-blue?style=flat-square" /></a>
   <a href="https://github.com/onyx-dot-app/onyx/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-green?style=flat-square" /></a>
-  <a href="https://discord.gg/TDJ59cGV2X"><img alt="Discord" src="https://img.shields.io/discord/1234567890?style=flat-square&label=discord" /></a>
+    <a href="https://discord.gg/TDJ59cGV2X" target="_blank">
+        <img src="https://img.shields.io/badge/discord-join-blue.svg?logo=discord&logoColor=white" alt="Discord" />
+    </a>
   <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/onyx-dot-app/onyx" />
 </p>
 
