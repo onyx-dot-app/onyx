@@ -342,9 +342,6 @@ def sync_model_configurations(
             )
             new_count += 1
 
-    if new_count > 0:
-        db_session.commit()
-
     return new_count
 
 

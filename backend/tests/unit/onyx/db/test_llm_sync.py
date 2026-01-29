@@ -47,7 +47,7 @@ class TestSyncModelConfigurations:
 
             assert result == 2  # Two new models
             assert mock_session.execute.call_count == 2
-            mock_session.commit.assert_called_once()
+            mock_session.commit.call_count == 4  # 2 for model config + 2 for flow mapping
 
     def test_skips_existing_models(self) -> None:
         """Test that existing models are not overwritten."""

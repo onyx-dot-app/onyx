@@ -2703,7 +2703,7 @@ class FlowMapping(Base):
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration",
-        back_populates="flow_mappings",
+        back_populates="flows",
     )
 
     __table_args__ = (
