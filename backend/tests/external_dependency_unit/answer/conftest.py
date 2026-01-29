@@ -27,14 +27,15 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             provider=LlmProviderNames.OPENAI,
             api_key=os.environ.get("OPENAI_API_KEY", "test"),
             is_public=True,
-            default_model_name="gpt-4o-mini",
             groups=[],
         )
         provider = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_request,
             db_session=db_session,
         )
-        update_default_provider(provider.id, db_session)
+        update_default_provider(
+            provider_id=provider.id, model="gpt-4o-mini", db_session=db_session
+        )
     except Exception as exc:  # pragma: no cover - only hits on duplicate setup issues
         print(f"Note: Could not create LLM provider: {exc}")
 

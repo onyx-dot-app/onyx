@@ -28,7 +28,8 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
-from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_default_model
+from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import User
@@ -338,15 +339,23 @@ class SessionManager:
                 )
 
         # Fallback to system default
-        default_provider = fetch_default_provider(self._db_session)
-        if not default_provider:
+        default_model = fetch_default_model(self._db_session)
+        if not default_model:
             raise ValueError("No LLM provider configured")
 
+        provider = fetch_existing_llm_provider_by_id(
+            id=default_model.provider_id,
+            db_session=self._db_session,
+        )
+
+        if not provider:
+            raise ValueError("No LLM provider found")
+
         return LLMProviderConfig(
-            provider=default_provider.provider,
-            model_name=default_provider.default_model_name,
-            api_key=default_provider.api_key,
-            api_base=default_provider.api_base,
+            provider=provider.provider,
+            model_name=default_model.model_name,
+            api_key=provider.api_key,
+            api_base=provider.api_base,
         )
 
     # =========================================================================

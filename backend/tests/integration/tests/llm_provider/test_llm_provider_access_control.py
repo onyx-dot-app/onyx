@@ -376,13 +376,13 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             persona=persona,
             user=admin_model,
         )
-        assert allowed_llm.config.model_name == restricted_provider.default_model_name
+        assert allowed_llm.config.model_name == "gpt-4o-mini"
 
         fallback_llm = get_llm_for_persona(
             persona=persona,
             user=basic_model,
         )
-        assert fallback_llm.config.model_name == default_provider.default_model_name
+        assert fallback_llm.config.model_name == "gpt-4o"
 
 
 def test_list_llm_provider_basics_excludes_non_public_unrestricted(

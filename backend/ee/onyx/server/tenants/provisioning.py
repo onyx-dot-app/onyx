@@ -300,12 +300,14 @@ def configure_default_api_keys(db_session: Session) -> None:
 
     has_set_default_provider = False
 
-    def _upsert(request: LLMProviderUpsertRequest) -> None:
+    def _upsert(request: LLMProviderUpsertRequest, default_model: str) -> None:
         nonlocal has_set_default_provider
         try:
             provider = upsert_llm_provider(request, db_session)
             if not has_set_default_provider:
-                update_default_provider(provider.id, db_session)
+                update_default_provider(
+                    provider_id=provider.id, model=default_model, db_session=db_session
+                )
                 has_set_default_provider = True
         except Exception as e:
             logger.error(f"Failed to configure {request.provider} provider: {e}")
@@ -330,7 +332,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(openai_provider)
+        _upsert(openai_provider, default_model_name)
 
         # Create default image generation config using the OpenAI API key
         try:
@@ -366,7 +368,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(anthropic_provider)
+        _upsert(anthropic_provider, default_model_name)
     else:
         logger.info(
             "ANTHROPIC_DEFAULT_API_KEY not set, skipping Anthropic provider configuration"
@@ -398,7 +400,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(vertexai_provider)
+        _upsert(vertexai_provider, default_model_name)
     else:
         logger.info(
             "VERTEXAI_DEFAULT_CREDENTIALS not set, skipping Vertex AI provider configuration"
@@ -435,7 +437,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key_changed=True,
             is_auto_mode=True,
         )
-        _upsert(openrouter_provider)
+        _upsert(openrouter_provider, default_model_name)
     else:
         logger.info(
             "OPENROUTER_DEFAULT_API_KEY not set, skipping OpenRouter provider configuration"

@@ -42,7 +42,6 @@ def _create_provider_with_api(
     llm_provider_data = {
         "name": name,
         "provider": provider_type,
-        "default_model_name": default_model,
         "api_key": "test-api-key-for-auto-mode-testing",
         "api_base": None,
         "api_version": None,

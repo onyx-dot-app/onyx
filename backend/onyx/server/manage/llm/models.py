@@ -99,7 +99,6 @@ class LLMProvider(BaseModel):
 class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
-    default_model_name: str | None = None
     api_key_changed: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
 

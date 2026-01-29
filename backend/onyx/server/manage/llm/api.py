@@ -286,11 +286,6 @@ def put_llm_provider(
                 deduplicated_personas.append(persona_id)
         llm_provider_upsert_request.personas = deduplicated_personas
 
-    # Default model must be visible
-    for model_configuration in llm_provider_upsert_request.model_configurations:
-        if model_configuration.name == llm_provider_upsert_request.default_model_name:
-            model_configuration.is_visible = True
-
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:

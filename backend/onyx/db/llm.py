@@ -234,7 +234,6 @@ def upsert_llm_provider(
         # Set to None if the dict is empty after filtering
         custom_config = custom_config if custom_config else None
 
-    existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     existing_llm_provider.api_key = llm_provider_upsert_request.api_key
     existing_llm_provider.api_base = llm_provider_upsert_request.api_base
@@ -276,13 +275,6 @@ def upsert_llm_provider(
             supports_image_input=model_configuration.supports_image_input or False,
             display_name=model_configuration.display_name,
         )
-
-        if model_configuration.name == llm_provider_upsert_request.default_model_name:
-            update_default_provider(
-                provider_id=existing_llm_provider.id,
-                model=model_configuration.name,
-                db_session=db_session,
-            )
 
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
@@ -625,6 +617,8 @@ def update_default_provider(provider_id: int, model: str, db_session: Session) -
         # required to ensure that the below does not cause a unique constraint violation
         db_session.flush()
 
+    # Default model must be visible
+    model_config.is_visible = True
     new_default.is_default = True
     db_session.commit()
 
@@ -678,6 +672,8 @@ def update_default_vision_provider(
         # required to ensure that the below does not cause a unique constraint violation
         db_session.flush()
 
+    # Default vision model must be visible
+    model_config.is_visible = True
     new_default.is_default = True
     db_session.commit()
 
