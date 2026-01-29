@@ -259,12 +259,21 @@ def put_llm_provider(
     if (
         MULTI_TENANT
         and existing_provider
-        and (llm_provider_upsert_request.api_base != existing_provider.api_base)
+        and (
+            (llm_provider_upsert_request.api_base != existing_provider.api_base)
+            or (
+                llm_provider_upsert_request.custom_config
+                and (
+                    llm_provider_upsert_request.custom_config
+                    != existing_provider.custom_config
+                )
+            )
+        )
         and not llm_provider_upsert_request.api_key_changed
     ):
         raise HTTPException(
             status_code=400,
-            detail="API base cannot be changed without changing the API key",
+            detail="API base and/or custom config cannot be changed without changing the API key",
         )
 
     persona_ids = llm_provider_upsert_request.personas

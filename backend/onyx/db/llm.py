@@ -226,7 +226,7 @@ def upsert_llm_provider(
             k: v for k, v in custom_config.items() if v is not None and v.strip() != ""
         }
         # Set to None if the dict is empty after filtering
-        custom_config = custom_config if custom_config else None
+        custom_config = custom_config or None
 
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     existing_llm_provider.api_key = llm_provider_upsert_request.api_key

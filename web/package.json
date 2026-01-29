@@ -124,6 +124,7 @@
     "@types/uuid": "^9.0.8",
     "@typescript/native-preview": "7.0.0-dev.20251222.1",
     "babel-plugin-react-compiler": "^1.0.0",
+    "baseline-browser-mapping": "^2.9.19",
     "chromatic": "^11.25.2",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.0.1",
