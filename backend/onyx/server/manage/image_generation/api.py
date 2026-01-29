@@ -11,7 +11,7 @@ from onyx.db.image_generation import get_all_image_generation_configs
 from onyx.db.image_generation import get_image_generation_config
 from onyx.db.image_generation import set_default_image_generation_config
 from onyx.db.image_generation import unset_default_image_generation_config
-from onyx.db.llm import remove_llm_provider__no_commit
+from onyx.db.llm import remove_llm_provider
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
@@ -430,7 +430,9 @@ def update_config(
         existing_config.model_configuration_id = new_model_config_id
 
         # 5. Delete old LLM provider (safe now - nothing references it)
-        remove_llm_provider__no_commit(db_session, old_llm_provider_id)
+        remove_llm_provider(
+            db_session=db_session, provider_id=old_llm_provider_id, commit=False
+        )
 
         db_session.commit()
         db_session.refresh(existing_config)
@@ -464,7 +466,9 @@ def delete_config(
         delete_image_generation_config__no_commit(db_session, image_provider_id)
 
         # Clean up the orphaned LLM provider (it was exclusively for image gen)
-        remove_llm_provider__no_commit(db_session, llm_provider_id)
+        remove_llm_provider(
+            db_session=db_session, provider_id=llm_provider_id, commit=False
+        )
 
         db_session.commit()
     except HTTPException:
