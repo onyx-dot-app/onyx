@@ -29,7 +29,7 @@ from onyx.db.opensearch_migration import (
 from onyx.db.opensearch_migration import (
     increment_num_times_observed_no_additional_docs_to_populate_migration_table_with_commit,
 )
-from onyx.db.opensearch_migration import is_document_migration_permanently_failed
+from onyx.db.opensearch_migration import should_document_migration_be_permanently_failed
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -167,6 +167,10 @@ def check_for_documents_for_opensearch_migration_task(
                 increment_num_times_observed_no_additional_docs_to_populate_migration_table_with_commit(
                     db_session
                 )
+                # TODO(andrei): Once we've done this enough times and the number
+                # of documents matches the number of migration records, we can
+                # be done with this task and update
+                # document_migration_record_table_population_status.
                 return True
 
             # Create the migration records for the next batch of documents with
@@ -207,6 +211,11 @@ def migrate_documents_from_vespa_to_opensearch_task(
 
     Should not execute meaningful logic at the same time as
     check_for_documents_for_opensearch_migration_task.
+
+    Returns:
+        None if OpenSearch migration is not enabled, or if the lock could not be
+            acquired; effectively a no-op. True if the task completed
+            successfully. False if the task failed.
     """
     if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         task_logger.warning(
@@ -256,6 +265,12 @@ def migrate_documents_from_vespa_to_opensearch_task(
                 increment_num_times_observed_no_additional_docs_to_migrate_with_commit(
                     db_session
                 )
+                # TODO(andrei): Once we've done this enough times and
+                # document_migration_record_table_population_status is done, we
+                # can be done with this task and update
+                # overall_document_migration_status accordingly. Note that this
+                # includes marking connectors as needing reindexing if some
+                # migrations failed.
                 return True
 
             search_settings = get_current_search_settings(db_session)
@@ -309,10 +324,12 @@ def migrate_documents_from_vespa_to_opensearch_task(
                 finally:
                     record.attempts_count += 1
                     record.last_attempt_at = datetime.now(timezone.utc)
-                    if is_document_migration_permanently_failed(record):
+                    if should_document_migration_be_permanently_failed(record):
                         record.status = (
                             OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
                         )
+                        # TODO(andrei): Not necessarily here but if this happens
+                        # we'll need to mark the connector as needing reindex.
 
             db_session.commit()
     except Exception:

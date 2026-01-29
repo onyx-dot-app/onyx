@@ -211,15 +211,6 @@ class OpenSearchDocumentMigrationStatus(str, PyEnum):
     FAILED = "failed"
     PERMANENTLY_FAILED = "permanently_failed"
 
-    def is_terminal(self) -> bool:
-        return self in {
-            OpenSearchDocumentMigrationStatus.COMPLETED,
-            OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED,
-        }
-
-    def needs_retry(self) -> bool:
-        return self == OpenSearchDocumentMigrationStatus.FAILED
-
 
 class OpenSearchTenantMigrationStatus(str, PyEnum):
     """Status for tenant-level OpenSearch migration."""
