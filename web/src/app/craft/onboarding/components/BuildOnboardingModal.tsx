@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { usePostHog } from "posthog-js/react";
 import { SvgArrowRight, SvgArrowLeft, SvgX, SvgLoader } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -109,6 +110,8 @@ export default function BuildOnboardingModal({
   onLlmComplete,
   onClose,
 }: BuildOnboardingModalProps) {
+  const posthog = usePostHog();
+
   // Compute steps based on mode
   const steps = useMemo(
     () => getStepsForMode(mode, isAdmin, allProvidersConfigured, hasUserInfo),
@@ -376,6 +379,7 @@ export default function BuildOnboardingModal({
         level: level || undefined,
       });
 
+      posthog?.capture("completed_craft_onboarding");
       onClose();
     } catch (error) {
       console.error("Error completing onboarding:", error);

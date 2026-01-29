@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion } from "motion/react";
+import { usePostHog } from "posthog-js/react";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
 import Text from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";
@@ -14,6 +16,13 @@ export default function BuildModeIntroContent({
   onClose,
   onTryBuildMode,
 }: BuildModeIntroContentProps) {
+  const posthog = usePostHog();
+
+  // Track when user sees the craft intro
+  useEffect(() => {
+    posthog?.capture("saw_craft_intro");
+  }, [posthog]);
+
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
       <div className="flex flex-col items-center gap-7 w-full">
@@ -66,6 +75,7 @@ export default function BuildModeIntroContent({
             className="!border-white !text-white hover:!bg-white/10 active:!bg-white/20 !w-[160px]"
             onClick={(e) => {
               e.stopPropagation();
+              posthog?.capture("clicked_go_home");
               onClose();
             }}
           >
@@ -76,6 +86,7 @@ export default function BuildModeIntroContent({
             className="!bg-white !text-black hover:!bg-gray-200 active:!bg-gray-300 !w-[160px]"
             onClick={(e) => {
               e.stopPropagation();
+              posthog?.capture("clicked_try_craft");
               onTryBuildMode();
             }}
           >
