@@ -79,13 +79,12 @@ import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
-import { useActionsLayout } from "@/layouts/actions-layouts";
+import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
-import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { deleteAgent } from "@/lib/agents";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -267,21 +266,16 @@ interface OpenApiToolCardProps {
 
 function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
-  const actionsLayouts = useActionsLayout();
-
-  useOnMount(() => actionsLayouts.setIsFolded(true));
 
   return (
-    <actionsLayouts.Provider>
-      <ActionsLayouts.Root>
-        <ActionsLayouts.Header
-          title={tool.display_name || tool.name}
-          description={tool.description}
-          icon={SvgActions}
-          rightChildren={<SwitchField name={toolFieldName} />}
-        />
-      </ActionsLayouts.Root>
-    </actionsLayouts.Provider>
+    <ExpandableCard.Root defaultFolded>
+      <ActionsLayouts.Header
+        title={tool.display_name || tool.name}
+        description={tool.description}
+        icon={SvgActions}
+        rightChildren={<SwitchField name={toolFieldName} />}
+      />
+    </ExpandableCard.Root>
   );
 }
 
@@ -296,7 +290,7 @@ function MCPServerCard({
   tools: enabledTools,
   isLoading,
 }: MCPServerCardProps) {
-  const actionsLayouts = useActionsLayout();
+  const [isFolded, setIsFolded] = useState(false);
   const { values, setFieldValue, getFieldMeta } = useFormikContext<any>();
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
@@ -313,96 +307,91 @@ function MCPServerCard({
   }).length;
 
   return (
-    <actionsLayouts.Provider>
-      <ActionsLayouts.Root>
-        <ActionsLayouts.Header
-          title={server.name}
-          description={server.description ?? server.server_url}
-          icon={getActionIcon(server.server_url, server.name)}
-          rightChildren={
-            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-              <EnabledCount
-                enabledCount={enabledCount}
-                totalCount={enabledTools.length}
-              />
-              <SwitchField
-                name={`${serverFieldName}.enabled`}
-                onCheckedChange={(checked) => {
-                  enabledTools.forEach((tool) => {
-                    setFieldValue(
-                      `${serverFieldName}.tool_${tool.id}`,
-                      checked
-                    );
-                  });
-                  if (!checked) return;
-                  actionsLayouts.setIsFolded(false);
-                }}
-              />
-            </GeneralLayouts.Section>
-          }
-        >
+    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
+      <ActionsLayouts.Header
+        title={server.name}
+        description={server.description}
+        icon={getActionIcon(server.server_url, server.name)}
+        rightChildren={
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              leftSearchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+            <EnabledCount
+              enabledCount={enabledCount}
+              totalCount={enabledTools.length}
             />
-            {enabledTools.length > 0 && (
-              <Button
-                internal
-                rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
-                onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
-              >
-                {actionsLayouts.isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
+            <SwitchField
+              name={`${serverFieldName}.enabled`}
+              onCheckedChange={(checked) => {
+                enabledTools.forEach((tool) => {
+                  setFieldValue(`${serverFieldName}.tool_${tool.id}`, checked);
+                });
+                if (!checked) return;
+                setIsFolded(false);
+              }}
+            />
           </GeneralLayouts.Section>
-        </ActionsLayouts.Header>
-        {isLoading ? (
+        }
+      >
+        <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+          <InputTypeIn
+            placeholder="Search tools..."
+            variant="internal"
+            leftSearchIcon
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {enabledTools.length > 0 && (
+            <Button
+              internal
+              rightIcon={isFolded ? SvgExpand : SvgFold}
+              onClick={() => setIsFolded((prev) => !prev)}
+            >
+              {isFolded ? "Expand" : "Fold"}
+            </Button>
+          )}
+        </GeneralLayouts.Section>
+      </ActionsLayouts.Header>
+      {isLoading ? (
+        <ActionsLayouts.Content>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Card key={index} padding={0.75}>
+              <GeneralLayouts.LineItemLayout
+                // We provide dummy values here.
+                // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
+                title="..."
+                description="..."
+                rightChildren={<></>}
+                loading
+              />
+            </Card>
+          ))}
+        </ActionsLayouts.Content>
+      ) : (
+        enabledTools.length > 0 &&
+        filteredTools.length > 0 && (
           <ActionsLayouts.Content>
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Card key={index} padding={0.75}>
-                <GeneralLayouts.LineItemLayout
-                  // We provide dummy values here.
-                  // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
-                  title="..."
-                  description="..."
-                  rightChildren={<></>}
-                  loading
-                />
-              </Card>
+            {filteredTools.map((tool) => (
+              <ActionsLayouts.Tool
+                key={tool.id}
+                name={`${serverFieldName}.tool_${tool.id}`}
+                title={tool.name}
+                description={tool.description}
+                icon={tool.icon ?? SvgSliders}
+                disabled={
+                  !tool.isAvailable ||
+                  !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
+                }
+                rightChildren={
+                  <SwitchField
+                    name={`${serverFieldName}.tool_${tool.id}`}
+                    disabled={!isServerEnabled}
+                  />
+                }
+              />
             ))}
           </ActionsLayouts.Content>
-        ) : (
-          enabledTools.length > 0 &&
-          filteredTools.length > 0 && (
-            <ActionsLayouts.Content>
-              {filteredTools.map((tool) => (
-                <ActionsLayouts.Tool
-                  key={tool.id}
-                  name={`${serverFieldName}.tool_${tool.id}`}
-                  title={tool.name}
-                  description={tool.description}
-                  icon={tool.icon ?? SvgSliders}
-                  disabled={
-                    !tool.isAvailable ||
-                    !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
-                  }
-                  rightChildren={
-                    <SwitchField
-                      name={`${serverFieldName}.tool_${tool.id}`}
-                      disabled={!isServerEnabled}
-                    />
-                  }
-                />
-              ))}
-            </ActionsLayouts.Content>
-          )
-        )}
-      </ActionsLayouts.Root>
-    </actionsLayouts.Provider>
+        )
+      )}
+    </ExpandableCard.Root>
   );
 }
 
@@ -508,8 +497,9 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData } = useMcpServersForAgentEditor();
-  const { openApiTools: openApiToolsRaw } = useOpenApiTools();
+  const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
+  const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
+    useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -519,7 +509,8 @@ export default function AgentEditorPage({
   // - image-gen
   // - web-search
   // - code-interpreter
-  const { tools: availableTools } = useAvailableTools();
+  const { tools: availableTools, isLoading: isToolsLoading } =
+    useAvailableTools();
   const searchTool = availableTools?.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -968,6 +959,14 @@ export default function AgentEditorPage({
     } catch (error) {
       console.error("Upload error:", error);
     }
+  }
+
+  // Wait for async tool data before rendering the form. Formik captures
+  // initialValues on mount — if tools haven't loaded yet, the initial values
+  // won't include MCP tool fields. Later, toggling those fields would make
+  // the form permanently dirty since they have no baseline to compare against.
+  if (isToolsLoading || isMcpLoading || isOpenApiLoading) {
+    return null;
   }
 
   return (

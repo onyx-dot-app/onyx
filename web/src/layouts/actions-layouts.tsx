@@ -6,47 +6,46 @@
  * layout that separates presentation from business logic, making it easier to
  * build and maintain action-related UIs.
  *
+ * Built on top of ExpandableCard layouts for the underlying card structure.
+ *
  * @example
  * ```tsx
  * import * as ActionsLayouts from "@/layouts/actions-layouts";
+ * import * as ExpandableCard from "@/layouts/expandable-card-layouts";
  * import { SvgServer } from "@opal/icons";
  * import Switch from "@/components/ui/switch";
  *
  * function MyActionCard() {
- *   const { Provider } = useActionsLayout();
- *
  *   return (
- *     <Provider>
- *       <ActionsLayouts.Root>
- *         <ActionsLayouts.Header
- *           title="My MCP Server"
- *           description="A powerful MCP server for automation"
- *           icon={SvgServer}
+ *     <ExpandableCard.Root>
+ *       <ActionsLayouts.Header
+ *         title="My MCP Server"
+ *         description="A powerful MCP server for automation"
+ *         icon={SvgServer}
+ *         rightChildren={
+ *           <Button onClick={handleDisconnect}>Disconnect</Button>
+ *         }
+ *       />
+ *       <ActionsLayouts.Content>
+ *         <ActionsLayouts.Tool
+ *           title="File Reader"
+ *           description="Read files from the filesystem"
+ *           icon={SvgFile}
  *           rightChildren={
- *             <Button onClick={handleDisconnect}>Disconnect</Button>
+ *             <Switch checked={enabled} onCheckedChange={setEnabled} />
  *           }
  *         />
- *         <ActionsLayouts.Content>
- *           <ActionsLayouts.Tool
- *             title="File Reader"
- *             description="Read files from the filesystem"
- *             icon={SvgFile}
- *             rightChildren={
- *               <Switch checked={enabled} onCheckedChange={setEnabled} />
- *             }
- *           />
- *           <ActionsLayouts.Tool
- *             title="Web Search"
- *             description="Search the web"
- *             icon={SvgGlobe}
- *             disabled={true}
- *             rightChildren={
- *               <Switch checked={false} disabled />
- *             }
- *           />
- *         </ActionsLayouts.Content>
- *       </ActionsLayouts.Root>
- *     </Provider>
+ *         <ActionsLayouts.Tool
+ *           title="Web Search"
+ *           description="Search the web"
+ *           icon={SvgGlobe}
+ *           disabled={true}
+ *           rightChildren={
+ *             <Switch checked={false} disabled />
+ *           }
+ *         />
+ *       </ActionsLayouts.Content>
+ *     </ExpandableCard.Root>
  *   );
  * }
  * ```
@@ -54,145 +53,13 @@
 
 "use client";
 
-import React, {
-  HtmlHTMLAttributes,
-  createContext,
-  useContext,
-  useState,
-  useMemo,
-  useRef,
-  useLayoutEffect,
-  Dispatch,
-  SetStateAction,
-} from "react";
-import { cn } from "@/lib/utils";
+import React, { HtmlHTMLAttributes } from "react";
 import type { IconProps } from "@opal/types";
 import { WithoutStyles } from "@/types";
-import ShadowDiv from "@/refresh-components/ShadowDiv";
-import {
-  LineItemLayout,
-  Section,
-  SectionProps,
-} from "@/layouts/general-layouts";
+import { LineItemLayout } from "@/layouts/general-layouts";
+import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { Card } from "@/refresh-components/cards";
 import Label from "@/refresh-components/form/Label";
-
-const ActionsLayoutContext = createContext<
-  ActionsLayoutContextValue | undefined
->(undefined);
-
-/**
- * Hook to create an ActionsLayout context provider and controller.
- *
- * @returns An object containing:
- *   - Provider: Context provider component to wrap action card
- *   - isFolded: Current folding state
- *   - setIsFolded: Function to update folding state
- *   - hasContent: Whether an ActionsContent is currently mounted (read-only)
- *
- * @example
- * ```tsx
- * function MyActionCard() {
- *   const { Provider, isFolded, setIsFolded } = useActionsLayout();
- *
- *   return (
- *     <Provider>
- *       <ActionsLayouts.Root>
- *         <ActionsLayouts.Header
- *           title="My Server"
- *           description="Description"
- *           icon={SvgServer}
- *           rightChildren={
- *             <button onClick={() => setIsFolded(true)}>Fold</button>
- *           }
- *         />
- *         <ActionsLayouts.Content>
- *         </ActionsLayouts.Content>
- *       </ActionsLayouts.Root>
- *     </Provider>
- *   );
- * }
- * ```
- */
-export function useActionsLayout() {
-  const [isFolded, setIsFolded] = useState(false);
-  const [hasContent, setHasContent] = useState(false);
-
-  // Registration function for ActionsContent to announce its presence
-  const registerContent = useMemo(
-    () => () => {
-      setHasContent(true);
-      return () => setHasContent(false);
-    },
-    []
-  );
-
-  // Use a ref to hold the context value so Provider can be stable.
-  // Without this, changing contextValue would create a new Provider function,
-  // which React treats as a different component type, causing unmount/remount
-  // of all children (and losing focus on inputs).
-  const contextValueRef = useRef<ActionsLayoutContextValue>(null!);
-  contextValueRef.current = {
-    isFolded,
-    setIsFolded,
-    hasContent,
-    registerContent,
-  };
-
-  // Stable Provider - reads from ref on each render, so the function
-  // reference never changes but the provided value stays current.
-  const Provider = useMemo(
-    () =>
-      ({ children }: { children: React.ReactNode }) => (
-        <ActionsLayoutContext.Provider value={contextValueRef.current}>
-          {children}
-        </ActionsLayoutContext.Provider>
-      ),
-    []
-  );
-
-  return { Provider, isFolded, setIsFolded, hasContent };
-}
-
-/**
- * Actions Layout Context
- *
- * Provides folding state management for action cards without prop drilling.
- * Also tracks whether content is present via self-registration.
- */
-interface ActionsLayoutContextValue {
-  isFolded: boolean;
-  setIsFolded: Dispatch<SetStateAction<boolean>>;
-  hasContent: boolean;
-  registerContent: () => () => void;
-}
-function useActionsLayoutContext() {
-  const context = useContext(ActionsLayoutContext);
-  if (!context) {
-    throw new Error(
-      "ActionsLayout components must be used within an ActionsLayout Provider"
-    );
-  }
-  return context;
-}
-
-/**
- * Actions Root Component
- *
- * The root container for an action card. Simply provides a flex column layout.
- * Use this as the outermost wrapper for action cards.
- *
- * @example
- * ```tsx
- * <ActionsLayouts.Root>
- *   <ActionsLayouts.Header {...} />
- *   <ActionsLayouts.Content {...} />
- * </ActionsLayouts.Root>
- * ```
- */
-function ActionsRoot(props: SectionProps) {
-  return <Section gap={0} padding={0} {...props} />;
-}
 
 /**
  * Actions Header Component
@@ -233,7 +100,7 @@ export interface ActionsHeaderProps
   // Core content
   name?: string;
   title: string;
-  description: string;
+  description?: string;
   icon: React.FunctionComponent<IconProps>;
 
   // Custom content
@@ -245,33 +112,24 @@ function ActionsHeader({
   description,
   icon: Icon,
   rightChildren,
-
   ...props
 }: ActionsHeaderProps) {
-  const { isFolded, hasContent } = useActionsLayoutContext();
-
-  // Round all corners if there's no content, or if content exists but is folded
-  const shouldFullyRound = !hasContent || isFolded;
-
   return (
-    <div
-      className={cn(
-        "flex flex-col border bg-background-neutral-00 w-full gap-2 pt-4 pb-2",
-        shouldFullyRound ? "rounded-16" : "rounded-t-16"
-      )}
-    >
-      <div className="px-4">
-        <Label name={name}>
-          <LineItemLayout
-            icon={Icon}
-            title={title}
-            description={description}
-            rightChildren={rightChildren}
-          />
-        </Label>
+    <ExpandableCard.Header>
+      <div className="flex flex-col gap-2 pt-4 pb-2">
+        <div className="px-4">
+          <Label name={name}>
+            <LineItemLayout
+              icon={Icon}
+              title={title}
+              description={description}
+              rightChildren={rightChildren}
+            />
+          </Label>
+        </div>
+        <div {...props} className="px-2" />
       </div>
-      <div {...props} className="px-2" />
-    </div>
+    </ExpandableCard.Header>
   );
 }
 
@@ -282,7 +140,7 @@ function ActionsHeader({
  * Use this to wrap tools, settings, or other expandable content.
  * Features a maximum height with scrollable overflow.
  *
- * IMPORTANT: Only ONE ActionsContent should be used within a single ActionsRoot.
+ * IMPORTANT: Only ONE ActionsContent should be used within a single ExpandableCard.Root.
  * This component self-registers with the ActionsLayout context to inform
  * ActionsHeader whether content exists (for border-radius styling). Using
  * multiple ActionsContent components will cause incorrect unmount behavior -
@@ -297,27 +155,14 @@ function ActionsHeader({
  * </ActionsLayouts.Content>
  * ```
  */
-function ActionsContent(
-  props: WithoutStyles<React.HTMLAttributes<HTMLDivElement>>
-) {
-  const { isFolded, registerContent } = useActionsLayoutContext();
-
-  // Self-register with context to inform Header that content exists
-  useLayoutEffect(() => {
-    return registerContent();
-  }, [registerContent]);
-
-  if (isFolded) {
-    return null;
-  }
-
+function ActionsContent({
+  children,
+  ...props
+}: WithoutStyles<React.HTMLAttributes<HTMLDivElement>>) {
   return (
-    <div className="border-x border-b rounded-b-16 overflow-hidden w-full">
-      <ShadowDiv
-        className="flex flex-col gap-2 rounded-b-16 max-h-[20rem] p-2"
-        {...props}
-      />
-    </div>
+    <ExpandableCard.Content {...props}>
+      <div className="flex flex-col gap-2 p-2">{children}</div>
+    </ExpandableCard.Content>
   );
 }
 
@@ -405,7 +250,6 @@ function ActionsTool({
 }
 
 export {
-  ActionsRoot as Root,
   ActionsHeader as Header,
   ActionsContent as Content,
   ActionsTool as Tool,
