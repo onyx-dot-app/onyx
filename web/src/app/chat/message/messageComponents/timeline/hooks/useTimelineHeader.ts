@@ -61,10 +61,10 @@ export function useTimelineHeader(
       );
       let headerText: string;
       if (searchState.hasResults) {
-        headerText = "Reading results";
+        headerText = "Reading";
       } else {
         headerText = searchState.isInternetSearch
-          ? "Searching web"
+          ? "Searching the web"
           : "Searching internal documents";
       }
       return { headerText, hasPackets, userStopped };
