@@ -140,7 +140,11 @@ class ImageGenerationCredentials(BaseModel):
         """
         llm_provider = config.model_configuration.llm_provider
         return cls(
-            api_key=_mask_api_key(llm_provider.api_key),
+            api_key=_mask_api_key(
+                llm_provider.api_key.get_value(apply_mask=False)
+                if llm_provider.api_key
+                else None
+            ),
             api_base=llm_provider.api_base,
             api_version=llm_provider.api_version,
             deployment_name=llm_provider.deployment_name,
@@ -168,7 +172,11 @@ class DefaultImageGenerationConfig(BaseModel):
             model_configuration_id=config.model_configuration_id,
             model_name=config.model_configuration.name,
             provider=llm_provider.provider,
-            api_key=llm_provider.api_key,
+            api_key=(
+                llm_provider.api_key.get_value(apply_mask=False)
+                if llm_provider.api_key
+                else None
+            ),
             api_base=llm_provider.api_base,
             api_version=llm_provider.api_version,
             deployment_name=llm_provider.deployment_name,

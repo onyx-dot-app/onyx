@@ -24,7 +24,12 @@ def sharepoint_doc_sync(
     sharepoint_connector = SharepointConnector(
         **cc_pair.connector.connector_specific_config,
     )
-    sharepoint_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    sharepoint_connector.load_credentials(credential_json)
 
     yield from generic_doc_sync(
         cc_pair=cc_pair,
