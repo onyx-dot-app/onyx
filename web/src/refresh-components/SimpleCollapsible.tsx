@@ -141,6 +141,7 @@ const Root = React.forwardRef<HTMLDivElement, SimpleCollapsibleRootProps>(
           ref={ref}
           open={open}
           onOpenChange={handleOpenChange}
+          className="flex flex-col flex-1 self-stretch"
           {...props}
         >
           {children}
