@@ -16,7 +16,7 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.embedding.models import TestEmbeddingRequest
-from onyx.server.utils import mask_string
+from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
