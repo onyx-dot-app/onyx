@@ -17,7 +17,16 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_MY_DRIVE_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    FOLDER_3_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
     get_expected_hierarchy_for_shared_drives,
@@ -35,7 +44,40 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
 )
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PILL_FOLDER_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import PUBLIC_RANGE
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    RESTRICTED_ACCESS_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_1_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_2_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_MY_DRIVE_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_MY_DRIVE_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_2_MY_DRIVE,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_3_MY_DRIVE_ID,
+)
 
 
 def _build_connector(
@@ -217,11 +259,32 @@ def test_gdrive_perm_sync_with_real_data(
     output = load_connector_outputs(hierarchy_connector)
 
     # Verify the expected shared drives hierarchy
+    # When include_shared_drives=True and include_my_drives=True, we get ALL drives
     expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
         include_drive_2=True,
         include_restricted_folder=False,
     )
+
+    # Add additional shared drives in the organization
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_ONLY_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
+    expected_ids.add(TEST_USER_1_MY_DRIVE_ID)
+    expected_ids.add(TEST_USER_1_MY_DRIVE_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
+    expected_ids.add(ADMIN_MY_DRIVE_ID)
+    expected_ids.add(TEST_USER_2_MY_DRIVE)
+    expected_ids.add(TEST_USER_3_MY_DRIVE_ID)
+    expected_ids.add(PILL_FOLDER_ID)
+    expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_FOLDER_ID)
+    expected_ids.add(EXTERNAL_SHARED_FOLDER_ID)
+    expected_ids.add(FOLDER_3_ID)
+
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,

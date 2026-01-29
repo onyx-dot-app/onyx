@@ -233,6 +233,7 @@ EXPECTED_PARENT_MAPPING: dict[str, str | None] = {
 EXTERNAL_SHARED_FOLDER_URL = (
     "https://drive.google.com/drive/folders/1sWC7Oi0aQGgifLiMnhTjvkhRWVeDa-XS"
 )
+EXTERNAL_SHARED_FOLDER_ID = "1sWC7Oi0aQGgifLiMnhTjvkhRWVeDa-XS"
 EXTERNAL_SHARED_DOCS_IN_FOLDER = [
     "https://docs.google.com/document/d/1Sywmv1-H6ENk2GcgieKou3kQHR_0te1mhIUcq8XlcdY"
 ]
@@ -301,6 +302,7 @@ TEST_USER_1_EXTRA_FOLDER_ID = (
 # Additional shared drives in the organization that appear when running include_all tests
 ADMIN_MY_DRIVE_ID = "0ABTZwt798K7MUk9PVA"  # Admin's My Drive
 TEST_USER_2_MY_DRIVE = "0ADjBZv2nEvJNUk9PVA"  # Test user 2's My Drive
+TEST_USER_3_MY_DRIVE_ID = "0AKl0e4Wr5NW7Uk9PVA"  # Test user 3's My Drive
 PILL_FOLDER_ID = "1FWzfA369tx9VT8scJ3LCOPBBuTBgt0OH"  # contains file with date pills
 
 PADDING_DRIVE_URLS = [

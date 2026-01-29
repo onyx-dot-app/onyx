@@ -177,11 +177,21 @@ def test_include_shared_drives_only(
     )
 
     # Verify hierarchy nodes - should include both shared drives and their folders
+    # When include_shared_drives=True, we get ALL shared drives admin has access to
     expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
         include_drive_2=True,
         include_restricted_folder=False,
     )
+
+    # Add additional shared drives that admin has access to
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_ONLY_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
+    expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
+
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,

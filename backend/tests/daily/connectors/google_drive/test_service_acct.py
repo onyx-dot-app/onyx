@@ -23,6 +23,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_DOCS_IN_FOLDER,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_URL,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
@@ -77,6 +80,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_DRIVE_B_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
@@ -84,9 +90,15 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_1_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_2_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_FOLDER_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_MY_DRIVE_FOLDER_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_ID,
 )
@@ -97,6 +109,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 )
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_3_MY_DRIVE_ID,
+)
 
 
 @patch(
@@ -154,13 +169,18 @@ def test_include_all(
     expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
     expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
     expected_ids.add(TEST_USER_1_MY_DRIVE_ID)
+    expected_ids.add(TEST_USER_1_MY_DRIVE_FOLDER_ID)
     expected_ids.add(TEST_USER_1_DRIVE_B_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_FOLDER_ID)
     expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
     expected_ids.add(ADMIN_MY_DRIVE_ID)
     expected_ids.add(TEST_USER_2_MY_DRIVE)
+    expected_ids.add(TEST_USER_3_MY_DRIVE_ID)
     expected_ids.add(PILL_FOLDER_ID)
     expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
     expected_ids.add(TEST_USER_1_EXTRA_FOLDER_ID)
+    expected_ids.add(EXTERNAL_SHARED_FOLDER_ID)
 
     # My Drive folders
     expected_ids.add(FOLDER_3_ID)
