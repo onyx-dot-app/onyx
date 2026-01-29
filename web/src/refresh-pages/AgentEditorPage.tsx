@@ -362,7 +362,18 @@ function MCPServerCard({
         </ActionsLayouts.Header>
         {isLoading ? (
           <ActionsLayouts.Content>
-            <ActionsLayouts.ToolSkeleton />
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Card key={index} padding={0.75}>
+                <GeneralLayouts.LineItemLayout
+                  // We provide dummy values here.
+                  // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
+                  title="..."
+                  description="..."
+                  rightChildren={<></>}
+                  loading
+                />
+              </Card>
+            ))}
           </ActionsLayouts.Content>
         ) : (
           enabledTools.length > 0 &&
