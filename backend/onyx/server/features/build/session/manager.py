@@ -375,6 +375,7 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        demo_data_enabled: bool = True,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
@@ -390,6 +391,7 @@ class SessionManager:
             user_level: User's level for demo persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
+            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
 
         Returns:
             The created BuildSession model
@@ -417,9 +419,6 @@ class SessionManager:
         # Get LLM config (uses user's selection or falls back to default)
         llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
 
-        # Determine if demo data mode is enabled
-        use_demo_data = user_work_area is not None and user_level is not None
-
         # Build tenant/user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
         # Path structure: {base_path}/{tenant_id}/knowledge/{user_id}/
@@ -445,7 +444,7 @@ class SessionManager:
 
         # Create BuildSession record with allocated port (uses flush, caller commits)
         build_session = create_build_session__no_commit(
-            user_id, self._db_session, name=name
+            user_id, self._db_session, name=name, demo_data_enabled=demo_data_enabled
         )
         build_session.nextjs_port = nextjs_port
         self._db_session.flush()
@@ -561,7 +560,7 @@ class SessionManager:
             user_role=user_role,
             user_work_area=user_work_area,
             user_level=user_level,
-            use_demo_data=use_demo_data,
+            use_demo_data=demo_data_enabled,
         )
         sandbox_id = sandbox.id
         logger.info(
@@ -577,14 +576,16 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        demo_data_enabled: bool = True,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
         Used for pre-provisioning sandboxes when user lands on /build/v1.
-        Returns existing recent empty session if one exists and has a healthy sandbox,
-        otherwise creates new. If an empty session exists but its sandbox is
-        unhealthy/terminated/missing, the stale session is deleted and a fresh
-        one is created (which will handle sandbox recovery/re-provisioning).
+        Returns existing recent empty session if one exists, has a healthy sandbox,
+        AND has matching demo_data_enabled setting. Otherwise creates new.
+        If an empty session exists but its sandbox is unhealthy/terminated/missing,
+        the stale session is deleted and a fresh one is created (which will handle
+        sandbox recovery/re-provisioning).
 
         Args:
             user_id: The user ID
@@ -592,6 +593,7 @@ class SessionManager:
             user_level: User's level for demo persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
+            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
 
         Returns:
             BuildSession (existing empty or newly created)
@@ -600,7 +602,10 @@ class SessionManager:
             ValueError: If max concurrent sandboxes reached
             RuntimeError: If sandbox provisioning fails
         """
-        existing = get_empty_session_for_user(user_id, self._db_session)
+        # Look for existing empty session with matching demo_data setting
+        existing = get_empty_session_for_user(
+            user_id, self._db_session, demo_data_enabled=demo_data_enabled
+        )
         if existing:
             logger.info(
                 f"Existing empty session {existing.id} found for user {user_id}"
@@ -637,6 +642,7 @@ class SessionManager:
             user_level=user_level,
             llm_provider_type=llm_provider_type,
             llm_model_name=llm_model_name,
+            demo_data_enabled=demo_data_enabled,
         )
 
     def delete_empty_session(self, user_id: UUID) -> bool:

@@ -13,7 +13,6 @@ from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk
 from onyx.indexing.models import IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
-from shared_configs.enums import RerankerProvider
 
 
 class QueryExpansions(BaseModel):
@@ -26,48 +25,18 @@ class QueryExpansionType(Enum):
     SEMANTIC = "semantic"
 
 
-# TODO clean up this stuff, reranking is no longer used
-class RerankingDetails(BaseModel):
-    # If model is None (or num_rerank is 0), then reranking is turned off
-    rerank_model_name: str | None
-    rerank_api_url: str | None
-    rerank_provider_type: RerankerProvider | None
-    rerank_api_key: str | None = None
-
-    num_rerank: int
-
-    # For faster flows where the results should start immediately
-    # this more time intensive step can be skipped
-    disable_rerank_for_streaming: bool = False
-
-    @classmethod
-    def from_db_model(cls, search_settings: SearchSettings) -> "RerankingDetails":
-        return cls(
-            rerank_model_name=search_settings.rerank_model_name,
-            rerank_provider_type=search_settings.rerank_provider_type,
-            rerank_api_key=search_settings.rerank_api_key,
-            num_rerank=search_settings.num_rerank,
-            rerank_api_url=search_settings.rerank_api_url,
-        )
-
-
-class InferenceSettings(RerankingDetails):
-    # Empty for no additional expansion
-    multilingual_expansion: list[str]
-
-
-class SearchSettingsCreationRequest(InferenceSettings, IndexingSetting):
+class SearchSettingsCreationRequest(IndexingSetting):
     @classmethod
     def from_db_model(
         cls, search_settings: SearchSettings
     ) -> "SearchSettingsCreationRequest":
-        inference_settings = InferenceSettings.from_db_model(search_settings)
         indexing_setting = IndexingSetting.from_db_model(search_settings)
+        return cls(**indexing_setting.model_dump())
 
-        return cls(**inference_settings.model_dump(), **indexing_setting.model_dump())
 
-
-class SavedSearchSettings(InferenceSettings, IndexingSetting):
+class SavedSearchSettings(IndexingSetting):
+    # Previously this contained also Inference time settings. Keeping this wrapper class around
+    # as there may again be inference time settings that may get added.
     @classmethod
     def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
         return cls(
@@ -86,15 +55,6 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
             contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
-            # Reranking Details
-            rerank_model_name=search_settings.rerank_model_name,
-            rerank_provider_type=search_settings.rerank_provider_type,
-            rerank_api_key=search_settings.rerank_api_key,
-            num_rerank=search_settings.num_rerank,
-            # Multilingual Expansion
-            multilingual_expansion=search_settings.multilingual_expansion,
-            rerank_api_url=search_settings.rerank_api_url,
-            disable_rerank_for_streaming=search_settings.disable_rerank_for_streaming,
         )
 
 

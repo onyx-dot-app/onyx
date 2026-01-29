@@ -1041,14 +1041,3 @@ STRIPE_PUBLISHABLE_KEY_URL = (
 )
 # Override for local testing with Stripe test keys (pk_test_*)
 STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")
-# Persistent Document Storage Configuration
-# When enabled, indexed documents are written to local filesystem with hierarchical structure
-PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
-    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
-)
-
-# Base directory path for persistent document storage (local filesystem)
-# Example: /var/onyx/indexed-docs or /app/indexed-docs
-PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
-    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/indexed-docs"
-)
