@@ -584,97 +584,85 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
 
 
 def update_default_provider(provider_id: int, model: str, db_session: Session) -> None:
-    model_config = db_session.scalar(
-        select(ModelConfiguration).where(
+    # Single query with join to get both model_config and its flow mapping
+    result = db_session.execute(
+        select(ModelConfiguration, FlowMapping)
+        .join(FlowMapping, FlowMapping.model_configuration_id == ModelConfiguration.id)
+        .where(
             ModelConfiguration.llm_provider_id == provider_id,
             ModelConfiguration.name == model,
+            FlowMapping.flow_type == ModelFlowType.TEXT,
         )
-    )
+    ).first()
 
-    if not model_config:
+    if not result:
         raise ValueError(
-            f"Model '{model}' is not a valid model for provider '{provider_id}'"
+            f"Model '{model}' is not a valid TEXT model for provider '{provider_id}'"
         )
 
-    existing_default = db_session.scalar(
-        select(FlowMapping).where(
+    model_config, new_default = result
+
+    # Clear existing default and set new one in a single atomic operation
+    # First, unset any existing defaults for TEXT flow type
+    db_session.execute(
+        update(FlowMapping)
+        .where(
             FlowMapping.flow_type == ModelFlowType.TEXT,
             FlowMapping.is_default == True,  # noqa: E712
         )
+        .values(is_default=False)
     )
 
-    new_default = db_session.scalar(
-        select(FlowMapping).where(FlowMapping.model_configuration_id == model_config.id)
-    )
-
-    if not new_default:
-        raise ValueError(
-            f"Model '{model}' is not a valid model for provider '{provider_id}'"
-        )
-
-    if existing_default:
-        existing_default.is_default = False
-        # required to ensure that the below does not cause a unique constraint violation
-        db_session.flush()
-
-    # Default model must be visible
-    model_config.is_visible = True
+    # Set the new default and ensure model is visible
     new_default.is_default = True
+    model_config.is_visible = True
+
     db_session.commit()
 
 
 def update_default_vision_provider(
     provider_id: int, vision_model: str, db_session: Session
 ) -> None:
-    model_config = db_session.scalar(
-        select(ModelConfiguration).where(
+    # Single query with join to get model_config with provider and its VISION flow mapping
+    result = db_session.execute(
+        select(ModelConfiguration, FlowMapping)
+        .join(FlowMapping, FlowMapping.model_configuration_id == ModelConfiguration.id)
+        .options(selectinload(ModelConfiguration.llm_provider))
+        .where(
             ModelConfiguration.llm_provider_id == provider_id,
             ModelConfiguration.name == vision_model,
+            FlowMapping.flow_type == ModelFlowType.VISION,
         )
-    )
+    ).first()
 
-    if not model_config:
+    if not result:
         raise ValueError(
-            f"Model '{vision_model}' is not a valid model for provider '{provider_id}'"
+            f"Model '{vision_model}' is not a valid VISION model for provider '{provider_id}'"
         )
 
-    # Validate that the specified vision model supports image input
-    model_to_validate = vision_model
-    if model_to_validate:
-        if not model_supports_image_input(
-            model_to_validate, model_config.llm_provider.provider
-        ):
-            raise ValueError(
-                f"Model '{model_to_validate}' for provider '{model_config.llm_provider.provider}' does not support image input"
-            )
-    else:
+    model_config, new_default = result
+
+    # Validate that the model supports image input
+    if not model_supports_image_input(vision_model, model_config.llm_provider.provider):
         raise ValueError(
-            f"Model '{vision_model}' is not a valid model for provider '{model_config.llm_provider.provider}'"
+            f"Model '{vision_model}' for provider '{model_config.llm_provider.provider}' "
+            "does not support image input"
         )
 
-    new_default = db_session.scalar(
-        select(FlowMapping).where(FlowMapping.model_configuration_id == model_config.id)
-    )
-
-    if not new_default:
-        raise ValueError(
-            f"Model '{vision_model}' is not a valid model for provider '{model_config.llm_provider.provider}'"
-        )
-
-    existing_default = db_session.scalar(
-        select(FlowMapping).where(
+    # Clear existing default for VISION flow type
+    db_session.execute(
+        update(FlowMapping)
+        .where(
             FlowMapping.flow_type == ModelFlowType.VISION,
             FlowMapping.is_default == True,  # noqa: E712
         )
+        .values(is_default=False)
     )
-    if existing_default:
-        existing_default.is_default = False
-        # required to ensure that the below does not cause a unique constraint violation
-        db_session.flush()
 
-    # Default vision model must be visible
-    model_config.is_visible = True
+    # Set the new default and ensure model is visible
     new_default.is_default = True
+    model_config.is_visible = True
+
     db_session.commit()
 
 
