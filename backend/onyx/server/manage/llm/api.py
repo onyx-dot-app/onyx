@@ -20,6 +20,8 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_default_model
+from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_persona_with_groups
@@ -50,8 +52,10 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 )
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
+from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
+from onyx.server.manage.llm.models import LLMProviderResponse
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationView
@@ -203,7 +207,7 @@ def list_llm_providers(
     include_image_gen: bool = Query(False),
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderView]:
+) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers")
 
@@ -226,7 +230,14 @@ def list_llm_providers(
     duration = (end_time - start_time).total_seconds()
     logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
 
-    return llm_provider_list
+    default_text = fetch_default_model(db_session)
+    default_vision = fetch_default_vision_model(db_session)
+
+    return LLMProviderResponse[LLMProviderView].from_models(
+        default_text=default_text,
+        default_vision=default_vision,
+        providers=llm_provider_list,
+    )
 
 
 @admin_router.put("/provider")
@@ -334,26 +345,29 @@ def delete_llm_provider(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@admin_router.post("/provider/{provider_id}/default")
-def set_provider_as_default(
-    provider_id: int,
+@admin_router.post("/default")
+def set_default_model(
+    default_model_request: DefaultModel,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_provider(provider_id=provider_id, db_session=db_session)
+    update_default_provider(
+        provider_id=default_model_request.provider_id,
+        model=default_model_request.model_name,
+        db_session=db_session,
+    )
 
 
-@admin_router.post("/provider/{provider_id}/default-vision")
-def set_provider_as_default_vision(
-    provider_id: int,
-    vision_model: str | None = Query(
-        None, description="The default vision model to use"
-    ),
+@admin_router.post("/default-vision")
+def set_default_vision_model(
+    default_vision_request: DefaultModel,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_vision_provider(
-        provider_id=provider_id, vision_model=vision_model, db_session=db_session
+        provider_id=default_vision_request.provider_id,
+        vision_model=default_vision_request.model_name,
+        db_session=db_session,
     )
 
 
@@ -425,7 +439,7 @@ def get_vision_capable_providers(
 def list_llm_provider_basics(
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderDescriptor]:
+) -> LLMProviderResponse[LLMProviderDescriptor]:
     """Get LLM providers accessible to the current user.
 
     Returns:
@@ -462,7 +476,14 @@ def list_llm_provider_basics(
         f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
     )
 
-    return accessible_providers
+    default_text = fetch_default_model(db_session)
+    default_vision = fetch_default_vision_model(db_session)
+
+    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+        providers=accessible_providers,
+        default_text=default_text,
+        default_vision=default_vision,
+    )
 
 
 def get_valid_models_for_persona(

@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 from typing import Any
+from typing import Generic
 from typing import TYPE_CHECKING
+from typing import TypeVar
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -22,9 +26,12 @@ if TYPE_CHECKING:
     )
 
 
+T = TypeVar("T", bound="LLMProviderDescriptor | LLMProviderView")
+
+
 class TestLLMRequest(BaseModel):
     # provider level
-    name: str | None = None
+    name: str
     provider: str
     model: str
     api_key: str | None = None
@@ -49,6 +56,7 @@ class LLMProviderDescriptor(BaseModel):
     """A descriptor for an LLM provider that can be safely viewed by
     non-admin users. Used when giving a list of available LLMs."""
 
+    name: str
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     model_configurations: list["ModelConfigurationView"]
@@ -65,6 +73,7 @@ class LLMProviderDescriptor(BaseModel):
         provider = llm_provider_model.provider
 
         return cls(
+            name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
             model_configurations=filter_model_configurations(
@@ -357,3 +366,22 @@ class OpenRouterFinalModelResponse(BaseModel):
 class DefaultModel(BaseModel):
     provider_id: int
     model_name: str
+
+
+class LLMProviderResponse(BaseModel, Generic[T]):
+    providers: list[T]
+    default_text: DefaultModel | None = None
+    default_vision: DefaultModel | None = None
+
+    @classmethod
+    def from_models(
+        cls,
+        providers: list[T],
+        default_text: DefaultModel | None = None,
+        default_vision: DefaultModel | None = None,
+    ) -> LLMProviderResponse[T]:
+        return cls(
+            default_text=default_text,
+            default_vision=default_vision,
+            providers=providers,
+        )

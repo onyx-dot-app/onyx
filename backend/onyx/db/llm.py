@@ -234,6 +234,7 @@ def upsert_llm_provider(
         # Set to None if the dict is empty after filtering
         custom_config = custom_config if custom_config else None
 
+    existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     existing_llm_provider.api_key = llm_provider_upsert_request.api_key
     existing_llm_provider.api_base = llm_provider_upsert_request.api_base
@@ -275,6 +276,13 @@ def upsert_llm_provider(
             supports_image_input=model_configuration.supports_image_input or False,
             display_name=model_configuration.display_name,
         )
+
+        if model_configuration.name == llm_provider_upsert_request.default_model_name:
+            update_default_provider(
+                provider_id=existing_llm_provider.id,
+                model=model_configuration.name,
+                db_session=db_session,
+            )
 
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
@@ -449,7 +457,7 @@ def fetch_default_model(db_session: Session) -> DefaultModel | None:
     )
 
 
-def fetch_default_vision_provider(db_session: Session) -> DefaultModel | None:
+def fetch_default_vision_model(db_session: Session) -> DefaultModel | None:
     flow_mapping = db_session.scalar(
         select(FlowMapping).where(
             FlowMapping.flow_type == ModelFlowType.VISION,
@@ -471,6 +479,17 @@ def fetch_llm_provider_view(
 ) -> LLMProviderView | None:
     provider_model = fetch_existing_llm_provider(
         name=provider_name, db_session=db_session
+    )
+    if not provider_model:
+        return None
+    return LLMProviderView.from_model(provider_model)
+
+
+def fetch_llm_provider_view_from_id(
+    db_session: Session, provider_id: int
+) -> LLMProviderView | None:
+    provider_model = fetch_existing_llm_provider_by_id(
+        id=provider_id, db_session=db_session
     )
     if not provider_model:
         return None

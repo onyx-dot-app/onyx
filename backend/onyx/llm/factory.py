@@ -7,11 +7,12 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_model
-from onyx.db.llm import fetch_default_vision_provider
+from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
+from onyx.db.llm import fetch_llm_provider_view_from_id
 from onyx.db.llm import fetch_llm_provider_view_from_model_id
 from onyx.db.llm import fetch_model_configuration_view
 from onyx.db.llm import fetch_user_group_ids
@@ -76,7 +77,10 @@ def get_llm_for_persona(
     model_version_override = llm_override.model_version if llm_override else None
     temperature_override = llm_override.temperature if llm_override else None
 
-    if not provider_name_override and not persona.model_configuration_id_override:
+    if (
+        not (provider_name_override and model_version_override)
+        and not persona.model_configuration_id_override
+    ):
         return get_default_llm(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
@@ -125,10 +129,6 @@ def get_llm_for_persona(
                 db_session, persona.model_configuration_id_override
             )
             model = model_config.name if model_config else None
-
-        # Fall back to provider's default model if no model was resolved
-        if not model:
-            model = llm_provider.default_model_name
 
     if not model:
         raise ValueError("No model name found")
@@ -203,15 +203,13 @@ def get_default_llm_with_vision(
 
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
-        default_provider = fetch_default_vision_provider(db_session)
-        if default_provider and default_provider.default_vision_model:
-            if model_supports_image_input(
-                default_provider.default_vision_model, default_provider.provider
-            ):
-                return create_vision_llm(
-                    default_provider, default_provider.default_vision_model
-                )
-
+        default_model = fetch_default_vision_model(db_session)
+        if default_model:
+            provider_view = fetch_llm_provider_view_from_id(
+                db_session, default_model.provider_id
+            )
+            if provider_view:
+                return create_vision_llm(provider_view, default_model.model_name)
         # Fall back to searching all providers
         providers = fetch_existing_llm_providers(db_session)
 
@@ -219,30 +217,21 @@ def get_default_llm_with_vision(
         return None
 
     # Check all providers for viable vision models
+    non_public_vision_models = []
+
     for provider in providers:
         provider_view = LLMProviderView.from_model(provider)
+        for model in provider.model_configurations:
+            # First priority: public vision models
+            if model_supports_image_input(model.name, provider.provider):
+                if model.is_visible:
+                    return create_vision_llm(provider_view, model.name)
+                else:
+                    non_public_vision_models.append(model)
 
-        # First priority: Check if provider has a default_vision_model
-        if provider.default_vision_model and model_supports_image_input(
-            provider.default_vision_model, provider.provider
-        ):
-            return create_vision_llm(provider_view, provider.default_vision_model)
-
-        # If no model-configurations are specified, try default model
-        if not provider.model_configurations:
-            # Try default_model_name
-            if provider.default_model_name and model_supports_image_input(
-                provider.default_model_name, provider.provider
-            ):
-                return create_vision_llm(provider_view, provider.default_model_name)
-
-        # Otherwise, if model-configurations are specified, check each model
-        else:
-            for model_configuration in provider.model_configurations:
-                if model_supports_image_input(
-                    model_configuration.name, provider.provider
-                ):
-                    return create_vision_llm(provider_view, model_configuration.name)
+    # Resort to non-public vision models
+    if non_public_vision_models:
+        return non_public_vision_models[0]
 
     return None
 

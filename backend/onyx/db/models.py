@@ -2620,11 +2620,6 @@ class LLMProvider(Base):
     )
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Accesses an API via key-value pairs
-    credentials: Mapped[dict[str, str]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default={}
-    )
-
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Auto mode: models, visibility, and defaults are managed by GitHub config
