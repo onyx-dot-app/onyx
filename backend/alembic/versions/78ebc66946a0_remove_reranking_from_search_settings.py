@@ -1,7 +1,7 @@
 """remove reranking from search_settings
 
 Revision ID: 78ebc66946a0
-Revises: 81c22b1e2e78
+Revises: 849b21c732f8
 Create Date: 2026-01-28
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "78ebc66946a0"
-down_revision = "81c22b1e2e78"
+down_revision = "849b21c732f8"
 branch_labels: None = None
 depends_on: None = None
 
