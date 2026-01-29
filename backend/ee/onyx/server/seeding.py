@@ -20,7 +20,7 @@ from ee.onyx.server.enterprise_settings.store import (
 from ee.onyx.server.enterprise_settings.store import upload_logo
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
 from onyx.db.persona import upsert_persona
@@ -127,7 +127,7 @@ def _seed_llms(
             len(seeded_providers) > 0
             and len(seeded_providers[0].model_configurations) > 0
         ):
-            update_default_provider(
+            update_default_text_provider(
                 provider_id=seeded_providers[0].id,
                 model=seeded_providers[0].model_configurations[0].name,
                 db_session=db_session,

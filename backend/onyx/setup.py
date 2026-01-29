@@ -25,7 +25,7 @@ from onyx.db.enums import ModelFlowType
 from onyx.db.index_attempt import cancel_indexing_attempts_past_model
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_model
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
@@ -313,7 +313,7 @@ def setup_postgres(db_session: Session) -> None:
         new_llm_provider = upsert_llm_provider(
             llm_provider_upsert_request=model_req, db_session=db_session
         )
-        update_default_provider(
+        update_default_text_provider(
             provider_id=new_llm_provider.id, model=llm_model, db_session=db_session
         )
 

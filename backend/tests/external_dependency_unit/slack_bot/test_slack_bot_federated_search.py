@@ -5,7 +5,7 @@ from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
 
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 
 # Set environment variables to disable model server for testing
 os.environ["DISABLE_MODEL_SERVER"] = "true"
@@ -425,7 +425,7 @@ class TestSlackBotFederatedSearch:
         db_session.add(llm_provider)
         db_session.commit()
 
-        update_default_provider(
+        update_default_text_provider(
             provider_id=llm_provider.id, model="gpt-4o", db_session=db_session
         )
 

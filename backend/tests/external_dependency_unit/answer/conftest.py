@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -33,7 +33,7 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             llm_provider_upsert_request=llm_provider_request,
             db_session=db_session,
         )
-        update_default_provider(
+        update_default_text_provider(
             provider_id=provider.id, model="gpt-4o-mini", db_session=db_session
         )
     except Exception as exc:  # pragma: no cover - only hits on duplicate setup issues

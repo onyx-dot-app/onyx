@@ -28,7 +28,7 @@ from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import sync_model_configurations
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
@@ -389,7 +389,7 @@ def set_default_model(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_provider(
+    update_default_text_provider(
         provider_id=default_model_request.provider_id,
         model=default_model_request.model_name,
         db_session=db_session,

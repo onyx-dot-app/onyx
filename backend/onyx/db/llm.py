@@ -594,7 +594,9 @@ def _update_default_provider(
     db_session.commit()
 
 
-def update_default_provider(provider_id: int, model: str, db_session: Session) -> None:
+def update_default_text_provider(
+    provider_id: int, model: str, db_session: Session
+) -> None:
     _update_default_provider(
         provider_id=provider_id,
         model=model,
@@ -712,15 +714,15 @@ def sync_auto_mode_models(
     # In Auto mode, default model is always set from GitHub config
     # Check if this provider is the set default provider
     default_model = fetch_default_model(db_session, ModelFlowType.TEXT)
-    if not default_model or default_model.provider_id != provider.id:
-        return changes
-
     recommended = llm_recommendations.get_default_model(provider.provider)
-    if not recommended or recommended.name == default_model.model_name:
-        return changes
-
-    update_default_provider(provider.id, recommended.name, db_session)
-    changes += 1
+    if (
+        default_model
+        and default_model.provider_id == provider.id
+        and recommended
+        and recommended.name != default_model.model_name
+    ):
+        update_default_text_provider(provider.id, recommended.name, db_session)
+        changes += 1
     db_session.commit()
     return changes
 

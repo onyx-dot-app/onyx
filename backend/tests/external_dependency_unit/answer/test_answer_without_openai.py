@@ -12,7 +12,7 @@ from onyx.chat.process_message import stream_chat_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -58,7 +58,7 @@ def test_answer_with_only_anthropic_provider(
     )
 
     try:
-        update_default_provider(
+        update_default_text_provider(
             provider_id=anthropic_provider.id,
             model=anthropic_model,
             db_session=db_session,

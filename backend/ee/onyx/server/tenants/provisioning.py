@@ -33,7 +33,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import AvailableTenant
@@ -305,7 +305,7 @@ def configure_default_api_keys(db_session: Session) -> None:
         try:
             provider = upsert_llm_provider(request, db_session)
             if not has_set_default_provider:
-                update_default_provider(
+                update_default_text_provider(
                     provider_id=provider.id, model=default_model, db_session=db_session
                 )
                 has_set_default_provider = True
