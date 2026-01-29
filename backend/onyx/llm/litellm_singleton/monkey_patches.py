@@ -340,9 +340,6 @@ def _patch_openai_responses_chunk_parser() -> None:
             GenericStreamingChunk,
         )
 
-        verbose_logger.debug(
-            f"Chat provider: transform_streaming_response called with chunk: {chunk}"
-        )
         parsed_chunk = chunk
         if not parsed_chunk:
             raise ValueError("Chat provider: Empty parsed_chunk")

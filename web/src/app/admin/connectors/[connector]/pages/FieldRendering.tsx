@@ -46,7 +46,7 @@ const TabsField: FC<TabsFieldProps> = ({
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="start">
       {tabField.label && (
-        <InputLayouts.Label
+        <InputLayouts.Title
           title={resolvedLabel ?? ""}
           description={resolvedDescription}
         />

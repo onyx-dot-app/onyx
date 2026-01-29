@@ -22,7 +22,8 @@
   @apply self-center stroke-text-04;
 }
 
-.line-item-layout[data-variant="tertiary-muted"] .line-item-layout-icon {
+.line-item-layout[data-variant="tertiary-muted"] .line-item-layout-icon,
+.line-item-layout[data-variant="mini"] .line-item-layout-icon {
   @apply stroke-text-03;
 }
 

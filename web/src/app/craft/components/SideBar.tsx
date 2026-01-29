@@ -393,7 +393,7 @@ const MemoizedBuildSidebarInner = memo(
 
     const backToChatButton = useMemo(
       () => (
-        <SidebarTab leftIcon={SvgArrowLeft} folded={folded} href="/chat">
+        <SidebarTab leftIcon={SvgArrowLeft} folded={folded} href="/app">
           Back to Chat
         </SidebarTab>
       ),

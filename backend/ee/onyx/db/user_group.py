@@ -125,7 +125,7 @@ def _cleanup_document_set__user_group_relationships__no_commit(
 
 def validate_object_creation_for_user(
     db_session: Session,
-    user: User | None,
+    user: User,
     target_group_ids: list[int] | None = None,
     object_is_public: bool | None = None,
     object_is_perm_sync: bool | None = None,
@@ -144,7 +144,8 @@ def validate_object_creation_for_user(
     if object_is_perm_sync and not target_group_ids:
         return
 
-    if not user or user.role == UserRole.ADMIN:
+    # Admins are allowed
+    if user.role == UserRole.ADMIN:
         return
 
     # Allow curators and global curators to create public objects
@@ -474,14 +475,15 @@ def remove_curator_status__no_commit(db_session: Session, user: User) -> None:
 def _validate_curator_relationship_update_requester(
     db_session: Session,
     user_group_id: int,
-    user_making_change: User | None = None,
+    user_making_change: User,
 ) -> None:
     """
     This function validates that the user making the change has the necessary permissions
     to update the curator relationship for the target user in the given user group.
     """
 
-    if user_making_change is None or user_making_change.role == UserRole.ADMIN:
+    # Admins can update curator relationships for any group
+    if user_making_change.role == UserRole.ADMIN:
         return
 
     # check if the user making the change is a curator in the group they are changing the curator relationship for
@@ -550,7 +552,7 @@ def update_user_curator_relationship(
     db_session: Session,
     user_group_id: int,
     set_curator_request: SetCuratorRequest,
-    user_making_change: User | None = None,
+    user_making_change: User,
 ) -> None:
     target_user = fetch_user_by_id(db_session, set_curator_request.user_id)
     if not target_user:
@@ -599,7 +601,7 @@ def update_user_curator_relationship(
 
 def add_users_to_user_group(
     db_session: Session,
-    user: User | None,
+    user: User,
     user_group_id: int,
     user_ids: list[UUID],
 ) -> UserGroup:
@@ -641,7 +643,7 @@ def add_users_to_user_group(
 
 def update_user_group(
     db_session: Session,
-    user: User | None,
+    user: User,
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:

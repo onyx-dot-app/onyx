@@ -19,7 +19,7 @@ export default function Layout({ children }: LayoutProps) {
   const authType = useAuthType();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType && authType !== AuthType.DISABLED;
+  const showTokensSection = authType !== null;
   const showAccountsAccessTab = showPasswordSection || showTokensSection;
 
   return (

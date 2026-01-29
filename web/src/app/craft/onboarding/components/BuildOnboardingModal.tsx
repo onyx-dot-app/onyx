@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { usePostHog } from "posthog-js/react";
 import { SvgArrowRight, SvgArrowLeft, SvgX, SvgLoader } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -15,6 +16,7 @@ import {
   WORK_AREAS_REQUIRING_LEVEL,
   setBuildLlmSelection,
   getBuildLlmSelection,
+  getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
@@ -29,15 +31,6 @@ import OnboardingLlmSetup, {
   type ProviderKey,
 } from "@/app/craft/onboarding/components/OnboardingLlmSetup";
 
-// Priority order for auto-selecting LLM when user completes onboarding without explicit selection
-const LLM_AUTO_SELECT_PRIORITY = [
-  { provider: "anthropic", model: "claude-opus-4-5" },
-  { provider: "openai", model: "gpt-5.2" },
-  { provider: "anthropic", model: "claude-sonnet-4-5" },
-  { provider: "openai", model: "gpt-5.1-codex" },
-  { provider: "openrouter", model: "moonshotai/kimi-k2-thinking" },
-] as const;
-
 /**
  * Auto-select the best available LLM based on priority order.
  * Used when user completes onboarding without going through LLM setup step.
@@ -48,35 +41,9 @@ function autoSelectBestLlm(
   // Don't override if user already has a selection
   if (getBuildLlmSelection()) return;
 
-  if (!llmProviders || llmProviders.length === 0) return;
-
-  // Try each priority option in order
-  for (const { provider, model } of LLM_AUTO_SELECT_PRIORITY) {
-    const matchingProvider = llmProviders.find((p) => p.provider === provider);
-    if (matchingProvider) {
-      // Check if the preferred model is available
-      const hasModel = matchingProvider.model_configurations.some(
-        (m) => m.name === model
-      );
-      if (hasModel) {
-        setBuildLlmSelection({
-          providerName: matchingProvider.name,
-          provider: matchingProvider.provider,
-          modelName: model,
-        });
-        return;
-      }
-    }
-  }
-
-  // Fallback: use the default provider's default model
-  const defaultProvider = llmProviders.find((p) => p.is_default_provider);
-  if (defaultProvider) {
-    setBuildLlmSelection({
-      providerName: defaultProvider.name,
-      provider: defaultProvider.provider,
-      modelName: defaultProvider.default_model_name,
-    });
+  const selection = getDefaultLlmSelection(llmProviders);
+  if (selection) {
+    setBuildLlmSelection(selection);
   }
 }
 
@@ -143,6 +110,8 @@ export default function BuildOnboardingModal({
   onLlmComplete,
   onClose,
 }: BuildOnboardingModalProps) {
+  const posthog = usePostHog();
+
   // Compute steps based on mode
   const steps = useMemo(
     () => getStepsForMode(mode, isAdmin, allProvidersConfigured, hasUserInfo),
@@ -251,10 +220,7 @@ export default function BuildOnboardingModal({
   const requiresLevel =
     workArea !== undefined && WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
   const isUserInfoValid =
-    firstName.trim() &&
-    lastName.trim() &&
-    workArea &&
-    (!requiresLevel || level);
+    firstName.trim() && workArea && (!requiresLevel || level);
 
   const currentProviderConfig = PROVIDERS.find(
     (p) => p.key === selectedProvider
@@ -408,11 +374,12 @@ export default function BuildOnboardingModal({
 
       await onComplete({
         firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        lastName: lastName.trim() || undefined,
         workArea,
         level: level || undefined,
       });
 
+      posthog?.capture("completed_craft_onboarding");
       onClose();
     } catch (error) {
       console.error("Error completing onboarding:", error);
@@ -538,7 +505,19 @@ export default function BuildOnboardingModal({
             {currentStep === "user-info" && (
               <button
                 type="button"
-                onClick={isLastStep ? handleSubmit : handleNext}
+                onClick={() => {
+                  posthog?.capture("completed_craft_user_info", {
+                    first_name: firstName.trim(),
+                    last_name: lastName.trim() || undefined,
+                    work_area: workArea,
+                    level: level,
+                  });
+                  if (isLastStep) {
+                    handleSubmit();
+                  } else {
+                    handleNext();
+                  }
+                }}
                 disabled={!canProceedUserInfo || isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",

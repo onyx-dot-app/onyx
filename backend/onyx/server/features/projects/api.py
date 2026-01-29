@@ -49,10 +49,10 @@ class UserFileDeleteResult(BaseModel):
 
 @router.get("", tags=PUBLIC_API_TAGS)
 def get_projects(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserProjectSnapshot]:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     projects = (
         db_session.query(UserProject).filter(UserProject.user_id == user_id).all()
     )
@@ -62,12 +62,12 @@ def get_projects(
 @router.post("/create", tags=PUBLIC_API_TAGS)
 def create_project(
     name: str,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
     if name == "":
         raise HTTPException(status_code=400, detail="Project name cannot be empty")
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = UserProject(name=name, user_id=user_id)
     db_session.add(project)
     db_session.commit()
@@ -79,7 +79,7 @@ def upload_user_files(
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
     temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> CategorizedFilesSnapshot:
     try:
@@ -118,10 +118,10 @@ def upload_user_files(
 @router.get("/{project_id}", tags=PUBLIC_API_TAGS)
 def get_project(
     project_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -135,10 +135,10 @@ def get_project(
 @router.get("/files/{project_id}", tags=PUBLIC_API_TAGS)
 def get_files_in_project(
     project_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     user_files = (
         db_session.query(UserFile)
         .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)
@@ -157,14 +157,14 @@ def get_files_in_project(
 def unlink_user_file_from_project(
     project_id: int,
     file_id: UUID,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     """Unlink an existing user file from a specific project for the current user.
 
     Does not delete the underlying file; only removes the association.
     """
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -173,7 +173,7 @@ def unlink_user_file_from_project(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    user_id = user.id if user is not None else None
+    user_id = user.id
     user_file = (
         db_session.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == user_id)
@@ -210,7 +210,7 @@ def unlink_user_file_from_project(
 def link_user_file_to_project(
     project_id: int,
     file_id: UUID,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserFileSnapshot:
     """Link an existing user file to a specific project for the current user.
@@ -218,7 +218,7 @@ def link_user_file_to_project(
     Creates the association in the Project__UserFile join table if it does not exist.
     Returns the linked user file snapshot.
     """
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -265,10 +265,10 @@ class ProjectInstructionsResponse(BaseModel):
 )
 def get_project_instructions(
     project_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ProjectInstructionsResponse:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -293,12 +293,12 @@ class UpsertProjectInstructionsRequest(BaseModel):
 def upsert_project_instructions(
     project_id: int,
     body: UpsertProjectInstructionsRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ProjectInstructionsResponse:
     """Create or update this project's instructions stored on the project itself."""
     # Ensure the project exists and belongs to the user
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -324,7 +324,7 @@ class ProjectPayload(BaseModel):
 )
 def get_project_details(
     project_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ProjectPayload:
     project = get_project(project_id, user, db_session)
@@ -354,10 +354,10 @@ class UpdateProjectRequest(BaseModel):
 def update_project(
     project_id: int,
     body: UpdateProjectRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserProjectSnapshot:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -379,10 +379,10 @@ def update_project(
 @router.delete("/{project_id}", tags=PUBLIC_API_TAGS)
 def delete_project(
     project_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)
@@ -407,14 +407,14 @@ def delete_project(
 @router.delete("/file/{file_id}", tags=PUBLIC_API_TAGS)
 def delete_user_file(
     file_id: UUID,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserFileDeleteResult:
     """Delete a user file belonging to the current user.
 
     This will also remove any project associations for the file.
     """
-    user_id = user.id if user is not None else None
+    user_id = user.id
     user_file = (
         db_session.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == user_id)
@@ -456,14 +456,14 @@ def delete_user_file(
 @router.get("/file/{file_id}", response_model=UserFileSnapshot, tags=PUBLIC_API_TAGS)
 def get_user_file(
     file_id: UUID,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserFileSnapshot:
     """Fetch a single user file by ID for the current user.
 
     Includes files in any status (including FAILED) to allow status polling.
     """
-    user_id = user.id if user is not None else None
+    user_id = user.id
     user_file = (
         db_session.query(UserFile)
         .filter(UserFile.id == file_id, UserFile.user_id == user_id)
@@ -484,7 +484,7 @@ class UserFileIdsRequest(BaseModel):
 )
 def get_user_file_statuses(
     body: UserFileIdsRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     """Fetch statuses for a set of user file IDs owned by the current user.
@@ -494,7 +494,7 @@ def get_user_file_statuses(
     if not body.file_ids:
         return []
 
-    user_id = user.id if user is not None else None
+    user_id = user.id
     user_files = (
         db_session.query(UserFile)
         .filter(UserFile.user_id == user_id)
@@ -510,10 +510,10 @@ def get_user_file_statuses(
 def move_chat_session(
     project_id: int,
     body: ChatSessionRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     chat_session = (
         db_session.query(ChatSession)
         .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user_id)
@@ -529,10 +529,10 @@ def move_chat_session(
 @router.post("/remove_chat_session")
 def remove_chat_session(
     body: ChatSessionRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     chat_session = (
         db_session.query(ChatSession)
         .filter(ChatSession.id == body.chat_session_id, ChatSession.user_id == user_id)
@@ -548,14 +548,14 @@ def remove_chat_session(
 @router.get("/session/{chat_session_id}/token-count", response_model=TokenCountResponse)
 def get_chat_session_project_token_count(
     chat_session_id: str,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> TokenCountResponse:
     """Return sum of token_count for all user files in the project linked to the given chat session.
 
     If the chat session has no project, returns 0.
     """
-    user_id = user.id if user is not None else None
+    user_id = user.id
     chat_session = (
         db_session.query(ChatSession)
         .filter(ChatSession.id == chat_session_id, ChatSession.user_id == user_id)
@@ -576,7 +576,7 @@ def get_chat_session_project_token_count(
 @router.get("/session/{chat_session_id}/files", tags=PUBLIC_API_TAGS)
 def get_chat_session_project_files(
     chat_session_id: str,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     """Return user files for the project linked to the given chat session.
@@ -584,7 +584,7 @@ def get_chat_session_project_files(
     If the chat session has no project, returns an empty list.
     Only returns files owned by the current user and not FAILED.
     """
-    user_id = user.id if user is not None else None
+    user_id = user.id
 
     chat_session = (
         db_session.query(ChatSession)
@@ -614,13 +614,13 @@ def get_chat_session_project_files(
 @router.get("/{project_id}/token-count", response_model=TokenCountResponse)
 def get_project_total_token_count(
     project_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> TokenCountResponse:
     """Return sum of token_count for all user files in the given project for the current user."""
 
     # Verify the project belongs to the current user
-    user_id = user.id if user is not None else None
+    user_id = user.id
     project = (
         db_session.query(UserProject)
         .filter(UserProject.id == project_id, UserProject.user_id == user_id)

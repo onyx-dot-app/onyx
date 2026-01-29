@@ -13,7 +13,7 @@ export default function AccountsAccessPage() {
   const authType = useAuthType();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType !== null && authType !== AuthType.DISABLED;
+  const showTokensSection = authType !== null;
   const hasAccess = showPasswordSection || showTokensSection;
 
   // Only redirect after authType has loaded to avoid redirecting during loading state

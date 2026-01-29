@@ -184,7 +184,7 @@ def _create_image_gen_llm_provider__no_commit(
 @admin_router.post("/test")
 def test_image_generation(
     test_request: TestImageGenerationRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test if an API key is valid for image generation.
@@ -269,7 +269,7 @@ def test_image_generation(
 @admin_router.post("/config")
 def create_config(
     config_create: ImageGenerationConfigCreate,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationConfigView:
     """Create a new image generation configuration.
@@ -331,7 +331,7 @@ def create_config(
 
 @admin_router.get("/config")
 def get_all_configs(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ImageGenerationConfigView]:
     """Get all image generation configurations."""
@@ -342,7 +342,7 @@ def get_all_configs(
 @admin_router.get("/config/{image_provider_id}/credentials")
 def get_config_credentials(
     image_provider_id: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationCredentials:
     """Get the credentials for an image generation config (for edit mode).
@@ -363,7 +363,7 @@ def get_config_credentials(
 def update_config(
     image_provider_id: str,
     config_update: ImageGenerationConfigUpdate,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationConfigView:
     """Update an image generation configuration.
@@ -448,7 +448,7 @@ def update_config(
 @admin_router.delete("/config/{image_provider_id}")
 def delete_config(
     image_provider_id: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Delete an image generation configuration and its associated LLM provider."""
@@ -479,7 +479,7 @@ def delete_config(
 @admin_router.post("/config/{image_provider_id}/default")
 def set_config_as_default(
     image_provider_id: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Set a configuration as the default for image generation."""
@@ -492,7 +492,7 @@ def set_config_as_default(
 @admin_router.delete("/config/{image_provider_id}/default")
 def unset_config_as_default(
     image_provider_id: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Unset a configuration as the default for image generation."""

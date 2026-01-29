@@ -4,11 +4,16 @@ This module provides functions for building dynamic agent instructions
 that are shared between local and kubernetes sandbox managers.
 """
 
+import threading
 from pathlib import Path
 
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Cache for skills section (skills are static, cached indefinitely)
+_skills_cache: dict[str, str] = {}
+_skills_cache_lock = threading.Lock()
 
 # Provider display name mapping
 PROVIDER_DISPLAY_NAMES = {
@@ -20,47 +25,61 @@ PROVIDER_DISPLAY_NAMES = {
     "vertex": "Google Vertex AI",
 }
 
-# Connector directory structure descriptions
+# Type alias for connector info entries
+ConnectorInfoEntry = dict[str, str | int]
+
+# Connector information for generating knowledge sources section
 # Keys are normalized (lowercase, underscores) directory names
-CONNECTOR_DESCRIPTIONS = {
-    "google_drive": (
-        "**Google Drive**: Copied over directly as is. "
-        "End files are stored as `FILE_NAME.json`."
-    ),
-    "gmail": (
-        "**Gmail**: Copied over directly as is. "
-        "End files are stored as `FILE_NAME.json`."
-    ),
-    "linear": (
-        "**Linear**: Each project is a folder, and within each project, "
-        "individual tickets are stored as `[TICKET_ID]_TICKET_NAME.json`."
-    ),
-    "slack": (
-        "**Slack**: Each channel is a folder titled `[CHANNEL_NAME]`. "
-        "Within each channel, each thread is a single file called "
-        "`[INITIAL_AUTHOR]_in_[CHANNEL]__[FIRST_MESSAGE].json`."
-    ),
-    "github": (
-        "**Github**: Each organization is a folder titled `[ORG_NAME]`. "
-        "Within each organization, there is a folder for each repository "
-        "titled `[REPO_NAME]`. Within each repository there are up to two "
-        "folders: `pull_requests` and `issues`. Pull requests are structured "
-        "as `[PR_ID]__[PR_NAME].json` and issues as `[ISSUE_ID]__[ISSUE_NAME].json`."
-    ),
-    "fireflies": (
-        "**Fireflies**: All calls are in the root, each as a single file "
-        "titled `CALL_TITLE.json`."
-    ),
-    "hubspot": (
-        "**HubSpot**: Four folders in the root: `Tickets`, `Companies`, "
-        "`Deals`, and `Contacts`. Each object is stored as a file named "
-        "after its title/name (e.g., `[TICKET_SUBJECT].json`, `[COMPANY_NAME].json`)."
-    ),
-    "notion": (
-        "**Notion**: Pages and databases are organized hierarchically. "
-        "Each page is stored as `PAGE_TITLE.json`."
-    ),
+# Each entry has: summary (with optional {subdirs}), file_pattern, scan_depth
+# NOTE: This is duplicated in kubernetes/docker/generate_agents_md.py to avoid circular imports
+CONNECTOR_INFO: dict[str, ConnectorInfoEntry] = {
+    "google_drive": {
+        "summary": "Documents and files from Google Drive. This may contain information about a user and work they have done",
+        "file_pattern": "`FILE_NAME.json`",
+        "scan_depth": 0,
+    },
+    "gmail": {
+        "summary": "Email conversations and threads",
+        "file_pattern": "`FILE_NAME.json`",
+        "scan_depth": 0,
+    },
+    "linear": {
+        "summary": "Engineering tickets from teams: {subdirs}",
+        "file_pattern": "`[TEAM]/[TICKET_ID]_TICKET_TITLE.json`",
+        "scan_depth": 2,
+    },
+    "slack": {
+        "summary": "Team messages from channels: {subdirs}",
+        "file_pattern": "`[CHANNEL]/[AUTHOR]_in_[CHANNEL]__[MSG].json`",
+        "scan_depth": 1,
+    },
+    "github": {
+        "summary": "Pull requests and code from: {subdirs}",
+        "file_pattern": "`[ORG]/[REPO]/pull_requests/[PR_NUMBER]__[PR_TITLE].json`",
+        "scan_depth": 2,
+    },
+    "fireflies": {
+        "summary": "Meeting transcripts from: {subdirs}",
+        "file_pattern": "`[YYYY-MM]/CALL_TITLE.json`",
+        "scan_depth": 1,
+    },
+    "hubspot": {
+        "summary": "CRM data including: {subdirs}",
+        "file_pattern": "`[TYPE]/[RECORD_NAME].json`",
+        "scan_depth": 1,
+    },
+    "notion": {
+        "summary": "Documentation and notes: {subdirs}",
+        "file_pattern": "`PAGE_TITLE.json`",
+        "scan_depth": 1,
+    },
+    "org_info": {
+        "summary": "Organizational structure and user identity",
+        "file_pattern": "Various JSON files",
+        "scan_depth": 0,
+    },
 }
+DEFAULT_SCAN_DEPTH = 1
 
 
 def get_provider_display_name(provider: str | None) -> str | None:
@@ -108,6 +127,63 @@ The `org_info/` directory contains information about the organization and user c
 - `organization_structure.json`: Contains a JSON representation of the organization's
   groups, managers, and their direct reports. Use this to understand reporting
   relationships and team structures."""
+
+
+# Content for the attachments section when user has uploaded files
+# NOTE: This is duplicated in agent_instructions.py to avoid circular imports
+ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
+
+The `attachments/` directory contains files that the user has explicitly
+uploaded during this session. **These files are critically important** and
+should be treated as high-priority context.
+
+### Why Attachments Matter
+
+- The user deliberately chose to upload these files, signaling they are directly relevant to the task
+- These files often contain the specific data, requirements, or examples the user wants you to work with
+- They may include spreadsheets, documents, images, or code that should inform your work
+
+### Required Actions
+
+**At the start of every task, you MUST:**
+
+1. **Check for attachments**: List the contents of `attachments/` to see what the user has provided
+2. **Read and analyze each file**: Thoroughly examine every attachment to understand its contents and relevance
+3. **Reference attachment content**: Use the information from attachments to inform your responses and outputs
+
+### File Handling
+
+- Uploaded files may be in various formats: CSV, JSON, PDF, images, text files, etc.
+- For spreadsheets and data files, examine the structure, columns, and sample data
+- For documents, extract key information and requirements
+- For images, analyze and describe their content
+- For code files, understand the logic and patterns
+
+**Do NOT ignore user uploaded files.** They are there for a reason and likely
+contain exactly what you need to complete the task successfully."""
+
+
+def build_attachments_section(attachments_path: Path | None) -> str:
+    """Build the attachments section for AGENTS.md.
+
+    Only includes the section when user-uploaded files are present
+    in the attachments directory.
+
+    Args:
+        attachments_path: Path to the attachments directory
+
+    Returns:
+        Formatted attachments section string, or empty string if no files
+    """
+    if not attachments_path or not attachments_path.exists():
+        return ""
+
+    try:
+        if any(attachments_path.iterdir()):
+            return ATTACHMENTS_SECTION_CONTENT
+    except Exception:
+        pass
+    return ""
 
 
 def build_org_info_section(include_org_info: bool) -> str:
@@ -164,8 +240,8 @@ def extract_skill_description(skill_md_path: Path) -> str:
         return "No description available."
 
 
-def build_skills_section(skills_path: Path) -> str:
-    """Build the available skills section by scanning the skills directory.
+def _scan_skills_directory(skills_path: Path) -> str:
+    """Internal function to scan skills directory (not cached).
 
     Args:
         skills_path: Path to the skills directory
@@ -173,12 +249,9 @@ def build_skills_section(skills_path: Path) -> str:
     Returns:
         Formatted skills section string
     """
-    if not skills_path.exists():
-        return "No skills available."
-
     skills_list: list[str] = []
     try:
-        for skill_dir in skills_path.iterdir():
+        for skill_dir in sorted(skills_path.iterdir()):
             if not skill_dir.is_dir():
                 continue
 
@@ -196,29 +269,97 @@ def build_skills_section(skills_path: Path) -> str:
     return "\n".join(skills_list)
 
 
-def _normalize_connector_name(name: str) -> str:
-    """Normalize a connector directory name for lookup.
+def build_skills_section(skills_path: Path) -> str:
+    """Build the available skills section by scanning the skills directory.
+
+    Skills are static, so results are cached indefinitely for performance.
 
     Args:
-        name: The directory name
+        skills_path: Path to the skills directory
 
     Returns:
-        Normalized name (lowercase, spaces to underscores)
+        Formatted skills section string
     """
+    if not skills_path.exists():
+        return "No skills available."
+
+    cache_key = str(skills_path)
+
+    # Check cache first (skills are static, no TTL needed)
+    with _skills_cache_lock:
+        cached = _skills_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    # Cache miss - scan the directory
+    result = _scan_skills_directory(skills_path)
+
+    # Update cache
+    with _skills_cache_lock:
+        _skills_cache[cache_key] = result
+
+    return result
+
+
+def _normalize_connector_name(name: str) -> str:
+    """Normalize a connector directory name for lookup."""
     return name.lower().replace(" ", "_").replace("-", "_")
 
 
-def build_file_structure_section(files_path: Path) -> str:
-    """Build the file structure section by scanning the files directory.
+def _scan_directory_to_depth(
+    directory: Path, current_depth: int, max_depth: int, indent: str = "  "
+) -> list[str]:
+    """Recursively scan directory up to max_depth levels.
 
-    Scans the symlinked files/ directory to discover which data sources
-    are available and lists them for the agent.
+    Args:
+        directory: Directory to scan
+        current_depth: Current depth level (0 = connector root)
+        max_depth: Maximum depth to scan
+        indent: Indentation string for current level
+
+    Returns:
+        List of formatted directory lines
+    """
+    if current_depth >= max_depth:
+        return []
+
+    lines: list[str] = []
+    try:
+        subdirs = sorted(
+            d for d in directory.iterdir() if d.is_dir() and not d.name.startswith(".")
+        )
+
+        for subdir in subdirs[:10]:  # Limit to 10 per level
+            lines.append(f"{indent}- {subdir.name}/")
+
+            # Recurse if we haven't hit max depth
+            if current_depth + 1 < max_depth:
+                nested = _scan_directory_to_depth(
+                    subdir, current_depth + 1, max_depth, indent + "  "
+                )
+                lines.extend(nested)
+
+        if len(subdirs) > 10:
+            lines.append(f"{indent}- ... and {len(subdirs) - 10} more")
+    except Exception:
+        pass
+
+    return lines
+
+
+def build_knowledge_sources_section(files_path: Path) -> str:
+    """Build combined knowledge sources section with summary, structure, and file patterns.
+
+    This creates a single section per connector that includes:
+    - What kind of data it contains (with actual subdirectory names)
+    - The directory structure
+    - The file naming pattern
 
     Args:
         files_path: Path to the files directory (symlink to knowledge sources)
 
     Returns:
-        Formatted file structure section string describing available sources
+        Formatted knowledge sources section
     """
     if not files_path.exists():
         return "No knowledge sources available."
@@ -229,108 +370,74 @@ def build_file_structure_section(files_path: Path) -> str:
         if not actual_path.exists():
             return "No knowledge sources available."
     except Exception:
-        # If we can't resolve the symlink, try to use it directly
         actual_path = files_path
 
-    sources: list[str] = []
+    sections: list[str] = []
     try:
-        for item in sorted(actual_path.iterdir()):
-            if not item.is_dir():
-                continue
-            # Skip hidden directories
-            if item.name.startswith("."):
+        for item in sorted(files_path.iterdir()):
+            if not item.is_dir() or item.name.startswith("."):
                 continue
 
-            source_name = item.name
-            # Count files and subdirectories for context
-            file_count = 0
-            subdir_count = 0
+            normalized = _normalize_connector_name(item.name)
+            info = CONNECTOR_INFO.get(normalized, {})
+
+            # Get subdirectory names
+            subdirs: list[str] = []
             try:
-                for child in item.rglob("*"):
-                    if child.is_file():
-                        file_count += 1
-                    elif child.is_dir():
-                        subdir_count += 1
+                subdirs = sorted(
+                    d.name
+                    for d in item.iterdir()
+                    if d.is_dir() and not d.name.startswith(".")
+                )[:5]
             except Exception:
                 pass
 
-            # Build description based on source name
-            source_info = f"- **{source_name}/**"
-            if file_count > 0 or subdir_count > 0:
-                details = []
-                if file_count > 0:
-                    details.append(f"{file_count} file{'s' if file_count != 1 else ''}")
-                if subdir_count > 0:
-                    details.append(
-                        f"{subdir_count} subdirector{'ies' if subdir_count != 1 else 'y'}"
-                    )
-                source_info += f" ({', '.join(details)})"
+            # Build summary with subdirs
+            summary_template = str(info.get("summary", f"Data from {item.name}"))
+            if "{subdirs}" in summary_template and subdirs:
+                subdir_str = ", ".join(subdirs)
+                if len(subdirs) == 5:
+                    subdir_str += ", ..."
+                summary = summary_template.format(subdirs=subdir_str)
+            elif "{subdirs}" in summary_template:
+                summary = summary_template.replace(": {subdirs}", "").replace(
+                    " {subdirs}", ""
+                )
+            else:
+                summary = summary_template
 
-            sources.append(source_info)
+            # Build connector section
+            file_pattern = str(info.get("file_pattern", ""))
+            scan_depth = int(info.get("scan_depth", DEFAULT_SCAN_DEPTH))
+
+            lines = [f"### {item.name}/"]
+            lines.append(f"{summary}.\n")
+            # Add directory structure if depth > 0
+            if scan_depth > 0:
+                lines.append("Directory structure:\n")
+                nested = _scan_directory_to_depth(item, 0, scan_depth, "")
+                if nested:
+                    lines.append("")
+                    lines.extend(nested)
+
+            lines.append(f"\nFile format: {file_pattern}")
+
+            sections.append("\n".join(lines))
     except Exception as e:
-        logger.warning(f"Error scanning files directory: {e}")
-        return "Error loading knowledge sources."
+        logger.warning(f"Error building knowledge sources section: {e}")
+        return "Error scanning knowledge sources."
 
-    if not sources:
+    if not sections:
         return "No knowledge sources available."
 
-    header = "The `files/` directory contains the following knowledge sources:\n\n"
-    return header + "\n".join(sources)
-
-
-def build_connector_descriptions_section(files_path: Path) -> str:
-    """Build connector-specific descriptions for available data sources.
-
-    Only includes descriptions for connectors that are actually present
-    in the files/ directory.
-
-    Args:
-        files_path: Path to the files directory (symlink to knowledge sources)
-
-    Returns:
-        Formatted connector descriptions section
-    """
-    if not files_path.exists():
-        return ""
-
-    # Resolve the symlink to get the actual path
-    try:
-        actual_path = files_path.resolve()
-        if not actual_path.exists():
-            return ""
-    except Exception:
-        actual_path = files_path
-
-    descriptions: list[str] = []
-    try:
-        for item in sorted(actual_path.iterdir()):
-            if not item.is_dir():
-                continue
-            if item.name.startswith("."):
-                continue
-
-            # Look up connector description
-            normalized_name = _normalize_connector_name(item.name)
-            if normalized_name in CONNECTOR_DESCRIPTIONS:
-                descriptions.append(f"- {CONNECTOR_DESCRIPTIONS[normalized_name]}")
-    except Exception as e:
-        logger.warning(
-            f"Error scanning files directory for connector descriptions: {e}"
-        )
-        return ""
-
-    if not descriptions:
-        return ""
-
-    header = "Each connector type organizes its data differently:\n\n"
-    footer = "\n\nAcross all names, spaces are replaced by `_`."
-    return header + "\n".join(descriptions) + footer
+    return "\n\n".join(sections)
 
 
 def generate_agent_instructions(
     template_path: Path,
     skills_path: Path,
     files_path: Path | None = None,
+    attachments_path: Path | None = None,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
@@ -346,6 +453,7 @@ def generate_agent_instructions(
         template_path: Path to the AGENTS.template.md file
         skills_path: Path to the skills directory
         files_path: Path to the files directory (symlink to knowledge sources)
+        attachments_path: Path to the attachments directory (user-uploaded files)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
@@ -382,6 +490,11 @@ def generate_agent_instructions(
     # Build org info section (only included when demo data is enabled)
     org_info_section = build_org_info_section(include_org_info)
 
+    # Build attachments section (only included when files are present)
+    attachments_section = (
+        build_attachments_section(attachments_path) if attachments_path else ""
+    )
+
     # Replace placeholders
     content = template_content
     content = content.replace("{{USER_CONTEXT}}", user_context)
@@ -393,18 +506,15 @@ def generate_agent_instructions(
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
     content = content.replace("{{ORG_INFO_SECTION}}", org_info_section)
+    content = content.replace("{{ATTACHMENTS_SECTION}}", attachments_section)
 
     # Only replace file-related placeholders if files_path is provided.
     # When files_path is None (e.g., Kubernetes), leave placeholders intact
     # so the container can replace them after files are synced.
     if files_path:
-        file_structure_section = build_file_structure_section(files_path)
-        connector_descriptions_section = build_connector_descriptions_section(
-            files_path
-        )
-        content = content.replace("{{FILE_STRUCTURE_SECTION}}", file_structure_section)
+        knowledge_sources_section = build_knowledge_sources_section(files_path)
         content = content.replace(
-            "{{CONNECTOR_DESCRIPTIONS_SECTION}}", connector_descriptions_section
+            "{{KNOWLEDGE_SOURCES_SECTION}}", knowledge_sources_section
         )
 
     return content

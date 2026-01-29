@@ -41,7 +41,7 @@ def _run_single_search(
     query: str,
     filters: BaseFilters | None,
     document_index: DocumentIndex,
-    user: User | None,
+    user: User,
     db_session: Session,
     num_hits: int | None = None,
 ) -> list[InferenceChunk]:
@@ -63,7 +63,7 @@ def _run_single_search(
 
 def stream_search_query(
     request: SendSearchQueryRequest,
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> Generator[
     SearchQueriesPacket | SearchDocsPacket | LLMSelectedDocsPacket | SearchErrorPacket,
@@ -101,8 +101,7 @@ def stream_search_query(
     # Build list of all executed queries for tracking
     all_executed_queries = [original_query] + keyword_expansions
 
-    # TODO remove this check, user should not be None
-    if user is not None:
+    if not user.is_anonymous:
         create_search_query(
             db_session=db_session,
             user_id=user.id,

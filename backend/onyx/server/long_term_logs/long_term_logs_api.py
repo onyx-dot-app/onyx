@@ -23,7 +23,7 @@ def get_long_term_logs(
     category: str,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> list[dict | list | str]:
     """Fetch logs for a specific category within an optional time range.
     Only accessible by admin users."""
@@ -46,7 +46,7 @@ def download_long_term_logs_zip(
     category: str,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> FileResponse:
     """Download logs for a specific category as a ZIP file.
     Only accessible by admin users."""
@@ -91,7 +91,7 @@ def download_long_term_logs_zip(
 
 @router.get("")
 def get_available_categories(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> list[str]:
     """Get a list of all available log categories.
     Only accessible by admin users."""

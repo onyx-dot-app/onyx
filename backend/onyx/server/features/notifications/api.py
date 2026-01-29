@@ -58,7 +58,7 @@ def get_notifications_api(
 @router.post("/{notification_id}/dismiss")
 def dismiss_notification_endpoint(
     notification_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
