@@ -151,7 +151,7 @@ export function useTimelineUIState(
       !lastTurnGroup?.isParallel &&
       lastStepSupportsCollapsedStreaming;
 
-    // Collapsed parallel compact content
+    // Collapsed parallel streaming content
     const showCollapsedParallel =
       showParallelTabs &&
       !isExpanded &&
