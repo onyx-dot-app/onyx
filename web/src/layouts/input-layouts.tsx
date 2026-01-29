@@ -40,13 +40,13 @@ function VerticalInputLayout({
   nonInteractable = false,
   children,
   subDescription,
-  ...props
+  ...titleLayoutProps
 }: VerticalLayoutProps) {
   const content = (
     <Section gap={0.25} alignItems="start">
-      <TitleLayout name={props.name} {...props} />
+      <TitleLayout {...titleLayoutProps} />
       {children}
-      {props.name && <ErrorLayout name={props.name} />}
+      {titleLayoutProps.name && <ErrorLayout name={titleLayoutProps.name} />}
       {subDescription && (
         <Text secondaryBody text03>
           {subDescription}
@@ -59,7 +59,7 @@ function VerticalInputLayout({
 
   // We wrap an empty, no-`name` `<Label>` around the actual contents to make it easily interactable.
   // Interacting with the entire section - NOT just the input itself - will redirect interactions to the input.
-  return <Label>{content}</Label>;
+  return <Label disabled={titleLayoutProps.disabled}>{content}</Label>;
 }
 
 /**
@@ -103,7 +103,7 @@ function HorizontalInputLayout({
   nonInteractable,
   children,
   center,
-  ...props
+  ...titleLayoutProps
 }: HorizontalLayoutProps) {
   const content = (
     <Section gap={0.25} alignItems="start">
@@ -112,12 +112,12 @@ function HorizontalInputLayout({
         justifyContent="between"
         alignItems={center ? "center" : "start"}
       >
-        <TitleLayout {...props} />
+        <TitleLayout {...titleLayoutProps} />
         <Section alignItems="end" width="fit">
           {children}
         </Section>
       </Section>
-      {props.name && <ErrorLayout name={props.name} />}
+      {titleLayoutProps.name && <ErrorLayout name={titleLayoutProps.name} />}
     </Section>
   );
 
@@ -125,7 +125,7 @@ function HorizontalInputLayout({
 
   // We wrap an empty, no-`name` `<Label>` around the actual contents to make it easily interactable.
   // Interacting with the entire section - NOT just the input itself - will redirect interactions to the input.
-  return <Label>{content}</Label>;
+  return <Label disabled={titleLayoutProps.disabled}>{content}</Label>;
 }
 
 /**
@@ -159,13 +159,15 @@ export interface TitleLayoutProps {
   title: string;
   description?: string;
   optional?: boolean;
+  disabled?: boolean;
   center?: boolean;
 }
 function TitleLayout({
   name,
   title,
-  optional,
   description,
+  optional,
+  disabled,
   center,
 }: TitleLayoutProps) {
   const content = (
@@ -196,7 +198,11 @@ function TitleLayout({
   );
 
   if (!name) return content;
-  return <Label name={name}>{content}</Label>;
+  return (
+    <Label name={name} disabled={disabled}>
+      {content}
+    </Label>
+  );
 }
 
 /**
