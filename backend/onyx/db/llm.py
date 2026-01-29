@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy import update
@@ -546,7 +548,15 @@ def remove_llm_provider(
         db_session.flush()
 
 
-def update_default_provider(provider_id: int, model: str, db_session: Session) -> None:
+def _update_default_provider(
+    provider_id: int,
+    model: str,
+    db_session: Session,
+    flow_type: ModelFlowType,
+    validation_func: (
+        Callable[[ModelConfiguration], str] | None
+    ) = None,  # Returns error message
+) -> None:
     # Single query with join to get both model_config and its flow mapping
     result = db_session.execute(
         select(ModelConfiguration, FlowMapping)
@@ -554,7 +564,7 @@ def update_default_provider(provider_id: int, model: str, db_session: Session) -
         .where(
             ModelConfiguration.llm_provider_id == provider_id,
             ModelConfiguration.name == model,
-            FlowMapping.flow_type == ModelFlowType.TEXT,
+            FlowMapping.flow_type == flow_type,
         )
     ).first()
 
@@ -565,68 +575,51 @@ def update_default_provider(provider_id: int, model: str, db_session: Session) -
 
     model_config, new_default = result
 
-    # Clear existing default and set new one in a single atomic operation
-    # First, unset any existing defaults for TEXT flow type
+    if validation_func and (error_message := validation_func(model_config)):
+        raise ValueError(error_message)
+
+    # Clear existing default and set now in a single atomic operation
     db_session.execute(
         update(FlowMapping)
         .where(
-            FlowMapping.flow_type == ModelFlowType.TEXT,
+            FlowMapping.flow_type == flow_type,
             FlowMapping.is_default == True,  # noqa: E712
         )
         .values(is_default=False)
     )
 
-    # Set the new default and ensure model is visible
     new_default.is_default = True
     model_config.is_visible = True
 
     db_session.commit()
+
+
+def update_default_provider(provider_id: int, model: str, db_session: Session) -> None:
+    _update_default_provider(
+        provider_id=provider_id,
+        model=model,
+        db_session=db_session,
+        flow_type=ModelFlowType.TEXT,
+    )
 
 
 def update_default_vision_provider(
     provider_id: int, vision_model: str, db_session: Session
 ) -> None:
-    # Single query with join to get model_config with provider and its VISION flow mapping
-    result = db_session.execute(
-        select(ModelConfiguration, FlowMapping)
-        .join(FlowMapping, FlowMapping.model_configuration_id == ModelConfiguration.id)
-        .options(selectinload(ModelConfiguration.llm_provider))
-        .where(
-            ModelConfiguration.llm_provider_id == provider_id,
-            ModelConfiguration.name == vision_model,
-            FlowMapping.flow_type == ModelFlowType.VISION,
-        )
-    ).first()
+    def validate_vision_model(model_config: ModelConfiguration) -> str:
+        if not model_supports_image_input(
+            vision_model, model_config.llm_provider.provider
+        ):
+            return f"Model '{vision_model}' for provider '{model_config.llm_provider.provider}' does not support image input"
+        return ""
 
-    if not result:
-        raise ValueError(
-            f"Model '{vision_model}' is not a valid VISION model for provider '{provider_id}'"
-        )
-
-    model_config, new_default = result
-
-    # Validate that the model supports image input
-    if not model_supports_image_input(vision_model, model_config.llm_provider.provider):
-        raise ValueError(
-            f"Model '{vision_model}' for provider '{model_config.llm_provider.provider}' "
-            "does not support image input"
-        )
-
-    # Clear existing default for VISION flow type
-    db_session.execute(
-        update(FlowMapping)
-        .where(
-            FlowMapping.flow_type == ModelFlowType.VISION,
-            FlowMapping.is_default == True,  # noqa: E712
-        )
-        .values(is_default=False)
+    _update_default_provider(
+        provider_id=provider_id,
+        model=vision_model,
+        db_session=db_session,
+        flow_type=ModelFlowType.VISION,
+        validation_func=validate_vision_model,
     )
-
-    # Set the new default and ensure model is visible
-    new_default.is_default = True
-    model_config.is_visible = True
-
-    db_session.commit()
 
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
