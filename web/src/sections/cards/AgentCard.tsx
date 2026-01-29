@@ -25,6 +25,7 @@ import {
 } from "@opal/icons";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import AgentViewerModal from "@/sections/modals/AgentViewerModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
 import Hoverable from "@/refresh-components/Hoverable";
@@ -47,6 +48,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
+  const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   const { popup, setPopup } = usePopup();
 
@@ -97,9 +99,13 @@ export default function AgentCard({ agent }: AgentCardProps) {
         />
       </shareAgentModal.Provider>
 
+      <agentViewerModal.Provider>
+        <AgentViewerModal agent={fullAgent!} />
+      </agentViewerModal.Provider>
+
       <Hoverable
         asChild
-        onClick={handleStartChat}
+        onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
