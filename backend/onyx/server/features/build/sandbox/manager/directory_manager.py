@@ -244,9 +244,11 @@ class DirectoryManager:
                 )
 
         # Create additional output directories for generated content
-        (output_dir / "slides").mkdir(parents=True, exist_ok=True)
         (output_dir / "markdown").mkdir(parents=True, exist_ok=True)
-        (output_dir / "graphs").mkdir(parents=True, exist_ok=True)
+        # TODO: no images for now
+        # (output_dir / "slides").mkdir(parents=True, exist_ok=True)
+        # TODO: No graphs for now
+        # (output_dir / "graphs").mkdir(parents=True, exist_ok=True)
 
     def setup_venv(self, sandbox_path: Path) -> Path:
         """Copy virtual environment template.
@@ -271,6 +273,8 @@ class DirectoryManager:
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
+        use_demo_data: bool = False,
+        include_org_info: bool = False,
     ) -> None:
         """Generate AGENTS.md with dynamic configuration.
 
@@ -286,6 +290,8 @@ class DirectoryManager:
             disabled_tools: List of disabled tools
             user_name: User's name for personalization
             user_role: User's role/title for personalization
+            use_demo_data: If True, exclude user context from AGENTS.md
+            include_org_info: Whether to include the org_info section (demo data mode)
         """
         agent_md_path = sandbox_path / "AGENTS.md"
         if agent_md_path.exists():
@@ -294,17 +300,23 @@ class DirectoryManager:
         # Get the files path (symlink to knowledge sources)
         files_path = sandbox_path / "files"
 
+        # Get the attachments path (user-uploaded files)
+        attachments_path = sandbox_path / "attachments"
+
         # Use shared utility to generate content
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
             files_path=files_path if files_path.exists() else None,
+            attachments_path=attachments_path if attachments_path.exists() else None,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
+            use_demo_data=use_demo_data,
+            include_org_info=include_org_info,
         )
 
         # Write the generated content

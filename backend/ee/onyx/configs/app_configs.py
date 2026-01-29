@@ -122,6 +122,9 @@ SUPER_CLOUD_API_KEY = os.environ.get("SUPER_CLOUD_API_KEY", "api_key")
 # when the capture is called. These defaults prevent Posthog issues from breaking the Onyx app
 POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY") or "FooBar"
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
+POSTHOG_DEBUG_LOGS_ENABLED = (
+    os.environ.get("POSTHOG_DEBUG_LOGS_ENABLED", "").lower() == "true"
+)
 
 MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 

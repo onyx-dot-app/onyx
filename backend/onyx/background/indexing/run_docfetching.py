@@ -45,6 +45,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
@@ -57,6 +58,10 @@ from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
+from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
+from onyx.redis.redis_hierarchy import ensure_source_node_exists
+from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.indexing.persistent_document_writer import (
     get_persistent_document_writer,
 )
@@ -538,14 +543,24 @@ def connector_document_extraction(
         total_failures = 0
         document_count = 0
 
+        # Ensure the SOURCE-type root hierarchy node exists before processing.
+        # This is the root of the hierarchy tree for this source - all other
+        # hierarchy nodes should ultimately have this as an ancestor.
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        with get_session_with_current_tenant() as db_session:
+            ensure_source_node_exists(redis_client, db_session, db_connector.source)
+
         # Main extraction loop
         while checkpoint.has_more:
             logger.info(
                 f"Running '{db_connector.source.value}' connector with checkpoint: {checkpoint}"
             )
-            for document_batch, failure, next_checkpoint in connector_runner.run(
-                checkpoint
-            ):
+            for (
+                document_batch,
+                hierarchy_node_batch,
+                failure,
+                next_checkpoint,
+            ) in connector_runner.run(checkpoint):
                 # Check if connector is disabled mid run and stop if so unless it's the secondary
                 # index being built. We want to populate it even for paused connectors
                 # Often paused connectors are sources that aren't updated frequently but the
@@ -579,6 +594,33 @@ def connector_document_extraction(
                 # Save checkpoint if provided
                 if next_checkpoint:
                     checkpoint = next_checkpoint
+
+                # Process hierarchy nodes batch - upsert to Postgres and cache in Redis
+                if hierarchy_node_batch:
+                    with get_session_with_current_tenant() as db_session:
+                        upserted_nodes = upsert_hierarchy_nodes_batch(
+                            db_session=db_session,
+                            nodes=hierarchy_node_batch,
+                            source=db_connector.source,
+                            commit=True,
+                        )
+
+                        # Cache in Redis for fast ancestor resolution during doc processing
+                        redis_client = get_redis_client(tenant_id=tenant_id)
+                        cache_entries = [
+                            HierarchyNodeCacheEntry.from_db_model(node)
+                            for node in upserted_nodes
+                        ]
+                        cache_hierarchy_nodes_batch(
+                            redis_client=redis_client,
+                            source=db_connector.source,
+                            entries=cache_entries,
+                        )
+
+                    logger.debug(
+                        f"Persisted and cached {len(hierarchy_node_batch)} hierarchy nodes "
+                        f"for attempt={index_attempt_id}"
+                    )
 
                 # below is all document processing task, so if no batch we can just continue
                 if not document_batch:

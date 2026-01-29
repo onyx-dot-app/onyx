@@ -10,8 +10,9 @@ export function BillingAlerts({
 }) {
   const isTrialing = billingInformation.status === BillingStatus.TRIALING;
   const isCancelled = billingInformation.cancel_at_period_end;
-  const isExpired =
-    new Date(billingInformation.current_period_end) < new Date();
+  const isExpired = billingInformation.current_period_end
+    ? new Date(billingInformation.current_period_end) < new Date()
+    : false;
   const noPaymentMethod = !billingInformation.payment_method_enabled;
 
   const messages: string[] = [];
@@ -21,7 +22,7 @@ export function BillingAlerts({
       "Your subscription has expired. Please resubscribe to continue using the service."
     );
   }
-  if (isCancelled && !isExpired) {
+  if (isCancelled && !isExpired && billingInformation.current_period_end) {
     messages.push(
       `Your subscription will cancel on ${new Date(
         billingInformation.current_period_end

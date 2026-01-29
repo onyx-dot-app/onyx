@@ -24,7 +24,7 @@ import {
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import { parseLlmDescriptor } from "./llm/utils";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -37,8 +37,8 @@ import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
+import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
 import { useLLMProviders } from "./hooks/useLLMProviders";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";

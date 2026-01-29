@@ -18,7 +18,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import boto3
 from botocore.exceptions import ClientError
 from mypy_boto3_s3.client import S3Client
 
@@ -27,6 +26,7 @@ from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.s3.s3_client import build_s3_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -287,13 +287,10 @@ class S3PersistentDocumentWriter:
     def _get_s3_client(self) -> S3Client:
         """Lazily initialize S3 client.
 
-        Uses the default boto3 credential chain which supports:
-        - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-        - AWS config files
-        - IAM roles (EC2/ECS/EKS instance profiles, IRSA)
+        Uses the craft-specific boto3 client which only supports IAM roles (IRSA).
         """
         if self._s3_client is None:
-            self._s3_client = boto3.client("s3")
+            self._s3_client = build_s3_client()
         return self._s3_client
 
     def write_documents(self, documents: list[Document]) -> list[str]:

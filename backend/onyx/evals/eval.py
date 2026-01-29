@@ -560,7 +560,6 @@ def _get_multi_turn_answer_with_tools(
                     file_descriptors=[],
                     search_doc_ids=None,
                     retrieval_options=RetrievalDetails(),
-                    rerank_settings=None,
                     llm_override=llm_override,
                     persona_override_config=full_configuration.persona_override_config,
                     skip_gen_ai_answer_generation=False,

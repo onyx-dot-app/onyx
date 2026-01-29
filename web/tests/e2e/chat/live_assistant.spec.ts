@@ -18,7 +18,7 @@ test("Chat workflow", async ({ page }) => {
   await loginAsRandomUser(page);
 
   // Navigate to the chat page
-  await page.goto("/chat");
+  await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
   // Test interaction with the Default assistant

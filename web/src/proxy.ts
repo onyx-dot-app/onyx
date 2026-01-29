@@ -11,7 +11,7 @@ const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
 const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
 // Protected route prefixes (require authentication)
-const PROTECTED_ROUTES = ["/chat", "/admin", "/assistants", "/connector"];
+const PROTECTED_ROUTES = ["/app", "/admin", "/assistants", "/connector"];
 
 // Public route prefixes (no authentication required)
 const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
@@ -21,7 +21,7 @@ const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 export const config = {
   matcher: [
     // Auth-protected routes (for middleware auth check)
-    "/chat/:path*",
+    "/app/:path*",
     "/admin/:path*",
     "/assistants/:path*",
     "/connector/:path*",

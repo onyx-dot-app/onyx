@@ -3,6 +3,9 @@
 ACP is a JSON-RPC 2.0 based protocol for communicating with coding agents.
 See: https://agentclientprotocol.com
 
+This module includes comprehensive logging for debugging ACP communication.
+Enable logging by setting LOG_LEVEL=DEBUG or BUILD_PACKET_LOGGING=true.
+
 Usage:
     # Simple usage with context manager
     with ACPAgentClient(cwd="/path/to/project") as client:
@@ -23,6 +26,7 @@ import select
 import shutil
 import subprocess
 import threading
+import time
 from collections.abc import Generator
 from dataclasses import dataclass
 from dataclasses import field
@@ -38,6 +42,8 @@ from acp.schema import PromptResponse
 from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 from pydantic import ValidationError
+
+from onyx.server.features.build.api.packet_logger import get_packet_logger
 
 
 # ACP Protocol version
@@ -315,6 +321,10 @@ class ACPAgentClient:
         if params is not None:
             request["params"] = params
 
+        # Log the outgoing request
+        packet_logger = get_packet_logger()
+        packet_logger.log_jsonrpc_request(method, request_id, params, context="local")
+
         try:
             process.stdin.write(json.dumps(request) + "\n")
             process.stdin.flush()
@@ -349,6 +359,10 @@ class ACPAgentClient:
         if params is not None:
             notification["params"] = params
 
+        # Log the outgoing notification
+        packet_logger = get_packet_logger()
+        packet_logger.log_jsonrpc_request(method, None, params, context="local")
+
         try:
             process.stdin.write(json.dumps(notification) + "\n")
             process.stdin.flush()
@@ -375,6 +389,8 @@ class ACPAgentClient:
         if process.stdout is None:
             raise RuntimeError("Process stdout is not available")
 
+        packet_logger = get_packet_logger()
+
         with self._read_lock:
             if timeout is not None:
                 stdout_fd = process.stdout.fileno()
@@ -391,8 +407,15 @@ class ACPAgentClient:
                 return None
 
             try:
-                return json.loads(line)
+                message = json.loads(line)
+                # Log the raw incoming message
+                packet_logger.log_jsonrpc_raw_message("IN", message, context="local")
+                return message
             except json.JSONDecodeError:
+                packet_logger.log_raw(
+                    "JSONRPC-PARSE-ERROR",
+                    {"raw_line": line[:500], "error": "JSON decode failed"},
+                )
                 return {
                     "jsonrpc": "2.0",
                     "error": {
@@ -533,13 +556,24 @@ class ACPAgentClient:
         Raises:
             RuntimeError: If no session or prompt fails
         """
-        import time
-
         if self._state.current_session is None:
             raise RuntimeError("No active session. Call start() first.")
 
         session_id = self._state.current_session.session_id
         process = self._ensure_running()
+        packet_logger = get_packet_logger()
+
+        # Log the start of message processing
+        packet_logger.log_raw(
+            "ACP-SEND-MESSAGE-START",
+            {
+                "session_id": session_id,
+                "message_preview": (
+                    message[:200] + "..." if len(message) > 200 else message
+                ),
+                "timeout": timeout,
+            },
+        )
 
         # Build prompt content blocks
         prompt_content = [{"type": "text", "text": message}]
@@ -551,10 +585,18 @@ class ACPAgentClient:
 
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
+        events_yielded = 0
 
         while True:
             remaining = timeout - (time.time() - start_time)
             if remaining <= 0:
+                packet_logger.log_raw(
+                    "ACP-TIMEOUT",
+                    {
+                        "session_id": session_id,
+                        "elapsed_ms": (time.time() - start_time) * 1000,
+                    },
+                )
                 yield Error(code=-1, message="Timeout waiting for response")
                 break
 
@@ -564,6 +606,10 @@ class ACPAgentClient:
 
             if message_data is None:
                 if process.poll() is not None:
+                    packet_logger.log_raw(
+                        "ACP-PROCESS-TERMINATED",
+                        {"session_id": session_id, "exit_code": process.returncode},
+                    )
                     yield Error(
                         code=-1,
                         message=f"Agent process terminated with code {process.returncode}",
@@ -575,13 +621,35 @@ class ACPAgentClient:
             if message_data.get("id") == request_id:
                 if "error" in message_data:
                     error_data = message_data["error"]
+                    packet_logger.log_jsonrpc_response(
+                        request_id, error=error_data, context="local"
+                    )
                     yield Error(
                         code=error_data.get("code", -1),
                         message=error_data.get("message", "Unknown error"),
                     )
                 else:
                     result = message_data.get("result", {})
-                    yield PromptResponse.model_validate(result)
+                    packet_logger.log_jsonrpc_response(
+                        request_id, result=result, context="local"
+                    )
+                    prompt_response = PromptResponse.model_validate(result)
+                    packet_logger.log_acp_event_yielded(
+                        "prompt_response", prompt_response
+                    )
+                    events_yielded += 1
+                    yield prompt_response
+
+                # Log completion summary
+                elapsed_ms = (time.time() - start_time) * 1000
+                packet_logger.log_raw(
+                    "ACP-SEND-MESSAGE-COMPLETE",
+                    {
+                        "session_id": session_id,
+                        "events_yielded": events_yielded,
+                        "elapsed_ms": elapsed_ms,
+                    },
+                )
                 break
 
             # Handle notifications (session/update)
@@ -589,16 +657,51 @@ class ACPAgentClient:
                 params_data = message_data.get("params", {})
                 update = params_data.get("update", {})
 
+                # Log the notification
+                packet_logger.log_jsonrpc_notification(
+                    "session/update",
+                    {"update_type": update.get("sessionUpdate")},
+                    context="local",
+                )
+
                 for event in self._process_session_update(update):
+                    events_yielded += 1
+                    # Log each yielded event
+                    event_type = self._get_event_type_name(event)
+                    packet_logger.log_acp_event_yielded(event_type, event)
                     yield event
 
             # Handle requests from agent (e.g., fs/readTextFile)
             elif "method" in message_data and "id" in message_data:
+                packet_logger.log_raw(
+                    "ACP-UNSUPPORTED-REQUEST",
+                    {"method": message_data["method"], "id": message_data["id"]},
+                )
                 self._send_error_response(
                     message_data["id"],
                     -32601,
                     f"Method not supported: {message_data['method']}",
                 )
+
+    def _get_event_type_name(self, event: ACPEvent) -> str:
+        """Get the type name for an ACP event."""
+        if isinstance(event, AgentMessageChunk):
+            return "agent_message_chunk"
+        elif isinstance(event, AgentThoughtChunk):
+            return "agent_thought_chunk"
+        elif isinstance(event, ToolCallStart):
+            return "tool_call_start"
+        elif isinstance(event, ToolCallProgress):
+            return "tool_call_progress"
+        elif isinstance(event, AgentPlanUpdate):
+            return "agent_plan_update"
+        elif isinstance(event, CurrentModeUpdate):
+            return "current_mode_update"
+        elif isinstance(event, PromptResponse):
+            return "prompt_response"
+        elif isinstance(event, Error):
+            return "error"
+        return "unknown"
 
     def _process_session_update(
         self, update: dict[str, Any]
@@ -606,58 +709,85 @@ class ACPAgentClient:
         """Process a session/update notification and yield typed ACP schema objects.
 
         Validates and returns the actual ACP schema types directly.
-        Invalid updates are silently skipped.
+        Invalid updates are logged and skipped.
         """
         update_type = update.get("sessionUpdate")
+        packet_logger = get_packet_logger()
 
         if update_type == "agent_message_chunk":
             try:
                 yield AgentMessageChunk.model_validate(update)
-            except ValidationError:
-                pass  # Skip invalid updates
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "agent_thought_chunk":
             try:
                 yield AgentThoughtChunk.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "user_message_chunk":
-            pass  # Echo of user message - skip
+            # Echo of user message - skip but log
+            packet_logger.log_raw("ACP-SKIPPED-UPDATE", {"type": "user_message_chunk"})
 
         elif update_type == "tool_call":
             try:
                 yield ToolCallStart.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "tool_call_update":
             try:
                 yield ToolCallProgress.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "plan":
             try:
                 yield AgentPlanUpdate.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "available_commands_update":
             # Skip command updates - not relevant for consumers
-            pass
+            packet_logger.log_raw(
+                "ACP-SKIPPED-UPDATE", {"type": "available_commands_update"}
+            )
 
         elif update_type == "current_mode_update":
             try:
                 yield CurrentModeUpdate.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "session_info_update":
             # Skip session info updates - internal bookkeeping
-            pass
+            packet_logger.log_raw("ACP-SKIPPED-UPDATE", {"type": "session_info_update"})
 
-        # Unknown update types are silently skipped
+        else:
+            # Unknown update types are logged
+            packet_logger.log_raw(
+                "ACP-UNKNOWN-UPDATE-TYPE",
+                {"update_type": update_type, "update": update},
+            )
 
     def _send_error_response(
         self,

@@ -526,6 +526,8 @@ export default function EmbeddingForm() {
                     setDisplayPoorModelName(false);
                     setShowPoorModel(true);
                   } else {
+                    // Skip reranking step (step 1), go directly to advanced settings (step 2)
+                    nextFormStep();
                     nextFormStep();
                   }
                 }}
@@ -571,6 +573,8 @@ export default function EmbeddingForm() {
                 <Button
                   onClick={() => {
                     setShowPoorModel(false);
+                    // Skip reranking step (step 1), go directly to advanced settings (step 2)
+                    nextFormStep();
                     nextFormStep();
                   }}
                 >
@@ -667,7 +671,11 @@ export default function EmbeddingForm() {
 
             <div className={`mt-4 grid  grid-cols-3 w-full `}>
               <Button
-                onClick={() => prevFormStep()}
+                onClick={() => {
+                  // Skip reranking step (step 1), go back to embedding model (step 0)
+                  prevFormStep();
+                  prevFormStep();
+                }}
                 leftIcon={SvgArrowLeft}
                 secondary
               >

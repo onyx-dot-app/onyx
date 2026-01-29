@@ -1468,7 +1468,7 @@ class OAuth2AuthorizeResponse(BaseModel):
 
 def generate_state_token(
     data: Dict[str, str],
-    secret: SecretType,  # type: ignore[valid-type]
+    secret: SecretType,
     lifetime_seconds: int = STATE_TOKEN_LIFETIME_SECONDS,
 ) -> str:
     data["aud"] = STATE_TOKEN_AUDIENCE
@@ -1484,7 +1484,7 @@ def generate_csrf_token() -> str:
 def create_onyx_oauth_router(
     oauth_client: BaseOAuth2,
     backend: AuthenticationBackend,
-    state_secret: SecretType,  # type: ignore[valid-type]
+    state_secret: SecretType,
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
@@ -1504,7 +1504,7 @@ def get_oauth_router(
     oauth_client: BaseOAuth2,
     backend: AuthenticationBackend,
     get_user_manager: UserManagerDependency[models.UP, models.ID],
-    state_secret: SecretType,  # type: ignore[valid-type]
+    state_secret: SecretType,
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,

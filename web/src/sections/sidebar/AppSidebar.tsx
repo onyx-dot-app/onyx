@@ -37,9 +37,9 @@ import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarCo
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
-import { removeChatSessionFromProject } from "@/app/chat/projects/projectsService";
-import type { Project } from "@/app/chat/projects/projectsService";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
+import type { Project } from "@/app/app/projects/projectsService";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -51,11 +51,12 @@ import {
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useModalContext } from "@/components/context/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgDevKit,
@@ -63,10 +64,13 @@ import {
   SvgFolderPlus,
   SvgMoreHorizontal,
   SvgOnyxOctagon,
+  SvgSearchMenu,
   SvgSettings,
 } from "@opal/icons";
-import BuildModeIntroBackground from "@/app/build/components/IntroBackground";
-import BuildModeIntroContent from "@/app/build/components/IntroContent";
+import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
+import BuildModeIntroContent from "@/app/craft/components/IntroContent";
+import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import { usePostHog } from "posthog-js/react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Notification,
@@ -74,6 +78,7 @@ import {
 } from "@/app/admin/settings/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -141,10 +146,11 @@ interface AppSidebarInnerProps {
 
 const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
-    const searchParams = useSearchParams();
     const router = useRouter();
     const combinedSettings = useSettingsContext();
     const { popup, setPopup } = usePopup();
+    const posthog = usePostHog();
+    const { newTenantInfo, invitationInfo } = useModalContext();
 
     // Use SWR hooks for data fetching
     const {
@@ -211,16 +217,19 @@ const MemoizedAppSidebarInner = memo(
     const hasAutoTriggeredRef = useRef(false);
 
     // Auto-show intro once when there's an undismissed notification
+    // Don't show if tenant/invitation modal is open (e.g., "join existing team" modal)
+    const hasTenantModal = !!(newTenantInfo || invitationInfo);
     useEffect(() => {
       if (
         isOnyxCraftEnabled &&
         buildModeNotification &&
-        !hasAutoTriggeredRef.current
+        !hasAutoTriggeredRef.current &&
+        !hasTenantModal
       ) {
         hasAutoTriggeredRef.current = true;
         setShowIntroAnimation(true);
       }
-    }, [buildModeNotification, isOnyxCraftEnabled]);
+    }, [buildModeNotification, isOnyxCraftEnabled, hasTenantModal]);
 
     // Dismiss the build mode notification
     const dismissBuildModeNotification = useCallback(async () => {
@@ -419,8 +428,8 @@ const MemoizedAppSidebarInner = memo(
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
-          ? `/chat?assistantId=${currentAgent.id}`
-          : "/chat";
+          ? `/app?assistantId=${currentAgent.id}`
+          : "/app";
       return (
         <div data-testid="AppSidebar/new-session">
           <SidebarTab
@@ -438,14 +447,31 @@ const MemoizedAppSidebarInner = memo(
     const buildButton = useMemo(
       () => (
         <div data-testid="AppSidebar/build">
-          <SidebarTab leftIcon={SvgDevKit} folded={folded} href="/build/v1">
+          <SidebarTab
+            leftIcon={SvgDevKit}
+            folded={folded}
+            href={CRAFT_PATH}
+            onClick={() => posthog?.capture("clicked_craft_in_sidebar")}
+          >
             Craft
           </SidebarTab>
         </div>
       ),
-      [folded]
+      [folded, posthog]
     );
 
+    const searchChatsButton = useMemo(
+      () => (
+        <ChatSearchCommandMenu
+          trigger={
+            <SidebarTab leftIcon={SvgSearchMenu} folded={folded}>
+              Search Chats
+            </SidebarTab>
+          }
+        />
+      ),
+      [folded]
+    );
     const moreAgentsButton = useMemo(
       () => (
         <div data-testid="AppSidebar/more-agents">
@@ -455,7 +481,7 @@ const MemoizedAppSidebarInner = memo(
                 ? SvgOnyxOctagon
                 : SvgMoreHorizontal
             }
-            href="/chat/agents"
+            href="/app/agents"
             folded={folded}
             transient={activeSidebarTab.isMoreAgents()}
             lowlight={!folded}
@@ -566,7 +592,7 @@ const MemoizedAppSidebarInner = memo(
                 onTryBuildMode={() => {
                   setShowIntroAnimation(false);
                   dismissBuildModeNotification();
-                  router.push("/build/v1");
+                  router.push(CRAFT_PATH);
                 }}
               />
             </motion.div>
@@ -578,10 +604,11 @@ const MemoizedAppSidebarInner = memo(
             scrollKey="app-sidebar"
             footer={settingsButton}
             actionButtons={
-              <>
+              <div className="flex flex-col gap-0.5">
                 {newSessionButton}
+                {searchChatsButton}
                 {isOnyxCraftEnabled && buildButton}
-              </>
+              </div>
             }
           >
             {/* When folded, show icons immediately without waiting for data */}

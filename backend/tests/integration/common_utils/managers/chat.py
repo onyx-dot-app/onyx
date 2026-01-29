@@ -117,7 +117,6 @@ class ChatSessionManager:
             file_descriptors=file_descriptors or [],
             search_doc_ids=search_doc_ids or [],
             retrieval_options=retrieval_options,
-            rerank_settings=None,  # Can be added if needed
             query_override=query_override,
             regenerate=regenerate,
             llm_override=llm_override,
@@ -208,7 +207,6 @@ class ChatSessionManager:
             file_descriptors=file_descriptors or [],
             search_doc_ids=search_doc_ids or [],
             retrieval_options=RetrievalDetails(),  # This will be deprecated soon anyway
-            rerank_settings=None,
             query_override=query_override,
             regenerate=regenerate,
             llm_override=llm_override,

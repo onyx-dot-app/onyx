@@ -1,21 +1,21 @@
 "use client";
 
 import React, { useCallback, useMemo, useRef } from "react";
-import { Message } from "@/app/chat/interfaces";
+import { Message } from "@/app/app/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import HumanMessage from "@/app/chat/message/HumanMessage";
-import { ErrorBanner } from "@/app/chat/message/Resubmit";
+import HumanMessage from "@/app/app/message/HumanMessage";
+import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import AIMessage from "@/app/chat/message/messageComponents/AIMessage";
+import AIMessage from "@/app/app/message/messageComponents/AIMessage";
 import Spacer from "@/refresh-components/Spacer";
 import {
   useCurrentMessageHistory,
   useCurrentMessageTree,
   useLoadingError,
   useUncaughtError,
-} from "@/app/chat/stores/useChatSessionStore";
+} from "@/app/app/stores/useChatSessionStore";
 
 export interface MessageListProps {
   liveAssistant: MinimalPersonaSnapshot;

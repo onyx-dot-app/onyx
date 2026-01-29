@@ -33,6 +33,7 @@ from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
@@ -98,6 +99,7 @@ def create_session(
             user_level=request.user_level if request.demo_data_enabled else None,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
+            demo_data_enabled=request.demo_data_enabled,
         )
         db_session.commit()
     except ValueError as e:
@@ -328,6 +330,8 @@ def restore_session(
                 logger.info(
                     f"Session {session_id} workspace was restored by another request"
                 )
+                # Update heartbeat to mark sandbox as active
+                update_sandbox_heartbeat(db_session, sandbox.id)
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
                     base_response, session_loaded_in_sandbox=True
@@ -422,6 +426,9 @@ def restore_session(
     finally:
         if lock.owned():
             lock.release()
+
+    # Update heartbeat to mark sandbox as active after successful restore
+    update_sandbox_heartbeat(db_session, sandbox.id)
 
     base_response = SessionResponse.from_model(session, sandbox)
     return DetailedSessionResponse.from_session_response(
@@ -543,6 +550,48 @@ def download_artifact(
     )
 
 
+@router.get("/{session_id}/export-docx/{path:path}")
+def export_docx(
+    session_id: UUID,
+    path: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Export a markdown file as DOCX."""
+    session_manager = SessionManager(db_session)
+
+    try:
+        result = session_manager.export_docx(session_id, user.id, path)
+    except ValueError as e:
+        error_message = str(e)
+        if (
+            "path traversal" in error_message.lower()
+            or "access denied" in error_message.lower()
+        ):
+            raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=400, detail=error_message)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    docx_bytes, filename = result
+
+    try:
+        filename.encode("latin-1")
+        content_disposition = f'attachment; filename="{filename}"'
+    except UnicodeEncodeError:
+        from urllib.parse import quote
+
+        encoded_filename = quote(filename, safe="")
+        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": content_disposition},
+    )
+
+
 @router.get("/{session_id}/webapp-info", response_model=WebappInfo)
 def get_webapp_info(
     session_id: UUID,
@@ -596,7 +645,7 @@ def download_webapp(
 
 
 @router.post("/{session_id}/upload", response_model=UploadResponse)
-async def upload_file_endpoint(
+def upload_file_endpoint(
     session_id: UUID,
     file: UploadFile = File(...),
     user: User = Depends(current_user),
@@ -612,8 +661,8 @@ async def upload_file_endpoint(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File has no filename")
 
-    # Read file content
-    content = await file.read()
+    # Read file content (use sync file interface)
+    content = file.file.read()
 
     # Validate file (extension, mime type, size)
     is_valid, error = validate_file(file.filename, file.content_type, len(content))

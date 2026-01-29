@@ -9,6 +9,7 @@ All database operations should be handled by the caller (SessionManager, Celery 
 
 import mimetypes
 import re
+import subprocess
 import threading
 from collections.abc import Generator
 from pathlib import Path
@@ -86,6 +87,10 @@ class LocalSandboxManager(SandboxManager):
         # Track ACP clients in memory - keyed by (sandbox_id, session_id) tuple
         # Each session within a sandbox has its own ACP client
         self._acp_clients: dict[tuple[UUID, UUID], ACPAgentClient] = {}
+
+        # Track Next.js processes - keyed by (sandbox_id, session_id) tuple
+        # Used for clean shutdown when sessions are deleted
+        self._nextjs_processes: dict[tuple[UUID, UUID], subprocess.Popen[bytes]] = {}
 
         # Validate templates exist (raises RuntimeError if missing)
         self._validate_templates()
@@ -199,8 +204,9 @@ class LocalSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up all resources.
 
-        1. Stop all ACP clients for this sandbox (terminates agent subprocesses)
-        2. Cleanup sandbox directory (this will handle Next.js process cleanup)
+        1. Stop all Next.js processes for this sandbox
+        2. Stop all ACP clients for this sandbox (terminates agent subprocesses)
+        3. Cleanup sandbox directory
 
         Args:
             sandbox_id: The sandbox ID to terminate
@@ -208,6 +214,23 @@ class LocalSandboxManager(SandboxManager):
         Raises:
             RuntimeError: If termination fails
         """
+        # Stop all Next.js processes for this sandbox (keyed by (sandbox_id, session_id))
+        processes_to_stop = [
+            (key, process)
+            for key, process in self._nextjs_processes.items()
+            if key[0] == sandbox_id
+        ]
+        for key, process in processes_to_stop:
+            session_id = key[1]
+            try:
+                self._stop_nextjs_process(process, session_id)
+                del self._nextjs_processes[key]
+            except Exception as e:
+                logger.warning(
+                    f"Failed to stop Next.js for sandbox {sandbox_id}, "
+                    f"session {session_id}: {e}"
+                )
+
         # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
         clients_to_stop = [
             (key, client)
@@ -224,7 +247,7 @@ class LocalSandboxManager(SandboxManager):
                     f"session {key[1]}: {e}"
                 )
 
-        # Cleanup directory (this will handle Next.js process cleanup)
+        # Cleanup directory
         sandbox_path = self._get_sandbox_path(sandbox_id)
         try:
             self._directory_manager.cleanup_sandbox_directory(sandbox_path)
@@ -359,7 +382,11 @@ class LocalSandboxManager(SandboxManager):
             )
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
 
-            self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            nextjs_process = self._process_manager.start_nextjs_server(
+                web_dir, nextjs_port
+            )
+            # Store process for clean shutdown on session delete
+            self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
             logger.info("Next.js server started successfully")
 
             # Setup venv and AGENTS.md
@@ -376,6 +403,8 @@ class LocalSandboxManager(SandboxManager):
                 disabled_tools=OPENCODE_DISABLED_TOOLS,
                 user_name=user_name,
                 user_role=user_role,
+                use_demo_data=use_demo_data,
+                include_org_info=use_demo_data,
             )
             logger.debug("Agent instructions ready")
 
@@ -399,18 +428,30 @@ class LocalSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace (on session delete).
 
-        1. Stop ACP client for this session
-        2. Remove session directory
+        1. Stop Next.js dev server if running
+        2. Stop ACP client for this session
+        3. Remove session directory
 
         Does NOT terminate the sandbox - other sessions may still be using it.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
+            nextjs_port: Optional port where Next.js server is running (fallback only)
         """
+        # Stop Next.js dev server - try stored process first, then fallback to port lookup
+        process_key = (sandbox_id, session_id)
+        nextjs_process = self._nextjs_processes.pop(process_key, None)
+        if nextjs_process is not None:
+            self._stop_nextjs_process(nextjs_process, session_id)
+        elif nextjs_port is not None:
+            # Fallback: find by port (e.g., if server was restarted)
+            self._stop_nextjs_server_on_port(nextjs_port, session_id)
+
         # Stop ACP client for this session
         client_key = (sandbox_id, session_id)
         client = self._acp_clients.pop(client_key, None)
@@ -427,6 +468,139 @@ class LocalSandboxManager(SandboxManager):
         sandbox_path = self._get_sandbox_path(sandbox_id)
         self._directory_manager.cleanup_session_directory(sandbox_path, str(session_id))
         logger.info(f"Cleaned up session workspace {session_id}")
+
+    def _stop_nextjs_process(
+        self, process: subprocess.Popen[bytes], session_id: UUID
+    ) -> None:
+        """Stop a Next.js dev server process gracefully.
+
+        Args:
+            process: The subprocess.Popen object for the Next.js server
+            session_id: The session ID (for logging)
+        """
+        if process.poll() is not None:
+            # Process already terminated
+            logger.debug(
+                f"Next.js server for session {session_id} already terminated "
+                f"(exit code: {process.returncode})"
+            )
+            return
+
+        try:
+            logger.info(
+                f"Stopping Next.js server (PID {process.pid}) for session {session_id}"
+            )
+            self._process_manager.terminate_process(process.pid)
+            logger.debug(f"Next.js server stopped for session {session_id}")
+        except Exception as e:
+            logger.warning(
+                f"Failed to stop Next.js server for session {session_id}: {e}"
+            )
+
+    def _stop_nextjs_server_on_port(self, port: int, session_id: UUID) -> None:
+        """Stop Next.js dev server running on a specific port (fallback method).
+
+        Finds the process listening on the port and terminates it gracefully.
+        Used when the process object is not available (e.g., after backend restart).
+
+        Args:
+            port: The port number where Next.js is running
+            session_id: The session ID (for logging)
+        """
+        # Try lsof first - it's the most reliable cross-platform way
+        # Timeout to prevent hanging if system is slow or unresponsive
+        LSOF_TIMEOUT_SECONDS = 5.0
+        try:
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True,
+                text=True,
+                timeout=LSOF_TIMEOUT_SECONDS,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                # lsof can return multiple PIDs - stop all processes on this port
+                pids = [
+                    int(pid.strip())
+                    for pid in result.stdout.strip().split("\n")
+                    if pid.strip()
+                ]
+                if pids:
+                    logger.info(
+                        f"Found {len(pids)} process(es) on port {port} for session {session_id}, "
+                        f"stopping all"
+                    )
+                    for pid in pids:
+                        try:
+                            logger.debug(
+                                f"Stopping Next.js server (PID {pid}) on port {port} "
+                                f"for session {session_id}"
+                            )
+                            self._process_manager.terminate_process(pid)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to stop process {pid} on port {port}: {e}"
+                            )
+                    return
+            else:
+                logger.debug(
+                    f"No process found on port {port} for session {session_id}"
+                )
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"lsof timed out after {LSOF_TIMEOUT_SECONDS}s while looking for "
+                f"process on port {port} for session {session_id}"
+            )
+        except FileNotFoundError:
+            # lsof not available, try psutil
+            try:
+                import psutil
+
+                # Use net_connections to find process by port
+                # Collect all PIDs on this port (handle multiple processes)
+                pids_to_stop = set()
+                for conn in psutil.net_connections(kind="inet"):
+                    # laddr can be empty tuple for some connection states
+                    # Check if it's a tuple with at least 2 elements (host, port)
+                    if (
+                        conn.laddr
+                        and isinstance(conn.laddr, tuple)
+                        and len(conn.laddr) >= 2
+                        and conn.pid
+                    ):
+                        if conn.laddr[1] == port:
+                            pids_to_stop.add(conn.pid)
+
+                if pids_to_stop:
+                    logger.info(
+                        f"Found {len(pids_to_stop)} process(es) on port {port} for session {session_id}, "
+                        f"stopping all"
+                    )
+                    for pid in pids_to_stop:
+                        try:
+                            logger.debug(
+                                f"Stopping Next.js server (PID {pid}) on port {port} "
+                                f"for session {session_id}"
+                            )
+                            self._process_manager.terminate_process(pid)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to stop process {pid} on port {port}: {e}"
+                            )
+                    return
+
+                logger.debug(
+                    f"No process found on port {port} for session {session_id}"
+                )
+            except ImportError:
+                logger.warning(
+                    f"Neither lsof nor psutil available to find process on port {port}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to find process on port {port}: {e}")
+        except Exception as e:
+            logger.warning(
+                f"Failed to stop Next.js server on port {port} for session {session_id}: {e}"
+            )
 
     def create_snapshot(
         self,
@@ -520,7 +694,11 @@ class LocalSandboxManager(SandboxManager):
         web_dir = session_path / "outputs" / "web"
         if web_dir.exists():
             logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
-            self._process_manager.start_nextjs_server(web_dir, nextjs_port)
+            nextjs_process = self._process_manager.start_nextjs_server(
+                web_dir, nextjs_port
+            )
+            # Store process for clean shutdown on session delete
+            self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
             logger.info(
                 f"Started NextJS server for session {session_id} on port {nextjs_port}"
             )
@@ -574,18 +752,98 @@ class LocalSandboxManager(SandboxManager):
         Yields:
             Typed ACP schema event objects
         """
+        from onyx.server.features.build.api.packet_logger import get_packet_logger
+
+        packet_logger = get_packet_logger()
+
         # Get or create ACP client for this session
         client_key = (sandbox_id, session_id)
         client = self._acp_clients.get(client_key)
+
         if client is None or not client.is_running:
             session_path = self._get_session_path(sandbox_id, session_id)
+
+            # Log client creation
+            packet_logger.log_acp_client_start(
+                sandbox_id, session_id, str(session_path), context="local"
+            )
+            logger.info(
+                f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
+            )
 
             # Create and start ACP client for this session
             client = ACPAgentClient(cwd=str(session_path))
             self._acp_clients[client_key] = client
 
-        for event in client.send_message(message):
-            yield event
+        # Log the send_message call at sandbox manager level
+        packet_logger.log_session_start(session_id, sandbox_id, message)
+
+        events_count = 0
+        try:
+            for event in client.send_message(message):
+                events_count += 1
+                yield event
+
+            # Log successful completion
+            packet_logger.log_session_end(
+                session_id, success=True, events_count=events_count
+            )
+        except Exception as e:
+            # Log failure
+            packet_logger.log_session_end(
+                session_id, success=False, error=str(e), events_count=events_count
+            )
+            raise
+
+    def _sanitize_path(self, path: str) -> str:
+        """Sanitize a user-provided path to prevent path traversal attacks.
+
+        Removes '..' components and normalizes the path to prevent attacks like
+        'files/../../../../etc/passwd'.
+
+        Args:
+            path: User-provided relative path
+
+        Returns:
+            Sanitized path string with '..' components removed
+        """
+        # Parse the path and filter out '..' components
+        path_obj = Path(path.lstrip("/"))
+        clean_parts = [p for p in path_obj.parts if p != ".."]
+        return str(Path(*clean_parts)) if clean_parts else "."
+
+    def _is_path_allowed(self, session_path: Path, target_path: Path) -> bool:
+        """Check if target_path is allowed for access.
+
+        Allows paths within session_path OR within the files/ symlink.
+        The files/ symlink intentionally points outside session_path to
+        provide access to knowledge files.
+
+        Args:
+            session_path: The session's root directory
+            target_path: The path being accessed
+
+        Returns:
+            True if access is allowed, False otherwise
+        """
+        files_symlink = session_path / "files"
+
+        # Check if path is within the files/ symlink (or is the symlink itself)
+        if files_symlink.is_symlink():
+            try:
+                # Use lexical check (without resolving symlinks)
+                # This handles both the symlink itself (returns '.') and paths within it
+                target_path.relative_to(files_symlink)
+                return True
+            except ValueError:
+                pass
+
+        # Standard check: path must be within session directory
+        try:
+            target_path.resolve().relative_to(session_path.resolve())
+            return True
+        except ValueError:
+            return False
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
@@ -604,12 +862,12 @@ class LocalSandboxManager(SandboxManager):
             ValueError: If path traversal attempted or path is not a directory
         """
         session_path = self._get_session_path(sandbox_id, session_id)
-        target_path = session_path / path.lstrip("/")
+        # Security: sanitize path to remove path traversal attempts
+        clean_path = self._sanitize_path(path)
+        target_path = session_path / clean_path
 
-        # Security: ensure path is within sessions directory
-        try:
-            target_path.resolve().relative_to(session_path.resolve())
-        except ValueError:
+        # Security check
+        if not self._is_path_allowed(session_path, target_path):
             raise ValueError("Path traversal not allowed")
 
         if not target_path.is_dir():
@@ -647,12 +905,12 @@ class LocalSandboxManager(SandboxManager):
             ValueError: If path traversal attempted or path is not a file
         """
         session_path = self._get_session_path(sandbox_id, session_id)
-        target_path = session_path / path.lstrip("/")
+        # Security: sanitize path to remove path traversal attempts
+        clean_path = self._sanitize_path(path)
+        target_path = session_path / clean_path
 
-        # Security: ensure path is within sessions directory
-        try:
-            target_path.resolve().relative_to(session_path.resolve())
-        except ValueError:
+        # Security check
+        if not self._is_path_allowed(session_path, target_path):
             raise ValueError("Path traversal not allowed")
 
         if not target_path.is_file():

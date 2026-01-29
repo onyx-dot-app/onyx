@@ -380,6 +380,7 @@ export default function OpenApiPageContent() {
           onSearchQueryChange={setSearchQuery}
           onAddAction={handleAddAction}
           buttonText="Add OpenAPI Action"
+          barText="Add custom actions from OpenAPI schemas."
         />
       </div>
 

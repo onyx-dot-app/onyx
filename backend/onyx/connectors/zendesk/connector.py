@@ -31,6 +31,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
@@ -571,7 +572,7 @@ class ZendeskConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        slim_doc_batch: list[SlimDocument] = []
+        slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         if self.content_type == "articles":
             articles = _get_articles(
                 self.client, start_time=int(start) if start else None

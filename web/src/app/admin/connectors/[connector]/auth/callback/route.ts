@@ -7,9 +7,9 @@ import {
   GOOGLE_DRIVE_AUTH_IS_ADMIN_COOKIE_NAME,
 } from "@/lib/constants";
 import {
-  BUILD_MODE_OAUTH_COOKIE_NAME,
-  BUILD_CONFIGURE_PATH,
-} from "@/app/build/v1/constants";
+  CRAFT_OAUTH_COOKIE_NAME,
+  CRAFT_CONFIGURE_PATH,
+} from "@/app/craft/v1/constants";
 import { processCookies } from "@/lib/userSS";
 
 export const GET = async (request: NextRequest) => {
@@ -31,12 +31,12 @@ export const GET = async (request: NextRequest) => {
 
   // Check for build mode OAuth flag (redirects to build admin panel)
   const isBuildMode =
-    requestCookies.get(BUILD_MODE_OAUTH_COOKIE_NAME)?.value === "true";
+    requestCookies.get(CRAFT_OAUTH_COOKIE_NAME)?.value === "true";
   if (isBuildMode) {
     const redirectResponse = NextResponse.redirect(
-      new URL(BUILD_CONFIGURE_PATH, getDomain(request))
+      new URL(CRAFT_CONFIGURE_PATH, getDomain(request))
     );
-    redirectResponse.cookies.delete(BUILD_MODE_OAUTH_COOKIE_NAME);
+    redirectResponse.cookies.delete(CRAFT_OAUTH_COOKIE_NAME);
     return redirectResponse;
   }
 

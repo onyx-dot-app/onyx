@@ -493,9 +493,10 @@ def add_document_summaries(
     # Note: For document summarization, there's no cacheable prefix since the document changes
     # So we just pass the full prompt without caching
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-    doc_summary = llm_response_to_string(
-        llm.invoke(UserMessage(content=summary_prompt), max_tokens=MAX_CONTEXT_TOKENS)
-    )
+    prompt_msg = UserMessage(content=summary_prompt)
+
+    response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+    doc_summary = llm_response_to_string(response)
 
     for chunk in chunks_by_doc:
         chunk.doc_summary = doc_summary
@@ -534,14 +535,11 @@ def add_chunk_summaries(
     if not doc_info:
         # This happens if the document is too long AND document summaries are turned off
         # In this case we compute a doc summary using the LLM
-        doc_info = llm_response_to_string(
-            llm.invoke(
-                UserMessage(
-                    content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-                ),
-                max_tokens=MAX_CONTEXT_TOKENS,
-            )
+        fallback_prompt = UserMessage(
+            content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
         )
+        response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+        doc_info = llm_response_to_string(response)
 
     from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
@@ -559,12 +557,8 @@ def add_chunk_summaries(
                 continuation=True,  # Append chunk to the document context
             )
 
-            chunk.chunk_context = llm_response_to_string(
-                llm.invoke(
-                    processed_prompt,
-                    max_tokens=MAX_CONTEXT_TOKENS,
-                )
-            )
+            response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            chunk.chunk_context = llm_response_to_string(response)
 
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue

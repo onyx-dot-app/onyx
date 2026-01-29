@@ -1,3 +1,4 @@
+import json
 import os
 from enum import Enum
 from pathlib import Path
@@ -19,17 +20,10 @@ class SandboxBackend(str, Enum):
 # "kubernetes" = full snapshots and cleanup (for production)
 SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
 
-
-# Persistent Document Storage Configuration
-# When enabled, indexed documents are written to local filesystem with hierarchical structure
-PERSISTENT_DOCUMENT_STORAGE_ENABLED = (
-    os.environ.get("PERSISTENT_DOCUMENT_STORAGE_ENABLED", "").lower() == "true"
-)
-
 # Base directory path for persistent document storage (local filesystem)
-# Example: /var/onyx/indexed-docs or /app/indexed-docs
+# Example: /var/onyx/file-system or /app/file-system
 PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
-    "PERSISTENT_DOCUMENT_STORAGE_PATH", ""
+    "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/file-system"
 )
 
 # Demo Data Path
@@ -95,7 +89,7 @@ SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 # Container image for sandbox pods
 # Should include Next.js template and opencode CLI
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:latest"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.0"
 )
 
 # S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)
@@ -115,3 +109,22 @@ SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
 )
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
+
+# ============================================================================
+# Rate Limiting Configuration
+# ============================================================================
+
+# Base rate limit for paid/subscribed users (messages per week)
+# Free users always get 5 messages total (not configurable)
+CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
+
+# Per-user rate limit overrides (JSON map of email -> limit)
+# Example: {"admin@example.com": 100, "power-user@example.com": 50}
+# Users in this map get their specified limit instead of the default
+_user_limit_overrides_str = os.environ.get("CRAFT_USER_RATE_LIMIT_OVERRIDES", "{}")
+try:
+    CRAFT_USER_RATE_LIMIT_OVERRIDES: dict[str, int] = json.loads(
+        _user_limit_overrides_str
+    )
+except json.JSONDecodeError:
+    CRAFT_USER_RATE_LIMIT_OVERRIDES = {}

@@ -42,6 +42,7 @@ from onyx.llm.utils import llm_response_to_string
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import FileSystemEntry
 from onyx.server.features.build.api.packet_logger import get_packet_logger
+from onyx.server.features.build.api.packet_logger import log_separator
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
@@ -76,6 +77,9 @@ from onyx.server.features.build.session.prompts import (
     FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
 )
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -318,20 +322,15 @@ class SessionManager:
                 self._db_session, requested_provider_type
             )
             if provider:
-                # Validate model exists in this provider's configurations
-                valid_models = [m.name for m in provider.model_configurations]
-                if requested_model_name in valid_models:
-                    return LLMProviderConfig(
-                        provider=provider.provider,
-                        model_name=requested_model_name,
-                        api_key=provider.api_key,
-                        api_base=provider.api_base,
-                    )
-                else:
-                    logger.warning(
-                        f"Requested model {requested_model_name} not found in provider "
-                        f"{requested_provider_type}, falling back to default"
-                    )
+                # Use the requested model directly - the provider's API will
+                # reject invalid models. This allows users to use models that
+                # aren't explicitly configured as "visible" in the admin UI.
+                return LLMProviderConfig(
+                    provider=provider.provider,
+                    model_name=requested_model_name,
+                    api_key=provider.api_key,
+                    api_base=provider.api_base,
+                )
             else:
                 logger.warning(
                     f"Requested provider type {requested_provider_type} not found, "
@@ -376,6 +375,7 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        demo_data_enabled: bool = True,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
@@ -391,6 +391,7 @@ class SessionManager:
             user_level: User's level for demo persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
+            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
 
         Returns:
             The created BuildSession model
@@ -418,9 +419,6 @@ class SessionManager:
         # Get LLM config (uses user's selection or falls back to default)
         llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
 
-        # Determine if demo data mode is enabled
-        use_demo_data = user_work_area is not None and user_level is not None
-
         # Build tenant/user-specific path for FILE_SYSTEM documents (sandbox isolation)
         # Each user's sandbox can only access documents they created
         # Path structure: {base_path}/{tenant_id}/knowledge/{user_id}/
@@ -446,7 +444,7 @@ class SessionManager:
 
         # Create BuildSession record with allocated port (uses flush, caller commits)
         build_session = create_build_session__no_commit(
-            user_id, self._db_session, name=name
+            user_id, self._db_session, name=name, demo_data_enabled=demo_data_enabled
         )
         build_session.nextjs_port = nextjs_port
         self._db_session.flush()
@@ -464,10 +462,15 @@ class SessionManager:
             sandbox = existing_sandbox
             sandbox_id = sandbox.id
 
-            if sandbox.status == SandboxStatus.TERMINATED:
-                # Re-provision terminated sandbox
+            if sandbox.status in (
+                SandboxStatus.TERMINATED,
+                SandboxStatus.SLEEPING,
+                SandboxStatus.FAILED,
+            ):
+                # Re-provision sandbox (pod doesn't exist or failed)
                 logger.info(
-                    f"Re-provisioning terminated sandbox {sandbox_id} for user {user_id}"
+                    f"Re-provisioning {sandbox.status.value} sandbox {sandbox_id} "
+                    f"for user {user_id}"
                 )
                 sandbox_info = self._sandbox_manager.provision(
                     sandbox_id=sandbox_id,
@@ -508,11 +511,14 @@ class SessionManager:
                         f"for new session {session_id}"
                     )
             else:
-                # Handle other statuses (SLEEPING, PROVISIONING, FAILED, etc.)
-                logger.info(
-                    f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
-                    f"for new session {session_id}"
+                # PROVISIONING status - sandbox is being created by another request
+                # Just fail this request
+                msg = (
+                    f"Sandbox {sandbox_id} has status {sandbox.status.value} and is being "
+                    f"created by another request for new session {session_id}"
                 )
+                logger.error(msg)
+                raise RuntimeError(msg)
         else:
             # Create new Sandbox record for the user (uses flush, caller commits)
             sandbox = create_sandbox__no_commit(
@@ -554,7 +560,7 @@ class SessionManager:
             user_role=user_role,
             user_work_area=user_work_area,
             user_level=user_level,
-            use_demo_data=use_demo_data,
+            use_demo_data=demo_data_enabled,
         )
         sandbox_id = sandbox.id
         logger.info(
@@ -570,14 +576,16 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        demo_data_enabled: bool = True,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
         Used for pre-provisioning sandboxes when user lands on /build/v1.
-        Returns existing recent empty session if one exists and has a healthy sandbox,
-        otherwise creates new. If an empty session exists but its sandbox is
-        unhealthy/terminated/missing, the stale session is deleted and a fresh
-        one is created (which will handle sandbox recovery/re-provisioning).
+        Returns existing recent empty session if one exists, has a healthy sandbox,
+        AND has matching demo_data_enabled setting. Otherwise creates new.
+        If an empty session exists but its sandbox is unhealthy/terminated/missing,
+        the stale session is deleted and a fresh one is created (which will handle
+        sandbox recovery/re-provisioning).
 
         Args:
             user_id: The user ID
@@ -585,6 +593,7 @@ class SessionManager:
             user_level: User's level for demo persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
+            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
 
         Returns:
             BuildSession (existing empty or newly created)
@@ -593,8 +602,14 @@ class SessionManager:
             ValueError: If max concurrent sandboxes reached
             RuntimeError: If sandbox provisioning fails
         """
-        existing = get_empty_session_for_user(user_id, self._db_session)
+        # Look for existing empty session with matching demo_data setting
+        existing = get_empty_session_for_user(
+            user_id, self._db_session, demo_data_enabled=demo_data_enabled
+        )
         if existing:
+            logger.info(
+                f"Existing empty session {existing.id} found for user {user_id}"
+            )
             # Verify sandbox is healthy before returning existing session
             sandbox = get_sandbox_by_user_id(self._db_session, user_id)
 
@@ -627,6 +642,7 @@ class SessionManager:
             user_level=user_level,
             llm_provider_type=llm_provider_type,
             llm_model_name=llm_model_name,
+            demo_data_enabled=demo_data_enabled,
         )
 
     def delete_empty_session(self, user_id: UUID) -> bool:
@@ -657,6 +673,7 @@ class SessionManager:
                 self._sandbox_manager.cleanup_session_workspace(
                     sandbox_id=sandbox.id,
                     session_id=session_id,
+                    nextjs_port=empty_session.nextjs_port,
                 )
                 logger.info(
                     f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
@@ -783,7 +800,7 @@ class SessionManager:
         if not user_message:
             return f"Build Session {str(session_id)[:8]}"
 
-        # Use LLM to generate a concise session name
+        # Use LLM to generate a concise session name with Braintrust tracing
         try:
             llm = get_default_llm()
             prompt_messages: LanguageModelInput = [
@@ -794,8 +811,23 @@ class SessionManager:
                     )
                 ),
             ]
-            response = llm.invoke(prompt_messages, reasoning_effort=ReasoningEffort.OFF)
-            generated_name = llm_response_to_string(response).strip().strip('"')
+            with ensure_trace(
+                "build_session_naming",
+                group_id=str(session_id),
+                metadata={"session_id": str(session_id)},
+            ):
+                with llm_generation_span(
+                    llm=llm,
+                    flow="build_session_naming",
+                    input_messages=prompt_messages,
+                ) as span_generation:
+                    response = llm.invoke(
+                        prompt_messages, reasoning_effort=ReasoningEffort.OFF
+                    )
+                    generated_name = llm_response_to_string(response).strip().strip('"')
+                    record_llm_span_output(
+                        span_generation, generated_name, response.usage
+                    )
 
             # Ensure the name isn't too long (max 50 chars)
             if len(generated_name) > 50:
@@ -840,10 +872,20 @@ class SessionManager:
                     )
                 ),
             ]
-            response = llm.invoke(
-                prompt_messages, reasoning_effort=ReasoningEffort.OFF, max_tokens=500
-            )
-            raw_output = llm_response_to_string(response).strip()
+            # Call LLM with Braintrust tracing
+            with ensure_trace("build_followup_suggestions"):
+                with llm_generation_span(
+                    llm=llm,
+                    flow="build_followup_suggestions",
+                    input_messages=prompt_messages,
+                ) as span_generation:
+                    response = llm.invoke(
+                        prompt_messages,
+                        reasoning_effort=ReasoningEffort.OFF,
+                        max_tokens=500,
+                    )
+                    raw_output = llm_response_to_string(response).strip()
+                    record_llm_span_output(span_generation, raw_output, response.usage)
 
             return self._parse_suggestions(raw_output)
         except Exception as e:
@@ -954,6 +996,7 @@ class SessionManager:
                 self._sandbox_manager.cleanup_session_workspace(
                     sandbox_id=sandbox.id,
                     session_id=session_id,
+                    nextjs_port=session.nextjs_port,
                 )
                 logger.info(
                     f"Cleaned up session workspace {session_id} in sandbox {sandbox.id}"
@@ -1101,6 +1144,22 @@ class SessionManager:
         # Initialize packet logging
         packet_logger = get_packet_logger()
 
+        # The log file auto-rotates to keep only the last N lines (default 5000).
+        # Add a prominent separator for visual identification of new message streams.
+        log_separator(
+            f"NEW MESSAGE STREAM - Session: {str(session_id)[:8]} - "
+            f"User: {str(user_id)[:8]}"
+        )
+        packet_logger.log_raw(
+            "STREAM-START",
+            {
+                "session_id": str(session_id),
+                "user_id": str(user_id),
+                "message_preview": user_message_content[:200]
+                + ("..." if len(user_message_content) > 200 else ""),
+            },
+        )
+
         try:
             # Verify session exists and belongs to user
             session = get_build_session(session_id, user_id, self._db_session)
@@ -1164,6 +1223,16 @@ class SessionManager:
                 return
 
             sandbox_id = sandbox.id
+            events_emitted = 0
+
+            packet_logger.log_raw(
+                "STREAM-BEGIN-AGENT-LOOP",
+                {
+                    "session_id": str(session_id),
+                    "sandbox_id": str(sandbox_id),
+                    "turn_index": turn_index,
+                },
+            )
 
             # Stream ACP events directly to frontend
             for acp_event in self._sandbox_manager.send_message(
@@ -1173,6 +1242,8 @@ class SessionManager:
                 event_type = self._get_event_type(acp_event)
                 if state.should_finalize_chunks(event_type):
                     _save_pending_chunks(state)
+
+                events_emitted += 1
 
                 # Pass through ACP events with snake_case type names
                 if isinstance(acp_event, AgentMessageChunk):
@@ -1184,6 +1255,7 @@ class SessionManager:
                     )
                     event_data["type"] = "agent_message_chunk"
                     packet_logger.log("agent_message_chunk", event_data)
+                    packet_logger.log_sse_emit("agent_message_chunk", session_id)
                     yield _serialize_acp_event(acp_event, "agent_message_chunk")
 
                 elif isinstance(acp_event, AgentThoughtChunk):
@@ -1194,6 +1266,7 @@ class SessionManager:
                         "agent_thought_chunk",
                         acp_event.model_dump(mode="json", by_alias=True),
                     )
+                    packet_logger.log_sse_emit("agent_thought_chunk", session_id)
                     yield _serialize_acp_event(acp_event, "agent_thought_chunk")
 
                 elif isinstance(acp_event, ToolCallStart):
@@ -1202,6 +1275,7 @@ class SessionManager:
                         "tool_call_start",
                         acp_event.model_dump(mode="json", by_alias=True),
                     )
+                    packet_logger.log_sse_emit("tool_call_start", session_id)
                     yield _serialize_acp_event(acp_event, "tool_call_start")
 
                 elif isinstance(acp_event, ToolCallProgress):
@@ -1265,6 +1339,7 @@ class SessionManager:
                                 )
 
                     packet_logger.log("tool_call_progress", event_data)
+                    packet_logger.log_sse_emit("tool_call_progress", session_id)
                     yield _serialize_acp_event(acp_event, "tool_call_progress")
 
                 elif isinstance(acp_event, AgentPlanUpdate):
@@ -1285,6 +1360,7 @@ class SessionManager:
                     state.plan_message_id = plan_msg.id
 
                     packet_logger.log("agent_plan_update", event_data)
+                    packet_logger.log_sse_emit("agent_plan_update", session_id)
                     yield _serialize_acp_event(acp_event, "agent_plan_update")
 
                 elif isinstance(acp_event, CurrentModeUpdate):
@@ -1293,6 +1369,7 @@ class SessionManager:
                     )
                     event_data["type"] = "current_mode_update"
                     packet_logger.log("current_mode_update", event_data)
+                    packet_logger.log_sse_emit("current_mode_update", session_id)
                     yield _serialize_acp_event(acp_event, "current_mode_update")
 
                 elif isinstance(acp_event, PromptResponse):
@@ -1301,6 +1378,7 @@ class SessionManager:
                     )
                     event_data["type"] = "prompt_response"
                     packet_logger.log("prompt_response", event_data)
+                    packet_logger.log_sse_emit("prompt_response", session_id)
                     yield _serialize_acp_event(acp_event, "prompt_response")
 
                 elif isinstance(acp_event, ACPError):
@@ -1309,6 +1387,7 @@ class SessionManager:
                     )
                     event_data["type"] = "error"
                     packet_logger.log("error", event_data)
+                    packet_logger.log_sse_emit("error", session_id)
                     yield _serialize_acp_event(acp_event, "error")
 
                 else:
@@ -1325,22 +1404,59 @@ class SessionManager:
             # Save all accumulated state at end of streaming
             _save_build_turn(state)
 
+            # Log streaming completion
+            packet_logger.log_raw(
+                "STREAM-COMPLETE",
+                {
+                    "session_id": str(session_id),
+                    "sandbox_id": str(sandbox_id),
+                    "turn_index": turn_index,
+                    "events_emitted": events_emitted,
+                    "message_chunks_accumulated": len(state.message_chunks),
+                    "thought_chunks_accumulated": len(state.thought_chunks),
+                },
+            )
+
             # Update heartbeat after successful message exchange
             update_sandbox_heartbeat(self._db_session, sandbox_id)
 
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
+            packet_logger.log_raw(
+                "STREAM-ERROR",
+                {
+                    "session_id": str(session_id),
+                    "error_type": "ValueError",
+                    "error": str(e),
+                },
+            )
             logger.exception("ValueError in build message streaming")
             yield _format_packet_event(error_packet)
         except RuntimeError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
+            packet_logger.log_raw(
+                "STREAM-ERROR",
+                {
+                    "session_id": str(session_id),
+                    "error_type": "RuntimeError",
+                    "error": str(e),
+                },
+            )
             logger.exception(f"RuntimeError in build message streaming: {e}")
             yield _format_packet_event(error_packet)
         except Exception as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
+            packet_logger.log_raw(
+                "STREAM-ERROR",
+                {
+                    "session_id": str(session_id),
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+            )
             logger.exception("Unexpected error in build message streaming")
             yield _format_packet_event(error_packet)
 
@@ -1483,6 +1599,49 @@ class SessionManager:
         mime_type, _ = mimetypes.guess_type(filename)
 
         return (content, mime_type or "application/octet-stream", filename)
+
+    def export_docx(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> tuple[bytes, str] | None:
+        """
+        Export a markdown file as DOCX.
+
+        Reads the markdown file and converts it to DOCX using pypandoc.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the markdown file
+
+        Returns:
+            Tuple of (docx_bytes, filename) or None if not found
+
+        Raises:
+            ValueError: If path traversal attempted, file is not markdown, etc.
+        """
+        result = self.download_artifact(session_id, user_id, path)
+        if result is None:
+            return None
+
+        content_bytes, _mime_type, filename = result
+
+        if not filename.lower().endswith(".md"):
+            raise ValueError("Only markdown (.md) files can be exported as DOCX")
+
+        import tempfile
+        import pypandoc  # type: ignore
+
+        md_text = content_bytes.decode("utf-8")
+
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
+            pypandoc.convert_text(md_text, "docx", format="md", outputfile=tmp.name)
+            docx_bytes = tmp.read()
+
+        docx_filename = filename.rsplit(".", 1)[0] + ".docx"
+        return (docx_bytes, docx_filename)
 
     def get_webapp_info(
         self,

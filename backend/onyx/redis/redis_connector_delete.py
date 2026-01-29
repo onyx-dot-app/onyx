@@ -32,6 +32,7 @@ class RedisConnectorDelete:
     FENCE_PREFIX = f"{PREFIX}_fence"  # "connectordeletion_fence"
     FENCE_TTL = 7 * 24 * 60 * 60  # 7 days - defensive TTL to prevent memory leaks
     TASKSET_PREFIX = f"{PREFIX}_taskset"  # "connectordeletion_taskset"
+    TASKSET_TTL = FENCE_TTL
 
     # used to signal the overall workflow is still active
     # it's impossible to get the exact state of the system at a single point in time
@@ -136,6 +137,7 @@ class RedisConnectorDelete:
             # add to the tracking taskset in redis BEFORE creating the celery task.
             # note that for the moment we are using a single taskset key, not differentiated by cc_pair id
             self.redis.sadd(self.taskset_key, custom_task_id)
+            self.redis.expire(self.taskset_key, self.TASKSET_TTL)
 
             # Priority on sync's triggered by new indexing should be medium
             celery_app.send_task(

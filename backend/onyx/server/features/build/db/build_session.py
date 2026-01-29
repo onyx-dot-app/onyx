@@ -32,21 +32,31 @@ def create_build_session__no_commit(
     user_id: UUID,
     db_session: Session,
     name: str | None = None,
+    demo_data_enabled: bool = True,
 ) -> BuildSession:
     """Create a new build session for the given user.
 
     NOTE: This function uses flush() instead of commit(). The caller is
     responsible for committing the transaction when ready.
+
+    Args:
+        user_id: The user ID
+        db_session: Database session
+        name: Optional session name
+        demo_data_enabled: Whether this session uses demo data (default True)
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
+        demo_data_enabled=demo_data_enabled,
     )
     db_session.add(session)
     db_session.flush()
 
-    logger.info(f"Created build session {session.id} for user {user_id}")
+    logger.info(
+        f"Created build session {session.id} for user {user_id} (demo_data={demo_data_enabled})"
+    )
     return session
 
 
@@ -90,19 +100,32 @@ def get_empty_session_for_user(
     user_id: UUID,
     db_session: Session,
     max_age_minutes: int = 30,
+    demo_data_enabled: bool | None = None,
 ) -> BuildSession | None:
-    """Get the user's empty session (0 messages) if one exists and is recent."""
+    """Get the user's empty session (0 messages) if one exists and is recent.
+
+    Args:
+        user_id: The user ID
+        db_session: Database session
+        max_age_minutes: Maximum age of session to consider (default 30)
+        demo_data_enabled: Match sessions with this demo_data setting.
+                          This ensures pre-provisioned sessions match the user's current
+                          preferences. If None, matches any session regardless of setting.
+                          Note: None is only used internally for operations that need to
+                          match any session (e.g., deletion).
+    """
     cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
 
-    return (
-        db_session.query(BuildSession)
-        .filter(
-            BuildSession.user_id == user_id,
-            BuildSession.created_at > cutoff,
-            ~exists().where(BuildMessage.session_id == BuildSession.id),
-        )
-        .first()
+    query = db_session.query(BuildSession).filter(
+        BuildSession.user_id == user_id,
+        BuildSession.created_at > cutoff,
+        ~exists().where(BuildMessage.session_id == BuildSession.id),
     )
+
+    if demo_data_enabled is not None:
+        query = query.filter(BuildSession.demo_data_enabled == demo_data_enabled)
+
+    return query.first()
 
 
 def update_session_activity(

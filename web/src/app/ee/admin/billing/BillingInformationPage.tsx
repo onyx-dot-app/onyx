@@ -6,6 +6,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   fetchCustomerPortal,
   useBillingInformation,
+  hasActiveSubscription,
 } from "@/lib/billing/utils";
 
 import {
@@ -55,7 +56,7 @@ export default function BillingInformationPage() {
     );
   }
 
-  if (!billingInformation) {
+  if (!billingInformation || !hasActiveSubscription(billingInformation)) {
     return (
       <div className="text-center py-8">No billing information available.</div>
     );

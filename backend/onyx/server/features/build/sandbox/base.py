@@ -160,15 +160,19 @@ class SandboxManager(ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace (on session delete).
 
-        Removes the session directory: sessions/$session_id/
+        1. Stop the Next.js dev server if running on nextjs_port
+        2. Remove the session directory: sessions/$session_id/
+
         Does NOT terminate the sandbox - other sessions may still be using it.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
+            nextjs_port: Optional port where Next.js server is running
         """
         ...
 

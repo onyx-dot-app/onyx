@@ -32,6 +32,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     env_file:
       - path: .env
         required: false
@@ -47,6 +48,8 @@ services:
         max-file: "6"
     volumes:
       - api_server_logs:/var/log/onyx
+      # Shared volume for persistent document storage (Craft file-system mode)
+      - file-system:/app/file-system
 
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -87,6 +90,7 @@ services:
       # API Server connection for Discord bot message processing
       - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
+      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     env_file:
       - path: .env
         required: false
@@ -97,6 +101,8 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - background_logs:/var/log/onyx
+      # Shared volume for persistent document storage (Craft file-system mode)
+      - file-system:/app/file-system
     logging:
       driver: json-file
       options:
@@ -382,3 +388,5 @@ volumes:
   inference_model_server_logs:
   indexing_model_server_logs:
   # mcp_server_logs:
+  # Shared volume for persistent document storage (Craft file-system mode)
+  file-system:
