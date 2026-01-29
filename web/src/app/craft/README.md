@@ -72,12 +72,6 @@ Enable Craft on an existing deployment:
 ENABLE_CRAFT=true IMAGE_TAG=craft-latest docker compose up -d
 ```
 
-### Verify Installation
-
-After installation:
-
-- The `/craft/v1` route should be accessible in the UI
-
 ## How It Works
 
 1. **User visits `/craft/v1`** — A sandbox is pre-provisioned in the background
