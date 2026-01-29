@@ -19,14 +19,7 @@
 
 ---
 
-<!-- TODO: Add launch video -->
-<p align="center">
-  <a href="#">
-    <img src="https://via.placeholder.com/800x450?text=Launch+Video" alt="Onyx Craft Demo" width="800">
-  </a>
-  <br>
-  <em>Watch the launch video</em>
-</p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/Hvjn76YSIRY?si=3JMg17-ky_EV_Wd3" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 ---
 
