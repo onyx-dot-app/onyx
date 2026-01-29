@@ -310,7 +310,7 @@ function MCPServerCard({
     <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
       <ActionsLayouts.Header
         title={server.name}
-        description={server.description ?? server.server_url}
+        description={server.description}
         icon={getActionIcon(server.server_url, server.name)}
         rightChildren={
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>

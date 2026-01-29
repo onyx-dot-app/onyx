@@ -100,7 +100,7 @@ export interface ActionsHeaderProps
   // Core content
   name?: string;
   title: string;
-  description: string;
+  description?: string;
   icon: React.FunctionComponent<IconProps>;
 
   // Custom content
