@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { usePostHog } from "posthog-js/react";
 import { SvgArrowRight, SvgArrowLeft, SvgX, SvgLoader } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
@@ -109,6 +110,8 @@ export default function BuildOnboardingModal({
   onLlmComplete,
   onClose,
 }: BuildOnboardingModalProps) {
+  const posthog = usePostHog();
+
   // Compute steps based on mode
   const steps = useMemo(
     () => getStepsForMode(mode, isAdmin, allProvidersConfigured, hasUserInfo),
@@ -376,6 +379,7 @@ export default function BuildOnboardingModal({
         level: level || undefined,
       });
 
+      posthog?.capture("completed_craft_onboarding");
       onClose();
     } catch (error) {
       console.error("Error completing onboarding:", error);
@@ -501,7 +505,19 @@ export default function BuildOnboardingModal({
             {currentStep === "user-info" && (
               <button
                 type="button"
-                onClick={isLastStep ? handleSubmit : handleNext}
+                onClick={() => {
+                  posthog?.capture("completed_craft_user_info", {
+                    first_name: firstName.trim(),
+                    last_name: lastName.trim() || undefined,
+                    work_area: workArea,
+                    level: level,
+                  });
+                  if (isLastStep) {
+                    handleSubmit();
+                  } else {
+                    handleNext();
+                  }
+                }}
                 disabled={!canProceedUserInfo || isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
