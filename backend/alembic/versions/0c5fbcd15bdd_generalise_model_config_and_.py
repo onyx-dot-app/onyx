@@ -86,6 +86,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Restore vision columns first (before we can populate them)
+    op.add_column(
+        "llm_provider",
+        sa.Column(
+            "is_default_vision_provider",
+            sa.Boolean(),
+            nullable=True,
+            server_default=sa.false(),
+        ),
+    )
+    op.add_column(
+        "llm_provider",
+        sa.Column("default_vision_model", sa.String(), nullable=True),
+    )
+
     # Populate vision defaults from flow_mapping
     op.execute(
         """

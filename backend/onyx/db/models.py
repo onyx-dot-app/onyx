@@ -2686,6 +2686,10 @@ class ModelConfiguration(Base):
         passive_deletes=True,
     )
 
+    @property
+    def model_flow_types(self) -> list[ModelFlowType]:
+        return [flow.flow_type for flow in self.flows]
+
 
 class FlowMapping(Base):
     __tablename__ = "flow_mapping"
