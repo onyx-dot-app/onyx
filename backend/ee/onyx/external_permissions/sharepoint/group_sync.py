@@ -25,7 +25,12 @@ def sharepoint_group_sync(
 
     # Create SharePoint connector instance and load credentials
     connector = SharepointConnector(**connector_config)
-    connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    connector.load_credentials(credential_json)
 
     if not connector.msal_app:
         raise RuntimeError("MSAL app not initialized in connector")

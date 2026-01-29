@@ -82,7 +82,11 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         model_provider=llm_provider.provider,
         model_name=default_config.model_configuration.name,
         temperature=GEN_AI_TEMPERATURE,
-        api_key=llm_provider.api_key,
+        api_key=(
+            llm_provider.api_key.get_value(apply_mask=False)
+            if llm_provider.api_key
+            else None
+        ),
         api_base=llm_provider.api_base,
         api_version=llm_provider.api_version,
         deployment_name=llm_provider.deployment_name,

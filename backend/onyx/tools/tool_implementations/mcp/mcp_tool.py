@@ -142,8 +142,9 @@ class MCPTool(Tool[None]):
                     )
 
             # Priority 2: Base headers from connection config (DB) - overrides request
-            if self.connection_config:
-                headers.update(self.connection_config.config.get("headers", {}))
+            if self.connection_config and self.connection_config.config:
+                config_dict = self.connection_config.config.get_value(apply_mask=False)
+                headers.update(config_dict.get("headers", {}))
 
             # Priority 3: For pass-through OAuth, use the user's login OAuth token
             if self._user_oauth_token:

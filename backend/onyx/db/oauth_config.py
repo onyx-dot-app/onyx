@@ -87,13 +87,13 @@ def update_oauth_config(
     if token_url is not None:
         oauth_config.token_url = token_url
     if clear_client_id:
-        oauth_config.client_id = ""
+        oauth_config.client_id = ""  # type: ignore[assignment]
     elif client_id is not None:
-        oauth_config.client_id = client_id
+        oauth_config.client_id = client_id  # type: ignore[assignment]
     if clear_client_secret:
-        oauth_config.client_secret = ""
+        oauth_config.client_secret = ""  # type: ignore[assignment]
     elif client_secret is not None:
-        oauth_config.client_secret = client_secret
+        oauth_config.client_secret = client_secret  # type: ignore[assignment]
     if scopes is not None:
         oauth_config.scopes = scopes
     if additional_params is not None:
@@ -154,7 +154,7 @@ def upsert_user_oauth_token(
 
     if existing_token:
         # Update existing token
-        existing_token.token_data = token_data
+        existing_token.token_data = token_data  # type: ignore[assignment]
         db_session.commit()
         return existing_token
     else:

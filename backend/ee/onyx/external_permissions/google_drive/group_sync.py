@@ -391,7 +391,12 @@ def gdrive_group_sync(
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
     )
-    google_drive_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    google_drive_connector.load_credentials(credential_json)
     admin_service = get_admin_service(
         google_drive_connector.creds, google_drive_connector.primary_admin_email
     )

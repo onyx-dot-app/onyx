@@ -28,7 +28,6 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
-from onyx.server.utils import mask_credential_dict
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
@@ -145,13 +144,21 @@ class CredentialSnapshot(CredentialBase):
 
     @classmethod
     def from_credential_db_model(cls, credential: Credential) -> "CredentialSnapshot":
+        # Get the credential_json value with appropriate masking
+        if credential.credential_json is None:
+            credential_json_value: dict[str, Any] = {}
+        elif MASK_CREDENTIAL_PREFIX:
+            credential_json_value = credential.credential_json.get_value(
+                apply_mask=True
+            )
+        else:
+            credential_json_value = credential.credential_json.get_value(
+                apply_mask=False
+            )
+
         return CredentialSnapshot(
             id=credential.id,
-            credential_json=(
-                mask_credential_dict(credential.credential_json)
-                if MASK_CREDENTIAL_PREFIX and credential.credential_json
-                else credential.credential_json
-            ),
+            credential_json=credential_json_value,
             user_id=credential.user_id,
             user_email=credential.user.email if credential.user else None,
             admin_public=credential.admin_public,

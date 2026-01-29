@@ -24,7 +24,12 @@ def jira_doc_sync(
     jira_connector = JiraConnector(
         **cc_pair.connector.connector_specific_config,
     )
-    jira_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    jira_connector.load_credentials(credential_json)
 
     yield from generic_doc_sync(
         cc_pair=cc_pair,
