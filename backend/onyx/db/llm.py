@@ -769,47 +769,6 @@ def create_new_flow_mapping(
     return flow_mapping
 
 
-def delete_flow_mapping(
-    db_session: Session,
-    model_configuration_id: int,
-    flow_type: ModelFlowType,
-) -> None:
-    db_session.execute(
-        delete(FlowMapping).where(
-            FlowMapping.model_configuration_id == model_configuration_id,
-            FlowMapping.flow_type == flow_type,
-        )
-    )
-    db_session.commit()
-
-
-def set_default_flow_mapping(
-    db_session: Session,
-    model_configuration_id: int,
-    flow_type: ModelFlowType,
-) -> None:
-    # Get the current default
-    current_default = db_session.scalar(
-        select(FlowMapping).where(
-            FlowMapping.flow_type == flow_type,
-            FlowMapping.is_default == True,  # noqa: E712
-        )
-    )
-    if current_default:
-        current_default.is_default = False
-        db_session.flush()
-
-    db_session.execute(
-        update(FlowMapping)
-        .where(
-            FlowMapping.model_configuration_id == model_configuration_id,
-            FlowMapping.flow_type == flow_type,
-        )
-        .values(is_default=True)
-    )
-    db_session.commit()
-
-
 def insert_new_model_configuration(
     db_session: Session,
     llm_provider_id: int,

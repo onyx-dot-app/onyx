@@ -300,6 +300,28 @@ def put_llm_provider(
         not existing_provider or not existing_provider.is_auto_mode
     )
 
+    default_vision_model = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.VISION
+    )
+
+    # Check that we're not disabling vision on the default vision model
+    if (
+        default_vision_model
+        and existing_provider
+        and default_vision_model.provider_id == existing_provider.id
+        and any(
+            m.name == default_vision_model.model_name and not m.supports_image_input
+            for m in llm_provider_upsert_request.model_configurations
+        )
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot disable vision for '{default_vision_model.model_name}' because it is the default vision model."
+                "Select another model as default first."
+            ),
+        )
+
     try:
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
