@@ -185,9 +185,11 @@ export default function MCPApiKeyModal({
                 {authTemplate!.required_fields.map((field) => (
                   <div key={field} className="space-y-2">
                     <Label name={field}>
-                      {field
-                        .replace(/_/g, " ")
-                        .replace(/\b\w/g, (l) => l.toUpperCase())}
+                      <Text>
+                        {field
+                          .replace(/_/g, " ")
+                          .replace(/\b\w/g, (l) => l.toUpperCase())}
+                      </Text>
                     </Label>
                     <div className="relative">
                       <Input
@@ -219,7 +221,9 @@ export default function MCPApiKeyModal({
             ) : (
               // Legacy API key field
               <div className="space-y-2">
-                <Label name="apiKey">{credsType}</Label>
+                <Label name="apiKey">
+                  <Text>{credsType}</Text>
+                </Label>
                 <div className="relative">
                   <Input
                     id="apiKey"
