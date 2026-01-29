@@ -48,7 +48,7 @@ def create_document_set(
     try:
         document_set_db_model, _ = insert_document_set(
             document_set_creation_request=document_set_creation_request,
-            user_id=user.id if user else None,
+            user_id=user.id,
             db_session=db_session,
         )
     except Exception as e:
@@ -66,7 +66,7 @@ def create_document_set(
 @router.patch("/admin/document-set")
 def patch_document_set(
     document_set_update_request: DocumentSetUpdateRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
@@ -149,7 +149,7 @@ def delete_document_set(
 
 @router.get("/document-set")
 def list_document_sets_for_user(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable document sets"

@@ -1066,7 +1066,7 @@ function AccountsAccessSettings() {
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType && authType !== AuthType.DISABLED;
+  const showTokensSection = authType !== null;
 
   // Fetch PATs with SWR
   const {

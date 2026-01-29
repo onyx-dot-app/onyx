@@ -11,6 +11,9 @@ from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 #####
 # App Configs
@@ -71,8 +74,16 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 #####
 # Auth Configs
 #####
-AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
-DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
+# Upgrades users from disabled auth to basic auth and shows warning.
+_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
+if not _auth_type_str or _auth_type_str in ("disabled", "none"):
+    logger.warning(
+        "AUTH_TYPE='disabled' is no longer supported. "
+        "Defaulting to 'basic'. Please update your configuration. "
+        "Your existing data will be migrated automatically."
+    )
+    _auth_type_str = AuthType.BASIC.value
+AUTH_TYPE = AuthType(_auth_type_str)
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
@@ -145,6 +156,10 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+
+# Whether Google OAuth is enabled (requires both client ID and secret)
+OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
+
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 

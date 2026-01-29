@@ -208,7 +208,7 @@ def update_slack_channel_config(
 def remove_slack_channel_config(
     db_session: Session,
     slack_channel_config_id: int,
-    user: User | None,
+    user: User,
 ) -> None:
     slack_channel_config = db_session.scalar(
         select(SlackChannelConfig).where(

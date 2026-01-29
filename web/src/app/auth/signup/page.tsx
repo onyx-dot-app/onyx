@@ -42,11 +42,6 @@ const Page = async (props: {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-  // simply take the user to the home page if Auth is disabled
-  if (authTypeMetadata?.authType === AuthType.DISABLED) {
-    return redirect("/app");
-  }
-
   // if user is already logged in, take them to the main app page
   if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
     if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {

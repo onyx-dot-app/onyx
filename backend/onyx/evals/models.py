@@ -75,7 +75,7 @@ class EvalConfiguration(BaseModel):
     builtin_tool_types: list[str] = Field(default_factory=list)
     persona_override_config: PersonaOverrideConfig | None = None
     llm: LLMOverride = Field(default_factory=LLMOverride)
-    search_permissions_email: str | None = None
+    search_permissions_email: str
     allowed_tool_ids: list[int]
 
 
