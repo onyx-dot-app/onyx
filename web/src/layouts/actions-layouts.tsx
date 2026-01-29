@@ -111,7 +111,6 @@ export interface ActionsHeaderProps
   // Custom content
   rightChildren?: React.ReactNode;
 }
-
 function ActionsHeader({
   name,
   title,
@@ -164,9 +163,7 @@ function ActionsHeader({
 function ActionsContent({
   children,
   ...props
-}: WithoutStyles<React.HTMLAttributes<HTMLDivElement>> & {
-  children?: React.ReactNode;
-}) {
+}: WithoutStyles<React.HTMLAttributes<HTMLDivElement>>) {
   return (
     <ExpandableCard.Content {...props}>
       <div className="flex flex-col gap-2 p-2">{children}</div>
