@@ -219,7 +219,7 @@ def get_default_llm_with_vision(
         return None
 
     # Check all providers for viable vision models
-    non_public_vision_models = []
+    non_public_vision_llm: LLM | None = None
 
     for provider in providers:
         provider_view = LLMProviderView.from_model(provider)
@@ -228,14 +228,11 @@ def get_default_llm_with_vision(
             if model_supports_image_input(model.name, provider.provider):
                 if model.is_visible:
                     return create_vision_llm(provider_view, model.name)
-                else:
-                    non_public_vision_models.append(model)
+                # Second priority: Give a non-public vision model
+                elif not non_public_vision_llm:
+                    non_public_vision_llm = create_vision_llm(provider_view, model.name)
 
-    # Resort to non-public vision models
-    if non_public_vision_models:
-        return non_public_vision_models[0]
-
-    return None
+    return non_public_vision_llm
 
 
 def llm_from_provider(
