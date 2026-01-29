@@ -653,14 +653,39 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               )}
               style={
                 hasBackground
-                  ? { backgroundImage: `url(${chatBackground.url})` }
+                  ? {
+                      backgroundImage: `url(20260129_08h20m13s_grim.png)`,
+                    }
                   : undefined
               }
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* Semi-transparent overlay for readability when background is set */}
-              {hasBackground && (
-                <div className="absolute inset-0 bg-background/80 pointer-events-none" />
+              {!!currentChatSessionId && liveAssistant && hasBackground && (
+                <>
+                  {/* TODO: See if `@container` is helping or I'm just getting lucky */}
+                  <div className="@container absolute z-0 inset-0 backdrop-blur-[1px] pointer-events-none" />
+                  <div
+                    className="@container absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                    style={{
+                      maskImage: `linear-gradient(
+                        to right,
+                        transparent 0%,
+                        black max(0%, calc(50% - 25rem)),
+                        black min(100%, calc(50% + 25rem)),
+                        transparent 100%
+                      )`,
+                      WebkitMaskImage: `linear-gradient(
+                        to right,
+                        transparent 0%,
+                        black max(0%, calc(50% - 25rem)),
+                        black min(100%, calc(50% + 25rem)),
+                        transparent 100%
+                      )`,
+                    }}
+                  />
+                  <div className="@container absolute z-0 inset-0 backdrop-blur-[1px] pointer-events-none" />
+                </>
               )}
 
               {/* ProjectUI */}
@@ -697,13 +722,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     stopGenerating={stopGenerating}
                     onResubmit={handleResubmitLastMessage}
                     anchorNodeId={anchorNodeId}
-                    disableBlur={!hasBackground}
                   />
                 </ChatScrollContainer>
               )}
 
               {!currentChatSessionId && !currentProjectId && (
-                <div className="w-full flex-1 flex flex-col items-center justify-end">
+                <div className="relative w-full flex-1 flex flex-col items-center justify-end">
                   <WelcomeMessage
                     agent={liveAssistant}
                     isDefaultAgent={isDefaultAgent}

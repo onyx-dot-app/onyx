@@ -385,7 +385,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
-                    disableBlur={!hasBackground}
                   />
                 </ChatScrollContainer>
               </>
@@ -393,7 +392,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Welcome message - centered when no messages */}
             {!hasMessages && (
-              <div className="w-full flex-1 flex flex-col items-center justify-end">
+              <div className="relative w-full flex-1 flex flex-col items-center justify-end">
                 <WelcomeMessage isDefaultAgent />
                 <Spacer rem={1.5} />
               </div>

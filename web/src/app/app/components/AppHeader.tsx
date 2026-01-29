@@ -266,17 +266,6 @@ export default function AppHeader() {
       )}
 
       <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 relative">
-        {/* Fading blur overlay for mobile/tablet - hidden on xl+ */}
-        <div
-          className="absolute inset-0 backdrop-blur-md xl:hidden pointer-events-none"
-          style={{
-            maskImage:
-              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
-          }}
-        />
-
         {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
         <div className="flex-1 relative z-sticky">
           <IconButton
