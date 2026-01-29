@@ -5,7 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.bitbucket.connector import BitbucketConnector
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 @pytest.fixture
@@ -46,11 +46,11 @@ def test_bitbucket_checkpointed_load(
     start = 1755004439  # Tue Aug 12 2025 13:13:59 UTC
     end = time.time()
 
-    docs = load_all_docs_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=bitbucket_connector_for_checkpoint,
         start=start,
         end=end,
-    )
+    ).documents
 
     assert isinstance(docs, list)
 

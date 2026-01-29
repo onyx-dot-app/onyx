@@ -694,7 +694,7 @@ def _convert_drive_item_to_document(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
             external_access=external_access,
-            parent_hierarchy_raw_node_id=file.get("parents", [None])[0],
+            parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
         )
     except Exception as e:
         doc_id = "unknown"

@@ -56,6 +56,7 @@ import SidebarBody from "@/sections/sidebar/SidebarBody";
 import { useUser } from "@/components/user/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useModalContext } from "@/components/context/ModalContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgDevKit,
@@ -69,6 +70,7 @@ import {
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
+import { usePostHog } from "posthog-js/react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Notification,
@@ -144,10 +146,11 @@ interface AppSidebarInnerProps {
 
 const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
-    const searchParams = useSearchParams();
     const router = useRouter();
     const combinedSettings = useSettingsContext();
     const { popup, setPopup } = usePopup();
+    const posthog = usePostHog();
+    const { newTenantInfo, invitationInfo } = useModalContext();
 
     // Use SWR hooks for data fetching
     const {
@@ -214,16 +217,19 @@ const MemoizedAppSidebarInner = memo(
     const hasAutoTriggeredRef = useRef(false);
 
     // Auto-show intro once when there's an undismissed notification
+    // Don't show if tenant/invitation modal is open (e.g., "join existing team" modal)
+    const hasTenantModal = !!(newTenantInfo || invitationInfo);
     useEffect(() => {
       if (
         isOnyxCraftEnabled &&
         buildModeNotification &&
-        !hasAutoTriggeredRef.current
+        !hasAutoTriggeredRef.current &&
+        !hasTenantModal
       ) {
         hasAutoTriggeredRef.current = true;
         setShowIntroAnimation(true);
       }
-    }, [buildModeNotification, isOnyxCraftEnabled]);
+    }, [buildModeNotification, isOnyxCraftEnabled, hasTenantModal]);
 
     // Dismiss the build mode notification
     const dismissBuildModeNotification = useCallback(async () => {
@@ -441,12 +447,17 @@ const MemoizedAppSidebarInner = memo(
     const buildButton = useMemo(
       () => (
         <div data-testid="AppSidebar/build">
-          <SidebarTab leftIcon={SvgDevKit} folded={folded} href={CRAFT_PATH}>
+          <SidebarTab
+            leftIcon={SvgDevKit}
+            folded={folded}
+            href={CRAFT_PATH}
+            onClick={() => posthog?.capture("clicked_craft_in_sidebar")}
+          >
             Craft
           </SidebarTab>
         </div>
       ),
-      [folded]
+      [folded, posthog]
     );
 
     const searchChatsButton = useMemo(
