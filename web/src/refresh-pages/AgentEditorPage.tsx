@@ -297,7 +297,7 @@ function MCPServerCard({
   isLoading,
 }: MCPServerCardProps) {
   const actionsLayouts = useActionsLayout();
-  const { values, setFieldValue } = useFormikContext<any>();
+  const { values, setFieldValue, getFieldMeta } = useFormikContext<any>();
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
   const {
@@ -386,7 +386,10 @@ function MCPServerCard({
                   title={tool.name}
                   description={tool.description}
                   icon={tool.icon ?? SvgSliders}
-                  disabled={!tool.isAvailable}
+                  disabled={
+                    !tool.isAvailable ||
+                    !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
+                  }
                   rightChildren={
                     <SwitchField
                       name={`${serverFieldName}.tool_${tool.id}`}
@@ -1191,7 +1194,7 @@ export default function AgentEditorPage({
 
                       <GeneralLayouts.Section>
                         <GeneralLayouts.Section gap={1}>
-                          <InputLayouts.Label
+                          <InputLayouts.Title
                             title="Knowledge"
                             description="Add specific connectors and documents for this agent to use to inform its responses."
                           />
@@ -1372,7 +1375,7 @@ export default function AgentEditorPage({
                           <GeneralLayouts.Section gap={0.5}>
                             <SimpleTooltip
                               tooltip={imageGenerationDisabledTooltip}
-                              side="left"
+                              side="top"
                             >
                               <Card
                                 variant={
@@ -1385,6 +1388,7 @@ export default function AgentEditorPage({
                                   name="image_generation"
                                   title="Image Generation"
                                   description="Generate and manipulate images using AI-powered tools."
+                                  disabled={!isImageGenerationAvailable}
                                 >
                                   <SwitchField
                                     name="image_generation"
@@ -1401,6 +1405,7 @@ export default function AgentEditorPage({
                                 name="web_search"
                                 title="Web Search"
                                 description="Search the web for real-time information and up-to-date results."
+                                disabled={!webSearchTool}
                               >
                                 <SwitchField
                                   name="web_search"
@@ -1416,6 +1421,7 @@ export default function AgentEditorPage({
                                 name="open_url"
                                 title="Open URL"
                                 description="Fetch and read content from web URLs."
+                                disabled={!openURLTool}
                               >
                                 <SwitchField
                                   name="open_url"
@@ -1433,6 +1439,7 @@ export default function AgentEditorPage({
                                 name="code_interpreter"
                                 title="Code Interpreter"
                                 description="Generate and run code."
+                                disabled={!codeInterpreterTool}
                               >
                                 <SwitchField
                                   name="code_interpreter"
@@ -1513,6 +1520,7 @@ export default function AgentEditorPage({
                                 description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
                               >
                                 <LLMSelector
+                                  name="llm_model"
                                   llmProviders={llmProviders ?? []}
                                   currentLlm={getCurrentLlm(
                                     values,

@@ -390,14 +390,13 @@ function ActionsTool({
   disabled,
 }: ActionsToolProps) {
   return (
-    <Card padding={0.75}>
+    <Card padding={0.75} variant={disabled ? "disabled" : undefined}>
       <Label name={name} disabled={disabled}>
         <LineItemLayout
           icon={icon}
           title={title}
           description={description}
           rightChildren={rightChildren}
-          strikethrough={disabled}
           variant="secondary"
         />
       </Label>

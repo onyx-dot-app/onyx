@@ -273,7 +273,7 @@ function GeneralSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Label title="Profile" />
+          <InputLayouts.Title title="Profile" />
           <Card>
             <InputLayouts.Horizontal
               title="Full Name"
@@ -329,7 +329,7 @@ function GeneralSettings() {
         </Section>
 
         <Section gap={0.75}>
-          <InputLayouts.Label title="Appearance" />
+          <InputLayouts.Title title="Appearance" />
           <Card>
             <InputLayouts.Horizontal
               title="Color Mode"
@@ -434,7 +434,7 @@ function GeneralSettings() {
         <Separator noPadding />
 
         <Section gap={0.75}>
-          <InputLayouts.Label title="Danger Zone" />
+          <InputLayouts.Title title="Danger Zone" />
           <Card>
             <InputLayouts.Horizontal
               title="Delete All Chats"
@@ -962,7 +962,7 @@ function ChatPreferencesSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75}>
-        <InputLayouts.Label title="Chats" />
+        <InputLayouts.Title title="Chats" />
         <Card>
           <InputLayouts.Horizontal
             title="Default Model"
@@ -991,7 +991,7 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Label title="Prompt Shortcuts" />
+        <InputLayouts.Title title="Prompt Shortcuts" />
         <Card>
           <InputLayouts.Horizontal
             title="Use Prompt Shortcuts"
@@ -1010,7 +1010,7 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Label title="Personalization" />
+        <InputLayouts.Title title="Personalization" />
         <Card>
           <InputLayouts.Horizontal
             title="Reference Stored Memories"
@@ -1354,13 +1354,13 @@ function AccountsAccessSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Label title="Accounts" />
+          <InputLayouts.Title title="Accounts" />
           <Card>
             <InputLayouts.Horizontal
               title="Email"
               description="Your account email address."
               center
-              cursorPointer={false}
+              nonInteractable
             >
               <Text>{user?.email ?? "anonymous"}</Text>
             </InputLayouts.Horizontal>
@@ -1386,7 +1386,7 @@ function AccountsAccessSettings() {
 
         {showTokensSection && (
           <Section gap={0.75}>
-            <InputLayouts.Label title="Access Tokens" />
+            <InputLayouts.Title title="Access Tokens" />
             <Card padding={0.25}>
               <Section gap={0}>
                 {/* Header with search/empty state and create button */}
@@ -1641,7 +1641,7 @@ function ConnectorsSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
-        <InputLayouts.Label title="Connectors" />
+        <InputLayouts.Title title="Connectors" />
         {hasConnectors ? (
           <>
             {/* Indexed Connectors */}

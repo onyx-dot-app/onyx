@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { WithoutStyles } from "@/types";
 
 /**
  * Label - A form label component
@@ -17,7 +18,11 @@ import { cn } from "@/lib/utils";
  * ```
  */
 
-interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {
+interface LabelProps
+  extends WithoutStyles<
+    // The `htmlFor` prop is instead renamed to `name?: string`.
+    Omit<React.LabelHTMLAttributes<HTMLLabelElement>, "htmlFor">
+  > {
   /** The name/id of the form element this label is associated with */
   name?: string;
   /** Whether the associated input is disabled */
@@ -31,6 +36,7 @@ export default function Label({ name, disabled, ref, ...props }: LabelProps) {
       ref={ref}
       className={cn(
         "flex-1 self-stretch",
+        "peer-disabled:cursor-not-allowed",
         disabled ? "cursor-not-allowed" : "cursor-pointer"
       )}
       htmlFor={name}
