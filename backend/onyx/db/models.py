@@ -927,7 +927,12 @@ class OpenSearchTenantMigrationRecord(Base):
     """
 
     __tablename__ = "opensearch_tenant_migration_record"
+    __table_args__ = (
+        # Singleton pattern - unique index on constant ensures only one row
+        Index("idx_opensearch_tenant_migration_singleton", text("(true)"), unique=True),
+    )
 
+    id: Mapped[int] = mapped_column(primary_key=True)
     document_migration_record_table_population_status: Mapped[
         OpenSearchTenantMigrationStatus
     ] = mapped_column(
