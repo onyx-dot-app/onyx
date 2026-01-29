@@ -70,6 +70,7 @@ from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -254,6 +255,16 @@ def put_llm_provider(
         raise HTTPException(
             status_code=400,
             detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
+        )
+    if (
+        MULTI_TENANT
+        and existing_provider
+        and (llm_provider_upsert_request.api_base != existing_provider.api_base)
+        and not llm_provider_upsert_request.api_key_changed
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="API base cannot be changed without changing the API key",
         )
 
     persona_ids = llm_provider_upsert_request.personas
