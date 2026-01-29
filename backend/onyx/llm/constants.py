@@ -16,6 +16,7 @@ class LlmProviderNames(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
+    GOOGLE_AI = "google_ai"  # Google AI Studio (uses gemini/ prefix in litellm)
     BEDROCK = "bedrock"
     BEDROCK_CONVERSE = "bedrock_converse"
     VERTEX_AI = "vertex_ai"
@@ -36,6 +37,7 @@ class LlmProviderNames(str, Enum):
 WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI,
     LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.GOOGLE_AI,
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.BEDROCK,
     LlmProviderNames.OPENROUTER,
@@ -49,6 +51,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI: "OpenAI",
     LlmProviderNames.ANTHROPIC: "Anthropic",
     LlmProviderNames.GOOGLE: "Google",
+    LlmProviderNames.GOOGLE_AI: "Google AI Studio",
     LlmProviderNames.BEDROCK: "Bedrock",
     LlmProviderNames.BEDROCK_CONVERSE: "Bedrock",
     LlmProviderNames.VERTEX_AI: "Vertex AI",

@@ -1,5 +1,6 @@
 import { LLMProviderName, LLMProviderView } from "../interfaces";
 import { AnthropicForm } from "./AnthropicForm";
+import { GoogleAIForm } from "./GoogleAIForm";
 import { OpenAIForm } from "./OpenAIForm";
 import { OllamaForm } from "./OllamaForm";
 import { AzureForm } from "./AzureForm";
@@ -28,6 +29,8 @@ export const getFormForExistingProvider = (provider: LLMProviderView) => {
       }
     case LLMProviderName.ANTHROPIC:
       return <AnthropicForm existingLlmProvider={provider} />;
+    case LLMProviderName.GOOGLE_AI:
+      return <GoogleAIForm existingLlmProvider={provider} />;
     case LLMProviderName.OLLAMA_CHAT:
       return <OllamaForm existingLlmProvider={provider} />;
     case LLMProviderName.AZURE:

@@ -31,6 +31,18 @@
         }
       ]
     },
+    "google_ai": {
+      "default_model": {
+        "name": "gemini-3-pro-preview",
+        "display_name": "Gemini 3 Pro"
+      },
+      "additional_visible_models": [
+        {
+          "name": "gemini-3-flash-preview",
+          "display_name": "Gemini 3 Flash"
+        }
+      ]
+    },
     "openrouter": {
       "default_model": "z-ai/glm-4.7",
       "additional_visible_models": [

@@ -61,6 +61,7 @@ export const getProviderIcon = (
     microsoft: MicrosoftIconSVG,
     meta: MetaIcon,
     google: GeminiIcon,
+    google_ai: GeminiIcon,
     qwen: QwenIcon,
     qwq: QwenIcon,
     zai: ZAIIcon,

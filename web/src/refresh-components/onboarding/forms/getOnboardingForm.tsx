@@ -6,10 +6,10 @@ import {
 import { OnboardingActions, OnboardingState } from "../types";
 import { OpenAIOnboardingForm } from "./OpenAIOnboardingForm";
 import { AnthropicOnboardingForm } from "./AnthropicOnboardingForm";
+import { GoogleAIOnboardingForm } from "./GoogleAIOnboardingForm";
 import { OllamaOnboardingForm } from "./OllamaOnboardingForm";
 import { AzureOnboardingForm } from "./AzureOnboardingForm";
 import { BedrockOnboardingForm } from "./BedrockOnboardingForm";
-import { VertexAIOnboardingForm } from "./VertexAIOnboardingForm";
 import { OpenRouterOnboardingForm } from "./OpenRouterOnboardingForm";
 import { CustomOnboardingForm } from "./CustomOnboardingForm";
 
@@ -20,6 +20,10 @@ const PROVIDER_DISPLAY_INFO: Record<
 > = {
   [LLMProviderName.OPENAI]: { title: "GPT", displayName: "OpenAI" },
   [LLMProviderName.ANTHROPIC]: { title: "Claude", displayName: "Anthropic" },
+  [LLMProviderName.GOOGLE_AI]: {
+    title: "Gemini",
+    displayName: "Google AI Studio",
+  },
   [LLMProviderName.OLLAMA_CHAT]: { title: "Ollama", displayName: "Ollama" },
   [LLMProviderName.AZURE]: {
     title: "Azure OpenAI",
@@ -28,10 +32,6 @@ const PROVIDER_DISPLAY_INFO: Record<
   [LLMProviderName.BEDROCK]: {
     title: "Amazon Bedrock",
     displayName: "AWS",
-  },
-  [LLMProviderName.VERTEX_AI]: {
-    title: "Gemini",
-    displayName: "Google Cloud Vertex AI",
   },
   [LLMProviderName.OPENROUTER]: {
     title: "OpenRouter",
@@ -104,6 +104,17 @@ export function getOnboardingForm({
         />
       );
 
+    case LLMProviderName.GOOGLE_AI:
+      return (
+        <GoogleAIOnboardingForm
+          llmDescriptor={llmDescriptor}
+          onboardingState={onboardingState}
+          onboardingActions={onboardingActions}
+          open={open}
+          onOpenChange={onOpenChange}
+        />
+      );
+
     case LLMProviderName.OLLAMA_CHAT:
       return (
         <OllamaOnboardingForm
@@ -129,17 +140,6 @@ export function getOnboardingForm({
     case LLMProviderName.BEDROCK:
       return (
         <BedrockOnboardingForm
-          llmDescriptor={llmDescriptor}
-          onboardingState={onboardingState}
-          onboardingActions={onboardingActions}
-          open={open}
-          onOpenChange={onOpenChange}
-        />
-      );
-
-    case LLMProviderName.VERTEX_AI:
-      return (
-        <VertexAIOnboardingForm
           llmDescriptor={llmDescriptor}
           onboardingState={onboardingState}
           onboardingActions={onboardingActions}

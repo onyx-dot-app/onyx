@@ -10,6 +10,7 @@ import { LLMProviderView } from "./interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { OpenAIForm } from "./forms/OpenAIForm";
 import { AnthropicForm } from "./forms/AnthropicForm";
+import { GoogleAIForm } from "./forms/GoogleAIForm";
 import { OllamaForm } from "./forms/OllamaForm";
 import { AzureForm } from "./forms/AzureForm";
 import { BedrockForm } from "./forms/BedrockForm";
@@ -71,6 +72,7 @@ export function LLMConfiguration() {
       <div className="flex flex-col gap-y-4">
         <OpenAIForm shouldMarkAsDefault={isFirstProvider} />
         <AnthropicForm shouldMarkAsDefault={isFirstProvider} />
+        <GoogleAIForm shouldMarkAsDefault={isFirstProvider} />
         <OllamaForm shouldMarkAsDefault={isFirstProvider} />
         <AzureForm shouldMarkAsDefault={isFirstProvider} />
         <BedrockForm shouldMarkAsDefault={isFirstProvider} />
