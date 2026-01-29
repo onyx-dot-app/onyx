@@ -14,25 +14,37 @@
  * ```tsx
  * import * as ExpandableCard from "@/layouts/expandable-card-layouts";
  *
+ * // Uncontrolled — Root manages its own state
  * function MyCard() {
- *   const { Provider, isFolded, setIsFolded } = ExpandableCard.useExpandableCard();
+ *   return (
+ *     <ExpandableCard.Root>
+ *       <ExpandableCard.Header>
+ *         <div className="p-4">
+ *           <h3>My Header</h3>
+ *         </div>
+ *       </ExpandableCard.Header>
+ *       <ExpandableCard.Content>
+ *         <div className="p-4">
+ *           <p>Expandable content goes here</p>
+ *         </div>
+ *       </ExpandableCard.Content>
+ *     </ExpandableCard.Root>
+ *   );
+ * }
+ *
+ * // Controlled — consumer owns the state
+ * function MyControlledCard() {
+ *   const [isFolded, setIsFolded] = useState(false);
  *
  *   return (
- *     <Provider>
- *       <ExpandableCard.Root>
- *         <ExpandableCard.Header>
- *           <div className="p-4">
- *             <h3>My Header</h3>
- *             <button onClick={() => setIsFolded(!isFolded)}>Toggle</button>
- *           </div>
- *         </ExpandableCard.Header>
- *         <ExpandableCard.Content>
- *           <div className="p-4">
- *             <p>Expandable content goes here</p>
- *           </div>
- *         </ExpandableCard.Content>
- *       </ExpandableCard.Root>
- *     </Provider>
+ *     <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
+ *       <ExpandableCard.Header>
+ *         <button onClick={() => setIsFolded(!isFolded)}>Toggle</button>
+ *       </ExpandableCard.Header>
+ *       <ExpandableCard.Content>
+ *         <p>Content here</p>
+ *       </ExpandableCard.Content>
+ *     </ExpandableCard.Root>
  *   );
  * }
  * ```
@@ -45,7 +57,6 @@ import React, {
   useContext,
   useState,
   useMemo,
-  useRef,
   useLayoutEffect,
   Dispatch,
   SetStateAction,
@@ -80,45 +91,66 @@ function useExpandableCardContext() {
   const context = useContext(ExpandableCardContext);
   if (!context) {
     throw new Error(
-      "ExpandableCard components must be used within an ExpandableCard Provider"
+      "ExpandableCard components must be used within an ExpandableCard.Root"
     );
   }
   return context;
 }
 
 /**
- * Hook to create an ExpandableCard context provider and controller.
+ * Expandable Card Root Component
  *
- * @returns An object containing:
- *   - Provider: Context provider component to wrap the card
- *   - isFolded: Current folding state
- *   - setIsFolded: Function to update folding state
- *   - hasContent: Whether Content is currently mounted (read-only)
+ * The root container and context provider for an expandable card. Provides a
+ * flex column layout with no gap or padding by default.
+ *
+ * Supports both controlled and uncontrolled folding state:
+ * - **Uncontrolled**: Manages its own state. Use `defaultFolded` to set the
+ *   initial folding state (defaults to `false`, i.e. expanded).
+ * - **Controlled**: Pass `isFolded` and `onFoldedChange` to manage folding
+ *   state externally.
  *
  * @example
  * ```tsx
- * function MyCard() {
- *   const { Provider, isFolded, setIsFolded } = ExpandableCard.useExpandableCard();
+ * // Uncontrolled
+ * <ExpandableCard.Root>
+ *   <ExpandableCard.Header>...</ExpandableCard.Header>
+ *   <ExpandableCard.Content>...</ExpandableCard.Content>
+ * </ExpandableCard.Root>
  *
- *   return (
- *     <Provider>
- *       <ExpandableCard.Root>
- *         <ExpandableCard.Header>
- *           <button onClick={() => setIsFolded(!isFolded)}>
- *             {isFolded ? 'Expand' : 'Collapse'}
- *           </button>
- *         </ExpandableCard.Header>
- *         <ExpandableCard.Content>
- *           <p>Content here</p>
- *         </ExpandableCard.Content>
- *       </ExpandableCard.Root>
- *     </Provider>
- *   );
- * }
+ * // Uncontrolled, starts folded
+ * <ExpandableCard.Root defaultFolded>
+ *   ...
+ * </ExpandableCard.Root>
+ *
+ * // Controlled
+ * const [isFolded, setIsFolded] = useState(false);
+ * <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
+ *   ...
+ * </ExpandableCard.Root>
  * ```
  */
-export function useExpandableCard() {
-  const [isFolded, setIsFolded] = useState(false);
+export interface ExpandableCardRootProps extends SectionProps {
+  /** Controlled folding state. When provided, the component is controlled. */
+  isFolded?: boolean;
+  /** Callback when folding state changes. Required for controlled usage. */
+  onFoldedChange?: Dispatch<SetStateAction<boolean>>;
+  /** Initial folding state for uncontrolled usage. Defaults to `false`. */
+  defaultFolded?: boolean;
+}
+
+function ExpandableCardRoot({
+  isFolded: controlledFolded,
+  onFoldedChange,
+  defaultFolded = false,
+  ...props
+}: ExpandableCardRootProps) {
+  const [uncontrolledFolded, setUncontrolledFolded] = useState(defaultFolded);
+  const isControlled = controlledFolded !== undefined;
+  const isFolded = isControlled ? controlledFolded : uncontrolledFolded;
+  const setIsFolded = isControlled
+    ? onFoldedChange ?? (() => {})
+    : setUncontrolledFolded;
+
   const [hasContent, setHasContent] = useState(false);
 
   // Registration function for Content to announce its presence
@@ -130,49 +162,16 @@ export function useExpandableCard() {
     []
   );
 
-  // Use a ref to hold the context value so Provider can be stable.
-  // Without this, changing contextValue would create a new Provider function,
-  // which React treats as a different component type, causing unmount/remount
-  // of all children (and losing focus on inputs).
-  const contextValueRef = useRef<ExpandableCardContextValue>(null!);
-  contextValueRef.current = {
-    isFolded,
-    setIsFolded,
-    hasContent,
-    registerContent,
-  };
-
-  // Stable Provider - reads from ref on each render, so the function
-  // reference never changes but the provided value stays current.
-  const Provider = useMemo(
-    () =>
-      ({ children }: { children: React.ReactNode }) => (
-        <ExpandableCardContext.Provider value={contextValueRef.current}>
-          {children}
-        </ExpandableCardContext.Provider>
-      ),
-    []
+  const contextValue = useMemo(
+    () => ({ isFolded, setIsFolded, hasContent, registerContent }),
+    [isFolded, setIsFolded, hasContent, registerContent]
   );
 
-  return { Provider, isFolded, setIsFolded, hasContent };
-}
-
-/**
- * Expandable Card Root Component
- *
- * The root container for an expandable card. Provides a flex column layout
- * with no gap or padding by default.
- *
- * @example
- * ```tsx
- * <ExpandableCard.Root>
- *   <ExpandableCard.Header>...</ExpandableCard.Header>
- *   <ExpandableCard.Content>...</ExpandableCard.Content>
- * </ExpandableCard.Root>
- * ```
- */
-function ExpandableCardRoot(props: SectionProps) {
-  return <Section gap={0} padding={0} {...props} />;
+  return (
+    <ExpandableCardContext.Provider value={contextValue}>
+      <Section gap={0} padding={0} {...props} />
+    </ExpandableCardContext.Provider>
+  );
 }
 
 /**

@@ -12,45 +12,40 @@
  * ```tsx
  * import * as ActionsLayouts from "@/layouts/actions-layouts";
  * import * as ExpandableCard from "@/layouts/expandable-card-layouts";
- * import { useExpandableCard } from "@/layouts/expandable-card-layouts";
  * import { SvgServer } from "@opal/icons";
  * import Switch from "@/components/ui/switch";
  *
  * function MyActionCard() {
- *   const { Provider } = useExpandableCard();
- *
  *   return (
- *     <Provider>
- *       <ExpandableCard.Root>
- *         <ActionsLayouts.Header
- *           title="My MCP Server"
- *           description="A powerful MCP server for automation"
- *           icon={SvgServer}
+ *     <ExpandableCard.Root>
+ *       <ActionsLayouts.Header
+ *         title="My MCP Server"
+ *         description="A powerful MCP server for automation"
+ *         icon={SvgServer}
+ *         rightChildren={
+ *           <Button onClick={handleDisconnect}>Disconnect</Button>
+ *         }
+ *       />
+ *       <ActionsLayouts.Content>
+ *         <ActionsLayouts.Tool
+ *           title="File Reader"
+ *           description="Read files from the filesystem"
+ *           icon={SvgFile}
  *           rightChildren={
- *             <Button onClick={handleDisconnect}>Disconnect</Button>
+ *             <Switch checked={enabled} onCheckedChange={setEnabled} />
  *           }
  *         />
- *         <ActionsLayouts.Content>
- *           <ActionsLayouts.Tool
- *             title="File Reader"
- *             description="Read files from the filesystem"
- *             icon={SvgFile}
- *             rightChildren={
- *               <Switch checked={enabled} onCheckedChange={setEnabled} />
- *             }
- *           />
- *           <ActionsLayouts.Tool
- *             title="Web Search"
- *             description="Search the web"
- *             icon={SvgGlobe}
- *             disabled={true}
- *             rightChildren={
- *               <Switch checked={false} disabled />
- *             }
- *           />
- *         </ActionsLayouts.Content>
- *       </ExpandableCard.Root>
- *     </Provider>
+ *         <ActionsLayouts.Tool
+ *           title="Web Search"
+ *           description="Search the web"
+ *           icon={SvgGlobe}
+ *           disabled={true}
+ *           rightChildren={
+ *             <Switch checked={false} disabled />
+ *           }
+ *         />
+ *       </ActionsLayouts.Content>
+ *     </ExpandableCard.Root>
  *   );
  * }
  * ```

@@ -80,13 +80,11 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
-import { useExpandableCard } from "@/layouts/expandable-card-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
-import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { deleteAgent } from "@/lib/agents";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -268,21 +266,16 @@ interface OpenApiToolCardProps {
 
 function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
-  const expandableCard = useExpandableCard();
-
-  useOnMount(() => expandableCard.setIsFolded(true));
 
   return (
-    <expandableCard.Provider>
-      <ExpandableCard.Root>
-        <ActionsLayouts.Header
-          title={tool.display_name || tool.name}
-          description={tool.description}
-          icon={SvgActions}
-          rightChildren={<SwitchField name={toolFieldName} />}
-        />
-      </ExpandableCard.Root>
-    </expandableCard.Provider>
+    <ExpandableCard.Root defaultFolded>
+      <ActionsLayouts.Header
+        title={tool.display_name || tool.name}
+        description={tool.description}
+        icon={SvgActions}
+        rightChildren={<SwitchField name={toolFieldName} />}
+      />
+    </ExpandableCard.Root>
   );
 }
 
@@ -297,7 +290,7 @@ function MCPServerCard({
   tools: enabledTools,
   isLoading,
 }: MCPServerCardProps) {
-  const expandableCard = useExpandableCard();
+  const [isFolded, setIsFolded] = useState(false);
   const { values, setFieldValue, getFieldMeta } = useFormikContext<any>();
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
@@ -314,96 +307,91 @@ function MCPServerCard({
   }).length;
 
   return (
-    <expandableCard.Provider>
-      <ExpandableCard.Root>
-        <ActionsLayouts.Header
-          title={server.name}
-          description={server.description ?? server.server_url}
-          icon={getActionIcon(server.server_url, server.name)}
-          rightChildren={
-            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-              <EnabledCount
-                enabledCount={enabledCount}
-                totalCount={enabledTools.length}
-              />
-              <SwitchField
-                name={`${serverFieldName}.enabled`}
-                onCheckedChange={(checked) => {
-                  enabledTools.forEach((tool) => {
-                    setFieldValue(
-                      `${serverFieldName}.tool_${tool.id}`,
-                      checked
-                    );
-                  });
-                  if (!checked) return;
-                  expandableCard.setIsFolded(false);
-                }}
-              />
-            </GeneralLayouts.Section>
-          }
-        >
+    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
+      <ActionsLayouts.Header
+        title={server.name}
+        description={server.description ?? server.server_url}
+        icon={getActionIcon(server.server_url, server.name)}
+        rightChildren={
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              leftSearchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+            <EnabledCount
+              enabledCount={enabledCount}
+              totalCount={enabledTools.length}
             />
-            {enabledTools.length > 0 && (
-              <Button
-                internal
-                rightIcon={expandableCard.isFolded ? SvgExpand : SvgFold}
-                onClick={() => expandableCard.setIsFolded((prev) => !prev)}
-              >
-                {expandableCard.isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
+            <SwitchField
+              name={`${serverFieldName}.enabled`}
+              onCheckedChange={(checked) => {
+                enabledTools.forEach((tool) => {
+                  setFieldValue(`${serverFieldName}.tool_${tool.id}`, checked);
+                });
+                if (!checked) return;
+                setIsFolded(false);
+              }}
+            />
           </GeneralLayouts.Section>
-        </ActionsLayouts.Header>
-        {isLoading ? (
+        }
+      >
+        <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+          <InputTypeIn
+            placeholder="Search tools..."
+            variant="internal"
+            leftSearchIcon
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {enabledTools.length > 0 && (
+            <Button
+              internal
+              rightIcon={isFolded ? SvgExpand : SvgFold}
+              onClick={() => setIsFolded((prev) => !prev)}
+            >
+              {isFolded ? "Expand" : "Fold"}
+            </Button>
+          )}
+        </GeneralLayouts.Section>
+      </ActionsLayouts.Header>
+      {isLoading ? (
+        <ActionsLayouts.Content>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Card key={index} padding={0.75}>
+              <GeneralLayouts.LineItemLayout
+                // We provide dummy values here.
+                // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
+                title="..."
+                description="..."
+                rightChildren={<></>}
+                loading
+              />
+            </Card>
+          ))}
+        </ActionsLayouts.Content>
+      ) : (
+        enabledTools.length > 0 &&
+        filteredTools.length > 0 && (
           <ActionsLayouts.Content>
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Card key={index} padding={0.75}>
-                <GeneralLayouts.LineItemLayout
-                  // We provide dummy values here.
-                  // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
-                  title="..."
-                  description="..."
-                  rightChildren={<></>}
-                  loading
-                />
-              </Card>
+            {filteredTools.map((tool) => (
+              <ActionsLayouts.Tool
+                key={tool.id}
+                name={`${serverFieldName}.tool_${tool.id}`}
+                title={tool.name}
+                description={tool.description}
+                icon={tool.icon ?? SvgSliders}
+                disabled={
+                  !tool.isAvailable ||
+                  !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
+                }
+                rightChildren={
+                  <SwitchField
+                    name={`${serverFieldName}.tool_${tool.id}`}
+                    disabled={!isServerEnabled}
+                  />
+                }
+              />
             ))}
           </ActionsLayouts.Content>
-        ) : (
-          enabledTools.length > 0 &&
-          filteredTools.length > 0 && (
-            <ActionsLayouts.Content>
-              {filteredTools.map((tool) => (
-                <ActionsLayouts.Tool
-                  key={tool.id}
-                  name={`${serverFieldName}.tool_${tool.id}`}
-                  title={tool.name}
-                  description={tool.description}
-                  icon={tool.icon ?? SvgSliders}
-                  disabled={
-                    !tool.isAvailable ||
-                    !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
-                  }
-                  rightChildren={
-                    <SwitchField
-                      name={`${serverFieldName}.tool_${tool.id}`}
-                      disabled={!isServerEnabled}
-                    />
-                  }
-                />
-              ))}
-            </ActionsLayouts.Content>
-          )
-        )}
-      </ExpandableCard.Root>
-    </expandableCard.Provider>
+        )
+      )}
+    </ExpandableCard.Root>
   );
 }
 
