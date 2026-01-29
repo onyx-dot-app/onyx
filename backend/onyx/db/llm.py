@@ -69,17 +69,17 @@ def update_llm_provider_persona_relationships__no_commit(
         )
 
 
-def fetch_user_group_ids(db_session: Session, user: User | None) -> set[int]:
+def fetch_user_group_ids(db_session: Session, user: User) -> set[int]:
     """Fetch the set of user group IDs for a given user.
 
     Args:
         db_session: Database session
-        user: User to fetch groups for, or None for anonymous users
+        user: User to fetch groups for
 
     Returns:
-        Set of user group IDs. Empty set if user is None.
+        Set of user group IDs. Empty set for anonymous users.
     """
-    if not user:
+    if user.is_anonymous:
         return set()
 
     return set(

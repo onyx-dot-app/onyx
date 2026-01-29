@@ -1,5 +1,4 @@
 export enum AuthType {
-  DISABLED = "disabled",
   BASIC = "basic",
   GOOGLE_OAUTH = "google_oauth",
   OIDC = "oidc",
@@ -21,7 +20,7 @@ export const MCP_INTERNAL_URL =
 // NOTE: this should ONLY be used on the server-side (including middleware).
 // The AUTH_TYPE environment variable is set in the backend and shared with Next.js
 export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
-  AuthType.DISABLED) as AuthType;
+  AuthType.BASIC) as AuthType;
 
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===

@@ -103,7 +103,7 @@ def get_llm_config_for_persona(
 
 def get_llm_for_persona(
     persona: Persona | PersonaOverrideConfig | None,
-    user: User | None,
+    user: User,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
@@ -143,7 +143,7 @@ def get_llm_for_persona(
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",
-                getattr(user, "id", None),
+                user.id,
                 getattr(persona_model, "id", None),
                 provider_model.name,
             )

@@ -36,14 +36,14 @@ class FeatureFlagProvider(abc.ABC):
         raise NotImplementedError
 
     def feature_enabled_for_user_tenant(
-        self, flag_key: str, user: User | None, tenant_id: str
+        self, flag_key: str, user: User, tenant_id: str
     ) -> bool:
         """
         Check if a feature flag is enabled for a user.
         """
         return self.feature_enabled(
             flag_key,
-            # For local dev with AUTH_TYPE=disabled, we don't have a user, so we use a random UUID
+            # For anonymous/unauthenticated users, use a fixed UUID as fallback
             user.id if user else UUID("caa1e0cd-6ee6-4550-b1ec-8affaef4bf83"),
             user_properties={
                 "tenant_id": tenant_id,

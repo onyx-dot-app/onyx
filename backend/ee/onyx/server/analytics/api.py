@@ -40,7 +40,7 @@ class QueryAnalyticsResponse(BaseModel):
 def get_query_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[QueryAnalyticsResponse]:
     daily_query_usage_info = fetch_query_analytics(
@@ -71,7 +71,7 @@ class UserAnalyticsResponse(BaseModel):
 def get_user_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserAnalyticsResponse]:
     daily_query_usage_info_per_user = fetch_per_user_query_analytics(
@@ -105,7 +105,7 @@ class OnyxbotAnalyticsResponse(BaseModel):
 def get_onyxbot_analytics(
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[OnyxbotAnalyticsResponse]:
     daily_onyxbot_info = fetch_onyxbot_analytics(
@@ -141,7 +141,7 @@ def get_persona_messages(
     persona_id: int,
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaMessageAnalyticsResponse]:
     """Fetch daily message counts for a single persona within the given time range."""
@@ -179,7 +179,7 @@ def get_persona_unique_users(
     persona_id: int,
     start: datetime.datetime,
     end: datetime.datetime,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[PersonaUniqueUsersResponse]:
     """Get unique users per day for a single persona."""
@@ -218,7 +218,7 @@ def get_assistant_stats(
     assistant_id: int,
     start: datetime.datetime | None = None,
     end: datetime.datetime | None = None,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> AssistantStatsResponse:
     """

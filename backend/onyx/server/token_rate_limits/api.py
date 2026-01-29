@@ -24,7 +24,7 @@ Global Token Limit Settings
 
 @router.get("/global")
 def get_global_token_limit_settings(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[TokenRateLimitDisplay]:
     return [
@@ -36,7 +36,7 @@ def get_global_token_limit_settings(
 @router.post("/global")
 def create_global_token_limit_settings(
     token_limit_settings: TokenRateLimitArgs,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
     rate_limit_display = TokenRateLimitDisplay.from_db(
@@ -56,7 +56,7 @@ General Token Limit Settings
 def update_token_limit_settings(
     token_rate_limit_id: int,
     token_limit_settings: TokenRateLimitArgs,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
     return TokenRateLimitDisplay.from_db(
@@ -71,7 +71,7 @@ def update_token_limit_settings(
 @router.delete("/rate-limit/{token_rate_limit_id}")
 def delete_token_limit_settings(
     token_rate_limit_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     return delete_token_rate_limit(
