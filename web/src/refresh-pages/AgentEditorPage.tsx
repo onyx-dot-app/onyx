@@ -79,7 +79,8 @@ import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
-import { useActionsLayout } from "@/layouts/actions-layouts";
+import * as ExpandableCard from "@/layouts/expandable-card-layouts";
+import { useExpandableCard } from "@/layouts/expandable-card-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -267,21 +268,21 @@ interface OpenApiToolCardProps {
 
 function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
-  const actionsLayouts = useActionsLayout();
+  const expandableCard = useExpandableCard();
 
-  useOnMount(() => actionsLayouts.setIsFolded(true));
+  useOnMount(() => expandableCard.setIsFolded(true));
 
   return (
-    <actionsLayouts.Provider>
-      <ActionsLayouts.Root>
+    <expandableCard.Provider>
+      <ExpandableCard.Root>
         <ActionsLayouts.Header
           title={tool.display_name || tool.name}
           description={tool.description}
           icon={SvgActions}
           rightChildren={<SwitchField name={toolFieldName} />}
         />
-      </ActionsLayouts.Root>
-    </actionsLayouts.Provider>
+      </ExpandableCard.Root>
+    </expandableCard.Provider>
   );
 }
 
@@ -296,7 +297,7 @@ function MCPServerCard({
   tools: enabledTools,
   isLoading,
 }: MCPServerCardProps) {
-  const actionsLayouts = useActionsLayout();
+  const expandableCard = useExpandableCard();
   const { values, setFieldValue, getFieldMeta } = useFormikContext<any>();
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
@@ -313,8 +314,8 @@ function MCPServerCard({
   }).length;
 
   return (
-    <actionsLayouts.Provider>
-      <ActionsLayouts.Root>
+    <expandableCard.Provider>
+      <ExpandableCard.Root>
         <ActionsLayouts.Header
           title={server.name}
           description={server.description ?? server.server_url}
@@ -335,7 +336,7 @@ function MCPServerCard({
                     );
                   });
                   if (!checked) return;
-                  actionsLayouts.setIsFolded(false);
+                  expandableCard.setIsFolded(false);
                 }}
               />
             </GeneralLayouts.Section>
@@ -352,10 +353,10 @@ function MCPServerCard({
             {enabledTools.length > 0 && (
               <Button
                 internal
-                rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
-                onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
+                rightIcon={expandableCard.isFolded ? SvgExpand : SvgFold}
+                onClick={() => expandableCard.setIsFolded((prev) => !prev)}
               >
-                {actionsLayouts.isFolded ? "Expand" : "Fold"}
+                {expandableCard.isFolded ? "Expand" : "Fold"}
               </Button>
             )}
           </GeneralLayouts.Section>
@@ -401,8 +402,8 @@ function MCPServerCard({
             </ActionsLayouts.Content>
           )
         )}
-      </ActionsLayouts.Root>
-    </actionsLayouts.Provider>
+      </ExpandableCard.Root>
+    </expandableCard.Provider>
   );
 }
 
