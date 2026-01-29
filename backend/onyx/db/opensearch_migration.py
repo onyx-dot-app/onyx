@@ -19,6 +19,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
+
+
 def get_paginated_document_batch(
     db_session: Session,
     limit: int = 1000,
@@ -149,3 +152,18 @@ def increment_num_times_observed_no_additional_docs_to_populate_migration_table_
         }
     )
     db_session.commit()
+
+
+def is_document_migration_permanently_failed(
+    opensearch_document_migration_record: OpenSearchDocumentMigrationRecord,
+) -> bool:
+    return (
+        opensearch_document_migration_record.status
+        == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
+        or (
+            opensearch_document_migration_record.status
+            == OpenSearchDocumentMigrationStatus.FAILED
+            and opensearch_document_migration_record.attempts_count
+            >= TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE
+        )
+    )

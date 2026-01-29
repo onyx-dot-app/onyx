@@ -16,7 +16,7 @@ from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import OpenSearchMigrationStatus
+from onyx.db.enums import OpenSearchDocumentMigrationStatus
 from onyx.db.opensearch_migration import create_opensearch_migration_records_with_commit
 from onyx.db.opensearch_migration import get_last_opensearch_migration_document_id
 from onyx.db.opensearch_migration import (
@@ -29,6 +29,7 @@ from onyx.db.opensearch_migration import (
 from onyx.db.opensearch_migration import (
     increment_num_times_observed_no_additional_docs_to_populate_migration_table_with_commit,
 )
+from onyx.db.opensearch_migration import is_document_migration_permanently_failed
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -39,9 +40,6 @@ from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
-
-
-TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
 
 
 def _migrate_single_document(
@@ -302,15 +300,19 @@ def migrate_documents_from_vespa_to_opensearch_task(
                             f"({record.document.chunk_count}) for document {record.document_id}."
                         )
 
-                    record.status = OpenSearchMigrationStatus.COMPLETED
+                    record.status = OpenSearchDocumentMigrationStatus.COMPLETED
                 except Exception as e:
-                    record.status = OpenSearchMigrationStatus.FAILED
+                    record.status = OpenSearchDocumentMigrationStatus.FAILED
                     record.error_message = (
                         f"Attempt {record.attempts_count + 1}: {str(e)}"
                     )
                 finally:
                     record.attempts_count += 1
                     record.last_attempt_at = datetime.now(timezone.utc)
+                    if is_document_migration_permanently_failed(record):
+                        record.status = (
+                            OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
+                        )
 
             db_session.commit()
     except Exception:
