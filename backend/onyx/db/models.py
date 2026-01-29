@@ -45,7 +45,6 @@ from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from onyx.configs.constants import (
     DEFAULT_BOOST,
     FederatedConnectorSource,
@@ -96,7 +95,6 @@ from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import RerankerProvider
 from onyx.context.search.enums import RecencyBiasSetting
 
 
@@ -1807,17 +1805,6 @@ class SearchSettings(Base):
     multilingual_expansion: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), default=[]
     )
-
-    # Reranking settings
-    disable_rerank_for_streaming: Mapped[bool] = mapped_column(Boolean, default=False)
-    rerank_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    rerank_provider_type: Mapped[RerankerProvider | None] = mapped_column(
-        Enum(RerankerProvider, native_enum=False), nullable=True
-    )
-    rerank_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
-    rerank_api_url: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    num_rerank: Mapped[int] = mapped_column(Integer, default=NUM_POSTPROCESSED_RESULTS)
 
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
         "CloudEmbeddingProvider",
