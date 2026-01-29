@@ -5,6 +5,7 @@ from typing import Any
 from typing import cast
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import model_validator
 
 from onyx.access.models import ExternalAccess
@@ -445,7 +446,7 @@ class ConnectorFailure(BaseModel):
     failed_document: DocumentFailure | None = None
     failed_entity: EntityFailure | None = None
     failure_message: str
-    exception: Exception | None = None
+    exception: Exception | None = Field(default=None, exclude=True)
 
     model_config = {"arbitrary_types_allowed": True}
 
