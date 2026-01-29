@@ -1520,6 +1520,7 @@ export default function AgentEditorPage({
                                 description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
                               >
                                 <LLMSelector
+                                  name="llm_model"
                                   llmProviders={llmProviders ?? []}
                                   currentLlm={getCurrentLlm(
                                     values,

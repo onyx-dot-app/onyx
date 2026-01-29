@@ -7,6 +7,8 @@ import { Section } from "@/layouts/general-layouts";
 import Label from "@/refresh-components/form/Label";
 
 interface OrientationLayoutProps extends TitleLayoutProps {
+  name?: string;
+  disabled?: boolean;
   nonInteractable?: boolean;
   children?: React.ReactNode;
 }
@@ -37,6 +39,8 @@ export interface VerticalLayoutProps extends OrientationLayoutProps {
   subDescription?: React.ReactNode;
 }
 function VerticalInputLayout({
+  name,
+  disabled,
   nonInteractable = false,
   children,
   subDescription,
@@ -46,7 +50,7 @@ function VerticalInputLayout({
     <Section gap={0.25} alignItems="start">
       <TitleLayout {...titleLayoutProps} />
       {children}
-      {titleLayoutProps.name && <ErrorLayout name={titleLayoutProps.name} />}
+      {name && <ErrorLayout name={name} />}
       {subDescription && (
         <Text secondaryBody text03>
           {subDescription}
@@ -56,10 +60,11 @@ function VerticalInputLayout({
   );
 
   if (nonInteractable) return content;
-
-  // We wrap an empty, no-`name` `<Label>` around the actual contents to make it easily interactable.
-  // Interacting with the entire section - NOT just the input itself - will redirect interactions to the input.
-  return <Label disabled={titleLayoutProps.disabled}>{content}</Label>;
+  return (
+    <Label name={name} disabled={disabled}>
+      {content}
+    </Label>
+  );
 }
 
 /**
@@ -100,6 +105,8 @@ export interface HorizontalLayoutProps extends OrientationLayoutProps {
   center?: boolean;
 }
 function HorizontalInputLayout({
+  name,
+  disabled,
   nonInteractable,
   children,
   center,
@@ -117,26 +124,28 @@ function HorizontalInputLayout({
           {children}
         </Section>
       </Section>
-      {titleLayoutProps.name && <ErrorLayout name={titleLayoutProps.name} />}
+      {name && <ErrorLayout name={name} />}
     </Section>
   );
 
   if (nonInteractable) return content;
-
-  // We wrap an empty, no-`name` `<Label>` around the actual contents to make it easily interactable.
-  // Interacting with the entire section - NOT just the input itself - will redirect interactions to the input.
-  return <Label disabled={titleLayoutProps.disabled}>{content}</Label>;
+  return (
+    <Label name={name} disabled={disabled}>
+      {content}
+    </Label>
+  );
 }
 
 /**
- * TitleLayout - A reusable label component for form fields
+ * TitleLayout - A reusable title/description component for form fields
  *
- * Renders a semantic label element with optional description and "Optional" indicator.
- * If no `name` prop is provided, renders a `div` instead of a `label` element.
+ * Renders a title with an optional description and "Optional" indicator.
+ * This is a pure presentational component — it does not render a `<label>`
+ * element. Label semantics are handled by the parent orientation layout
+ * (Vertical/Horizontal) or by the caller.
  *
  * Exported as `Title` for convenient usage.
  *
- * @param name - The field name to associate the label with (renders as `<Label>` if provided)
  * @param title - The main label text
  * @param description - Additional helper text shown below the title
  * @param optional - Whether to show "(Optional)" indicator
@@ -155,22 +164,18 @@ function HorizontalInputLayout({
  * ```
  */
 export interface TitleLayoutProps {
-  name?: string;
   title: string;
   description?: string;
   optional?: boolean;
-  disabled?: boolean;
   center?: boolean;
 }
 function TitleLayout({
-  name,
   title,
   description,
   optional,
-  disabled,
   center,
 }: TitleLayoutProps) {
-  const content = (
+  return (
     <Section gap={0} height="fit">
       <Section
         flexDirection="row"
@@ -195,13 +200,6 @@ function TitleLayout({
         </Section>
       )}
     </Section>
-  );
-
-  if (!name) return content;
-  return (
-    <Label name={name} disabled={disabled}>
-      {content}
-    </Label>
   );
 }
 
