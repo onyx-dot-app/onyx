@@ -133,6 +133,19 @@ export const getTimeAgoString = (date: Date | null) => {
   return `${diffMonths}mo ago`;
 };
 
+/**
+ * Format a date to short format like "Jan 27, 2026".
+ * Always shows date, never time.
+ */
+export const formatDateShort = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 export const getFormattedDateTime = (date: Date | null) => {
   if (!date) return null;
 
