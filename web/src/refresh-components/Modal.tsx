@@ -351,14 +351,14 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
 
     return (
       <Section ref={ref} padding={1} alignItems="start" {...props}>
-        <Section gap={0.25} alignItems="start">
+        <Section gap={0.5}>
           <Section
             gap={0}
             padding={0}
             flexDirection="row"
             justifyContent="between"
           >
-            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+            <Icon className="stroke-text-04" size={24} />
             {onClose && (
               <div
                 tabIndex={-1}
@@ -370,16 +370,19 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
               </div>
             )}
           </Section>
-          <DialogPrimitive.Title asChild>
-            <Text headingH3>{title}</Text>
-          </DialogPrimitive.Title>
-          {description && (
-            <DialogPrimitive.Description asChild>
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            </DialogPrimitive.Description>
-          )}
+
+          <Section alignItems="start" gap={0}>
+            <DialogPrimitive.Title asChild>
+              <Text headingH3>{title}</Text>
+            </DialogPrimitive.Title>
+            {description && (
+              <DialogPrimitive.Description asChild>
+                <Text secondaryBody text03>
+                  {description}
+                </Text>
+              </DialogPrimitive.Description>
+            )}
+          </Section>
         </Section>
         {children}
       </Section>
