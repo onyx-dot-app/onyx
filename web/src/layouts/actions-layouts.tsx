@@ -75,6 +75,7 @@ import {
   SectionProps,
 } from "@/layouts/general-layouts";
 import { Card } from "@/refresh-components/cards";
+import Label from "@/refresh-components/form/Label";
 
 const ActionsLayoutContext = createContext<
   ActionsLayoutContextValue | undefined
@@ -259,14 +260,16 @@ function ActionsHeader({
         shouldFullyRound ? "rounded-16" : "rounded-t-16"
       )}
     >
-      <label className="px-4 cursor-pointer" htmlFor={name}>
-        <LineItemLayout
-          icon={Icon}
-          title={title}
-          description={description}
-          rightChildren={rightChildren}
-        />
-      </label>
+      <div className="px-4">
+        <Label name={name}>
+          <LineItemLayout
+            icon={Icon}
+            title={title}
+            description={description}
+            rightChildren={rightChildren}
+          />
+        </Label>
+      </div>
       <div {...props} className="px-2" />
     </div>
   );
@@ -388,7 +391,7 @@ function ActionsTool({
 }: ActionsToolProps) {
   return (
     <Card padding={0.75}>
-      <label className="w-full cursor-pointer" htmlFor={name}>
+      <Label name={name} disabled={disabled}>
         <LineItemLayout
           icon={icon}
           title={title}
@@ -397,47 +400,9 @@ function ActionsTool({
           strikethrough={disabled}
           variant="secondary"
         />
-      </label>
+      </Label>
     </Card>
   );
-}
-
-/**
- * Actions Tool Skeleton Component
- *
- * A loading skeleton that mimics the appearance of ActionsTool.
- * Renders 3 pulsing skeleton items to indicate loading state.
- *
- * Features:
- * - Animated pulsing effect
- * - Matches ActionsTool layout
- * - Renders 3 skeleton items by default
- *
- * @example
- * ```tsx
- * // Show loading state
- * <ActionsLayouts.Content>
- *   {isLoading ? (
- *     <ActionsLayouts.ToolSkeleton />
- *   ) : (
- *     tools.map(tool => <ActionsLayouts.Tool key={tool.id} {...tool} />)
- *   )}
- * </ActionsLayouts.Content>
- * ```
- */
-function ActionsToolSkeleton() {
-  return Array.from({ length: 3 }).map((_, index) => (
-    <Card key={index} padding={1.5}>
-      <LineItemLayout
-        // We provide dummy values here.
-        // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
-        title="..."
-        description="..."
-        rightChildren={<></>}
-        loading
-      />
-    </Card>
-  ));
 }
 
 export {
@@ -445,5 +410,4 @@ export {
   ActionsHeader as Header,
   ActionsContent as Content,
   ActionsTool as Tool,
-  ActionsToolSkeleton as ToolSkeleton,
 };

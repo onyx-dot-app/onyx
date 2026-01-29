@@ -362,7 +362,18 @@ function MCPServerCard({
         </ActionsLayouts.Header>
         {isLoading ? (
           <ActionsLayouts.Content>
-            <ActionsLayouts.ToolSkeleton />
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Card key={index} padding={0.75}>
+                <GeneralLayouts.LineItemLayout
+                  // We provide dummy values here.
+                  // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
+                  title="..."
+                  description="..."
+                  rightChildren={<></>}
+                  loading
+                />
+              </Card>
+            ))}
           </ActionsLayouts.Content>
         ) : (
           enabledTools.length > 0 &&
@@ -1352,198 +1363,202 @@ export default function AgentEditorPage({
 
                       <Separator noPadding />
 
-                      <SimpleCollapsible
-                        trigger={
-                          <SimpleCollapsible.Header
-                            title="Actions"
-                            description="Tools and capabilities available for this agent to use."
-                          />
-                        }
-                      >
-                        <GeneralLayouts.Section gap={0.5}>
-                          <SimpleTooltip
-                            tooltip={imageGenerationDisabledTooltip}
-                            side="left"
-                          >
+                      <SimpleCollapsible>
+                        <SimpleCollapsible.Header
+                          title="Actions"
+                          description="Tools and capabilities available for this agent to use."
+                        />
+                        <SimpleCollapsible.Content>
+                          <GeneralLayouts.Section gap={0.5}>
+                            <SimpleTooltip
+                              tooltip={imageGenerationDisabledTooltip}
+                              side="left"
+                            >
+                              <Card
+                                variant={
+                                  isImageGenerationAvailable
+                                    ? undefined
+                                    : "disabled"
+                                }
+                              >
+                                <InputLayouts.Horizontal
+                                  name="image_generation"
+                                  title="Image Generation"
+                                  description="Generate and manipulate images using AI-powered tools."
+                                >
+                                  <SwitchField
+                                    name="image_generation"
+                                    disabled={!isImageGenerationAvailable}
+                                  />
+                                </InputLayouts.Horizontal>
+                              </Card>
+                            </SimpleTooltip>
+
                             <Card
-                              variant={
-                                isImageGenerationAvailable
-                                  ? undefined
-                                  : "disabled"
-                              }
+                              variant={!!webSearchTool ? undefined : "disabled"}
                             >
                               <InputLayouts.Horizontal
-                                name="image_generation"
-                                title="Image Generation"
-                                description="Generate and manipulate images using AI-powered tools."
+                                name="web_search"
+                                title="Web Search"
+                                description="Search the web for real-time information and up-to-date results."
                               >
                                 <SwitchField
-                                  name="image_generation"
-                                  disabled={!isImageGenerationAvailable}
+                                  name="web_search"
+                                  disabled={!webSearchTool}
                                 />
                               </InputLayouts.Horizontal>
                             </Card>
-                          </SimpleTooltip>
 
-                          <Card
-                            variant={!!webSearchTool ? undefined : "disabled"}
-                          >
-                            <InputLayouts.Horizontal
-                              name="web_search"
-                              title="Web Search"
-                              description="Search the web for real-time information and up-to-date results."
+                            <Card
+                              variant={!!openURLTool ? undefined : "disabled"}
                             >
-                              <SwitchField
-                                name="web_search"
-                                disabled={!webSearchTool}
-                              />
-                            </InputLayouts.Horizontal>
-                          </Card>
-
-                          <Card
-                            variant={!!openURLTool ? undefined : "disabled"}
-                          >
-                            <InputLayouts.Horizontal
-                              name="open_url"
-                              title="Open URL"
-                              description="Fetch and read content from web URLs."
-                            >
-                              <SwitchField
+                              <InputLayouts.Horizontal
                                 name="open_url"
-                                disabled={!openURLTool}
-                              />
-                            </InputLayouts.Horizontal>
-                          </Card>
+                                title="Open URL"
+                                description="Fetch and read content from web URLs."
+                              >
+                                <SwitchField
+                                  name="open_url"
+                                  disabled={!openURLTool}
+                                />
+                              </InputLayouts.Horizontal>
+                            </Card>
 
-                          <Card
-                            variant={
-                              !!codeInterpreterTool ? undefined : "disabled"
-                            }
-                          >
-                            <InputLayouts.Horizontal
-                              name="code_interpreter"
-                              title="Code Interpreter"
-                              description="Generate and run code."
+                            <Card
+                              variant={
+                                !!codeInterpreterTool ? undefined : "disabled"
+                              }
                             >
-                              <SwitchField
+                              <InputLayouts.Horizontal
                                 name="code_interpreter"
-                                disabled={!codeInterpreterTool}
-                              />
-                            </InputLayouts.Horizontal>
-                          </Card>
+                                title="Code Interpreter"
+                                description="Generate and run code."
+                              >
+                                <SwitchField
+                                  name="code_interpreter"
+                                  disabled={!codeInterpreterTool}
+                                />
+                              </InputLayouts.Horizontal>
+                            </Card>
 
-                          {/* Tools */}
-                          <>
-                            {/* render the separator if there is at least one mcp-server or open-api-tool */}
-                            {(mcpServers.length > 0 ||
-                              openApiTools.length > 0) && (
-                              <Separator noPadding className="py-1" />
-                            )}
+                            {/* Tools */}
+                            <>
+                              {/* render the separator if there is at least one mcp-server or open-api-tool */}
+                              {(mcpServers.length > 0 ||
+                                openApiTools.length > 0) && (
+                                <Separator noPadding className="py-1" />
+                              )}
 
-                            {/* MCP tools */}
-                            {mcpServersWithTools.length > 0 && (
-                              <GeneralLayouts.Section gap={0.5}>
-                                {mcpServersWithTools.map(
-                                  ({ server, tools, isLoading }) => (
-                                    <MCPServerCard
-                                      key={server.id}
-                                      server={server}
-                                      tools={tools}
-                                      isLoading={isLoading}
+                              {/* MCP tools */}
+                              {mcpServersWithTools.length > 0 && (
+                                <GeneralLayouts.Section gap={0.5}>
+                                  {mcpServersWithTools.map(
+                                    ({ server, tools, isLoading }) => (
+                                      <MCPServerCard
+                                        key={server.id}
+                                        server={server}
+                                        tools={tools}
+                                        isLoading={isLoading}
+                                      />
+                                    )
+                                  )}
+                                </GeneralLayouts.Section>
+                              )}
+
+                              {/* OpenAPI tools */}
+                              {openApiTools.length > 0 && (
+                                <GeneralLayouts.Section gap={0.5}>
+                                  {openApiTools.map((tool) => (
+                                    <OpenApiToolCard
+                                      key={tool.id}
+                                      tool={tool}
                                     />
-                                  )
-                                )}
-                              </GeneralLayouts.Section>
-                            )}
-
-                            {/* OpenAPI tools */}
-                            {openApiTools.length > 0 && (
-                              <GeneralLayouts.Section gap={0.5}>
-                                {openApiTools.map((tool) => (
-                                  <OpenApiToolCard key={tool.id} tool={tool} />
-                                ))}
-                              </GeneralLayouts.Section>
-                            )}
-                          </>
-                        </GeneralLayouts.Section>
+                                  ))}
+                                </GeneralLayouts.Section>
+                              )}
+                            </>
+                          </GeneralLayouts.Section>
+                        </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
                       <Separator noPadding />
 
-                      <SimpleCollapsible
-                        trigger={
-                          <SimpleCollapsible.Header
-                            title="Advanced Options"
-                            description="Fine-tune agent prompts and knowledge."
-                          />
-                        }
-                      >
-                        <GeneralLayouts.Section>
-                          <Card>
-                            <InputLayouts.Horizontal
-                              title="Share This Agent"
-                              description="Share this agent with other users, groups, or everyone in your organization."
-                              center
-                            >
-                              <Button
-                                secondary
-                                leftIcon={SvgLock}
-                                onClick={() => shareAgentModal.toggle(true)}
+                      <SimpleCollapsible>
+                        <SimpleCollapsible.Header
+                          title="Advanced Options"
+                          description="Fine-tune agent prompts and knowledge."
+                        />
+                        <SimpleCollapsible.Content>
+                          <GeneralLayouts.Section>
+                            <Card>
+                              <InputLayouts.Horizontal
+                                title="Share This Agent"
+                                description="Share this agent with other users, groups, or everyone in your organization."
+                                center
                               >
-                                Share
-                              </Button>
-                            </InputLayouts.Horizontal>
-                          </Card>
+                                <Button
+                                  secondary
+                                  leftIcon={SvgLock}
+                                  onClick={() => shareAgentModal.toggle(true)}
+                                >
+                                  Share
+                                </Button>
+                              </InputLayouts.Horizontal>
+                            </Card>
 
-                          <Card>
-                            <InputLayouts.Horizontal
-                              name="llm_model"
-                              title="Default Model"
-                              description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
-                            >
-                              <LLMSelector
-                                llmProviders={llmProviders ?? []}
-                                currentLlm={getCurrentLlm(values, llmProviders)}
-                                onSelect={(selected) =>
-                                  onLlmSelect(selected, setFieldValue)
-                                }
-                              />
-                            </InputLayouts.Horizontal>
-                            <InputLayouts.Horizontal
-                              name="knowledge_cutoff_date"
-                              title="Knowledge Cutoff Date"
-                              description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
-                            >
-                              <InputDatePickerField name="knowledge_cutoff_date" />
-                            </InputLayouts.Horizontal>
-                            <InputLayouts.Horizontal
-                              name="replace_base_system_prompt"
-                              title="Overwrite System Prompt"
-                              description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
-                            >
-                              <SwitchField name="replace_base_system_prompt" />
-                            </InputLayouts.Horizontal>
-                          </Card>
+                            <Card>
+                              <InputLayouts.Horizontal
+                                name="llm_model"
+                                title="Default Model"
+                                description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
+                              >
+                                <LLMSelector
+                                  llmProviders={llmProviders ?? []}
+                                  currentLlm={getCurrentLlm(
+                                    values,
+                                    llmProviders
+                                  )}
+                                  onSelect={(selected) =>
+                                    onLlmSelect(selected, setFieldValue)
+                                  }
+                                />
+                              </InputLayouts.Horizontal>
+                              <InputLayouts.Horizontal
+                                name="knowledge_cutoff_date"
+                                title="Knowledge Cutoff Date"
+                                description="Set the knowledge cutoff date for this agent. The agent will only use information up to this date."
+                              >
+                                <InputDatePickerField name="knowledge_cutoff_date" />
+                              </InputLayouts.Horizontal>
+                              <InputLayouts.Horizontal
+                                name="replace_base_system_prompt"
+                                title="Overwrite System Prompt"
+                                description='Completely replace the base system prompt. This might affect response quality since it will also overwrite useful system instructions (e.g. "You (the LLM) can provide markdown and it will be rendered").'
+                              >
+                                <SwitchField name="replace_base_system_prompt" />
+                              </InputLayouts.Horizontal>
+                            </Card>
 
-                          <GeneralLayouts.Section gap={0.25}>
-                            <InputLayouts.Vertical
-                              name="reminders"
-                              title="Reminders"
-                            >
-                              <InputTextAreaField
+                            <GeneralLayouts.Section gap={0.25}>
+                              <InputLayouts.Vertical
                                 name="reminders"
-                                placeholder="Remember, I want you to always format your response as a numbered list."
-                              />
-                            </InputLayouts.Vertical>
-                            <Text text03 secondaryBody>
-                              Append a brief reminder to the prompt messages.
-                              Use this to remind the agent if you find that it
-                              tends to forget certain instructions as the chat
-                              progresses. This should be brief and not interfere
-                              with the user messages.
-                            </Text>
+                                title="Reminders"
+                              >
+                                <InputTextAreaField
+                                  name="reminders"
+                                  placeholder="Remember, I want you to always format your response as a numbered list."
+                                />
+                              </InputLayouts.Vertical>
+                              <Text text03 secondaryBody>
+                                Append a brief reminder to the prompt messages.
+                                Use this to remind the agent if you find that it
+                                tends to forget certain instructions as the chat
+                                progresses. This should be brief and not
+                                interfere with the user messages.
+                              </Text>
+                            </GeneralLayouts.Section>
                           </GeneralLayouts.Section>
-                        </GeneralLayouts.Section>
+                        </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
                       {existingAgent && (
