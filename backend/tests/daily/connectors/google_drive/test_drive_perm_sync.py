@@ -255,8 +255,9 @@ def test_gdrive_perm_sync_with_real_data(
     print(f"Checked permissions for {checked_files} files from drive_id_mapping.json")
 
     # Verify hierarchy nodes are returned with correct structure
+    # Use include_permissions=True to populate external_access on hierarchy nodes
     hierarchy_connector = _build_connector(google_drive_service_acct_connector_factory)
-    output = load_connector_outputs(hierarchy_connector)
+    output = load_connector_outputs(hierarchy_connector, include_permissions=True)
 
     # Verify the expected shared drives hierarchy
     # When include_shared_drives=True and include_my_drives=True, we get ALL drives
@@ -289,6 +290,7 @@ def test_gdrive_perm_sync_with_real_data(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
         expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
     # Verify the perm sync drives are included in the hierarchy

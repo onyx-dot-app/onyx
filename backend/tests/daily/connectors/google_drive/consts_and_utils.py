@@ -493,12 +493,16 @@ def assert_expected_docs_in_retrieved_docs(
     assert expected_file_texts == valid_retrieved_texts
 
 
-def load_connector_outputs(connector: GoogleDriveConnector) -> ConnectorOutput:
+def load_connector_outputs(
+    connector: GoogleDriveConnector,
+    include_permissions: bool = False,
+) -> ConnectorOutput:
     """Load all documents, failures, and hierarchy nodes from the connector."""
     return load_all_from_connector(
         connector,
         0,
         time.time(),
+        include_permissions=include_permissions,
     )
 
 
@@ -506,6 +510,7 @@ def assert_hierarchy_nodes_match_expected(
     retrieved_nodes: list[HierarchyNode],
     expected_node_ids: set[str],
     expected_parent_mapping: dict[str, str | None] | None = None,
+    ignorable_node_ids: set[str] | None = None,
 ) -> None:
     """
     Assert that retrieved hierarchy nodes match expected structure.
@@ -514,11 +519,18 @@ def assert_hierarchy_nodes_match_expected(
         retrieved_nodes: List of HierarchyNode objects from the connector
         expected_node_ids: Set of expected raw_node_ids
         expected_parent_mapping: Optional dict mapping node_id -> parent_id for parent verification
+        ignorable_node_ids: Optional set of node IDs that can be missing or extra without failing.
+            Useful for nodes that are non-deterministically returned by the connector.
     """
     retrieved_node_ids = {node.raw_node_id for node in retrieved_nodes}
+    ignorable = ignorable_node_ids or set()
+
+    # Calculate differences, excluding ignorable nodes
+    missing = expected_node_ids - retrieved_node_ids - ignorable
+    extra = retrieved_node_ids - expected_node_ids - ignorable
 
     # Print discrepancies for debugging
-    if expected_node_ids != retrieved_node_ids:
+    if missing or extra:
         print("Expected hierarchy node IDs:")
         print(sorted(expected_node_ids))
         print("Retrieved hierarchy node IDs:")
@@ -527,11 +539,12 @@ def assert_hierarchy_nodes_match_expected(
         print(sorted(retrieved_node_ids - expected_node_ids))
         print("Missing (expected but not retrieved):")
         print(sorted(expected_node_ids - retrieved_node_ids))
+        if ignorable:
+            print("Ignorable node IDs:")
+            print(sorted(ignorable))
 
-    assert expected_node_ids == retrieved_node_ids, (
-        f"Hierarchy node mismatch. "
-        f"Missing: {expected_node_ids - retrieved_node_ids}, "
-        f"Extra: {retrieved_node_ids - expected_node_ids}"
+    assert not missing and not extra, (
+        f"Hierarchy node mismatch. " f"Missing: {missing}, " f"Extra: {extra}"
     )
 
     # Verify parent relationships if provided

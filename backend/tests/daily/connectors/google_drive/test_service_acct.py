@@ -189,6 +189,7 @@ def test_include_all(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
         expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
@@ -315,6 +316,7 @@ def test_include_shared_drives_only(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
         expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
@@ -351,8 +353,19 @@ def test_include_my_drives_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # Verify hierarchy nodes - My Drive folders only (folder_3 from admin's My Drive)
-    expected_ids = {FOLDER_3_ID}
+    # Verify hierarchy nodes - My Drive roots and folders for all users
+    # Service account impersonates all users, so it sees all My Drives
+    expected_ids = {
+        FOLDER_3_ID,
+        ADMIN_MY_DRIVE_ID,
+        TEST_USER_1_MY_DRIVE_ID,
+        TEST_USER_1_MY_DRIVE_FOLDER_ID,
+        TEST_USER_2_MY_DRIVE,
+        TEST_USER_3_MY_DRIVE_ID,
+        PILL_FOLDER_ID,
+        TEST_USER_1_EXTRA_FOLDER_ID,
+        EXTERNAL_SHARED_FOLDER_ID,
+    }
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_node_ids=expected_ids,
