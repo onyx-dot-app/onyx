@@ -89,6 +89,29 @@ Check that specified modules are only lazily imported (used for keeping backend 
 ods check-lazy-imports
 ```
 
+### `logs` - Sort and View Logs Chronologically
+
+Sort logs from multiple sources chronologically and view them in a pager.
+
+```shell
+cat api-server*.log | ods logs
+```
+
+**Examples:**
+
+```shell
+# Combine and sort multiple log files
+cat service1.log service2.log service3.log | ods logs
+
+# Sort kubectl logs
+kubectl logs -l app=api-server --all-containers | ods logs
+
+# Sort logs from multiple pods
+cat api-server-deployment-*.log | ods logs
+```
+
+The command parses timestamps in the format `MM/DD/YYYY HH:MM:SS AM/PM` and sorts all entries chronologically before displaying them in your preferred pager (respects `$PAGER`, defaults to `less`).
+
 ### `run-ci` - Run CI on Fork PRs
 
 Pull requests from forks don't automatically trigger GitHub Actions for security reasons.

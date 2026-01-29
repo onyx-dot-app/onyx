@@ -44,6 +44,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewCheckLazyImportsCommand())
 	cmd.AddCommand(NewCherryPickCommand())
 	cmd.AddCommand(NewDBCommand())
+	cmd.AddCommand(NewLogsCommand())
 	cmd.AddCommand(NewOpenAPICommand())
 	cmd.AddCommand(NewRunCICommand())
 
