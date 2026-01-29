@@ -326,7 +326,7 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-onyx-devtools==0.4.0
+onyx-devtools==0.4.1
     # via onyx
 openai==2.14.0
     # via
@@ -452,12 +452,15 @@ pytest==8.3.5
     #   pytest-alembic
     #   pytest-asyncio
     #   pytest-dotenv
+    #   pytest-repeat
     #   pytest-xdist
 pytest-alembic==0.12.1
     # via onyx
 pytest-asyncio==1.3.0
     # via onyx
 pytest-dotenv==0.5.2
+    # via onyx
+pytest-repeat==0.9.4
     # via onyx
 pytest-xdist==3.6.1
     # via onyx

@@ -3,8 +3,8 @@
 import React, { useState, memo, useMemo, useEffect } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
-import { deleteChatSession, renameChatSession } from "@/app/chat/services/lib";
-import { ChatSession } from "@/app/chat/interfaces";
+import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
+import { ChatSession } from "@/app/app/interfaces";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { cn, noProp } from "@/lib/utils";
@@ -14,11 +14,11 @@ import {
   Project,
   removeChatSessionFromProject,
   createProject as createProjectService,
-} from "@/app/chat/projects/projectsService";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+} from "@/app/app/projects/projectsService";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import ShareChatSessionModal from "@/app/chat/components/modal/ShareChatSessionModal";
+import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -435,7 +435,7 @@ const ChatButton = memo(
       >
         <Popover.Anchor>
           <SidebarTab
-            href={isDragging ? undefined : `/chat?chatId=${chatSession.id}`}
+            href={isDragging ? undefined : `/app?chatId=${chatSession.id}`}
             onClick={handleClick}
             transient={active}
             rightChildren={rightMenu}

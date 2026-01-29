@@ -42,7 +42,7 @@ test.skip("User changes password and logs in with new password", async ({
   await page.getByRole("button", { name: "Log In" }).click();
 
   // Verify successful login
-  await expect(page).toHaveURL("http://localhost:3000/chat");
+  await expect(page).toHaveURL("http://localhost:3000/app");
   await expect(page.getByText("Explore Assistants")).toBeVisible();
 });
 
@@ -111,6 +111,6 @@ test.skip("Admin resets own password and logs in with new password", async ({
   await page.getByRole("button", { name: "Log In" }).click();
 
   // Verify successful login
-  await expect(page).toHaveURL("http://localhost:3000/chat");
+  await expect(page).toHaveURL("http://localhost:3000/app");
   await expect(page.getByText("Explore Assistants")).toBeVisible();
 });

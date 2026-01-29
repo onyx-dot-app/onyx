@@ -342,8 +342,9 @@ const MemoizedBuildSidebarInner = memo(
     }, [refreshSessionHistory]);
 
     // Build section title with usage if cloud is enabled
+    // limit=0 indicates unlimited (local/self-hosted mode), so hide the count
     const sessionsTitle = useMemo(() => {
-      if (isEnabled && limits) {
+      if (isEnabled && limits && limits.limit > 0) {
         return `Sessions (${limits.messagesUsed}/${limits.limit})`;
       }
       return "Sessions";

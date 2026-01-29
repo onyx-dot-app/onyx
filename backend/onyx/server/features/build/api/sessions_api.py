@@ -98,6 +98,7 @@ def create_session(
             user_level=request.user_level if request.demo_data_enabled else None,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
+            demo_data_enabled=request.demo_data_enabled,
         )
         db_session.commit()
     except ValueError as e:

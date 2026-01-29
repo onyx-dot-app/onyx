@@ -1,8 +1,10 @@
+import { WorkArea, Level } from "./constants";
+
 export interface BuildUserInfo {
   firstName: string;
   lastName: string;
-  workArea: string;
-  level?: string;
+  workArea: WorkArea;
+  level?: Level;
 }
 
 // Legacy flow interface (kept for backwards compatibility during migration)
@@ -37,8 +39,8 @@ export interface OnboardingModalController {
   initialValues: {
     firstName: string;
     lastName: string;
-    workArea: string;
-    level: string;
+    workArea: WorkArea | undefined;
+    level: Level | undefined;
   };
 
   // State

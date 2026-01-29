@@ -4,6 +4,9 @@ This client runs `opencode acp` directly in the sandbox pod via kubernetes exec,
 using stdin/stdout for JSON-RPC communication. This bypasses the HTTP server
 and uses the native ACP subprocess protocol.
 
+This module includes comprehensive logging for debugging ACP communication.
+Enable logging by setting LOG_LEVEL=DEBUG or BUILD_PACKET_LOGGING=true.
+
 Usage:
     client = ACPExecClient(
         pod_name="sandbox-abc123",
@@ -39,6 +42,7 @@ from kubernetes.stream import stream as k8s_stream  # type: ignore
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 from pydantic import ValidationError
 
+from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -194,6 +198,7 @@ class ACPExecClient:
     def _read_responses(self) -> None:
         """Background thread to read responses from the exec stream."""
         buffer = ""
+        packet_logger = get_packet_logger()
 
         while not self._stop_reader.is_set():
             if self._ws_client is None:
@@ -216,17 +221,36 @@ class ACPExecClient:
                             if line:
                                 try:
                                     message = json.loads(line)
+                                    # Log the raw incoming message
+                                    packet_logger.log_jsonrpc_raw_message(
+                                        "IN", message, context="k8s"
+                                    )
                                     self._response_queue.put(message)
                                 except json.JSONDecodeError:
+                                    packet_logger.log_raw(
+                                        "JSONRPC-PARSE-ERROR-K8S",
+                                        {
+                                            "raw_line": line[:500],
+                                            "error": "JSON decode failed",
+                                        },
+                                    )
                                     logger.warning(
                                         f"Invalid JSON from agent: {line[:100]}"
                                     )
 
                 else:
+                    packet_logger.log_raw(
+                        "K8S-WEBSOCKET-CLOSED",
+                        {"pod": self._pod_name, "namespace": self._namespace},
+                    )
                     break
 
             except Exception as e:
                 if not self._stop_reader.is_set():
+                    packet_logger.log_raw(
+                        "K8S-READER-ERROR",
+                        {"error": str(e), "pod": self._pod_name},
+                    )
                     logger.debug(f"Reader error: {e}")
                 break
 
@@ -267,6 +291,10 @@ class ACPExecClient:
         if params is not None:
             request["params"] = params
 
+        # Log the outgoing request
+        packet_logger = get_packet_logger()
+        packet_logger.log_jsonrpc_request(method, request_id, params, context="k8s")
+
         message = json.dumps(request) + "\n"
         self._ws_client.write_stdin(message)
 
@@ -285,6 +313,10 @@ class ACPExecClient:
         }
         if params is not None:
             notification["params"] = params
+
+        # Log the outgoing notification
+        packet_logger = get_packet_logger()
+        packet_logger.log_jsonrpc_request(method, None, params, context="k8s")
 
         message = json.dumps(notification) + "\n"
         self._ws_client.write_stdin(message)
@@ -372,6 +404,21 @@ class ACPExecClient:
             raise RuntimeError("No active session. Call start() first.")
 
         session_id = self._state.current_session.session_id
+        packet_logger = get_packet_logger()
+
+        # Log the start of message processing
+        packet_logger.log_raw(
+            "ACP-SEND-MESSAGE-START-K8S",
+            {
+                "session_id": session_id,
+                "pod": self._pod_name,
+                "namespace": self._namespace,
+                "message_preview": (
+                    message[:200] + "..." if len(message) > 200 else message
+                ),
+                "timeout": timeout,
+            },
+        )
 
         prompt_content = [{"type": "text", "text": message}]
         params = {
@@ -381,10 +428,18 @@ class ACPExecClient:
 
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
+        events_yielded = 0
 
         while True:
             remaining = timeout - (time.time() - start_time)
             if remaining <= 0:
+                packet_logger.log_raw(
+                    "ACP-TIMEOUT-K8S",
+                    {
+                        "session_id": session_id,
+                        "elapsed_ms": (time.time() - start_time) * 1000,
+                    },
+                )
                 yield Error(code=-1, message="Timeout waiting for response")
                 break
 
@@ -397,16 +452,41 @@ class ACPExecClient:
             if message_data.get("id") == request_id:
                 if "error" in message_data:
                     error_data = message_data["error"]
+                    packet_logger.log_jsonrpc_response(
+                        request_id, error=error_data, context="k8s"
+                    )
                     yield Error(
                         code=error_data.get("code", -1),
                         message=error_data.get("message", "Unknown error"),
                     )
                 else:
                     result = message_data.get("result", {})
+                    packet_logger.log_jsonrpc_response(
+                        request_id, result=result, context="k8s"
+                    )
                     try:
-                        yield PromptResponse.model_validate(result)
-                    except ValidationError:
-                        pass
+                        prompt_response = PromptResponse.model_validate(result)
+                        packet_logger.log_acp_event_yielded(
+                            "prompt_response", prompt_response
+                        )
+                        events_yielded += 1
+                        yield prompt_response
+                    except ValidationError as e:
+                        packet_logger.log_raw(
+                            "ACP-VALIDATION-ERROR-K8S",
+                            {"type": "prompt_response", "error": str(e)},
+                        )
+
+                # Log completion summary
+                elapsed_ms = (time.time() - start_time) * 1000
+                packet_logger.log_raw(
+                    "ACP-SEND-MESSAGE-COMPLETE-K8S",
+                    {
+                        "session_id": session_id,
+                        "events_yielded": events_yielded,
+                        "elapsed_ms": elapsed_ms,
+                    },
+                )
                 break
 
             # Handle notifications (session/update)
@@ -414,61 +494,137 @@ class ACPExecClient:
                 params_data = message_data.get("params", {})
                 update = params_data.get("update", {})
 
+                # Log the notification
+                packet_logger.log_jsonrpc_notification(
+                    "session/update",
+                    {"update_type": update.get("sessionUpdate")},
+                    context="k8s",
+                )
+
                 for event in self._process_session_update(update):
+                    events_yielded += 1
+                    # Log each yielded event
+                    event_type = self._get_event_type_name(event)
+                    packet_logger.log_acp_event_yielded(event_type, event)
                     yield event
 
             # Handle requests from agent - send error response
             elif "method" in message_data and "id" in message_data:
+                packet_logger.log_raw(
+                    "ACP-UNSUPPORTED-REQUEST-K8S",
+                    {"method": message_data["method"], "id": message_data["id"]},
+                )
                 self._send_error_response(
                     message_data["id"],
                     -32601,
                     f"Method not supported: {message_data['method']}",
                 )
 
+    def _get_event_type_name(self, event: ACPEvent) -> str:
+        """Get the type name for an ACP event."""
+        if isinstance(event, AgentMessageChunk):
+            return "agent_message_chunk"
+        elif isinstance(event, AgentThoughtChunk):
+            return "agent_thought_chunk"
+        elif isinstance(event, ToolCallStart):
+            return "tool_call_start"
+        elif isinstance(event, ToolCallProgress):
+            return "tool_call_progress"
+        elif isinstance(event, AgentPlanUpdate):
+            return "agent_plan_update"
+        elif isinstance(event, CurrentModeUpdate):
+            return "current_mode_update"
+        elif isinstance(event, PromptResponse):
+            return "prompt_response"
+        elif isinstance(event, Error):
+            return "error"
+        return "unknown"
+
     def _process_session_update(
         self, update: dict[str, Any]
     ) -> Generator[ACPEvent, None, None]:
         """Process a session/update notification and yield typed ACP schema objects."""
         update_type = update.get("sessionUpdate")
+        packet_logger = get_packet_logger()
 
         if update_type == "agent_message_chunk":
             try:
                 yield AgentMessageChunk.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR-K8S",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "agent_thought_chunk":
             try:
                 yield AgentThoughtChunk.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR-K8S",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "user_message_chunk":
-            pass  # Echo of user message - skip
+            # Echo of user message - skip but log
+            packet_logger.log_raw(
+                "ACP-SKIPPED-UPDATE-K8S", {"type": "user_message_chunk"}
+            )
 
         elif update_type == "tool_call":
             try:
                 yield ToolCallStart.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR-K8S",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "tool_call_update":
             try:
                 yield ToolCallProgress.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR-K8S",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "plan":
             try:
                 yield AgentPlanUpdate.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR-K8S",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
 
         elif update_type == "current_mode_update":
             try:
                 yield CurrentModeUpdate.model_validate(update)
-            except ValidationError:
-                pass
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR-K8S",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
+
+        elif update_type == "available_commands_update":
+            # Skip command updates
+            packet_logger.log_raw(
+                "ACP-SKIPPED-UPDATE-K8S", {"type": "available_commands_update"}
+            )
+
+        elif update_type == "session_info_update":
+            # Skip session info updates
+            packet_logger.log_raw(
+                "ACP-SKIPPED-UPDATE-K8S", {"type": "session_info_update"}
+            )
+
+        else:
+            # Unknown update types are logged
+            packet_logger.log_raw(
+                "ACP-UNKNOWN-UPDATE-TYPE-K8S",
+                {"update_type": update_type, "update": update},
+            )
 
     def _send_error_response(self, request_id: int, code: int, message: str) -> None:
         """Send an error response to an agent request."""

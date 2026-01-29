@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
         redirectTo = `/admin/actions/edit-mcp?server_id=${serverId}`;
       } else {
         // For user flow, redirect to chat
-        redirectTo = "/chat";
+        redirectTo = "/app";
       }
     }
 

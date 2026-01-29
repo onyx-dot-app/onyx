@@ -11,11 +11,14 @@ import {
   useToggleOutputPanel,
   useBuildSessionStore,
   useIsPreProvisioning,
+  useIsPreProvisioningFailed,
   usePreProvisionedSessionId,
   useFollowupSuggestions,
   useSuggestionsLoading,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
+import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
+import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -31,6 +34,7 @@ import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import SuggestionBubbles from "@/app/craft/components/SuggestionBubbles";
 import ConnectorBannersRow from "@/app/craft/components/ConnectorBannersRow";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
+import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
@@ -71,6 +75,20 @@ export default function BuildChatPanel({
   const [isOutputPanelFullyClosed, setIsOutputPanelFullyClosed] =
     useState(!outputPanelOpen);
 
+  const { limits, refreshLimits } = useUsageLimits();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const setCurrentError = useBuildSessionStore(
+    (state) => state.setCurrentError
+  );
+
+  useEffect(() => {
+    if (session?.error === SessionErrorCode.RATE_LIMIT_EXCEEDED) {
+      setShowUpgradeModal(true);
+      setCurrentError(null);
+      refreshLimits();
+    }
+  }, [session?.error, refreshLimits, setCurrentError]);
+
   useEffect(() => {
     if (outputPanelOpen) {
       // Panel opening - immediately mark as not fully closed
@@ -86,22 +104,20 @@ export default function BuildChatPanel({
   const consumePreProvisionedSession = useBuildSessionStore(
     (state) => state.consumePreProvisionedSession
   );
-  const createNewSession = useBuildSessionStore(
-    (state) => state.createNewSession
-  );
   const createSession = useBuildSessionStore((state) => state.createSession);
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
-  );
-  const appendMessageToSession = useBuildSessionStore(
-    (state) => state.appendMessageToSession
   );
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
   const { streamMessage } = useBuildStreaming();
   const isPreProvisioning = useIsPreProvisioning();
+  const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
+
+  // Disable input when pre-provisioning is in progress or failed (waiting for retry)
+  const sandboxNotReady = isPreProvisioning || isPreProvisioningFailed;
   const { currentMessageFiles, hasUploadingFiles } = useUploadFilesContext();
   const followupSuggestions = useFollowupSuggestions();
   const suggestionsLoading = useSuggestionsLoading();
@@ -221,6 +237,11 @@ export default function BuildChatPanel({
 
   const handleSubmit = useCallback(
     async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
+      if (limits?.isLimited) {
+        setShowUpgradeModal(true);
+        return;
+      }
+
       if (hasSession && sessionId) {
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
@@ -244,103 +265,100 @@ export default function BuildChatPanel({
         });
         // Stream the response
         await streamMessage(sessionId, message);
+        refreshLimits();
       } else {
-        // New session flow - get pre-provisioned session or fall back to creating new one
+        // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
 
         if (!newSessionId) {
-          // Fallback: createNewSession handles everything including navigation
-          const fallbackSessionId = await createNewSession(message);
-          if (fallbackSessionId) {
-            // Upload files that weren't already uploaded (no path means not yet uploaded)
-            const filesToUpload = files.filter((f) => f.file && !f.path);
-            if (filesToUpload.length > 0) {
-              await Promise.all(
-                filesToUpload.map((f) => uploadFile(fallbackSessionId, f.file!))
-              );
-            }
-            await streamMessage(fallbackSessionId, message);
-          }
-        } else {
-          // Pre-provisioned session flow:
-          // The backend session already exists (created during pre-provisioning).
-          // Files were already uploaded immediately when attached to the pre-provisioned session.
-          // Here we initialize the LOCAL Zustand store entry with the right state.
-          const userMessage = {
-            id: `msg-${Date.now()}`,
-            type: "user" as const,
-            content: message,
-            timestamp: new Date(),
-          };
-          // Initialize local state (NOT an API call - backend session already exists)
-          // - status: "running" disables input immediately
-          // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
-          createSession(newSessionId, {
-            messages: [userMessage],
-            status: "running",
+          // This should not happen if UI properly disables input until ready
+          console.error("[ChatPanel] No pre-provisioned session available");
+          setPopup({
+            message: "Please wait for sandbox to initialize",
+            type: "error",
           });
-
-          // Fallback: Handle files that weren't successfully uploaded yet
-          // This handles edge cases where:
-          // 1. File is still uploading when user sends message - wait for it
-          // 2. File upload failed and needs retry
-          // 3. File was attached but upload hasn't started yet
-
-          // Wait for any in-flight uploads to complete (max 5 seconds)
-          // Use ref to check current state during polling
-          if (hasUploadingFiles) {
-            const maxWaitMs = 5000;
-            const checkIntervalMs = 100;
-            let waited = 0;
-
-            await new Promise<void>((resolve) => {
-              const checkUploads = () => {
-                // Check current state via ref (updates with each render)
-                const stillUploading = currentFilesRef.current.some(
-                  (f) => f.status === UploadFileStatus.UPLOADING
-                );
-                if (!stillUploading || waited >= maxWaitMs) {
-                  resolve();
-                } else {
-                  waited += checkIntervalMs;
-                  setTimeout(checkUploads, checkIntervalMs);
-                }
-              };
-              checkUploads();
-            });
-          }
-
-          // Upload any files that need to be uploaded:
-          // - PENDING: Was attached before session existed, needs upload now
-          // - FAILED: Previous upload failed, retry
-          // - No path + not currently uploading: Edge case fallback
-          const currentFiles = currentFilesRef.current;
-          const filesToUpload = currentFiles.filter(
-            (f) =>
-              f.file &&
-              (f.status === UploadFileStatus.PENDING ||
-                f.status === UploadFileStatus.FAILED ||
-                (!f.path && f.status !== UploadFileStatus.UPLOADING))
-          );
-          if (filesToUpload.length > 0) {
-            await Promise.all(
-              filesToUpload.map((f) => uploadFile(newSessionId, f.file!))
-            );
-          }
-
-          // Navigate to URL - session controller will set currentSessionId
-          router.push(
-            `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
-          );
-
-          // Schedule naming after delay (message will be saved by then)
-          // Note: Don't call refreshSessionHistory() here - it would overwrite the
-          // optimistic update from consumePreProvisionedSession() before the message is saved
-          setTimeout(() => nameBuildSession(newSessionId), 500);
-
-          // Stream the response (uses session ID directly, not currentSessionId)
-          await streamMessage(newSessionId, message);
+          return;
         }
+
+        // Pre-provisioned session flow:
+        // The backend session already exists (created during pre-provisioning).
+        // Files were already uploaded immediately when attached to the pre-provisioned session.
+        // Here we initialize the LOCAL Zustand store entry with the right state.
+        const userMessage = {
+          id: `msg-${Date.now()}`,
+          type: "user" as const,
+          content: message,
+          timestamp: new Date(),
+        };
+        // Initialize local state (NOT an API call - backend session already exists)
+        // - status: "running" disables input immediately
+        // - isLoaded: false allows loadSession to fetch sandbox info while preserving messages
+        createSession(newSessionId, {
+          messages: [userMessage],
+          status: "running",
+        });
+
+        // Handle files that weren't successfully uploaded yet
+        // This handles edge cases where:
+        // 1. File is still uploading when user sends message - wait for it
+        // 2. File upload failed and needs retry
+        // 3. File was attached but upload hasn't started yet
+
+        // Wait for any in-flight uploads to complete (max 5 seconds)
+        // Use ref to check current state during polling
+        if (hasUploadingFiles) {
+          const maxWaitMs = 5000;
+          const checkIntervalMs = 100;
+          let waited = 0;
+
+          await new Promise<void>((resolve) => {
+            const checkUploads = () => {
+              // Check current state via ref (updates with each render)
+              const stillUploading = currentFilesRef.current.some(
+                (f) => f.status === UploadFileStatus.UPLOADING
+              );
+              if (!stillUploading || waited >= maxWaitMs) {
+                resolve();
+              } else {
+                waited += checkIntervalMs;
+                setTimeout(checkUploads, checkIntervalMs);
+              }
+            };
+            checkUploads();
+          });
+        }
+
+        // Upload any files that need to be uploaded:
+        // - PENDING: Was attached before session existed, needs upload now
+        // - FAILED: Previous upload failed, retry
+        // - No path + not currently uploading: Edge case fallback
+        const currentFiles = currentFilesRef.current;
+        const filesToUpload = currentFiles.filter(
+          (f) =>
+            f.file &&
+            (f.status === UploadFileStatus.PENDING ||
+              f.status === UploadFileStatus.FAILED ||
+              (!f.path && f.status !== UploadFileStatus.UPLOADING))
+        );
+        if (filesToUpload.length > 0) {
+          await Promise.all(
+            filesToUpload.map((f) => uploadFile(newSessionId, f.file!))
+          );
+        }
+
+        // Navigate to URL - session controller will set currentSessionId
+        router.push(
+          `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${newSessionId}`
+        );
+
+        // Schedule naming after delay (message will be saved by then)
+        // Note: Don't call refreshSessionHistory() here - it would overwrite the
+        // optimistic update from consumePreProvisionedSession() before the message is saved
+        setTimeout(() => nameBuildSession(newSessionId), 1000);
+
+        // Stream the response (uses session ID directly, not currentSessionId)
+        await streamMessage(newSessionId, message);
+        refreshLimits();
       }
     },
     [
@@ -351,18 +369,24 @@ export default function BuildChatPanel({
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
-      createNewSession,
       createSession,
-      appendMessageToSession,
       nameBuildSession,
       router,
       clearFollowupSuggestions,
+      hasUploadingFiles,
+      limits,
+      refreshLimits,
     ]
   );
 
   return (
     <div className="h-full w-full">
       {popup}
+      <UpgradePlanModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        limits={limits}
+      />
       {/* Content wrapper - shrinks when output panel opens */}
       <div
         className={cn(
@@ -408,7 +432,7 @@ export default function BuildChatPanel({
             <BuildWelcome
               onSubmit={handleSubmit}
               isRunning={isRunning}
-              sandboxInitializing={isPreProvisioning}
+              sandboxInitializing={sandboxNotReady}
               preProvisionedSessionId={preProvisionedSessionId}
             />
           ) : (

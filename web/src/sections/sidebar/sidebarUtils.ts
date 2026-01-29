@@ -1,6 +1,6 @@
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import { LOCAL_STORAGE_KEYS, DEFAULT_PERSONA_ID } from "./constants";
-import { moveChatSession } from "@/app/chat/projects/projectsService";
+import { moveChatSession } from "@/app/app/projects/projectsService";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 export const shouldShowMoveModal = (chatSession: ChatSession): boolean => {

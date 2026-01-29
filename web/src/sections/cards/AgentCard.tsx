@@ -150,7 +150,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                     icon={SvgEdit}
                     tertiary
                     onClick={noProp(() =>
-                      router.push(`/chat/agents/edit/${agent.id}` as Route)
+                      router.push(`/app/agents/edit/${agent.id}` as Route)
                     )}
                     tooltip="Edit Agent"
                     className="hidden group-hover/AgentCard:flex"

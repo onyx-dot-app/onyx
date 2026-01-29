@@ -72,7 +72,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "Testing user file uploads without connectors";
       const assistantInstructions = "Help users with their documents.";
 
-      await page.goto("/chat/agents/create");
+      await page.goto("/app/agents/create");
 
       // Fill in basic assistant details
       await getNameInput(page).fill(assistantName);
@@ -100,7 +100,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getCreateSubmitButton(page).click();
 
       // Verify redirection to chat page with the new assistant
-      await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
       const url = page.url();
       const assistantIdMatch = url.match(/assistantId=(\d+)/);
       expect(assistantIdMatch).toBeTruthy();
@@ -150,7 +150,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       );
 
       // Navigate to a page to ensure session is fully established
-      await page.goto("/chat");
+      await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
       // Now login as a regular user to test the assistant creation
@@ -174,7 +174,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const editedKnowledgeCutoffDate = "2024-01-01";
 
       // Navigate to the assistant creation page
-      await page.goto("/chat/agents/create");
+      await page.goto("/app/agents/create");
 
       // --- Fill in Initial Assistant Details ---
       await getNameInput(page).fill(assistantName);
@@ -211,7 +211,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getCreateSubmitButton(page).click();
 
       // Verify redirection to chat page with the new assistant ID
-      await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
       const url = page.url();
       const assistantIdMatch = url.match(/assistantId=(\d+)/);
       expect(assistantIdMatch).toBeTruthy();
@@ -219,8 +219,8 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(assistantId).not.toBeNull();
 
       // Navigate directly to the edit page
-      await page.goto(`/chat/agents/edit/${assistantId}`);
-      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
+      await page.goto(`/app/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/app/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(assistantName);
@@ -258,12 +258,12 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getUpdateSubmitButton(page).click();
 
       // Verify redirection back to the chat page
-      await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
       expect(page.url()).toContain(`assistantId=${assistantId}`);
 
       // --- Navigate to Edit Page Again and Verify Edited Values ---
-      await page.goto(`/chat/agents/edit/${assistantId}`);
-      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
+      await page.goto(`/app/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/app/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(editedAssistantName);

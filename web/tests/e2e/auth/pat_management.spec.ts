@@ -15,7 +15,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await page.context().clearCookies();
   const { email } = await loginAsRandomUser(page);
 
-  await page.goto("/chat");
+  await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
   // Click on user dropdown and open settings (same pattern as other tests)
@@ -26,7 +26,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await expect(page.getByText("Full Name")).toBeVisible();
 
   await page
-    .locator('a[href="/chat/settings/accounts-access"]')
+    .locator('a[href="/app/settings/accounts-access"]')
     .click({ force: true });
 
   // Wait for PAT page to load (button is unique to the PAT section)
@@ -141,7 +141,7 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   await page.context().clearCookies();
   await loginAsRandomUser(page);
 
-  await page.goto("/chat");
+  await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
   // Click on user dropdown and open settings (same pattern as other tests)
@@ -152,7 +152,7 @@ test("PAT Multiple Tokens Management", async ({ page }, testInfo) => {
   await expect(page.getByText("Full Name")).toBeVisible();
 
   await page
-    .locator('a[href="/chat/settings/accounts-access"]')
+    .locator('a[href="/app/settings/accounts-access"]')
     .click({ force: true });
 
   // Wait for PAT page to load (button is unique to the PAT section)

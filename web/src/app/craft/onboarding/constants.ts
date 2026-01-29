@@ -137,28 +137,163 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
 // User Info/Persona Constants
 // =============================================================================
 
-export const WORK_AREA_OPTIONS = [
-  { value: "engineering", label: "Engineering" },
-  { value: "product", label: "Product" },
-  { value: "executive", label: "Executive" },
-  { value: "sales", label: "Sales" },
-  { value: "marketing", label: "Marketing" },
-  { value: "other", label: "Other" },
+export interface PersonaInfo {
+  name: string;
+  email: string;
+}
+
+// Work area enum - derived from PERSONA_MAPPING keys
+export enum WorkArea {
+  ENGINEERING = "engineering",
+  PRODUCT = "product",
+  EXECUTIVE = "executive",
+  SALES = "sales",
+  MARKETING = "marketing",
+  OTHER = "other",
+}
+
+// Level enum - derived from PERSONA_MAPPING structure
+export enum Level {
+  IC = "ic",
+  MANAGER = "manager",
+}
+
+// Persona mapping: work_area -> level -> PersonaInfo
+// Matches backend/onyx/server/features/build/sandbox/util/persona_mapping.py
+// This is the source of truth for work areas and levels
+export const PERSONA_MAPPING: Record<WorkArea, Record<Level, PersonaInfo>> = {
+  [WorkArea.ENGINEERING]: {
+    [Level.IC]: {
+      name: "Jiwon Kang",
+      email: "jiwon_kang@netherite-extraction.onyx.app",
+    },
+    [Level.MANAGER]: {
+      name: "Javier Morales",
+      email: "javier_morales@netherite-extraction.onyx.app",
+    },
+  },
+  [WorkArea.SALES]: {
+    [Level.IC]: {
+      name: "Megan Foster",
+      email: "megan_foster@netherite-extraction.onyx.app",
+    },
+    [Level.MANAGER]: {
+      name: "Valeria Cruz",
+      email: "valeria_cruz@netherite-extraction.onyx.app",
+    },
+  },
+  [WorkArea.PRODUCT]: {
+    [Level.IC]: {
+      name: "Michael Anderson",
+      email: "michael_anderson@netherite-extraction.onyx.app",
+    },
+    [Level.MANAGER]: {
+      name: "David Liu",
+      email: "david_liu@netherite-extraction.onyx.app",
+    },
+  },
+  [WorkArea.MARKETING]: {
+    [Level.IC]: {
+      name: "Rahul Patel",
+      email: "rahul_patel@netherite-extraction.onyx.app",
+    },
+    [Level.MANAGER]: {
+      name: "Olivia Reed",
+      email: "olivia_reed@netherite-extraction.onyx.app",
+    },
+  },
+  [WorkArea.EXECUTIVE]: {
+    [Level.IC]: {
+      name: "Sarah Mitchell",
+      email: "sarah_mitchell@netherite-extraction.onyx.app",
+    },
+    [Level.MANAGER]: {
+      name: "Sarah Mitchell",
+      email: "sarah_mitchell@netherite-extraction.onyx.app",
+    },
+  },
+  [WorkArea.OTHER]: {
+    [Level.MANAGER]: {
+      name: "Ralf Schroeder",
+      email: "ralf_schroeder@netherite-extraction.onyx.app",
+    },
+    [Level.IC]: {
+      name: "John Carpenter",
+      email: "john_carpenter@netherite-extraction.onyx.app",
+    },
+  },
+};
+
+// Helper to capitalize first letter
+const capitalize = (str: string): string => {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+// Derive WORK_AREA_OPTIONS from WorkArea enum
+export const WORK_AREA_OPTIONS = Object.values(WorkArea).map((value) => ({
+  value,
+  label: capitalize(value),
+}));
+
+// Derive LEVEL_OPTIONS from Level enum
+export const LEVEL_OPTIONS = Object.values(Level).map((value) => ({
+  value,
+  label: value === Level.IC ? "IC" : capitalize(value),
+}));
+
+// Work areas where level selection is required
+// Executive has the same persona for both levels, so level is optional
+export const WORK_AREAS_REQUIRING_LEVEL: WorkArea[] = [
+  WorkArea.ENGINEERING,
+  WorkArea.PRODUCT,
+  WorkArea.SALES,
+  WorkArea.MARKETING,
+  WorkArea.OTHER,
 ];
 
-export const LEVEL_OPTIONS = [
-  { value: "ic", label: "IC" },
-  { value: "manager", label: "Manager" },
-];
+// Helper function to get persona info
+export function getPersonaInfo(
+  workArea: WorkArea,
+  level: Level
+): PersonaInfo | undefined {
+  return PERSONA_MAPPING[workArea]?.[level];
+}
 
-export const WORK_AREAS_WITH_LEVEL = ["engineering", "product", "sales"];
+// Company name for demo personas
+export const DEMO_COMPANY_NAME = "Netherite Extraction Inc.";
+
+// Helper function to get position text from work area and level
+// Executive: "Executive" (no level), Other: "employee", Everything else: show level if available
+export function getPositionText(
+  workArea: WorkArea,
+  level: Level | undefined
+): string {
+  const workAreaLabel =
+    WORK_AREA_OPTIONS.find((opt) => opt.value === workArea)?.label || workArea;
+
+  if (workArea === WorkArea.OTHER) {
+    return "Employee";
+  }
+
+  if (workArea === WorkArea.EXECUTIVE) {
+    return "Executive";
+  }
+
+  if (level) {
+    const levelLabel =
+      LEVEL_OPTIONS.find((opt) => opt.value === level)?.label || level;
+    return `${workAreaLabel} ${levelLabel}`;
+  }
+
+  return workAreaLabel;
+}
 
 export const BUILD_USER_PERSONA_COOKIE_NAME = "build_user_persona";
 
 // Helper type for the consolidated cookie
 export interface BuildUserPersona {
-  workArea: string;
-  level?: string;
+  workArea: WorkArea;
+  level?: Level;
 }
 
 // Helper functions for getting/setting the consolidated cookie
@@ -173,7 +308,21 @@ export function getBuildUserPersona(): BuildUserPersona | null {
   if (!cookieValue) return null;
 
   try {
-    return JSON.parse(decodeURIComponent(cookieValue));
+    const parsed = JSON.parse(decodeURIComponent(cookieValue));
+    // Validate and cast to enum types
+    if (
+      parsed.workArea &&
+      Object.values(WorkArea).includes(parsed.workArea as WorkArea)
+    ) {
+      return {
+        workArea: parsed.workArea as WorkArea,
+        level:
+          parsed.level && Object.values(Level).includes(parsed.level as Level)
+            ? (parsed.level as Level)
+            : undefined,
+      };
+    }
+    return null;
   } catch {
     return null;
   }

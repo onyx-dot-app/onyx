@@ -1,8 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import Cookies from "js-cookie";
-import { CRAFT_DEMO_DATA_COOKIE_NAME } from "@/app/craft/v1/constants";
+import { getDemoDataEnabled } from "@/app/craft/v1/constants";
 import {
   getBuildUserPersona,
   getBuildLlmSelection,
@@ -261,13 +260,12 @@ export type {
 /** Pre-provisioning state machine - exactly one of these states at a time */
 export type PreProvisioningState =
   | { status: "idle" }
-  | {
-      status: "provisioning";
-      promise: Promise<string | null>;
-      demoDataEnabled: boolean;
-    }
+  | { status: "provisioning"; demoDataEnabled: boolean }
   | { status: "ready"; sessionId: string; demoDataEnabled: boolean }
-  | { status: "failed"; error: string };
+  | { status: "failed"; error: string; retryCount: number; retryAt: number };
+
+// Module-level variable to store the provisioning promise (not in Zustand state for serializability)
+let provisioningPromise: Promise<string | null> | null = null;
 
 /** File preview tab data */
 export interface FilePreviewTab {
@@ -353,8 +351,13 @@ interface BuildSessionStore {
   // Pre-provisioning state (discriminated union - see PreProvisioningState type)
   preProvisioning: PreProvisioningState;
 
-  // Demo data toggle (controls whether demo files are mounted in sandbox)
-  demoDataEnabled: boolean;
+  // Controller state (replaces refs in useBuildSessionController for better race condition handling)
+  controllerState: {
+    /** Tracks which URL we've triggered provisioning for (prevents re-triggering) */
+    lastTriggeredForUrl: string | null;
+    /** Tracks which session ID has been loaded (prevents duplicate API calls) */
+    loadedSessionId: string | null;
+  };
 
   // Temporary output panel state when no session exists (resets when session is created/cleared)
   noSessionOutputPanelOpen: boolean;
@@ -451,8 +454,10 @@ interface BuildSessionStore {
   /** Clear and delete any pre-provisioned session (used when settings change) */
   clearPreProvisionedSession: () => Promise<void>;
 
-  // Demo Data Actions
-  setDemoDataEnabled: (enabled: boolean) => void;
+  // Controller State Actions (for useBuildSessionController - replaces refs)
+  setControllerTriggered: (url: string | null) => void;
+  setControllerLoaded: (sessionId: string | null) => void;
+  resetControllerState: () => void;
 
   // Webapp Refresh Actions
   triggerWebappRefresh: (sessionId: string) => void;
@@ -486,21 +491,6 @@ interface BuildSessionStore {
   ) => void;
   setSuggestionsLoading: (sessionId: string, loading: boolean) => void;
   clearFollowupSuggestions: (sessionId: string) => void;
-}
-
-// =============================================================================
-// Cookie Helpers
-// =============================================================================
-
-/**
- * Read initial demoDataEnabled value from cookie.
- * Defaults to true if cookie doesn't exist or is invalid.
- */
-function getInitialDemoDataEnabled(): boolean {
-  if (typeof window === "undefined") return true; // SSR fallback
-  const cookieValue = Cookies.get(CRAFT_DEMO_DATA_COOKIE_NAME);
-  if (cookieValue === "false") return false;
-  return true; // Default to true
 }
 
 // =============================================================================
@@ -551,8 +541,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Pre-provisioning state
   preProvisioning: { status: "idle" },
 
-  // Demo data toggle (persisted to cookie, defaults to true)
-  demoDataEnabled: getInitialDemoDataEnabled(),
+  // Controller state (replaces refs in useBuildSessionController)
+  controllerState: {
+    lastTriggeredForUrl: null,
+    loadedSessionId: null,
+  },
 
   // Temporary output panel state when no session exists (resets when session is created/cleared)
   noSessionOutputPanelOpen: false,
@@ -1137,8 +1130,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       updateSessionData,
       refreshSessionHistory,
       nameBuildSession,
-      demoDataEnabled,
     } = get();
+    // Read from cookie - single source of truth
+    const demoDataEnabled = getDemoDataEnabled();
 
     // Create a temporary session ID for optimistic UI
     const tempId = `temp-${Date.now()}`;
@@ -1411,20 +1405,48 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // ===========================================================================
 
   ensurePreProvisionedSession: async () => {
-    const { preProvisioning, demoDataEnabled } = get();
+    const { preProvisioning } = get();
+    // Read from cookie - single source of truth
+    const demoDataEnabled = getDemoDataEnabled();
 
-    // Already have a pre-provisioned session ready with matching demoDataEnabled
+    // Already have a pre-provisioned session ready
     if (preProvisioning.status === "ready") {
-      // If demoDataEnabled changed, we need to re-provision (handled by setDemoDataEnabled)
-      return preProvisioning.sessionId;
+      // If demoDataEnabled matches, return the existing session
+      if (preProvisioning.demoDataEnabled === demoDataEnabled) {
+        return preProvisioning.sessionId;
+      }
+      // demoDataEnabled changed - invalidate and re-provision
+      const sessionIdToDelete = preProvisioning.sessionId;
+      set({ preProvisioning: { status: "idle" } });
+      apiDeleteSession(sessionIdToDelete).catch((err) => {
+        console.error(
+          "[PreProvision] Failed to delete invalidated session:",
+          err
+        );
+      });
+      // Fall through to create a new session with the current setting
     }
 
     // Already provisioning - return existing promise
     if (preProvisioning.status === "provisioning") {
-      return preProvisioning.promise;
+      return provisioningPromise;
+    }
+
+    // Handle failed state with retry
+    // Capture retryCount BEFORE resetting to idle (so we can increment it on next failure)
+    let currentRetryCount = 0;
+    if (preProvisioning.status === "failed") {
+      currentRetryCount = preProvisioning.retryCount;
+      if (Date.now() < preProvisioning.retryAt) {
+        // Not yet time to retry
+        return null;
+      }
+      // Time to retry - reset to idle and continue
+      set({ preProvisioning: { status: "idle" } });
     }
 
     // Start new provisioning with current demoDataEnabled value
+
     const promise = (async (): Promise<string | null> => {
       try {
         // Parse user persona and LLM selection from cookies
@@ -1438,6 +1460,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           llmProviderType: llmSelection?.provider || null,
           llmModelName: llmSelection?.modelName || null,
         });
+
+        provisioningPromise = null; // Clear promise on success
         set({
           preProvisioning: {
             status: "ready",
@@ -1450,18 +1474,30 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         console.error("[PreProvision] Failed to pre-provision session:", err);
         const errorMessage =
           err instanceof Error ? err.message : "Unknown error";
+
+        // Exponential backoff: 1s, 2s, 4s, 8s, ... max 30s
+        const newRetryCount = currentRetryCount + 1;
+        const backoffMs = Math.min(
+          1000 * Math.pow(2, newRetryCount - 1),
+          30000
+        );
+
+        provisioningPromise = null; // Clear promise on failure
         set({
           preProvisioning: {
             status: "failed",
             error: errorMessage,
+            retryCount: newRetryCount,
+            retryAt: Date.now() + backoffMs,
           },
         });
         return null;
       }
     })();
 
+    provisioningPromise = promise;
     set({
-      preProvisioning: { status: "provisioning", promise, demoDataEnabled },
+      preProvisioning: { status: "provisioning", demoDataEnabled },
     });
     return promise;
   },
@@ -1471,7 +1507,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Wait for provisioning to complete if in progress
     if (preProvisioning.status === "provisioning") {
-      await preProvisioning.promise;
+      await provisioningPromise;
     }
 
     // Re-check state after awaiting (may have changed)
@@ -1512,7 +1548,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // If provisioning is in progress, wait for it to complete
     if (preProvisioning.status === "provisioning") {
-      await preProvisioning.promise;
+      await provisioningPromise;
     }
 
     // Re-check state after awaiting
@@ -1540,72 +1576,34 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   // ===========================================================================
-  // Demo Data Actions
+  // Controller State Actions (replaces refs in useBuildSessionController)
   // ===========================================================================
 
-  setDemoDataEnabled: (enabled: boolean) => {
-    const {
-      preProvisioning,
-      demoDataEnabled: currentValue,
-      ensurePreProvisionedSession,
-    } = get();
+  setControllerTriggered: (url: string | null) => {
+    set((state) => ({
+      controllerState: {
+        ...state.controllerState,
+        lastTriggeredForUrl: url,
+      },
+    }));
+  },
 
-    // If value hasn't changed, do nothing
-    if (enabled === currentValue) {
-      return;
-    }
+  setControllerLoaded: (sessionId: string | null) => {
+    set((state) => ({
+      controllerState: {
+        ...state.controllerState,
+        loadedSessionId: sessionId,
+      },
+    }));
+  },
 
-    // Update the state value and persist to cookie
-    set({ demoDataEnabled: enabled });
-    Cookies.set(CRAFT_DEMO_DATA_COOKIE_NAME, String(enabled), {
-      path: "/",
-      expires: 365, // 1 year
+  resetControllerState: () => {
+    set({
+      controllerState: {
+        lastTriggeredForUrl: null,
+        loadedSessionId: null,
+      },
     });
-
-    // Check if we need to invalidate a pre-provisioned session
-    if (preProvisioning.status === "ready") {
-      // Pre-provisioned session exists with different demoDataEnabled value
-      if (preProvisioning.demoDataEnabled !== enabled) {
-        const sessionIdToDelete = preProvisioning.sessionId;
-
-        // Reset to idle first
-        set({ preProvisioning: { status: "idle" } });
-
-        // Delete the old session in the background (don't await)
-        apiDeleteSession(sessionIdToDelete).catch((err) => {
-          console.error(
-            "[PreProvision] Failed to delete invalidated session:",
-            err
-          );
-        });
-
-        // Start new pre-provisioning with updated demoDataEnabled
-        ensurePreProvisionedSession();
-      }
-    } else if (preProvisioning.status === "provisioning") {
-      // If currently provisioning with different value, the new session will have wrong demoDataEnabled
-      // We'll let it complete but mark it for replacement
-      if (preProvisioning.demoDataEnabled !== enabled) {
-        // Wait for current provisioning to complete, then invalidate
-        preProvisioning.promise.then((sessionId) => {
-          if (sessionId) {
-            // Check if demoDataEnabled is still different (user may have toggled back)
-            const { demoDataEnabled: latestValue } = get();
-            if (latestValue !== preProvisioning.demoDataEnabled) {
-              // Delete the session and re-provision
-              set({ preProvisioning: { status: "idle" } });
-              apiDeleteSession(sessionId).catch((err) => {
-                console.error(
-                  "[PreProvision] Failed to delete invalidated session:",
-                  err
-                );
-              });
-              get().ensurePreProvisionedSession();
-            }
-          }
-        });
-      }
-    }
   },
 
   // ===========================================================================
@@ -2096,12 +2094,23 @@ export const usePreProvisionedSessionId = () =>
       : null
   );
 
-// Demo data selectors
-export const useDemoDataEnabled = () =>
-  useBuildSessionStore((state) => state.demoDataEnabled);
+// Demo data selector - reads directly from cookie (single source of truth)
+// Note: This returns the current cookie value but doesn't trigger re-renders on change.
+// Components that need reactive updates should manage their own local state.
+export const useDemoDataEnabled = () => getDemoDataEnabled();
 
-export const useSetDemoDataEnabled = () =>
-  useBuildSessionStore((state) => state.setDemoDataEnabled);
+// Controller state selectors (for useBuildSessionController)
+export const useControllerState = () =>
+  useBuildSessionStore((state) => state.controllerState);
+
+export const useSetControllerTriggered = () =>
+  useBuildSessionStore((state) => state.setControllerTriggered);
+
+export const useSetControllerLoaded = () =>
+  useBuildSessionStore((state) => state.setControllerLoaded);
+
+export const useResetControllerState = () =>
+  useBuildSessionStore((state) => state.resetControllerState);
 
 // Stream items selector
 export const useStreamItems = () =>
