@@ -237,17 +237,6 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
 
   const hasActions = mcpServersWithTools.length > 0 || openApiTools.length > 0;
   const defaultModel = getDisplayName(agent, llmProviders ?? []);
-  // const llmDescriptor = getLLMProviderOverrideForPersona(
-  //   agent,
-  //   llmProviders ?? []
-  // );
-  // const x = llmProviders?.find(
-  //   (llmProvider) => llmProvider.name === agent.llm_model_provider_override
-  // );
-  // const y = x?.model_configurations.find(
-  //   (y) => y.name === llmDescriptor?.modelName
-  // );
-  // console.log(y?.provider_display_name);
 
   return (
     <Modal
