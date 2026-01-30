@@ -7,16 +7,14 @@
   @apply transition-colors;
 }
 
-/* Primary: static tint-02 bg, hover stays tint-02 */
 .hoverable[data-variant="primary"] {
-  @apply bg-background-tint-02;
+  @apply bg-background-tint-00;
 }
 
 .hoverable[data-variant="primary"]:not([data-non-interactive]):hover {
   @apply bg-background-tint-02;
 }
 
-/* Secondary: tint-02 bg, hover → tint-03 */
 .hoverable[data-variant="secondary"] {
   @apply bg-background-tint-02;
 }
