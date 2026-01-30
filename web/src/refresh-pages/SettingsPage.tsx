@@ -1360,7 +1360,7 @@ function AccountsAccessSettings() {
               title="Email"
               description="Your account email address."
               center
-              nonInteractable
+              nonInteractive
             >
               <Text>{user?.email ?? "anonymous"}</Text>
             </InputLayouts.Horizontal>

@@ -1,15 +1,12 @@
-import React, { createContext, useContext } from "react";
+import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
 
+type HoverableVariants = "primary" | "secondary";
 type HoverableContainerVariants = "primary";
-
-const HoverableContext = createContext<HoverableContainerVariants | undefined>(
-  undefined
-);
 
 interface HoverableContainerProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
@@ -18,12 +15,10 @@ interface HoverableContainerProps
 }
 
 function HoverableContainer({
-  variant,
+  variant = "primary",
   ref,
   ...props
 }: HoverableContainerProps) {
-  const contextVariant = useContext(HoverableContext);
-  const resolvedVariant = variant ?? contextVariant ?? "primary";
   // Radix Slot injects className at runtime (bypassing WithoutStyles),
   // so we extract and merge it to preserve "hoverable-container".
   const { className: slotClassName, ...rest } = props as typeof props & {
@@ -32,9 +27,9 @@ function HoverableContainer({
   return (
     <div
       ref={ref}
-      data-variant={resolvedVariant}
-      className={cn("hoverable-container", slotClassName)}
       {...rest}
+      data-variant={variant}
+      className={cn("hoverable-container", slotClassName)}
     />
   );
 }
@@ -57,13 +52,9 @@ export interface HoverableProps
    * Enables group-hover utilities on descendant elements.
    */
   group?: string;
-  disableHoverInteractivity?: boolean;
-  /**
-   * Variant passed down to `HoverableContainer` via context.
-   * Any descendant `HoverableContainer` without an explicit `variant`
-   * prop will inherit this value.
-   */
-  variant?: HoverableContainerVariants;
+  nonInteractive?: boolean;
+  /** Controls background color styling on the hoverable element. */
+  variant?: HoverableVariants;
 }
 
 /**
@@ -118,64 +109,51 @@ export default function Hoverable({
   href,
   ref,
   group,
-  disableHoverInteractivity,
-  variant,
+  nonInteractive,
+  variant = "primary",
   ...props
 }: HoverableProps) {
-  const classes = cn(
-    "flex flex-1 cursor-pointer",
-    !disableHoverInteractivity && [
-      "transition-colors",
-      "hover:bg-background-tint-02",
-      "active:bg-background-tint-00",
-      "data-[pressed=true]:bg-background-tint-00",
-    ],
-    group
-  );
+  const classes = cn("hoverable", group);
+  const dataAttrs = {
+    "data-variant": variant,
+    ...(nonInteractive && { "data-non-interactive": "" }),
+  };
 
-  const content = (() => {
-    // asChild: merge props onto child element
-    if (asChild) {
-      return (
-        <Slot ref={ref} className={classes} {...props}>
-          {children}
-        </Slot>
-      );
-    }
-
-    // href: render as Link (anchor) directly
-    if (href) {
-      return (
-        <Link
-          href={href as Route}
-          ref={ref as React.Ref<HTMLAnchorElement>}
-          className={classes}
-          {...props}
-        >
-          {children}
-        </Link>
-      );
-    }
-
-    // default: render as button
+  // asChild: merge props onto child element
+  if (asChild) {
     return (
-      <button
-        ref={ref as React.Ref<HTMLButtonElement>}
-        type="button"
+      <Slot ref={ref} className={classes} {...dataAttrs} {...props}>
+        {children}
+      </Slot>
+    );
+  }
+
+  // href: render as Link (anchor) directly
+  if (href) {
+    return (
+      <Link
+        href={href as Route}
+        ref={ref as React.Ref<HTMLAnchorElement>}
         className={classes}
+        {...dataAttrs}
         {...props}
       >
         {children}
-      </button>
+      </Link>
     );
-  })();
+  }
 
-  if (variant === undefined) return content;
-
+  // default: render as button
   return (
-    <HoverableContext.Provider value={variant}>
-      {content}
-    </HoverableContext.Provider>
+    <button
+      ref={ref as React.Ref<HTMLButtonElement>}
+      type="button"
+      className={classes}
+      {...dataAttrs}
+      {...props}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -1,3 +1,37 @@
+/* Hoverable */
+.hoverable {
+  @apply flex flex-1 cursor-pointer;
+}
+
+.hoverable:not([data-non-interactive]) {
+  @apply transition-colors;
+}
+
+/* Primary: static tint-02 bg, hover stays tint-02 */
+.hoverable[data-variant="primary"] {
+  @apply bg-background-tint-02;
+}
+
+.hoverable[data-variant="primary"]:not([data-non-interactive]):hover {
+  @apply bg-background-tint-02;
+}
+
+/* Secondary: tint-02 bg, hover → tint-03 */
+.hoverable[data-variant="secondary"] {
+  @apply bg-background-tint-02;
+}
+
+.hoverable[data-variant="secondary"]:not([data-non-interactive]):hover {
+  @apply bg-background-tint-03;
+}
+
+/* Active & pressed (all variants) */
+.hoverable:not([data-non-interactive]):active,
+.hoverable:not([data-non-interactive])[data-pressed="true"] {
+  @apply bg-background-tint-00;
+}
+
+/* HoverableContainer */
 .hoverable-container[data-variant="primary"] {
-  @apply bg-background-tint-02 p-2 rounded-08;
+  @apply p-2 rounded-08;
 }

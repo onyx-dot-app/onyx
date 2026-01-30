@@ -316,7 +316,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 <Horizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                  nonInteractable
+                  nonInteractive
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </Horizontal>
@@ -341,8 +341,9 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 {agent.starter_messages.map((starter, index) => (
                   <Hoverable
                     key={index}
-                    asChild
                     onClick={() => handleStarterClick(starter.message)}
+                    variant="secondary"
+                    asChild
                   >
                     <HoverableContainer>
                       <LineItemLayout

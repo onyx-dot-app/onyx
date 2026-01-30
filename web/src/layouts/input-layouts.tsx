@@ -9,7 +9,7 @@ import Label from "@/refresh-components/form/Label";
 interface OrientationLayoutProps extends TitleLayoutProps {
   name?: string;
   disabled?: boolean;
-  nonInteractable?: boolean;
+  nonInteractive?: boolean;
   children?: React.ReactNode;
 }
 
@@ -41,7 +41,7 @@ export interface VerticalLayoutProps extends OrientationLayoutProps {
 function VerticalInputLayout({
   name,
   disabled,
-  nonInteractable = false,
+  nonInteractive,
   children,
   subDescription,
   ...titleLayoutProps
@@ -59,7 +59,7 @@ function VerticalInputLayout({
     </Section>
   );
 
-  if (nonInteractable) return content;
+  if (nonInteractive) return content;
   return (
     <Label name={name} disabled={disabled}>
       {content}
@@ -107,7 +107,7 @@ export interface HorizontalLayoutProps extends OrientationLayoutProps {
 function HorizontalInputLayout({
   name,
   disabled,
-  nonInteractable,
+  nonInteractive,
   children,
   center,
   ...titleLayoutProps
@@ -128,7 +128,7 @@ function HorizontalInputLayout({
     </Section>
   );
 
-  if (nonInteractable) return content;
+  if (nonInteractive) return content;
   return (
     <Label name={name} disabled={disabled}>
       {content}
