@@ -13,8 +13,8 @@ from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
 
 
-def build_llm_model_config(llm: LLM, flow: str | None = None) -> dict[str, Any]:
-    model_config: dict[str, Any] = {
+def build_llm_model_config(llm: LLM, flow: str | None = None) -> dict[str, str]:
+    model_config: dict[str, str] = {
         "base_url": str(llm.config.api_base or ""),
         "model_provider": llm.config.model_provider,
     }
