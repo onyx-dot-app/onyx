@@ -406,6 +406,7 @@ class HierarchyNode(BaseModel):
     # If this hierarchy node represents a document (e.g., Confluence page),
     # The db model stores that doc's document_id. This gets set during docprocessing
     # after the document row is created. Matching is done by raw_node_id matching document.id.
+    # so, we don't allow connectors to specify this as it would be unused
     # document_id: str | None = None
 
     # External access information for the node
