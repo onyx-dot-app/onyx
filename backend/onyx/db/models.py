@@ -71,7 +71,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
-    ModelFlowType,
+    ModelInputModalityType,
     ThemePreference,
     SwitchoverType,
 )
@@ -2684,25 +2684,28 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
-    flows: Mapped[list["FlowMapping"]] = relationship(
-        "FlowMapping",
+    input_modalities: Mapped[list["InputModality"]] = relationship(
+        "InputModality",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
     @property
-    def model_flow_types(self) -> list[ModelFlowType]:
-        return [flow.flow_type for flow in self.flows]
+    def model_input_modalities(self) -> list[ModelInputModalityType]:
+        return [
+            input_modality.input_modality_type
+            for input_modality in self.input_modalities
+        ]
 
 
-class FlowMapping(Base):
-    __tablename__ = "flow_mapping"
+class InputModality(Base):
+    __tablename__ = "input_modality"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    flow_type: Mapped[ModelFlowType] = mapped_column(
-        Enum(ModelFlowType), nullable=False
+    input_modality_type: Mapped[ModelInputModalityType] = mapped_column(
+        Enum(ModelInputModalityType), nullable=False
     )
     model_configuration_id: Mapped[int] = mapped_column(
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
@@ -2712,18 +2715,18 @@ class FlowMapping(Base):
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration",
-        back_populates="flows",
+        back_populates="input_modalities",
     )
 
     __table_args__ = (
         UniqueConstraint(
-            "flow_type",
+            "input_modality_type",
             "model_configuration_id",
-            name="uq_flow_mapping_flow_type_model_configuration",
+            name="uq_input_modality_input_modality_type_model_configuration",
         ),
         Index(
-            "ix_one_default_per_flow",
-            "flow_type",
+            "ix_one_default_per_input_modality",
+            "input_modality_type",
             unique=True,
             postgresql_where=(is_default == True),  # noqa: E712
         ),

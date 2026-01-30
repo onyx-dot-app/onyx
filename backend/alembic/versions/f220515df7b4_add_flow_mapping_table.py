@@ -6,7 +6,7 @@ Create Date: 2026-01-30 12:21:24.955922
 
 """
 
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import ModelInputModalityType
 from alembic import op
 import sqlalchemy as sa
 
@@ -20,11 +20,13 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "flow_mapping",
+        "input_modality",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column(
-            "flow_type",
-            sa.Enum(ModelFlowType, name="modelflowtype", native_enum=False),
+            "input_modality_type",
+            sa.Enum(
+                ModelInputModalityType, name="modelinputmodalitytype", native_enum=False
+            ),
             nullable=False,
         ),
         sa.Column("is_default", sa.Boolean(), nullable=False, default=False),
@@ -34,26 +36,26 @@ def upgrade() -> None:
             ["model_configuration_id"], ["model_configuration.id"], ondelete="CASCADE"
         ),
         sa.UniqueConstraint(
-            "flow_type",
+            "input_modality_type",
             "model_configuration_id",
-            name="uq_flow_mapping_flow_type_model_configuration",
+            name="uq_input_modality_input_modality_type_model_configuration",
         ),
     )
 
     # Partial unique index so that there is at most one default for each flow type
     op.create_index(
-        "ix_one_default_per_flow",
-        "flow_mapping",
-        ["flow_type"],
+        "ix_one_default_per_input_modality",
+        "input_modality",
+        ["input_modality_type"],
         unique=True,
         postgresql_where=sa.text("is_default IS TRUE"),
     )
 
 
 def downgrade() -> None:
-    # Drop the flow_mapping table (index is dropped automatically with table)
-    op.drop_table("flow_mapping")
+    # Drop the input_modality table (index is dropped automatically with table)
+    op.drop_table("input_modality")
 
     # Drop the enum type if it was created by this migration
     # (only if no other tables reference it)
-    op.execute("DROP TYPE IF EXISTS modelflowtype;")
+    op.execute("DROP TYPE IF EXISTS modelinputmodalitytype;")

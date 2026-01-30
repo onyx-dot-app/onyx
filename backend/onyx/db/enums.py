@@ -271,7 +271,7 @@ class HierarchyNodeType(str, PyEnum):
     CHANNEL = "channel"
 
 
-class ModelFlowType(str, PyEnum):
+class ModelInputModalityType(str, PyEnum):
     CONVERSATION_MODALITY = "conversation"
     VISION_MODALITY = "vision"
     EMBEDDING_MODALITY = "embedding"
