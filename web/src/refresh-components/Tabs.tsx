@@ -71,7 +71,7 @@ const useTabsContext = () => {
 /** Style classes for TabsList variants */
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
+  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden pr-1",
 } as const;
 
 /** Base style classes for TabsTrigger variants */

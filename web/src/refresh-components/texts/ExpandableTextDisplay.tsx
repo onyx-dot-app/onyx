@@ -188,16 +188,17 @@ export default function ExpandableTextDisplay({
             : renderPlainTextStatic()}
 
         {/* Expand button - only show when content is truncated */}
-        {isTruncated && (
-          <div className="flex items-end mt-1">
+
+        <div className="flex items-end mt-1 w-8">
+          {isTruncated && (
             <IconButton
               internal
               icon={SvgMaximize2}
               tooltip="View Full Text"
               onClick={() => setIsModalOpen(true)}
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Expanded Modal */}
