@@ -28,7 +28,7 @@ export interface ExpandableTextDisplayProps {
    * @param isExpanded - Whether the content is being rendered in expanded (modal) view
    */
   renderContent?: (content: string, isExpanded: boolean) => React.ReactNode;
-  /** When true, uses scrollable container with auto-scroll instead of line-clamp */
+  /** When true, shows last N lines with top-truncation (ellipsis at top) instead of bottom-truncation */
   isStreaming?: boolean;
 }
 
@@ -42,6 +42,24 @@ function getContentSize(text: string): string {
 /** Count lines in text */
 function getLineCount(text: string): number {
   return text.split("\n").length;
+}
+
+/** Extract the last N lines from text for streaming display.
+ * When truncated, returns (maxLines - 1) lines to leave room for ellipsis.
+ */
+function getLastLines(
+  text: string,
+  maxLines: number
+): { lines: string; hasTruncation: boolean } {
+  const allLines = text.split("\n");
+  if (allLines.length <= maxLines) {
+    return { lines: text, hasTruncation: false };
+  }
+  // Reserve one line for ellipsis, show last (maxLines - 1) content lines
+  return {
+    lines: allLines.slice(-(maxLines - 1)).join("\n"),
+    hasTruncation: true,
+  };
 }
 
 /** Download content as a .txt file */
@@ -59,9 +77,6 @@ function downloadAsTxt(content: string, filename: string) {
     URL.revokeObjectURL(url);
   }
 }
-
-/** Approximate line height for max-height calculation */
-const LINE_HEIGHT_PX = 20;
 
 export default function ExpandableTextDisplay({
   title,
@@ -85,34 +100,24 @@ export default function ExpandableTextDisplay({
   // Detect truncation for renderContent mode (both streaming and static)
   // (TruncateMarkup's onTruncate handles plain text static mode)
   useLayoutEffect(() => {
-    if (renderContent && scrollRef.current) {
-      // For renderContent, always use scrollRef (same container for streaming and static)
-      setIsTruncated(
-        scrollRef.current.scrollHeight > scrollRef.current.clientHeight
-      );
-    } else if (isStreaming && scrollRef.current) {
-      // Plain text streaming mode
+    const textToCheck = displayContent ?? content;
+    if (isStreaming) {
+      // For streaming, use line-based truncation detection
+      const lineCount = getLineCount(textToCheck);
+      setIsTruncated(lineCount > maxLines);
+    } else if (renderContent && scrollRef.current) {
+      // For renderContent static mode, use scroll-based detection
       setIsTruncated(
         scrollRef.current.scrollHeight > scrollRef.current.clientHeight
       );
     }
+    // Plain text static mode is handled by TruncateMarkup's onTruncate
   }, [isStreaming, renderContent, content, displayContent, maxLines]);
 
-  // Auto-scroll to bottom when streaming, reset to top when streaming ends
+  // Track streaming state transitions (no longer need scroll management with top-truncation)
   useEffect(() => {
-    if (isStreaming && scrollRef.current) {
-      // Auto-scroll to bottom during streaming
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    } else if (
-      prevIsStreamingRef.current &&
-      !isStreaming &&
-      scrollRef.current
-    ) {
-      // When streaming just ended, reset scroll to top
-      scrollRef.current.scrollTop = 0;
-    }
     prevIsStreamingRef.current = isStreaming;
-  }, [isStreaming, content, displayContent]);
+  }, [isStreaming]);
 
   // Handle truncation callback from TruncateMarkup (static mode only)
   const handleTruncate = (wasTruncated: boolean) => {
@@ -135,36 +140,51 @@ export default function ExpandableTextDisplay({
   }[maxLines];
 
   // Single container for renderContent mode (both streaming and static)
-  // Keeps scrollRef alive across the streaming → static transition so scroll reset works
-  const renderContentWithRef = () => (
-    <div
-      ref={scrollRef}
-      className={cn(
-        "no-scrollbar",
-        isStreaming ? "overflow-y-auto" : lineClampClass
-      )}
-      style={
-        isStreaming
-          ? { maxHeight: `${maxLines * LINE_HEIGHT_PX}px` }
-          : undefined
-      }
-    >
-      {renderContent!(displayContent ?? content, false)}
-    </div>
-  );
+  // Keeps scrollRef alive across the streaming → static transition
+  const renderContentWithRef = () => {
+    const textToDisplay = displayContent ?? content;
 
-  // Render plain text streaming (scrollable)
-  const renderPlainTextStreaming = () => (
-    <div
-      ref={scrollRef}
-      className="overflow-y-auto no-scrollbar"
-      style={{ maxHeight: `${maxLines * LINE_HEIGHT_PX}px` }}
-    >
-      <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
-        {displayContent ?? content}
-      </Text>
-    </div>
-  );
+    if (isStreaming) {
+      // During streaming: show last N lines with top ellipsis if truncated
+      const { lines, hasTruncation } = getLastLines(textToDisplay, maxLines);
+      return (
+        <div ref={scrollRef} className="overflow-hidden">
+          {hasTruncation && (
+            <Text as="span" mainUiMuted text03>
+              …
+            </Text>
+          )}
+          {renderContent!(hasTruncation ? "\n" + lines : lines, false)}
+        </div>
+      );
+    }
+
+    // Static mode: use line-clamp for bottom truncation
+    return (
+      <div ref={scrollRef} className={cn("no-scrollbar", lineClampClass)}>
+        {renderContent!(textToDisplay, false)}
+      </div>
+    );
+  };
+
+  // Render plain text streaming (top-truncation with last N lines)
+  const renderPlainTextStreaming = () => {
+    const textToDisplay = displayContent ?? content;
+    const { lines, hasTruncation } = getLastLines(textToDisplay, maxLines);
+
+    return (
+      <div ref={scrollRef} className="overflow-hidden">
+        {hasTruncation && (
+          <Text as="span" mainUiMuted text03>
+            …{"\n"}
+          </Text>
+        )}
+        <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
+          {lines}
+        </Text>
+      </div>
+    );
+  };
 
   // Render plain text static (TruncateMarkup for reliable truncation)
   const renderPlainTextStatic = () => (
