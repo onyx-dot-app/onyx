@@ -46,17 +46,20 @@ export function getLLMProviderOverrideForPersona(
   liveAssistant: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
-  const overrideModelId = liveAssistant.default_model_configuration_id;
+  const defaultModelConfigurationId =
+    liveAssistant.default_model_configuration_id;
 
-  if (!overrideModelId) {
+  if (!defaultModelConfigurationId) {
     return null;
   }
 
   const matchingProvider = llmProviders.find((provider) =>
-    provider.model_configurations.find((m) => m.id === overrideModelId)
+    provider.model_configurations.find(
+      (m) => m.id === defaultModelConfigurationId
+    )
   );
   const underlyingModel = matchingProvider?.model_configurations.find(
-    (m) => m.id === overrideModelId
+    (m) => m.id === defaultModelConfigurationId
   );
 
   if (matchingProvider && underlyingModel) {

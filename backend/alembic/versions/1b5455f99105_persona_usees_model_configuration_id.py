@@ -36,7 +36,7 @@ def upgrade() -> None:
     # Migration Strategy:
     # 1. Port over where provider_override + model_version are both present
     # 2. Port over where only provider is present (Provider default)
-    # 3. Where only model is present, we attempt to find the model. Otherwise we go for global default
+    # 3. Where only the model is provided, or neither provider or model are provided, we go for global default
 
     conn = op.get_bind()
 
@@ -70,28 +70,6 @@ def upgrade() -> None:
               AND persona.default_model_configuration_id IS NULL
               AND lp.name = persona.llm_model_provider_override
               AND mc.name = lp.default_model_name
-        """
-        )
-    )
-
-    # Strategy 3: Only model is present - try to find the model in any provider
-    conn.execute(
-        sa.text(
-            """
-            UPDATE persona
-            SET default_model_configuration_id = (
-                SELECT mc.id
-                FROM model_configuration mc
-                WHERE mc.name = persona.llm_model_version_override
-                LIMIT 1
-            )
-            WHERE persona.llm_model_provider_override IS NULL
-              AND persona.llm_model_version_override IS NOT NULL
-              AND persona.default_model_configuration_id IS NULL
-              AND EXISTS (
-                  SELECT 1 FROM model_configuration mc
-                  WHERE mc.name = persona.llm_model_version_override
-              )
         """
         )
     )
