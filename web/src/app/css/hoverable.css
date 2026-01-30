@@ -9,7 +9,7 @@
 }
 
 .hoverable--primary:hover {
-  @apply bg-background-tint-00;
+  @apply bg-background-tint-02;
 }
 
 .hoverable--primary:active,
