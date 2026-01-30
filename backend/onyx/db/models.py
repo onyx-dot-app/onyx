@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from sqlalchemy.orm import validates
+
+from onyx.db.enums import ModelFlowType
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 from pydantic import ValidationError
@@ -2680,6 +2682,51 @@ class ModelConfiguration(Base):
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
+    )
+
+    flows: Mapped[list["FlowMapping"]] = relationship(
+        "FlowMapping",
+        back_populates="model_configuration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    @property
+    def model_flow_types(self) -> list[ModelFlowType]:
+        return [flow.flow_type for flow in self.flows]
+
+
+class FlowMapping(Base):
+    __tablename__ = "flow_mapping"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    flow_type: Mapped[ModelFlowType] = mapped_column(
+        Enum(ModelFlowType), nullable=False
+    )
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration",
+        back_populates="flows",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "flow_type",
+            "model_configuration_id",
+            name="uq_flow_mapping_flow_type_model_configuration",
+        ),
+        Index(
+            "ix_one_default_per_flow",
+            "flow_type",
+            unique=True,
+            postgresql_where=(is_default is True),
+        ),
     )
 
 
