@@ -71,9 +71,9 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
+    ModelFlowType,
     ThemePreference,
     SwitchoverType,
-    ModelFlowType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
