@@ -1,0 +1,37 @@
+/* Hoverable - base (structural only, no color changes) */
+.hoverable {
+  @apply flex flex-1 cursor-pointer;
+}
+
+/* Primary: tint-00 base, hover → tint-02 */
+.hoverable--primary {
+  @apply bg-background-tint-00 transition-colors;
+}
+
+.hoverable--primary:hover {
+  @apply bg-background-tint-02;
+}
+
+.hoverable--primary:active,
+.hoverable--primary[data-pressed="true"] {
+  @apply bg-background-tint-00;
+}
+
+/* Secondary: tint-02 base, hover → tint-03 */
+.hoverable--secondary {
+  @apply bg-background-tint-02 transition-colors;
+}
+
+.hoverable--secondary:hover {
+  @apply bg-background-tint-03;
+}
+
+.hoverable--secondary:active,
+.hoverable--secondary[data-pressed="true"] {
+  @apply bg-background-tint-00;
+}
+
+/* HoverableContainer */
+.hoverable-container[data-variant="primary"] {
+  @apply p-2 rounded-08;
+}

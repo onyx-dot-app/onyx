@@ -5,6 +5,35 @@ import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
 
+type HoverableVariants = "primary" | "secondary";
+type HoverableContainerVariants = "primary";
+
+interface HoverableContainerProps
+  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+  variant?: HoverableContainerVariants;
+  ref?: React.Ref<HTMLDivElement>;
+}
+
+function HoverableContainer({
+  variant = "primary",
+  ref,
+  ...props
+}: HoverableContainerProps) {
+  // Radix Slot injects className at runtime (bypassing WithoutStyles),
+  // so we extract and merge it to preserve "hoverable-container".
+  const { className: slotClassName, ...rest } = props as typeof props & {
+    className?: string;
+  };
+  return (
+    <div
+      ref={ref}
+      {...rest}
+      data-variant={variant}
+      className={cn("hoverable-container", slotClassName)}
+    />
+  );
+}
+
 export interface HoverableProps
   extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   /** Content to be wrapped with hover behavior */
@@ -23,7 +52,9 @@ export interface HoverableProps
    * Enables group-hover utilities on descendant elements.
    */
   group?: string;
-  disableHoverInteractivity?: boolean;
+  nonInteractive?: boolean;
+  /** Controls background color styling on the hoverable element. */
+  variant?: HoverableVariants;
 }
 
 /**
@@ -78,17 +109,13 @@ export default function Hoverable({
   href,
   ref,
   group,
-  disableHoverInteractivity,
+  nonInteractive,
+  variant = "primary",
   ...props
 }: HoverableProps) {
   const classes = cn(
-    "flex flex-1 cursor-pointer",
-    !disableHoverInteractivity && [
-      "transition-colors",
-      "hover:bg-background-tint-02",
-      "active:bg-background-tint-00",
-      "data-[pressed=true]:bg-background-tint-00",
-    ],
+    "hoverable",
+    !nonInteractive && `hoverable--${variant}`,
     group
   );
 
@@ -127,3 +154,5 @@ export default function Hoverable({
     </button>
   );
 }
+
+export { HoverableContainer };
