@@ -8,6 +8,7 @@ from datetime import timedelta
 from datetime import timezone
 
 from sqlalchemy import and_
+from sqlalchemy import any_
 from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
@@ -16,10 +17,12 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import tuple_
 from sqlalchemy import update
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST
@@ -223,6 +226,88 @@ def get_documents_by_ids(
     stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
     documents = db_session.execute(stmt).scalars().all()
     return list(documents)
+
+
+def _build_document_access_filter(
+    user_email: str | None,
+    external_group_ids: list[str],
+) -> ColumnElement[bool]:
+    access_filters: list[ColumnElement[bool]] = [DbDocument.is_public.is_(True)]
+    if user_email:
+        access_filters.append(any_(DbDocument.external_user_emails) == user_email)
+    if external_group_ids:
+        access_filters.append(
+            DbDocument.external_user_group_ids.overlap(
+                postgresql.array(external_group_ids)
+            )
+        )
+    return or_(*access_filters)
+
+
+def _apply_document_cursor_filter(
+    stmt: Select,
+    cursor_last_modified: datetime | None,
+    cursor_last_synced: datetime | None,
+    cursor_document_id: str | None,
+) -> Select:
+    if not cursor_last_modified or not cursor_document_id:
+        return stmt
+    if cursor_last_synced is None:
+        return stmt.where(
+            or_(
+                DbDocument.last_modified < cursor_last_modified,
+                and_(
+                    DbDocument.last_modified == cursor_last_modified,
+                    DbDocument.last_synced.is_(None),
+                    DbDocument.id < cursor_document_id,
+                ),
+            )
+        )
+    return stmt.where(
+        or_(
+            DbDocument.last_modified < cursor_last_modified,
+            and_(
+                DbDocument.last_modified == cursor_last_modified,
+                or_(
+                    DbDocument.last_synced < cursor_last_synced,
+                    DbDocument.last_synced.is_(None),
+                    and_(
+                        DbDocument.last_synced == cursor_last_synced,
+                        DbDocument.id < cursor_document_id,
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+def get_accessible_documents_for_hierarchy_node_paginated(
+    db_session: Session,
+    parent_hierarchy_node_id: int,
+    user_email: str | None,
+    external_group_ids: list[str],
+    cursor_last_modified: datetime | None,
+    cursor_last_synced: datetime | None,
+    cursor_document_id: str | None,
+    limit: int,
+) -> list[DbDocument]:
+    stmt = select(DbDocument).where(
+        DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
+    )
+    stmt = stmt.where(_build_document_access_filter(user_email, external_group_ids))
+    stmt = _apply_document_cursor_filter(
+        stmt,
+        cursor_last_modified=cursor_last_modified,
+        cursor_last_synced=cursor_last_synced,
+        cursor_document_id=cursor_document_id,
+    )
+    stmt = stmt.order_by(
+        DbDocument.last_modified.desc(),
+        DbDocument.last_synced.desc().nulls_last(),
+        DbDocument.id.desc(),
+    )
+    stmt = stmt.limit(limit)
+    return list(db_session.execute(stmt).scalars().all())
 
 
 def filter_existing_document_ids(

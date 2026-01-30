@@ -85,6 +85,7 @@ from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 logger = setup_logger()
 # TODO: Improve this by using the batch utility: https://googleapis.github.io/google-api-python-client/docs/batch.html
@@ -134,6 +135,31 @@ def _get_parent_id_from_file(drive_file: GoogleDriveFileType) -> str | None:
     if parents and len(parents) > 0:
         return parents[0]  # files have a unique parent
     return None
+
+
+def _is_shared_drive_root(folder: GoogleDriveFileType) -> bool:
+    """
+    Check if a folder is a verified shared drive root.
+
+    For shared drives, we can verify using driveId:
+    - If driveId is set and folder_id == driveId AND no parents, it's the shared drive root
+    - If driveId is set but folder_id != driveId with empty parents, it's a permission issue
+
+    Returns True only for verified shared drive roots.
+    """
+    folder_id = folder.get("id")
+    drive_id = folder.get("driveId")
+    parents = folder.get("parents", [])
+
+    # Must have no parents to be a root
+    if parents:
+        return False
+
+    # For shared drive content, the root has id == driveId
+    if drive_id and folder_id == drive_id:
+        return True
+
+    return False
 
 
 def _public_access() -> ExternalAccess:
@@ -268,6 +294,10 @@ class GoogleDriveConnector(
 
         # ids of folders and shared drives that have been traversed
         self._retrieved_folder_and_drive_ids: set[str] = set()
+
+        # Cache of known My Drive root IDs (user_email -> root_id)
+        # Used to verify if a folder with no parents is actually a My Drive root
+        self._my_drive_root_id_cache: dict[str, str] = {}
 
         self.allow_images = False
 
@@ -414,23 +444,85 @@ class GoogleDriveConnector(
                         user_emails.append(email)
         return user_emails
 
+    def _get_my_drive_root_id(self, user_email: str) -> str | None:
+        """
+        Get the My Drive root folder ID for a user.
+
+        Uses a cache to avoid repeated API calls. Returns None if the user
+        doesn't have access to Drive APIs or the call fails.
+        """
+        if user_email in self._my_drive_root_id_cache:
+            return self._my_drive_root_id_cache[user_email]
+
+        try:
+            drive_service = get_drive_service(self.creds, user_email)
+            root_id = get_root_folder_id(drive_service)
+            self._my_drive_root_id_cache[user_email] = root_id
+            return root_id
+        except Exception:
+            # User might not have access to Drive APIs
+            return None
+
+    def _is_my_drive_root(
+        self, folder: GoogleDriveFileType, retriever_email: str
+    ) -> bool:
+        """
+        Check if a folder is a My Drive root.
+
+        For My Drive folders (no driveId), we verify by comparing the folder ID
+        to the actual My Drive root ID obtained via files().get(fileId='root').
+        """
+        folder_id = folder.get("id")
+        drive_id = folder.get("driveId")
+        parents = folder.get("parents", [])
+
+        # If there are parents, this is not a root
+        if parents:
+            return False
+
+        # If driveId is set, this is shared drive content, not My Drive
+        if drive_id:
+            return False
+
+        # Get the My Drive root ID for this user and compare
+        root_id = self._get_my_drive_root_id(retriever_email)
+        if root_id and folder_id == root_id:
+            return True
+
+        # Also check with admin in case the retriever doesn't have access
+        admin_root_id = self._get_my_drive_root_id(self.primary_admin_email)
+        if admin_root_id and folder_id == admin_root_id:
+            return True
+
+        return False
+
     def _get_new_ancestors_for_files(
         self,
         files: list[RetrievedDriveFile],
-        seen_hierarchy_node_raw_ids: set[str],
+        seen_hierarchy_node_raw_ids: ThreadSafeSet[str],
+        fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str],
         permission_sync_context: PermissionSyncContext | None = None,
     ) -> list[HierarchyNode]:
         """
         Get all NEW ancestor hierarchy nodes for a batch of files.
 
-        For each file, walks up the parent chain until hitting a previously
-        seen node or reaching a root/drive. Returns HierarchyNode objects
-        for all new ancestors.
+        For each file, walks up the parent chain until reaching a root/drive
+        (terminal node with no parent). Returns HierarchyNode objects for all
+        new ancestors.
+
+        The function tracks two separate sets:
+        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (to avoid duplicates)
+        - fully_walked_hierarchy_node_raw_ids: Nodes where we've successfully walked
+          to a terminal root. Only skip walking from a node if it's in this set.
+
+        This separation ensures that if User A can access folder C but not its parent B,
+        a later User B who has access to both can still complete the walk to the root.
 
         Args:
-            service: Google Drive service for fetching folder metadata
             files: List of retrieved drive files to get ancestors for
             seen_hierarchy_node_raw_ids: Set of already-yielded node IDs (modified in place)
+            fully_walked_hierarchy_node_raw_ids: Set of node IDs where the walk to root
+                succeeded (modified in place)
             permission_sync_context: If provided, permissions will be fetched for hierarchy nodes.
                 Contains google_domain and primary_admin_email needed for permission syncing.
 
@@ -450,13 +542,25 @@ class GoogleDriveConnector(
             if not parent_id:
                 continue
 
+            # Only skip if we've already successfully walked from this node to a root.
+            # Don't skip just because it's "seen" - a previous user may have failed
+            # to walk to the root, and this user might have better access.
+            if parent_id in fully_walked_hierarchy_node_raw_ids:
+                continue
+
             # Walk up the parent chain
             ancestors_to_add: list[HierarchyNode] = []
+            node_ids_in_walk: list[str] = []
             current_id: str | None = parent_id
+            reached_terminal = False
 
             while current_id:
-                # Stop if we've already seen this node
-                if current_id in seen_hierarchy_node_raw_ids:
+                node_ids_in_walk.append(current_id)
+
+                # If we hit a node that's already been fully walked, we know
+                # the path from here to root is complete
+                if current_id in fully_walked_hierarchy_node_raw_ids:
+                    reached_terminal = True
                     break
 
                 # Fetch folder metadata
@@ -465,35 +569,58 @@ class GoogleDriveConnector(
                 )
                 if not folder:
                     # Can't access this folder - stop climbing
+                    # Don't mark as fully walked since we didn't reach root
                     break
 
-                # Determine node type based on folder context
                 folder_parent_id = _get_parent_id_from_file(folder)
 
-                # Extract permissions if context provided
-                if permission_sync_context:
-                    external_access = get_external_access_for_folder(
-                        folder, permission_sync_context.google_domain, service
-                    )
-                else:
-                    external_access = _public_access()
+                # Atomically check and add to avoid race conditions where multiple
+                # threads could create duplicate hierarchy nodes for the same folder
+                already_seen = seen_hierarchy_node_raw_ids.check_and_add(current_id)
+                if not already_seen:
+                    if permission_sync_context:
+                        external_access = get_external_access_for_folder(
+                            folder, permission_sync_context.google_domain, service
+                        )
+                    else:
+                        external_access = _public_access()
 
-                # Create hierarchy node for this folder
-                node = HierarchyNode(
-                    raw_node_id=current_id,
-                    raw_parent_id=folder_parent_id,
-                    display_name=folder.get("name", "Unknown Folder"),
-                    link=folder.get("webViewLink"),
-                    node_type=HierarchyNodeType.FOLDER,
-                    external_access=external_access,
-                )
-                ancestors_to_add.append(node)
-                seen_hierarchy_node_raw_ids.add(current_id)
+                    node = HierarchyNode(
+                        raw_node_id=current_id,
+                        raw_parent_id=folder_parent_id,
+                        display_name=folder.get("name", "Unknown Folder"),
+                        link=folder.get("webViewLink"),
+                        node_type=HierarchyNodeType.FOLDER,
+                        external_access=external_access,
+                    )
+                    ancestors_to_add.append(node)
+
+                # Check if this is a verified terminal node (actual root, not just
+                # empty parents due to permission limitations)
+                # Check shared drive root first (simple ID comparison)
+                if _is_shared_drive_root(folder):
+                    reached_terminal = True
+                    break
+
+                # Check if this is a My Drive root (requires API call, but cached)
+                if self._is_my_drive_root(folder, file.user_email):
+                    reached_terminal = True
+                    break
+
+                # If parents is empty but we couldn't verify it's a true root,
+                # stop walking but don't mark as fully walked (another user
+                # with better access might be able to continue)
+                if folder_parent_id is None:
+                    break
 
                 # Move to parent
                 current_id = folder_parent_id
 
-            # Add ancestors. ordering is tricky (need a topo sort if we really care) so let the caller handle it
+            # If we successfully reached a terminal node (or a fully-walked node),
+            # mark all nodes in this walk as fully walked
+            if reached_terminal:
+                fully_walked_hierarchy_node_raw_ids.update(set(node_ids_in_walk))
+
             new_nodes += ancestors_to_add
 
         return new_nodes
@@ -1348,6 +1475,7 @@ class GoogleDriveConnector(
                 new_ancestors = self._get_new_ancestors_for_files(
                     files=files_batch,
                     seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                    fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
                     permission_sync_context=permission_sync_context,
                 )
                 if new_ancestors:
@@ -1508,6 +1636,7 @@ class GoogleDriveConnector(
             new_ancestors = self._get_new_ancestors_for_files(
                 files=files_batch,
                 seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
                 permission_sync_context=permission_sync_context,
             )
 
