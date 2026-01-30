@@ -227,6 +227,10 @@ class ConfluenceConnector(
         (it has at least one child - the page we're currently processing).
 
         This ensures parent nodes are always yielded before child documents.
+
+        Note: raw_node_id for page hierarchy nodes uses the page URL (same as document.id)
+        to enable document<->hierarchy node linking in the indexing pipeline.
+        Space hierarchy nodes use the space key since they don't have documents.
         """
         ancestors = page.get("ancestors", [])
         space_key = page.get("space", {}).get("key")
@@ -244,33 +248,42 @@ class ConfluenceConnector(
             )
 
         # Walk through ancestors (root to immediate parent)
+        # Build a list of (ancestor_url, ancestor_data) pairs first
+        ancestor_urls: list[str | None] = []
+        for ancestor in ancestors:
+            if "_links" in ancestor and "webui" in ancestor["_links"]:
+                ancestor_urls.append(
+                    build_confluence_document_id(
+                        self.wiki_base, ancestor["_links"]["webui"], self.is_cloud
+                    )
+                )
+            else:
+                ancestor_urls.append(None)
+
         for i, ancestor in enumerate(ancestors):
-            ancestor_id = str(ancestor.get("id"))
-            if ancestor_id in self.seen_hierarchy_node_raw_ids:
+            ancestor_url = ancestor_urls[i]
+            if not ancestor_url:
+                # Can't build URL for this ancestor, skip it
                 continue
 
-            self.seen_hierarchy_node_raw_ids.add(ancestor_id)
+            if ancestor_url in self.seen_hierarchy_node_raw_ids:
+                continue
+
+            self.seen_hierarchy_node_raw_ids.add(ancestor_url)
 
             # Determine parent of this ancestor
             if i == 0:
                 # First ancestor - parent is the space
                 parent_raw_id = space_key
             else:
-                # Parent is the previous ancestor
-                parent_raw_id = str(ancestors[i - 1].get("id"))
-
-            # Build link from ancestor's _links
-            ancestor_link = None
-            if "_links" in ancestor and "webui" in ancestor["_links"]:
-                ancestor_link = build_confluence_document_id(
-                    self.wiki_base, ancestor["_links"]["webui"], self.is_cloud
-                )
+                # Parent is the previous ancestor (use URL)
+                parent_raw_id = ancestor_urls[i - 1]
 
             yield HierarchyNode(
-                raw_node_id=ancestor_id,
+                raw_node_id=ancestor_url,  # Use URL to match document.id
                 raw_parent_id=parent_raw_id,
-                display_name=ancestor.get("title", f"Page {ancestor_id}"),
-                link=ancestor_link,
+                display_name=ancestor.get("title", f"Page {ancestor.get('id')}"),
+                link=ancestor_url,
                 node_type=HierarchyNodeType.PAGE,
             )
 
@@ -278,16 +291,25 @@ class ConfluenceConnector(
         """Get the raw hierarchy node ID of this page's parent.
 
         Returns:
-            - Parent page ID if page has a parent page (last item in ancestors)
+            - Parent page URL if page has a parent page (last item in ancestors)
             - Space key if page is at top level of space
             - None if we can't determine
+
+        Note: For pages, we return URLs (to match document.id and hierarchy node raw_node_id).
+        For spaces, we return the space key (spaces don't have documents).
         """
         ancestors = page.get("ancestors", [])
         if ancestors:
-            # Last ancestor is the immediate parent page
-            return str(ancestors[-1].get("id"))
+            # Last ancestor is the immediate parent page - use URL
+            parent = ancestors[-1]
+            if "_links" in parent and "webui" in parent["_links"]:
+                return build_confluence_document_id(
+                    self.wiki_base, parent["_links"]["webui"], self.is_cloud
+                )
+            # Fallback to page ID if URL not available (shouldn't happen normally)
+            return str(parent.get("id"))
 
-        # Top-level page - parent is the space
+        # Top-level page - parent is the space (use space key)
         return page.get("space", {}).get("key")
 
     def _maybe_yield_page_hierarchy_node(
@@ -297,30 +319,32 @@ class ConfluenceConnector(
 
         Used when a page has attachments - attachments are children of the page
         in the hierarchy, so the page must be a hierarchy node.
+
+        Note: raw_node_id uses the page URL (same as document.id) to enable
+        document<->hierarchy node linking in the indexing pipeline.
         """
-        page_id = _get_page_id(page)
-        if page_id in self.seen_hierarchy_node_raw_ids:
+        # Build page URL - we use this as raw_node_id to match document.id
+        if "_links" not in page or "webui" not in page["_links"]:
+            return None  # Can't build URL, skip
+
+        page_url = build_confluence_document_id(
+            self.wiki_base, page["_links"]["webui"], self.is_cloud
+        )
+
+        if page_url in self.seen_hierarchy_node_raw_ids:
             return None
 
-        self.seen_hierarchy_node_raw_ids.add(page_id)
-
-        # Build page link
-        page_link = None
-        if "_links" in page and "webui" in page["_links"]:
-            page_link = build_confluence_document_id(
-                self.wiki_base, page["_links"]["webui"], self.is_cloud
-            )
+        self.seen_hierarchy_node_raw_ids.add(page_url)
 
         # Get parent hierarchy ID
         parent_raw_id = self._get_parent_hierarchy_raw_id(page)
 
         return HierarchyNode(
-            raw_node_id=page_id,
+            raw_node_id=page_url,  # Use URL to match document.id
             raw_parent_id=parent_raw_id,
-            display_name=page.get("title", f"Page {page_id}"),
-            link=page_link,
+            display_name=page.get("title", f"Page {_get_page_id(page)}"),
+            link=page_url,
             node_type=HierarchyNodeType.PAGE,
-            document_id=page_link,  # Page is also a document
         )
 
     @property
@@ -636,7 +660,8 @@ class ConfluenceConnector(
                         ]
 
                     # Attachments have their parent page as the hierarchy parent
-                    attachment_parent_hierarchy_raw_id = _get_page_id(page)
+                    # Use page URL to match the hierarchy node's raw_node_id
+                    attachment_parent_hierarchy_raw_id = page_url
 
                     attachment_doc = Document(
                         id=attachment_id,
