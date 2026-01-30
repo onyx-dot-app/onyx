@@ -4,32 +4,58 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
+import {
+  heightClassmap,
+  Length,
+  widthClassmap,
+} from "@/layouts/general-layouts";
 
-type HoverableVariants = "primary" | "secondary";
-type HoverableContainerVariants = "primary";
+type HoverableVariants = "primary" | "secondary" | "tertiary";
 
 interface HoverableContainerProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
-  variant?: HoverableContainerVariants;
+  border?: boolean;
+  rounded?: string;
+  padding?: number;
+  height?: Length;
+  width?: Length;
   ref?: React.Ref<HTMLDivElement>;
 }
 
 function HoverableContainer({
-  variant = "primary",
+  border,
+  rounded = "rounded-08",
+  padding = 0.5,
+  height = "full",
+  width = "full",
   ref,
   ...props
 }: HoverableContainerProps) {
   // Radix Slot injects className at runtime (bypassing WithoutStyles),
   // so we extract and merge it to preserve "hoverable-container".
-  const { className: slotClassName, ...rest } = props as typeof props & {
+  const {
+    className: slotClassName,
+    style: slotStyle,
+    ...rest
+  } = props as typeof props & {
     className?: string;
+    style?: React.CSSProperties;
   };
   return (
     <div
       ref={ref}
       {...rest}
-      data-variant={variant}
-      className={cn("hoverable-container", slotClassName)}
+      className={cn(
+        border && "border",
+        rounded,
+        widthClassmap[width],
+        heightClassmap[height],
+        slotClassName
+      )}
+      style={{
+        ...slotStyle,
+        padding: `${padding}rem`,
+      }}
     />
   );
 }
@@ -115,14 +141,18 @@ export default function Hoverable({
 }: HoverableProps) {
   const classes = cn(
     "hoverable",
-    !nonInteractive && `hoverable--${variant}`,
+    `hoverable--${variant}`,
+    nonInteractive && "cursor-default",
     group
   );
+  const dataAttrs = nonInteractive
+    ? { "data-non-interactive": "true" as const }
+    : {};
 
   // asChild: merge props onto child element
   if (asChild) {
     return (
-      <Slot ref={ref} className={classes} {...props}>
+      <Slot ref={ref} className={classes} {...dataAttrs} {...props}>
         {children}
       </Slot>
     );
@@ -135,6 +165,7 @@ export default function Hoverable({
         href={href as Route}
         ref={ref as React.Ref<HTMLAnchorElement>}
         className={classes}
+        {...dataAttrs}
         {...props}
       >
         {children}
@@ -148,6 +179,7 @@ export default function Hoverable({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       className={classes}
+      {...dataAttrs}
       {...props}
     >
       {children}

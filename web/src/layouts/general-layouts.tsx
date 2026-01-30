@@ -26,12 +26,12 @@ const alignClassMap: Record<AlignItems, string> = {
   end: "items-end",
   stretch: "items-stretch",
 };
-const widthClassmap: Record<Length, string> = {
+export const widthClassmap: Record<Length, string> = {
   auto: "w-auto flex-shrink-0",
   fit: "w-fit flex-shrink-0",
   full: "w-full",
 };
-const heightClassmap: Record<Length, string> = {
+export const heightClassmap: Record<Length, string> = {
   auto: "h-auto",
   fit: "h-fit",
   full: "h-full",

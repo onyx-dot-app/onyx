@@ -71,9 +71,29 @@ export default function Card({
   ref,
   ...props
 }: CardProps) {
+  const dataProps: Record<string, unknown> = {};
+  const sectionProps: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (key.startsWith("data-")) {
+      dataProps[key] = value;
+    } else {
+      sectionProps[key] = value;
+    }
+  }
+
   return (
-    <div ref={ref} className={cn("card", className)} data-variant={variant}>
-      <Section alignItems="start" padding={padding} height="fit" {...props} />
+    <div
+      ref={ref}
+      className={cn("card", className)}
+      data-variant={variant}
+      {...dataProps}
+    >
+      <Section
+        alignItems="start"
+        padding={padding}
+        height="fit"
+        {...sectionProps}
+      />
     </div>
   );
 }
