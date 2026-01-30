@@ -15,6 +15,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
@@ -23,6 +24,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
+from onyx.db.document import filter_accessible_documents
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentSet
@@ -919,14 +921,21 @@ def upsert_persona(
         if not hierarchy_nodes and hierarchy_node_ids:
             raise ValueError("hierarchy_nodes not found")
 
-    # Fetch and attach documents by IDs
+    # Fetch and attach documents by IDs, filtering for access permissions
     attached_documents = None
     if document_ids is not None:
-        attached_documents = (
-            db_session.query(Document).filter(Document.id.in_(document_ids)).all()
+        user_email = user.email if user else None
+        external_group_ids = (
+            get_user_external_group_ids(db_session, user) if user else []
+        )
+        attached_documents = filter_accessible_documents(
+            db_session=db_session,
+            document_ids=document_ids,
+            user_email=user_email,
+            external_group_ids=external_group_ids,
         )
         if not attached_documents and document_ids:
-            raise ValueError("documents not found")
+            raise ValueError("documents not found or not accessible")
 
     # ensure all specified tools are valid
     if tools:

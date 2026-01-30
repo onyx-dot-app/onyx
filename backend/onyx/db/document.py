@@ -356,6 +356,40 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     return list(db_session.execute(stmt).scalars().all())
 
 
+def filter_accessible_documents(
+    db_session: Session,
+    document_ids: list[str],
+    user_email: str | None,
+    external_group_ids: list[str],
+) -> list[DbDocument]:
+    """
+    Filter a list of document IDs and return only those the user has access to.
+
+    Uses the same access filtering logic as other document queries:
+    - Documents from PUBLIC connectors
+    - Documents marked as public (e.g., "Anyone with link")
+    - Documents where user email matches external_user_emails
+    - Documents where user's groups overlap with external_user_group_ids
+
+    Args:
+        db_session: Database session
+        document_ids: List of document IDs to filter
+        user_email: User's email for permission checking
+        external_group_ids: List of external group IDs the user belongs to
+
+    Returns:
+        List of Document objects from the input that the user has access to
+    """
+    if not document_ids:
+        return []
+
+    stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
+    stmt = _apply_document_access_filter(stmt, user_email, external_group_ids)
+    # Use distinct to avoid duplicates when a document belongs to multiple cc_pairs
+    stmt = stmt.distinct()
+    return list(db_session.execute(stmt).scalars().all())
+
+
 def filter_existing_document_ids(
     db_session: Session,
     document_ids: list[str],

@@ -3,7 +3,7 @@ import {
   HierarchyNodesResponse,
   HierarchyNodeDocumentsRequest,
   HierarchyNodeDocumentsResponse,
-} from "./types";
+} from "./interfaces";
 
 const HIERARCHY_NODES_PREFIX = "/api/hierarchy-nodes";
 

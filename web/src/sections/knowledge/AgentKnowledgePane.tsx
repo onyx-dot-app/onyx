@@ -40,11 +40,11 @@ import {
   HierarchyNodeSummary,
   DocumentSummary,
   DocumentPageCursor,
-} from "@/lib/hierarchy/types";
+} from "@/lib/hierarchy/interfaces";
 import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
-} from "@/lib/hierarchy/api";
+} from "@/lib/hierarchy/svc";
 import { ProjectFile } from "@/app/app/projects/projectsService";
 import { AttachedDocumentSnapshot } from "@/app/admin/assistants/interfaces";
 import { timeAgo } from "@/lib/time";
