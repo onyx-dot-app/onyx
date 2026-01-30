@@ -32,11 +32,6 @@ export interface FrostedDivProps extends React.HTMLAttributes<HTMLDivElement> {
    * Additional classes for the frost overlay element itself
    */
   overlayClassName?: string;
-
-  /**
-   * Disable the frost effect entirely
-   */
-  disabled?: boolean;
 }
 
 /**
@@ -65,30 +60,29 @@ export default function FrostedDiv({
   backdropBlur = "6px",
   borderRadius = "1rem",
   overlayClassName,
-  disabled = false,
   className,
   style,
   children,
   ...props
 }: FrostedDivProps) {
   return (
-    <div className={cn("relative", className)} style={style} {...props}>
-      {/* Frost effect overlay */}
-      {!disabled && (
-        <div
-          className={cn(
-            "absolute inset-0 pointer-events-none -z-10",
-            overlayClassName
-          )}
-          style={{
-            borderRadius,
-            background: backgroundColor,
-            filter: `blur(${blur})`,
-            backdropFilter: `blur(${backdropBlur})`,
-          }}
-        />
-      )}
-      {children}
+    <div className="relative">
+      {/* Frost effect overlay - positioned behind content with bloom extending outward */}
+      <div
+        className={cn("absolute pointer-events-none", overlayClassName)}
+        style={{
+          // Extend beyond bounds to allow blur to bloom outward
+          inset: `-${blur}`,
+          borderRadius,
+          background: backgroundColor,
+          filter: `blur(${blur})`,
+          backdropFilter: `blur(${backdropBlur})`,
+        }}
+      />
+      {/* Content rendered above the frost effect */}
+      <div className={cn("relative", className)} style={style} {...props}>
+        {children}
+      </div>
     </div>
   );
 }

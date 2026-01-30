@@ -711,7 +711,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <>
                   {/* Header positioned outside scroll container to avoid mask effect */}
                   <div className="absolute top-0 left-0 right-0 z-sticky">
-                    <AppHeader hasBackground={hasBackground} />
+                    <AppHeader />
                   </div>
                   <ChatScrollContainer
                     ref={scrollContainerRef}

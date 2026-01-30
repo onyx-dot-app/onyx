@@ -35,11 +35,6 @@ import {
 } from "@opal/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 
-export interface AppHeaderProps {
-  /** Whether a custom background is set - enables frost effect */
-  hasBackground?: boolean;
-}
-
 /**
  * Chat Header Component
  *
@@ -53,7 +48,7 @@ export interface AppHeaderProps {
  * - Mobile-responsive sidebar toggle
  * - Custom header content from enterprise settings
  */
-export default function AppHeader({ hasBackground = false }: AppHeaderProps) {
+export default function AppHeader() {
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -295,10 +290,7 @@ export default function AppHeader({ hasBackground = false }: AppHeaderProps) {
 
         {/* Right - contains the share and more-options buttons */}
         <div className="flex flex-1 z-sticky justify-end">
-          <FrostedDiv
-            className="flex shrink flex-row items-center"
-            disabled={!hasBackground}
-          >
+          <FrostedDiv className="flex shrink flex-row items-center">
             <Button
               leftIcon={SvgShare}
               transient={showShareModal}
