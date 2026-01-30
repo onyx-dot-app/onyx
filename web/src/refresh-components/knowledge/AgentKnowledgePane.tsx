@@ -24,7 +24,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources, DocumentSetSummary } from "@/lib/types";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ConnectedSource } from "@/lib/hierarchy/types";
-import { ProjectFile } from "@/app/chat/projects/projectsService";
+import { ProjectFile } from "@/app/app/projects/projectsService";
 import Spacer from "@/refresh-components/Spacer";
 
 // Knowledge pane view states
