@@ -1168,7 +1168,7 @@ export default function Page() {
                         alt: `${label} logo`,
                         fallback:
                           provider.provider_type === "onyx_web_crawler" ? (
-                            <SvgOnyxLogo width={16} height={16} />
+                            <SvgOnyxLogo size={16} />
                           ) : undefined,
                         size: 16,
                         isHighlighted: isCurrentCrawler,
@@ -1381,7 +1381,7 @@ export default function Page() {
           } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
-              <SvgOnyxLogo width={24} height={24} className="text-text-05" />
+              <SvgOnyxLogo size={24} className="text-text-05" />
             ) : undefined,
           size: 24,
           containerSize: 28,
