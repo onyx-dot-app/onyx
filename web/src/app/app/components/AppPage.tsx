@@ -73,10 +73,7 @@ import AppHeader from "@/app/app/components/AppHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -576,11 +573,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     );
   }
 
-  // Chat background logic
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+  // Chat background from context
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
 
   if (!isReady) return <OnyxInitializingLoader />;
 
@@ -653,7 +647,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               )}
               style={
                 hasBackground
-                  ? { backgroundImage: `url(${chatBackground.url})` }
+                  ? { backgroundImage: `url(${appBackgroundUrl})` }
                   : undefined
               }
               {...getRootProps({ tabIndex: -1 })}
@@ -681,7 +675,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
                   onScrollButtonVisibilityChange={setShowScrollButton}
-                  disableFadeOverlay={hasBackground}
                 >
                   <AppLayouts.StickyHeader>
                     <AppHeader />

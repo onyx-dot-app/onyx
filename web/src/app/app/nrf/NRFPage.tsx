@@ -45,10 +45,7 @@ import {
   SvgExternalLink,
   SvgAlertTriangle,
 } from "@opal/icons";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import TextView from "@/components/chat/TextView";
@@ -158,11 +155,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     }
   }, []);
 
-  // Chat background - shared with ChatPage
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+  // Chat background from context
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
@@ -316,7 +310,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
       style={
         !isSidePanel && hasBackground
-          ? { backgroundImage: `url(${chatBackground.url})` }
+          ? { backgroundImage: `url(${appBackgroundUrl})` }
           : undefined
       }
     >
@@ -372,7 +366,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
-                  disableFadeOverlay={!isSidePanel}
                 >
                   <MessageList
                     liveAssistant={resolvedAssistant}

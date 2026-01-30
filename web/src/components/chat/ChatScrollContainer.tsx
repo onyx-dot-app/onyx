@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
@@ -45,9 +46,6 @@ export interface ChatScrollContainerProps {
 
   /** Session ID - resets scroll state when changed */
   sessionId?: string;
-
-  /** Disable fade overlays (e.g., when a background image is set) */
-  disableFadeOverlay?: boolean;
 }
 
 const FadeOverlay = React.memo(
@@ -81,10 +79,10 @@ const ChatScrollContainer = React.memo(
         isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
-        disableFadeOverlay = false,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
+      const { hasBackground } = useAppBackground();
       const anchorOffsetPx = DEFAULT_ANCHOR_OFFSET_PX;
       const fadeThresholdPx = DEFAULT_FADE_THRESHOLD_PX;
       const buttonThresholdPx = DEFAULT_BUTTON_THRESHOLD_PX;
@@ -341,11 +339,11 @@ const ChatScrollContainer = React.memo(
       return (
         <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-[7.5rem]">
           <FadeOverlay
-            show={!disableFadeOverlay && hasContentAbove}
+            show={!hasBackground && hasContentAbove}
             position="top"
           />
           <FadeOverlay
-            show={!disableFadeOverlay && hasContentBelow}
+            show={!hasBackground && hasContentBelow}
             position="bottom"
           />
 
