@@ -33,8 +33,13 @@ function HoverableContainer({
 }: HoverableContainerProps) {
   // Radix Slot injects className at runtime (bypassing WithoutStyles),
   // so we extract and merge it to preserve "hoverable-container".
-  const { className: slotClassName, ...rest } = props as typeof props & {
+  const {
+    className: slotClassName,
+    style: slotStyle,
+    ...rest
+  } = props as typeof props & {
     className?: string;
+    style?: React.CSSProperties;
   };
   return (
     <div
@@ -48,6 +53,7 @@ function HoverableContainer({
         slotClassName
       )}
       style={{
+        ...slotStyle,
         padding: `${padding}rem`,
       }}
     />
