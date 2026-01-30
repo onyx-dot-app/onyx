@@ -709,8 +709,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {/* ChatUI */}
               {!!currentChatSessionId && liveAssistant && (
                 <>
+                  {/* Header positioned outside scroll container to avoid mask effect */}
                   <div className="absolute top-0 left-0 right-0 z-sticky">
-                    <AppHeader />
+                    <AppHeader hasBackground={hasBackground} />
                   </div>
                   <ChatScrollContainer
                     ref={scrollContainerRef}
