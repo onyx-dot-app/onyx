@@ -27,7 +27,7 @@ import { parseLlmDescriptor } from "./llm/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import {
   MinimalPersonaSnapshot,
   PersonaLabel,

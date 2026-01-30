@@ -47,7 +47,7 @@
  * scattered across multiple directories:
  * - `@/providers/UserProvider`
  * - `@/components/chat/ProviderContext`
- * - `@/components/settings/SettingsProvider`
+ * - `@/providers/SettingsProvider`
  * - `@/components/context/ModalContext`
  * - `@/providers/AppSidebarProvider`
  *
@@ -60,7 +60,7 @@
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
-import { SettingsProvider } from "@/components/settings/SettingsProvider";
+import { SettingsProvider } from "@/providers/SettingsProvider";
 import { User } from "@/lib/types";
 import { ModalProvider } from "@/components/context/ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
