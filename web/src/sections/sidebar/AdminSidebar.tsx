@@ -12,6 +12,11 @@ import { useUser } from "@/components/user/UserProvider";
 import { UserRole } from "@/lib/types";
 import { MdOutlineCreditCard } from "react-icons/md";
 import {
+  useBillingInformation,
+  useLicense,
+  hasActiveSubscription,
+} from "@/lib/billing";
+import {
   ClipboardIcon,
   NotebookIconSkeleton,
   SlackIconSkeleton,
@@ -135,7 +140,8 @@ const collections = (
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
   kgExposed: boolean,
-  customAnalyticsEnabled: boolean
+  customAnalyticsEnabled: boolean,
+  hasSubscription: boolean
 ) => [
   {
     name: "Connectors",
@@ -292,10 +298,10 @@ const collections = (
                   },
                 ]
               : []),
-            ...(enableCloud
+            ...(enableCloud || enableEnterprise
               ? [
                   {
-                    name: "Billing",
+                    name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
                     icon: MdOutlineCreditCard,
                     link: "/admin/billing",
                   },
@@ -328,9 +334,18 @@ export default function AdminSidebar({
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
+  const { data: billingData } = useBillingInformation();
+  const { data: licenseData } = useLicense();
 
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
+
+  // Check if user has an active subscription or license for billing link text
+  // Show "Plans & Billing" if they have either (even if Stripe connection fails)
+  const hasSubscription = Boolean(
+    (billingData && hasActiveSubscription(billingData)) ||
+      licenseData?.has_license
+  );
 
   const items = collections(
     isCurator,
@@ -338,7 +353,8 @@ export default function AdminSidebar({
     enableEnterpriseSS,
     settings,
     kgExposed,
-    customAnalyticsEnabled
+    customAnalyticsEnabled,
+    hasSubscription
   );
 
   return (

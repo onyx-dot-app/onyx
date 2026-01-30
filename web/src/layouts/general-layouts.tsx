@@ -137,7 +137,10 @@ function Section({
         wrap && "flex-wrap",
         dbg && "dbg-red"
       )}
-      style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
+      style={{
+        gap: `${gap}rem`,
+        padding: `${padding}rem`,
+      }}
       {...rest}
     />
   );
