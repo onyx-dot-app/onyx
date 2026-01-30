@@ -115,11 +115,17 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
     <ExpandableCard.Root>
-      <ActionsLayouts.Header
-        title={tool.display_name || tool.name}
-        description={tool.description}
-        icon={SvgActions}
-      />
+      <ExpandableCard.Header>
+        <div className="p-2">
+          <LineItemLayout
+            icon={SvgActions}
+            title={tool.display_name}
+            description={tool.description}
+            variant="secondary"
+            center
+          />
+        </div>
+      </ExpandableCard.Header>
     </ExpandableCard.Root>
   );
 }
