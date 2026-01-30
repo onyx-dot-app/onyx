@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback, memo } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -502,7 +502,7 @@ interface KnowledgeTwoColumnViewProps {
   hasProcessingFiles: boolean;
 }
 
-function KnowledgeTwoColumnView({
+const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   activeView,
   activeSource,
   connectedSources,
@@ -561,7 +561,7 @@ function KnowledgeTwoColumnView({
       </TableLayouts.ContentColumn>
     </TableLayouts.TwoColumnLayout>
   );
-}
+});
 
 // ============================================================================
 // KNOWLEDGE ADD VIEW - Initial pill selection view
@@ -577,7 +577,7 @@ interface KnowledgeAddViewProps {
   selectedSources: ValidSources[];
 }
 
-function KnowledgeAddView({
+const KnowledgeAddView = memo(function KnowledgeAddView({
   connectedSources,
   onNavigateToDocumentSets,
   onNavigateToRecent,
@@ -637,7 +637,7 @@ function KnowledgeAddView({
       )}
     </GeneralLayouts.Section>
   );
-}
+});
 
 // ============================================================================
 // KNOWLEDGE MAIN CONTENT - Empty state and preview
@@ -657,7 +657,7 @@ interface KnowledgeMainContentProps {
   onFileClick?: (file: ProjectFile) => void;
 }
 
-function KnowledgeMainContent({
+const KnowledgeMainContent = memo(function KnowledgeMainContent({
   enableKnowledge,
   hasAnyKnowledge,
   selectedDocumentSetIds,
@@ -712,7 +712,7 @@ function KnowledgeMainContent({
       </Button>
     </GeneralLayouts.Section>
   );
-}
+});
 
 // ============================================================================
 // MAIN COMPONENT - AgentKnowledgePane
@@ -771,40 +771,52 @@ export default function AgentKnowledgePane({
     selectedFileIds.length > 0 ||
     selectedSources.length > 0;
 
-  // Navigation handlers
-  const handleNavigateToAdd = () => setView("add");
-  const handleNavigateToMain = () => setView("main");
-  const handleNavigateToDocumentSets = () => setView("document-sets");
-  const handleNavigateToRecent = () => setView("recent");
-  const handleNavigateToSource = (source: ValidSources) => {
+  // Navigation handlers - memoized to prevent unnecessary re-renders
+  const handleNavigateToAdd = useCallback(() => setView("add"), []);
+  const handleNavigateToMain = useCallback(() => setView("main"), []);
+  const handleNavigateToDocumentSets = useCallback(
+    () => setView("document-sets"),
+    []
+  );
+  const handleNavigateToRecent = useCallback(() => setView("recent"), []);
+  const handleNavigateToSource = useCallback((source: ValidSources) => {
     setActiveSource(source);
     setView("sources");
-  };
+  }, []);
 
-  // Toggle handlers
-  const handleDocumentSetToggle = (documentSetId: number) => {
-    const newIds = selectedDocumentSetIds.includes(documentSetId)
-      ? selectedDocumentSetIds.filter((id) => id !== documentSetId)
-      : [...selectedDocumentSetIds, documentSetId];
-    onDocumentSetIdsChange(newIds);
-  };
+  // Toggle handlers - memoized to prevent unnecessary re-renders
+  const handleDocumentSetToggle = useCallback(
+    (documentSetId: number) => {
+      const newIds = selectedDocumentSetIds.includes(documentSetId)
+        ? selectedDocumentSetIds.filter((id) => id !== documentSetId)
+        : [...selectedDocumentSetIds, documentSetId];
+      onDocumentSetIdsChange(newIds);
+    },
+    [selectedDocumentSetIds, onDocumentSetIdsChange]
+  );
 
-  const handleSourceToggle = (source: ValidSources) => {
-    const newSources = selectedSources.includes(source)
-      ? selectedSources.filter((s) => s !== source)
-      : [...selectedSources, source];
-    onSourcesChange(newSources);
-  };
+  const handleSourceToggle = useCallback(
+    (source: ValidSources) => {
+      const newSources = selectedSources.includes(source)
+        ? selectedSources.filter((s) => s !== source)
+        : [...selectedSources, source];
+      onSourcesChange(newSources);
+    },
+    [selectedSources, onSourcesChange]
+  );
 
-  const handleFileToggle = (fileId: string) => {
-    const newIds = selectedFileIds.includes(fileId)
-      ? selectedFileIds.filter((id) => id !== fileId)
-      : [...selectedFileIds, fileId];
-    onFileIdsChange(newIds);
-  };
+  const handleFileToggle = useCallback(
+    (fileId: string) => {
+      const newIds = selectedFileIds.includes(fileId)
+        ? selectedFileIds.filter((id) => id !== fileId)
+        : [...selectedFileIds, fileId];
+      onFileIdsChange(newIds);
+    },
+    [selectedFileIds, onFileIdsChange]
+  );
 
-  // Render content based on view
-  const renderContent = () => {
+  // Memoized content based on view - prevents unnecessary re-renders
+  const renderedContent = useMemo(() => {
     switch (view) {
       case "main":
         return (
@@ -863,7 +875,28 @@ export default function AgentKnowledgePane({
       default:
         return null;
     }
-  };
+  }, [
+    view,
+    activeSource,
+    enableKnowledge,
+    hasAnyKnowledge,
+    selectedDocumentSetIds,
+    selectedFileIds,
+    selectedSources,
+    documentSets,
+    allRecentFiles,
+    connectedSources,
+    hasProcessingFiles,
+    onFileClick,
+    onUploadChange,
+    handleNavigateToAdd,
+    handleNavigateToDocumentSets,
+    handleNavigateToRecent,
+    handleNavigateToSource,
+    handleDocumentSetToggle,
+    handleSourceToggle,
+    handleFileToggle,
+  ]);
 
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
@@ -884,7 +917,7 @@ export default function AgentKnowledgePane({
             />
           </InputLayouts.Horizontal>
 
-          {renderContent()}
+          {renderedContent}
         </GeneralLayouts.Section>
       </Card>
     </GeneralLayouts.Section>
