@@ -122,6 +122,38 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
         provider_view.custom_config = masked_config
 
 
+def _validate_llm_provider_change(
+    existing_api_base: str | None,
+    existing_custom_config: dict[str, str] | None,
+    new_api_base: str | None,
+    new_custom_config: dict[str, str] | None,
+    api_key_changed: bool,
+) -> None:
+    """Validate that api_base and custom_config changes are safe.
+
+    When using a stored API key (api_key_changed=False), we must ensure api_base and
+    custom_config match the stored values.
+
+    Only enforced in MULTI_TENANT mode.
+
+    Raises:
+        HTTPException: If api_base or custom_config changed without changing API key
+    """
+    if not MULTI_TENANT or api_key_changed:
+        return
+
+    api_base_changed = new_api_base != existing_api_base
+    custom_config_changed = (
+        new_custom_config and new_custom_config != existing_custom_config
+    )
+
+    if api_base_changed or custom_config_changed:
+        raise HTTPException(
+            status_code=400,
+            detail="API base and/or custom config cannot be changed without changing the API key",
+        )
+
+
 @admin_router.get("/built-in/options")
 def fetch_llm_options(
     _: User = Depends(current_admin_user),
@@ -161,6 +193,13 @@ def test_llm_configuration(
         )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
+            _validate_llm_provider_change(
+                existing_api_base=existing_provider.api_base,
+                existing_custom_config=existing_provider.custom_config,
+                new_api_base=test_llm_request.api_base,
+                new_custom_config=test_llm_request.custom_config,
+                api_key_changed=False,
+            )
             test_api_key = existing_provider.api_key
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
@@ -256,24 +295,15 @@ def put_llm_provider(
             status_code=400,
             detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
         )
-    if (
-        MULTI_TENANT
-        and existing_provider
-        and (
-            (llm_provider_upsert_request.api_base != existing_provider.api_base)
-            or (
-                llm_provider_upsert_request.custom_config
-                and (
-                    llm_provider_upsert_request.custom_config
-                    != existing_provider.custom_config
-                )
-            )
-        )
-        and not llm_provider_upsert_request.api_key_changed
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="API base and/or custom config cannot be changed without changing the API key",
+
+    # SSRF Protection: Validate api_base and custom_config match stored values
+    if existing_provider:
+        _validate_llm_provider_change(
+            existing_api_base=existing_provider.api_base,
+            existing_custom_config=existing_provider.custom_config,
+            new_api_base=llm_provider_upsert_request.api_base,
+            new_custom_config=llm_provider_upsert_request.custom_config,
+            api_key_changed=llm_provider_upsert_request.api_key_changed,
         )
 
     persona_ids = llm_provider_upsert_request.personas
