@@ -55,17 +55,15 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     """
     doc_batch_generator = notion_connector.poll_source(0, time.time())
 
-    # Get first batch of documents and hierarchy nodes
-    doc_batch = next(doc_batch_generator)
-
-    # Separate documents and hierarchy nodes
+    # Collect all documents and hierarchy nodes from all batches
     documents: list[Document] = []
     hierarchy_nodes: list[HierarchyNode] = []
-    for item in doc_batch:
-        if isinstance(item, HierarchyNode):
-            hierarchy_nodes.append(item)
-        else:
-            documents.append(item)
+    for doc_batch in doc_batch_generator:
+        for item in doc_batch:
+            if isinstance(item, HierarchyNode):
+                hierarchy_nodes.append(item)
+            else:
+                documents.append(item)
 
     # Verify document count
     assert (
