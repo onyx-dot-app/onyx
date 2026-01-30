@@ -74,14 +74,14 @@
     "lucide-react": "^0.454.0",
     "mdast-util-find-and-replace": "^3.0.1",
     "motion": "^12.29.0",
-    "next": "^16.1.5",
+    "next": "16.1.6",
     "next-themes": "^0.4.4",
     "postcss": "^8.5.6",
     "posthog-js": "^1.176.0",
-    "react": "^19.2.1",
+    "react": "19.2.4",
     "react-datepicker": "^7.6.0",
     "react-day-picker": "^9.13.0",
-    "react-dom": "^19.2.1",
+    "react-dom": "19.2.4",
     "react-dropzone": "^14.2.3",
     "react-icons": "^4.8.0",
     "react-loader-spinner": "^8.0.0",
@@ -118,8 +118,8 @@
     "@types/js-cookie": "^3.0.6",
     "@types/lodash": "^4.17.20",
     "@types/node": "18.15.11",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
+    "@types/react": "19.2.10",
+    "@types/react-dom": "19.2.3",
     "@types/stats.js": "^0.17.4",
     "@types/uuid": "^9.0.8",
     "@typescript/native-preview": "7.0.0-dev.20251222.1",
@@ -127,7 +127,7 @@
     "baseline-browser-mapping": "^2.9.19",
     "chromatic": "^11.25.2",
     "eslint": "^9.39.1",
-    "eslint-config-next": "^16.0.1",
+    "eslint-config-next": "16.1.6",
     "eslint-plugin-unused-imports": "^4.1.4",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^29.7.0",
@@ -142,7 +142,7 @@
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2"
+    "@types/react": "19.2.10",
+    "@types/react-dom": "19.2.3"
   }
 }
