@@ -79,9 +79,6 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
-export const NEXT_PUBLIC_ENABLE_CHROME_EXTENSION =
-  process.env.NEXT_PUBLIC_ENABLE_CHROME_EXTENSION?.toLowerCase() === "true";
-
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
