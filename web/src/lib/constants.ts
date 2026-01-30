@@ -39,12 +39,6 @@ export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
 
-// Default sidebar open is true if the environment variable is not set
-export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
-  process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "false"
-    ? false
-    : true;
-
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
 /* Enterprise-only settings */
