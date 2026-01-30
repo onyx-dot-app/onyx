@@ -402,7 +402,15 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
             flexDirection="row"
             justifyContent="between"
           >
-            <Icon className="stroke-text-04" size={24} />
+            {/*
+              The `h-[1.5rem]` and `w-[1.5rem]` were added as backups here.
+              However, prop-resolution technically resolves to choosing classNames over size props, so technically the `size={24}` is the backup.
+              We specify both to be safe.
+
+              # Note
+              1.5rem === 24px
+            */}
+            <Icon className="stroke-text-04 h-[1.5rem] w-[1.5rem]" size={24} />
             {onClose && (
               <div
                 tabIndex={-1}
