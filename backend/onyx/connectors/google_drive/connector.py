@@ -297,7 +297,8 @@ class GoogleDriveConnector(
 
         # Cache of known My Drive root IDs (user_email -> root_id)
         # Used to verify if a folder with no parents is actually a My Drive root
-        self._my_drive_root_id_cache: dict[str, str] = {}
+        # Thread-safe because multiple impersonation threads access this concurrently
+        self._my_drive_root_id_cache: ThreadSafeDict[str, str] = ThreadSafeDict()
 
         self.allow_images = False
 
@@ -574,25 +575,35 @@ class GoogleDriveConnector(
 
                 folder_parent_id = _get_parent_id_from_file(folder)
 
-                # Atomically check and add to avoid race conditions where multiple
-                # threads could create duplicate hierarchy nodes for the same folder
+                # Create the node BEFORE marking as seen to avoid a race condition where:
+                # 1. Thread A marks node as "seen"
+                # 2. Thread A fails to create node (e.g., API error in get_external_access)
+                # 3. Thread B sees node as "already seen" and skips it
+                # 4. Result: node is never yielded
+                #
+                # By creating first and then atomically checking/marking, we ensure that
+                # if creation fails, another thread can still try. If both succeed,
+                # only one will add to ancestors_to_add (the one that wins check_and_add).
+                if permission_sync_context:
+                    external_access = get_external_access_for_folder(
+                        folder, permission_sync_context.google_domain, service
+                    )
+                else:
+                    external_access = _public_access()
+
+                node = HierarchyNode(
+                    raw_node_id=current_id,
+                    raw_parent_id=folder_parent_id,
+                    display_name=folder.get("name", "Unknown Folder"),
+                    link=folder.get("webViewLink"),
+                    node_type=HierarchyNodeType.FOLDER,
+                    external_access=external_access,
+                )
+
+                # Now atomically check and add - only append if we're the first thread
+                # to successfully create this node
                 already_seen = seen_hierarchy_node_raw_ids.check_and_add(current_id)
                 if not already_seen:
-                    if permission_sync_context:
-                        external_access = get_external_access_for_folder(
-                            folder, permission_sync_context.google_domain, service
-                        )
-                    else:
-                        external_access = _public_access()
-
-                    node = HierarchyNode(
-                        raw_node_id=current_id,
-                        raw_parent_id=folder_parent_id,
-                        display_name=folder.get("name", "Unknown Folder"),
-                        link=folder.get("webViewLink"),
-                        node_type=HierarchyNodeType.FOLDER,
-                        external_access=external_access,
-                    )
                     ancestors_to_add.append(node)
 
                 # Check if this is a verified terminal node (actual root, not just
