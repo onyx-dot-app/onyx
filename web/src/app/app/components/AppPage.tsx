@@ -674,10 +674,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {/* Semi-transparent overlay for readability when background is set */}
               {!!currentChatSessionId && liveAssistant && hasBackground && (
                 <>
-                  {/* TODO: See if `@container` is helping or I'm just getting lucky */}
-                  <div className="@container absolute z-0 inset-0 backdrop-blur-[1px] pointer-events-none" />
+                  <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
                   <div
-                    className="@container absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                    className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
                     style={{
                       maskImage: `linear-gradient(
                         to right,
@@ -695,7 +694,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       )`,
                     }}
                   />
-                  <div className="@container absolute z-0 inset-0 backdrop-blur-[1px] pointer-events-none" />
                 </>
               )}
 
