@@ -3013,7 +3013,6 @@ class Persona(Base):
     # Allows the persona to specify a specific default LLM model
     # NOTE: only is applied on the actual response generation - is not used for things like
     # auto-detected time filters, relevance filters, etc.
-    # llm_model_provider_override is deprecated and will be removed in a future release
     llm_model_provider_override: Mapped[str | None] = mapped_column(
         String, nullable=True
     )
