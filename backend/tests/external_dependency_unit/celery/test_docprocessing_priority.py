@@ -156,8 +156,12 @@ class TestDocprocessingPriorityInDocumentExtraction:
     @patch("onyx.background.indexing.run_docfetching.get_redis_client")
     @patch("onyx.background.indexing.run_docfetching.ensure_source_node_exists")
     @patch("onyx.background.indexing.run_docfetching.get_source_node_id_from_cache")
+    @patch("onyx.background.indexing.run_docfetching.get_node_id_from_raw_id")
+    @patch("onyx.background.indexing.run_docfetching.cache_hierarchy_nodes_batch")
     def test_docprocessing_priority_based_on_last_successful_index_time(
         self,
+        mock_cache_hierarchy_nodes_batch: MagicMock,
+        mock_get_node_id_from_raw_id: MagicMock,
         mock_get_source_node_id_from_cache: MagicMock,
         mock_ensure_source_node_exists: MagicMock,
         mock_get_redis_client: MagicMock,
@@ -217,12 +221,23 @@ class TestDocprocessingPriorityInDocumentExtraction:
         mock_memory_tracer_class.return_value = mock_memory_tracer
 
         # Mock Redis-related functions (not the focus of this test)
+        # Configure mock Redis client to return None for common operations
+        # as a safety net in case any patches don't work as expected
         mock_redis_client = MagicMock()
+        mock_redis_client.get.return_value = None
+        mock_redis_client.hget.return_value = None
+        mock_redis_client.hset.return_value = None
+        mock_redis_client.exists.return_value = 0
+        mock_redis_client.expire.return_value = True
         mock_get_redis_client.return_value = mock_redis_client
+
+        # Mock hierarchy/cache functions
         mock_ensure_source_node_exists.return_value = 1  # Return a valid node ID
         mock_get_source_node_id_from_cache.return_value = (
             1  # Return a valid source node ID
         )
+        mock_get_node_id_from_raw_id.return_value = (None, False)  # (node_id, found)
+        # cache_hierarchy_nodes_batch doesn't need a return value (returns None)
 
         # Create checkpoint mocks - initial checkpoint has_more=True, final has_more=False
         mock_initial_checkpoint = MagicMock(has_more=True)
