@@ -155,8 +155,10 @@ class TestDocprocessingPriorityInDocumentExtraction:
     @patch("onyx.background.indexing.run_docfetching.get_latest_valid_checkpoint")
     @patch("onyx.background.indexing.run_docfetching.get_redis_client")
     @patch("onyx.background.indexing.run_docfetching.ensure_source_node_exists")
+    @patch("onyx.background.indexing.run_docfetching.get_source_node_id_from_cache")
     def test_docprocessing_priority_based_on_last_successful_index_time(
         self,
+        mock_get_source_node_id_from_cache: MagicMock,
         mock_ensure_source_node_exists: MagicMock,
         mock_get_redis_client: MagicMock,
         mock_get_latest_valid_checkpoint: MagicMock,
@@ -218,6 +220,9 @@ class TestDocprocessingPriorityInDocumentExtraction:
         mock_redis_client = MagicMock()
         mock_get_redis_client.return_value = mock_redis_client
         mock_ensure_source_node_exists.return_value = 1  # Return a valid node ID
+        mock_get_source_node_id_from_cache.return_value = (
+            1  # Return a valid source node ID
+        )
 
         # Create checkpoint mocks - initial checkpoint has_more=True, final has_more=False
         mock_initial_checkpoint = MagicMock(has_more=True)
