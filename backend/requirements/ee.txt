@@ -22,6 +22,8 @@ aiolimiter==1.2.1
     # via voyageai
 aiosignal==1.4.0
     # via aiohttp
+annotated-doc==0.0.4
+    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anyio==4.11.0
@@ -88,7 +90,7 @@ docstring-parser==0.17.0
     # via google-cloud-aiplatform
 durationpy==0.10
     # via kubernetes
-fastapi==0.116.1
+fastapi==0.128.0
     # via onyx
 fastavro==1.12.1
     # via cohere
@@ -376,7 +378,7 @@ sniffio==1.3.1
     #   openai
 sse-starlette==3.0.3
     # via mcp
-starlette==0.47.2
+starlette==0.49.3
     # via
     #   fastapi
     #   mcp
