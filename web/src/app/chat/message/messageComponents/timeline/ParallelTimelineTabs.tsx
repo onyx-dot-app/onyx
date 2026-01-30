@@ -120,12 +120,12 @@ export function ParallelTimelineTabs({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <div
-        className="flex flex-col w-full"
-        onMouseEnter={() => setIsHover(true)}
-        onMouseLeave={() => setIsHover(false)}
-      >
-        <div className="flex w-full">
+      <div className="flex flex-col w-full">
+        <div
+          className="flex w-full"
+          onMouseEnter={() => setIsHover(true)}
+          onMouseLeave={() => setIsHover(false)}
+        >
           {/* Left column: Icon + connector line */}
           <div className="flex flex-col items-center w-9 pt-2">
             <div
