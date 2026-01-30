@@ -19,6 +19,16 @@ export const mutedTextMarkdownComponents = {
   ol: ({ children }: { children?: React.ReactNode }) => (
     <ol className="!pl-0 !ml-0 !my-0.5 list-inside">{children}</ol>
   ),
+  a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+    <a
+      href={href}
+      className="text-text-03 mainUiMuted underline"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  ),
 } satisfies Partial<Components>;
 
 // Collapsed view: no spacing for compact display
@@ -38,5 +48,15 @@ export const collapsedMarkdownComponents = {
   ),
   ol: ({ children }: { children?: React.ReactNode }) => (
     <ol className="!pl-0 !ml-0 !my-0 list-inside">{children}</ol>
+  ),
+  a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
+    <a
+      href={href}
+      className="text-text-03 mainUiMuted underline"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
   ),
 } satisfies Partial<Components>;
