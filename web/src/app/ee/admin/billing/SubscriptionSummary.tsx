@@ -1,6 +1,6 @@
 import React from "react";
 import { InfoItem } from "./InfoItem";
-import { statusToDisplay, BillingInformation } from "@/lib/billing/utils";
+import { statusToDisplay, BillingInformation } from "@/lib/billing";
 import { formatDateShort } from "@/lib/dateUtils";
 
 interface SubscriptionSummaryProps {
