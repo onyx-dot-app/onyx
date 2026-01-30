@@ -3010,16 +3010,22 @@ class Persona(Base):
         Enum(RecencyBiasSetting, native_enum=False)
     )
 
-    # Allows the Persona to specify a different LLM version than is controlled
-    # globablly via env variables. For flexibility, validity is not currently enforced
+    # Allows the persona to specify a specific default LLM model
     # NOTE: only is applied on the actual response generation - is not used for things like
     # auto-detected time filters, relevance filters, etc.
+    # llm_model_provider_override is deprecated and will be removed in a future release
     llm_model_provider_override: Mapped[str | None] = mapped_column(
         String, nullable=True
     )
     llm_model_version_override: Mapped[str | None] = mapped_column(
         String, nullable=True
     )
+    default_model_configuration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("model_configuration.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(
         PydanticListType(StarterMessage), nullable=True
     )
