@@ -51,7 +51,7 @@ import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Horizontal, Title } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
 import Button from "@/refresh-components/buttons/Button";
-import Hoverable, { HoverableButton } from "@/refresh-components/Hoverable";
+import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -323,13 +323,13 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
                   <Hoverable key={index} asChild>
-                    <HoverableButton>
+                    <HoverableContainer>
                       <LineItemLayout
                         icon={SvgBubbleText}
                         title={starter.message}
                         variant="tertiary-muted"
                       />
-                    </HoverableButton>
+                    </HoverableContainer>
                   </Hoverable>
                 ))}
               </div>
