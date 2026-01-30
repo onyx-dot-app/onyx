@@ -83,7 +83,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: ./desktop
-        run: npm install
+        run: npm ci
 
       - name: Build desktop app
         working-directory: ./desktop
