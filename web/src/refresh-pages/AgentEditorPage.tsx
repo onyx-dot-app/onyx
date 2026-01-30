@@ -43,9 +43,9 @@ import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
+import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { FileCard } from "@/app/app/components/input/FileCard";
+import { FileCard } from "@/sections/cards/FileCard";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import {
   ProjectFile,
@@ -1239,13 +1239,13 @@ export default function AgentEditorPage({
                                   alignItems="start"
                                 >
                                   {documentSets!.map((documentSet) => (
-                                    <DocumentSetSelectable
+                                    <DocumentSetCard
                                       key={documentSet.id}
                                       documentSet={documentSet}
                                       isSelected={values.document_set_ids.includes(
                                         documentSet.id
                                       )}
-                                      onSelect={() => {
+                                      onSelectToggle={() => {
                                         const index =
                                           values.document_set_ids.indexOf(
                                             documentSet.id
