@@ -5,6 +5,33 @@ import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
 
+type HoverableButtonVariants = "primary";
+
+interface HoverableButtonProps
+  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+  variant?: HoverableButtonVariants;
+  ref?: React.Ref<HTMLDivElement>;
+}
+
+function HoverableButton({
+  variant = "primary",
+  ref,
+  ...props
+}: HoverableButtonProps) {
+  // Radix Slot injects className at runtime (bypassing WithoutStyles),
+  // so we extract and merge it to preserve "hoverable-button".
+  const { className: slotClassName, ...rest } = props as typeof props & {
+    className?: string;
+  };
+  return (
+    <div
+      ref={ref}
+      className={cn("hoverable-button", slotClassName)}
+      {...rest}
+    />
+  );
+}
+
 export interface HoverableProps
   extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   /** Content to be wrapped with hover behavior */
@@ -127,3 +154,5 @@ export default function Hoverable({
     </button>
   );
 }
+
+export { HoverableButton };
