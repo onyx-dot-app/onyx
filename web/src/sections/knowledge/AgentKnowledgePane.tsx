@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
 import Button from "@/refresh-components/buttons/Button";
@@ -58,7 +59,7 @@ function KnowledgeSidebar({
   onNavigateToSource,
 }: KnowledgeSidebarProps) {
   return (
-    <GeneralLayouts.SidebarLayout>
+    <TableLayouts.SidebarLayout>
       <LineItem
         icon={SvgFiles}
         onClick={onNavigateToRecent}
@@ -100,7 +101,7 @@ function KnowledgeSidebar({
           </LineItem>
         );
       })}
-    </GeneralLayouts.SidebarLayout>
+    </TableLayouts.SidebarLayout>
   );
 }
 
@@ -168,10 +169,10 @@ function KnowledgeTable<T>({
       <Spacer rem={0.5} />
 
       {/* Table header */}
-      <GeneralLayouts.TableRow>
-        <GeneralLayouts.CheckboxCell />
+      <TableLayouts.TableRow>
+        <TableLayouts.CheckboxCell />
         {columns.map((column) => (
-          <GeneralLayouts.TableCell
+          <TableLayouts.TableCell
             key={column.key}
             flex={!column.width}
             width={column.width}
@@ -192,9 +193,9 @@ function KnowledgeTable<T>({
                 </Text>
               )}
             </GeneralLayouts.Section>
-          </GeneralLayouts.TableCell>
+          </TableLayouts.TableCell>
         ))}
-      </GeneralLayouts.TableRow>
+      </TableLayouts.TableRow>
 
       <Separator noPadding />
 
@@ -212,27 +213,27 @@ function KnowledgeTable<T>({
             const isSelected = selectedIds.includes(id);
 
             return (
-              <GeneralLayouts.TableRow
+              <TableLayouts.TableRow
                 key={String(id)}
                 selected={isSelected}
                 onClick={() => onToggleItem(id)}
               >
-                <GeneralLayouts.CheckboxCell>
+                <TableLayouts.CheckboxCell>
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => onToggleItem(id)}
                   />
-                </GeneralLayouts.CheckboxCell>
+                </TableLayouts.CheckboxCell>
                 {columns.map((column) => (
-                  <GeneralLayouts.TableCell
+                  <TableLayouts.TableCell
                     key={column.key}
                     flex={!column.width}
                     width={column.width}
                   >
                     {column.render(item)}
-                  </GeneralLayouts.TableCell>
+                  </TableLayouts.TableCell>
                 ))}
-              </GeneralLayouts.TableRow>
+              </TableLayouts.TableRow>
             );
           })}
         </GeneralLayouts.Section>
@@ -282,7 +283,7 @@ function DocumentSetsTableContent({
       header: "Sources",
       width: 8,
       render: (ds) => (
-        <GeneralLayouts.SourceIconsRow>
+        <TableLayouts.SourceIconsRow>
           {ds.cc_pair_summaries
             ?.slice(0, 4)
             .map((summary: CCPairSummary, idx: number) => {
@@ -294,7 +295,7 @@ function DocumentSetsTableContent({
               +{(ds.cc_pair_summaries?.length ?? 0) - 4}
             </Text>
           )}
-        </GeneralLayouts.SourceIconsRow>
+        </TableLayouts.SourceIconsRow>
       ),
     },
   ];
@@ -455,7 +456,7 @@ function RecentFilesTableContent({
 
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch">
-      <GeneralLayouts.HiddenInput
+      <TableLayouts.HiddenInput
         inputRef={fileInputRef}
         type="file"
         multiple
@@ -538,7 +539,7 @@ function KnowledgeTwoColumnView({
   hasProcessingFiles,
 }: KnowledgeTwoColumnViewProps) {
   return (
-    <GeneralLayouts.TwoColumnLayout minHeight={18.75}>
+    <TableLayouts.TwoColumnLayout minHeight={18.75}>
       <KnowledgeSidebar
         activeView={activeView}
         activeSource={activeSource}
@@ -551,7 +552,7 @@ function KnowledgeTwoColumnView({
         onNavigateToSource={onNavigateToSource}
       />
 
-      <GeneralLayouts.ContentColumn>
+      <TableLayouts.ContentColumn>
         {activeView === "document-sets" && (
           <DocumentSetsTableContent
             documentSets={documentSets}
@@ -575,8 +576,8 @@ function KnowledgeTwoColumnView({
             hasProcessingFiles={hasProcessingFiles}
           />
         )}
-      </GeneralLayouts.ContentColumn>
-    </GeneralLayouts.TwoColumnLayout>
+      </TableLayouts.ContentColumn>
+    </TableLayouts.TwoColumnLayout>
   );
 }
 
