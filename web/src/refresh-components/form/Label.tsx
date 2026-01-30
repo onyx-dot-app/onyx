@@ -41,10 +41,10 @@ export default function Label({
   return (
     <label
       ref={ref}
-      data-non-interactable={nonInteractive ? "true" : undefined}
+      data-non-interactive={nonInteractive ? "true" : undefined}
       className={cn(
         "flex-1 self-stretch",
-        "peer-disabled:cursor-not-allowed data-[non-interactable=true]:cursor-default",
+        "peer-disabled:cursor-not-allowed data-[non-interactive=true]:cursor-default",
         disabled
           ? "cursor-not-allowed"
           : nonInteractive
