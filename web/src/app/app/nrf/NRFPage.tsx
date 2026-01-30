@@ -449,18 +449,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Document sidebar - shown when sources are clicked */}
       <div
         className={cn(
-          "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out absolute right-0 top-0 h-full z-20",
+          "absolute right-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
           documentSidebarVisible ? "w-[25rem]" : "w-0"
         )}
       >
-        <div className="h-full w-[25rem]">
-          <DocumentsSidebar
-            setPresentingDocument={setPresentingDocument}
-            modal={false}
-            closeSidebar={handleDocumentSidebarClose}
-            selectedDocuments={[]}
-          />
-        </div>
+        <DocumentsSidebar
+          setPresentingDocument={setPresentingDocument}
+          modal={false}
+          closeSidebar={handleDocumentSidebarClose}
+          selectedDocuments={[]}
+        />
       </div>
 
       {/* Text/document preview modal */}
