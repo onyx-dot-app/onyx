@@ -113,16 +113,16 @@ export default function Hoverable({
   variant = "primary",
   ...props
 }: HoverableProps) {
-  const classes = cn("hoverable", group);
-  const dataAttrs = {
-    "data-variant": variant,
-    ...(nonInteractive && { "data-non-interactive": "" }),
-  };
+  const classes = cn(
+    "hoverable",
+    !nonInteractive && `hoverable--${variant}`,
+    group
+  );
 
   // asChild: merge props onto child element
   if (asChild) {
     return (
-      <Slot ref={ref} className={classes} {...dataAttrs} {...props}>
+      <Slot ref={ref} className={classes} {...props}>
         {children}
       </Slot>
     );
@@ -135,7 +135,6 @@ export default function Hoverable({
         href={href as Route}
         ref={ref as React.Ref<HTMLAnchorElement>}
         className={classes}
-        {...dataAttrs}
         {...props}
       >
         {children}
@@ -149,7 +148,6 @@ export default function Hoverable({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       className={classes}
-      {...dataAttrs}
       {...props}
     >
       {children}
