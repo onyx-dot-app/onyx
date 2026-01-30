@@ -28,6 +28,7 @@ def upgrade() -> None:
         "model_configuration",
         ["default_model_configuration_id"],
         ["id"],
+        ondelete="SET NULL",
     )
 
 
