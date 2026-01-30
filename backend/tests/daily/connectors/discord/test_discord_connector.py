@@ -21,13 +21,12 @@ def load_test_data(file_name: str = "test_discord_data.json") -> dict[str, Any]:
 @pytest.fixture
 def discord_connector() -> DiscordConnector:
     connector = DiscordConnector()
-    connector.load_credentials({"discord_bot_token": os.environ["DISCORD_BOT_TOKEN"]})
+    connector.load_credentials(
+        {"discord_bot_token": os.environ["DISCORD_CONNECTOR_BOT_TOKEN"]}
+    )
     return connector
 
 
-@pytest.mark.xfail(
-    reason="Environment variable not set for some reason",
-)
 def test_discord_connector_basic(discord_connector: DiscordConnector) -> None:
     test_data = load_test_data()
 
