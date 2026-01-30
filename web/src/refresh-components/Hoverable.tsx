@@ -26,6 +26,7 @@ function HoverableContainer({
   return (
     <div
       ref={ref}
+      data-variant={variant}
       className={cn("hoverable-button", slotClassName)}
       {...rest}
     />
