@@ -15,16 +15,18 @@ def compare_hierarchy_nodes(
 ) -> None:
     """Compare yielded HierarchyNodes against expected ground truth.
 
-    Compares nodes by their essential fields (node_id, parent_id, node_name, link).
+    Compares nodes by their essential fields (raw_node_id, raw_parent_id, display_name, link).
     Order does not matter.
     """
     if not expected_nodes:
         # Empty ground truth - skip comparison for now
         return
 
-    yielded_set = {(n.node_id, n.parent_id, n.node_name, n.link) for n in yielded_nodes}
+    yielded_set = {
+        (n.raw_node_id, n.raw_parent_id, n.display_name, n.link) for n in yielded_nodes
+    }
     expected_set = {
-        (n.node_id, n.parent_id, n.node_name, n.link) for n in expected_nodes
+        (n.raw_node_id, n.raw_parent_id, n.display_name, n.link) for n in expected_nodes
     }
 
     missing = expected_set - yielded_set
