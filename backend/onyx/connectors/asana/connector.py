@@ -36,7 +36,7 @@ class AsanaConnector(LoadConnector, PollConnector):
             self.project_ids_to_index = project_ids or None
         else:
             self.project_ids_to_index = None
-        self.asana_team_id = asana_team_id.strip() if asana_team_id else None
+        self.asana_team_id = (asana_team_id.strip() or None) if asana_team_id else None
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
         logger.info(

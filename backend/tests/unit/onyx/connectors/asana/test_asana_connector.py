@@ -29,11 +29,22 @@ def test_asana_connector_project_ids_normalization(
     assert connector.asana_team_id == "1210918501948021"
 
 
-def test_asana_connector_team_id_empty_string() -> None:
+@pytest.mark.parametrize(
+    "team_id,expected",
+    [
+        (None, None),
+        ("", None),
+        ("   ", None),
+        (" 1210918501948021 ", "1210918501948021"),
+    ],
+)
+def test_asana_connector_team_id_normalization(
+    team_id: str | None, expected: str | None
+) -> None:
     connector = AsanaConnector(
         asana_workspace_id="1153293530468850",
         asana_project_ids=None,
-        asana_team_id="   ",
+        asana_team_id=team_id,
     )
 
-    assert connector.asana_team_id is None
+    assert connector.asana_team_id == expected
