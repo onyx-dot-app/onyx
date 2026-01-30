@@ -219,8 +219,7 @@ export default function BuildOnboardingModal({
 
   const requiresLevel =
     workArea !== undefined && WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
-  const isUserInfoValid =
-    firstName.trim() && workArea && (!requiresLevel || level);
+  const isUserInfoValid = workArea && (!requiresLevel || level);
 
   const currentProviderConfig = PROVIDERS.find(
     (p) => p.key === selectedProvider

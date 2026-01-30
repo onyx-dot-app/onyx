@@ -72,12 +72,12 @@ interface OnboardingUserInfoProps {
 }
 
 export default function OnboardingUserInfo({
-  firstName,
-  lastName,
+  firstName: _firstName,
+  lastName: _lastName,
   workArea,
   level,
-  onFirstNameChange,
-  onLastNameChange,
+  onFirstNameChange: _onFirstNameChange,
+  onLastNameChange: _onLastNameChange,
   onWorkAreaChange,
   onLevelChange,
 }: OnboardingUserInfoProps) {
@@ -105,7 +105,7 @@ export default function OnboardingUserInfo({
       </div>
 
       <div className="flex-1 flex flex-col gap-8 justify-center">
-        {/* Name inputs */}
+        {/* Name inputs - commented out for now, can be re-enabled later
         <div className="flex justify-center">
           <div className="grid grid-cols-2 gap-4 w-full max-w-md">
             <div className="flex flex-col gap-1.5">
@@ -134,6 +134,7 @@ export default function OnboardingUserInfo({
             </div>
           </div>
         </div>
+        */}
 
         {/* Work area */}
         <div className="flex flex-col gap-3 items-center">
