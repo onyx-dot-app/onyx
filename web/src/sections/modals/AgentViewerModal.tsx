@@ -22,7 +22,9 @@
  * - Advanced options (model, sharing status)
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
@@ -52,6 +54,7 @@ import { Horizontal, Title } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
 import Button from "@/refresh-components/buttons/Button";
 import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -127,6 +130,20 @@ export interface AgentViewerModalProps {
 
 export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
+  const router = useRouter();
+
+  const handleStarterClick = useCallback(
+    (message: string) => {
+      const params = new URLSearchParams({
+        [SEARCH_PARAM_NAMES.PERSONA_ID]: String(agent.id),
+        [SEARCH_PARAM_NAMES.USER_PROMPT]: message,
+        [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
+      });
+      router.push(`/app?${params.toString()}` as Route);
+      agentViewerModal.toggle(false);
+    },
+    [agent.id, router, agentViewerModal]
+  );
 
   const hasKnowledge =
     (agent.document_sets && agent.document_sets.length > 0) ||
@@ -322,7 +339,11 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               <Title title="Prompt Reminders" />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
-                  <Hoverable key={index} asChild>
+                  <Hoverable
+                    key={index}
+                    asChild
+                    onClick={() => handleStarterClick(starter.message)}
+                  >
                     <HoverableContainer>
                       <LineItemLayout
                         icon={SvgBubbleText}
