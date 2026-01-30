@@ -1446,10 +1446,14 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Hoverable asChild nonInteractive variant="secondary">
+                      <Hoverable
+                        key={pat.id}
+                        asChild
+                        nonInteractive
+                        variant="secondary"
+                      >
                         <HoverableContainer rounded="rounded-12" padding={0}>
                           <AttachmentItemLayout
-                            key={pat.id}
                             icon={SvgKey}
                             title={pat.name}
                             description={pat.token_display}
