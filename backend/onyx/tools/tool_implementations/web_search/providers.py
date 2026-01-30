@@ -130,9 +130,7 @@ def get_default_content_provider() -> WebContentProvider:
             provider = build_content_provider_from_config(
                 provider_type=WebContentProviderType(provider_model.provider_type),
                 api_key=provider_model.api_key or "",
-                config=WebContentProviderConfig.model_validate(
-                    provider_model.config or {}
-                ),
+                config=provider_model.config or WebContentProviderConfig(),
             )
             if provider:
                 return provider
