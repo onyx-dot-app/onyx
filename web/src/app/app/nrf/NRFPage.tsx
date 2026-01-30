@@ -372,7 +372,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
-                  disableFadeOverlay={!isSidePanel}
                 >
                   <MessageList
                     liveAssistant={resolvedAssistant}

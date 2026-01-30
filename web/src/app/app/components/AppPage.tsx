@@ -708,31 +708,35 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
               {/* ChatUI */}
               {!!currentChatSessionId && liveAssistant && (
-                <ChatScrollContainer
-                  ref={scrollContainerRef}
-                  sessionId={currentChatSessionId}
-                  anchorSelector={anchorSelector}
-                  autoScroll={autoScrollEnabled}
-                  isStreaming={isStreaming}
-                  onScrollButtonVisibilityChange={setShowScrollButton}
-                  disableFadeOverlay={hasBackground}
-                >
-                  <AppLayouts.StickyHeader>
+                <>
+                  {/* Header positioned outside scroll container to avoid mask effect */}
+                  <div className="absolute top-0 left-0 right-0 z-sticky">
                     <AppHeader />
-                  </AppLayouts.StickyHeader>
-                  <MessageList
-                    liveAssistant={liveAssistant}
-                    llmManager={llmManager}
-                    deepResearchEnabled={deepResearchEnabled}
-                    currentMessageFiles={currentMessageFiles}
-                    setPresentingDocument={setPresentingDocument}
-                    onSubmit={onSubmit}
-                    onMessageSelection={onMessageSelection}
-                    stopGenerating={stopGenerating}
-                    onResubmit={handleResubmitLastMessage}
-                    anchorNodeId={anchorNodeId}
-                  />
-                </ChatScrollContainer>
+                  </div>
+                  <ChatScrollContainer
+                    ref={scrollContainerRef}
+                    sessionId={currentChatSessionId}
+                    anchorSelector={anchorSelector}
+                    autoScroll={autoScrollEnabled}
+                    isStreaming={isStreaming}
+                    onScrollButtonVisibilityChange={setShowScrollButton}
+                  >
+                    {/* Spacer for the header height */}
+                    <div className="h-16 shrink-0" />
+                    <MessageList
+                      liveAssistant={liveAssistant}
+                      llmManager={llmManager}
+                      deepResearchEnabled={deepResearchEnabled}
+                      currentMessageFiles={currentMessageFiles}
+                      setPresentingDocument={setPresentingDocument}
+                      onSubmit={onSubmit}
+                      onMessageSelection={onMessageSelection}
+                      stopGenerating={stopGenerating}
+                      onResubmit={handleResubmitLastMessage}
+                      anchorNodeId={anchorNodeId}
+                    />
+                  </ChatScrollContainer>
+                </>
               )}
 
               {!currentChatSessionId && !currentProjectId && (
