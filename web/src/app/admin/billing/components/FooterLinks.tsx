@@ -10,11 +10,14 @@ const SUPPORT_EMAIL = "support@onyx.app";
 interface FooterLinksProps {
   hasSubscription?: boolean;
   onActivateLicense?: () => void;
+  /** Hide the license activation link (when card is already open) */
+  hideLicenseLink?: boolean;
 }
 
 export default function FooterLinks({
   hasSubscription,
   onActivateLicense,
+  hideLicenseLink,
 }: FooterLinksProps) {
   const { user } = useUser();
 
@@ -28,7 +31,7 @@ export default function FooterLinks({
 
   return (
     <Section flexDirection="row" justifyContent="center" gap={1} height="auto">
-      {onActivateLicense && (
+      {onActivateLicense && !hideLicenseLink && (
         <>
           <Text secondaryBody text03>
             Have a license key?

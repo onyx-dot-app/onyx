@@ -8,7 +8,7 @@ import Card from "@/refresh-components/cards/Card";
 import Separator from "@/refresh-components/Separator";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgUsers, SvgCheck } from "@opal/icons";
-import { createCheckoutSession } from "@/lib/billing/actions";
+import { createCheckoutSession } from "@/lib/billing/svc";
 import { useUser } from "@/components/user/UserProvider";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { formatDateShort } from "@/lib/dateUtils";

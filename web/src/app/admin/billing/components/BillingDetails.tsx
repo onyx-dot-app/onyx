@@ -2,6 +2,7 @@
 
 import { Section } from "@/layouts/general-layouts";
 import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
+import Message from "@/refresh-components/messages/Message";
 import ExpirationBanner from "./ExpirationBanner";
 import SubscriptionCard from "./SubscriptionCard";
 import SeatsCard from "./SeatsCard";
@@ -9,10 +10,14 @@ import PaymentSection from "./PaymentSection";
 import { humanReadableFormatShort } from "@/lib/time";
 
 interface BillingDetailsProps {
-  billing: BillingInformation;
+  billing?: BillingInformation;
   license?: LicenseStatus;
   onViewPlans: () => void;
   onRefresh?: () => Promise<void>;
+  /** User is in air-gapped mode (license manually uploaded) */
+  isAirGapped?: boolean;
+  /** Failed to connect to Stripe (but has license) */
+  hasStripeError?: boolean;
 }
 
 // Grace period for data deletion after expiration (30 days)
@@ -133,11 +138,40 @@ export default function BillingDetails({
   license,
   onViewPlans,
   onRefresh,
+  isAirGapped,
+  hasStripeError,
 }: BillingDetailsProps) {
-  const expirationState = getExpirationState(billing, license);
+  const expirationState = billing ? getExpirationState(billing, license) : null;
+
+  // In air-gapped mode or when Stripe fails, disable billing management
+  const disableBillingActions = isAirGapped || hasStripeError;
 
   return (
     <Section gap={1} height="auto" width="full">
+      {/* Stripe connection error banner */}
+      {hasStripeError && (
+        <Message
+          static
+          warning
+          text="Unable to connect to Stripe payment portal."
+          description="Check your internet connection or manually provide a license."
+          close={false}
+          className="w-full"
+        />
+      )}
+
+      {/* Air-gapped mode info banner */}
+      {isAirGapped && !hasStripeError && (
+        <Message
+          static
+          info
+          text="Air-gapped deployment"
+          description="Online billing management is disabled. Contact support to update your subscription."
+          close={false}
+          className="w-full"
+        />
+      )}
+
       {/* Expiration banner */}
       {expirationState && (
         <ExpirationBanner
@@ -148,14 +182,29 @@ export default function BillingDetails({
         />
       )}
 
-      {/* Subscription card */}
-      <SubscriptionCard billing={billing} onViewPlans={onViewPlans} />
+      {/* Subscription card - show if billing exists OR if there's a license */}
+      {(billing || license?.has_license) && (
+        <SubscriptionCard
+          billing={billing}
+          license={license}
+          onViewPlans={onViewPlans}
+          disabled={disableBillingActions}
+          onReconnect={onRefresh}
+        />
+      )}
 
       {/* Seats card */}
-      <SeatsCard billing={billing} license={license} onRefresh={onRefresh} />
+      <SeatsCard
+        billing={billing}
+        license={license}
+        onRefresh={onRefresh}
+        disabled={disableBillingActions}
+      />
 
-      {/* Payment section - only show if has payment info */}
-      {billing.payment_method_enabled && <PaymentSection billing={billing} />}
+      {/* Payment section - only show if has payment info and not air-gapped */}
+      {billing?.payment_method_enabled && !isAirGapped && (
+        <PaymentSection billing={billing} />
+      )}
     </Section>
   );
 }

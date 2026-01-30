@@ -9,7 +9,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import { SvgExternalLink, SvgPlus, SvgXOctagon } from "@opal/icons";
 import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
-import { updateSeatCount, claimLicense } from "@/lib/billing/actions";
+import { updateSeatCount, claimLicense } from "@/lib/billing/svc";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useUsers from "@/hooks/useUsers";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -19,12 +19,15 @@ interface SeatsCardProps {
   billing?: BillingInformation;
   license?: LicenseStatus;
   onRefresh?: () => Promise<void>;
+  /** Disable the Update Seats button (air-gapped or Stripe error) */
+  disabled?: boolean;
 }
 
 export default function SeatsCard({
   billing,
   license,
   onRefresh,
+  disabled,
 }: SeatsCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -274,17 +277,15 @@ export default function SeatsCard({
           <Button main tertiary href="/admin/users" leftIcon={SvgExternalLink}>
             View Users
           </Button>
-          {billing && (
-            <Button
-              main
-              secondary
-              onClick={handleStartEdit}
-              leftIcon={SvgPlus}
-              disabled={isLoadingUsers}
-            >
-              Update Seats
-            </Button>
-          )}
+          <Button
+            main
+            secondary
+            onClick={handleStartEdit}
+            leftIcon={SvgPlus}
+            disabled={isLoadingUsers || disabled || !billing}
+          >
+            Update Seats
+          </Button>
         </Section>
       </Section>
     </Card>

@@ -10,6 +10,7 @@ class CreateCheckoutSessionRequest(BaseModel):
     """Request to create a Stripe checkout session."""
 
     billing_period: Literal["monthly", "annual"] = "monthly"
+    seats: int | None = None
     email: str | None = None
 
 

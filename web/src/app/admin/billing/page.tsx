@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgWallet } from "@opal/icons";
-import { useBillingInformation } from "@/lib/hooks/useBillingInformation";
-import { useLicense } from "@/lib/hooks/useLicense";
 import {
+  useBillingInformation,
+  useLicense,
   BillingInformation,
   hasActiveSubscription,
-} from "@/lib/billing/interfaces";
-import { claimLicense } from "@/lib/billing/actions";
+  claimLicense,
+} from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import Plans from "./components/Plans";
 import BillingDetails from "./components/BillingDetails";
@@ -41,6 +41,7 @@ export default function BillingPage() {
   const {
     data: billingData,
     isLoading: billingLoading,
+    error: billingError,
     refresh: refreshBilling,
   } = useBillingInformation();
 
@@ -56,12 +57,33 @@ export default function BillingPage() {
   const currentPlan = billing?.plan_type ?? licenseData?.plan_type ?? undefined;
   const isSelfHosted = !NEXT_PUBLIC_CLOUD_ENABLED;
 
+  // Detect air-gapped mode (license was manually uploaded)
+  const isAirGapped = licenseData?.source === "manual_upload";
+
+  // Detect Stripe connection error (has license but can't reach Stripe)
+  const hasStripeError = !!(
+    isSelfHosted &&
+    licenseData?.has_license &&
+    billingError &&
+    !isAirGapped
+  );
+
   // Set initial view based on subscription status
+  // For air-gapped or users with license but no billing, show details view
   useEffect(() => {
     if (!isLoading) {
-      setView(hasSubscription ? "details" : "plans");
+      const shouldShowDetails =
+        hasSubscription || (isSelfHosted && licenseData?.has_license);
+      setView(shouldShowDetails ? "details" : "plans");
     }
-  }, [isLoading, hasSubscription]);
+  }, [isLoading, hasSubscription, isSelfHosted, licenseData?.has_license]);
+
+  // Show license activation card when there's a Stripe error (like air-gapped mode)
+  useEffect(() => {
+    if (hasStripeError && !showLicenseActivationInput) {
+      setShowLicenseActivationInput(true);
+    }
+  }, [hasStripeError, showLicenseActivationInput]);
 
   // Handle checkout success
   useEffect(() => {
@@ -115,7 +137,31 @@ export default function BillingPage() {
       refreshBilling(),
       isSelfHosted ? refreshLicense() : Promise.resolve(),
     ]);
+    // After successful refresh, hide license card if Stripe is now connected
+    // (billingError will be cleared by the refresh if successful)
   };
+
+  // Hide license activation card when Stripe connection is restored
+  useEffect(() => {
+    if (
+      !hasStripeError &&
+      !isAirGapped &&
+      showLicenseActivationInput &&
+      !isLoading
+    ) {
+      // Only auto-hide if we had a Stripe error before and it's now resolved
+      // Keep it open if user manually opened it or if air-gapped
+      if (billingData && hasActiveSubscription(billingData)) {
+        setShowLicenseActivationInput(false);
+      }
+    }
+  }, [
+    hasStripeError,
+    isAirGapped,
+    showLicenseActivationInput,
+    isLoading,
+    billingData,
+  ]);
 
   const handleLicenseActivated = () => {
     refreshLicense();
@@ -165,12 +211,6 @@ export default function BillingPage() {
 
     return (
       <>
-        <FooterLinks
-          hasSubscription={!!hasSubscription}
-          onActivateLicense={
-            isSelfHosted ? () => setShowLicenseActivationInput(true) : undefined
-          }
-        />
         {showLicenseActivationInput && (
           <div className="w-full billing-card-enter">
             <LicenseActivationCard
@@ -181,6 +221,13 @@ export default function BillingPage() {
             />
           </div>
         )}
+        <FooterLinks
+          hasSubscription={!!hasSubscription || !!licenseData?.has_license}
+          onActivateLicense={
+            isSelfHosted ? () => setShowLicenseActivationInput(true) : undefined
+          }
+          hideLicenseLink={showLicenseActivationInput}
+        />
       </>
     );
   };
@@ -230,10 +277,12 @@ export default function BillingPage() {
         case "details":
           return (
             <BillingDetails
-              billing={billing!}
+              billing={billing ?? undefined}
               license={licenseData ?? undefined}
               onViewPlans={() => changeView("plans")}
               onRefresh={handleRefresh}
+              isAirGapped={isAirGapped}
+              hasStripeError={hasStripeError}
             />
           );
       }

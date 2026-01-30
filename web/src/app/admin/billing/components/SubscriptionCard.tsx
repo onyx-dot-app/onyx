@@ -1,42 +1,65 @@
 "use client";
 
+import { useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { SvgUsers, SvgExternalLink } from "@opal/icons";
-import { BillingInformation } from "@/lib/billing/interfaces";
-import { createCustomerPortalSession } from "@/lib/billing/actions";
+import { SvgUsers, SvgExternalLink, SvgArrowRight } from "@opal/icons";
+import { BillingInformation, LicenseStatus } from "@/lib/billing/interfaces";
+import {
+  createCustomerPortalSession,
+  resetStripeConnection,
+} from "@/lib/billing/svc";
 import { formatDateShort } from "@/lib/dateUtils";
 
 interface SubscriptionCardProps {
-  billing: BillingInformation;
+  billing?: BillingInformation;
+  license?: LicenseStatus;
   onViewPlans: () => void;
+  /** Disable the Manage Plan button (air-gapped or Stripe error) */
+  disabled?: boolean;
+  /** Called after successful reconnection to refresh data */
+  onReconnect?: () => Promise<void>;
 }
 
 export default function SubscriptionCard({
   billing,
+  license,
   onViewPlans,
+  disabled,
+  onReconnect,
 }: SubscriptionCardProps) {
-  const planName = billing.plan_type
-    ? `${billing.plan_type.charAt(0).toUpperCase()}${billing.plan_type.slice(
-        1
-      )} Plan`
-    : "Business Plan";
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
-  const nextPaymentDate = formatDateShort(billing.current_period_end);
+  // Plan name is always "Business Plan" for now (plan_type is billing period, not tier)
+  const planName = "Business Plan";
 
-  const isExpired =
-    billing.status === "expired" || billing.status === "cancelled";
-  const isCanceling = billing.cancel_at_period_end;
+  // Derive expiration date from billing or license
+  const expirationDate = billing?.current_period_end ?? license?.expires_at;
+  const formattedDate = formatDateShort(expirationDate);
+
+  // Determine status
+  const isExpiredFromBilling =
+    billing?.status === "expired" || billing?.status === "cancelled";
+  const isExpiredFromLicense =
+    license?.status === "expired" ||
+    license?.status === "gated_access" ||
+    (license?.expires_at && new Date(license.expires_at) < new Date());
+  const isExpired = isExpiredFromBilling || isExpiredFromLicense;
+
+  const isCanceling = billing?.cancel_at_period_end;
 
   let subtitle: string;
   if (isExpired) {
-    subtitle = "Expired";
+    subtitle = `Expired on ${formattedDate}`;
   } else if (isCanceling) {
-    subtitle = `Valid until ${nextPaymentDate}`;
+    subtitle = `Valid until ${formattedDate}`;
+  } else if (billing) {
+    subtitle = `Next payment on ${formattedDate}`;
   } else {
-    subtitle = `Next payment on ${nextPaymentDate}`;
+    // License-only mode
+    subtitle = `Valid until ${formattedDate}`;
   }
 
   const handleManagePlan = async () => {
@@ -49,6 +72,18 @@ export default function SubscriptionCard({
       }
     } catch (error) {
       console.error("Failed to open customer portal:", error);
+    }
+  };
+
+  const handleReconnect = async () => {
+    setIsReconnecting(true);
+    try {
+      await resetStripeConnection();
+      await onReconnect?.();
+    } catch (error) {
+      console.error("Failed to reconnect to Stripe:", error);
+    } finally {
+      setIsReconnecting(false);
     }
   };
 
@@ -79,14 +114,26 @@ export default function SubscriptionCard({
           height="auto"
           width="fit"
         >
-          <Button
-            main
-            primary
-            onClick={handleManagePlan}
-            rightIcon={SvgExternalLink}
-          >
-            Manage Plan
-          </Button>
+          {disabled ? (
+            <Button
+              main
+              secondary
+              onClick={handleReconnect}
+              rightIcon={SvgArrowRight}
+              disabled={isReconnecting}
+            >
+              {isReconnecting ? "Connecting..." : "Connect to Stripe"}
+            </Button>
+          ) : (
+            <Button
+              main
+              primary
+              onClick={handleManagePlan}
+              rightIcon={SvgExternalLink}
+            >
+              Manage Plan
+            </Button>
+          )}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
             <Text secondaryBody text03>
               View Plan Details

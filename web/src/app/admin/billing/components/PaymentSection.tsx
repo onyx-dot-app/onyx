@@ -7,7 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { SvgWallet, SvgFileText, SvgExternalLink } from "@opal/icons";
 import { BillingInformation } from "@/lib/billing/interfaces";
-import { createCustomerPortalSession } from "@/lib/billing/actions";
+import { createCustomerPortalSession } from "@/lib/billing/svc";
 import { formatDateShort } from "@/lib/dateUtils";
 
 interface PaymentSectionProps {
@@ -51,7 +51,7 @@ export default function PaymentSection({ billing }: PaymentSectionProps) {
   return (
     <div className="billing-payment-section">
       <Section alignItems="start" height="auto" width="full">
-        <Text text04>Payment</Text>
+        <Text mainContentEmphasis>Payment</Text>
 
         <Section
           flexDirection="row"
