@@ -55,7 +55,7 @@ export interface FrostedDivProps extends React.HTMLAttributes<HTMLDivElement> {
  * </FrostedDiv>
  */
 export default function FrostedDiv({
-  backgroundColor = "var(--background-alpha-02, rgba(255, 255, 255, 0.1))",
+  backgroundColor = "var(--frost-overlay)",
   blur = "20px",
   backdropBlur = "6px",
   borderRadius = "1rem",
