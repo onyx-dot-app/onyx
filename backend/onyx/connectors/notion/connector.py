@@ -805,7 +805,10 @@ class NotionConnector(LoadConnector, PollConnector):
         res.raise_for_status()
         return NotionSearchResponse(**res.json())
 
-    def _yield_database_hierarchy_nodes(self) -> Generator[HierarchyNode, None, None]:
+    # The | Document is needed for mypy type checking
+    def _yield_database_hierarchy_nodes(
+        self,
+    ) -> Generator[HierarchyNode | Document, None, None]:
         """Search for all databases and yield hierarchy nodes for each.
 
         This must be called BEFORE page indexing so that database hierarchy nodes
