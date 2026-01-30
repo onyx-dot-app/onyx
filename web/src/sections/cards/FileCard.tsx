@@ -10,6 +10,42 @@ import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 
+interface RemovableProps {
+  onRemove?: () => void;
+  children: React.ReactNode;
+}
+
+function Removable({ onRemove, children }: RemovableProps) {
+  if (!onRemove) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="relative group">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        title="Remove"
+        aria-label="Remove"
+        className={cn(
+          "absolute -left-2 -top-2 z-10 h-4 w-4",
+          "flex items-center justify-center",
+          "rounded-04 border border-border text-[11px]",
+          "bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm",
+          "opacity-0 group-hover:opacity-100 focus:opacity-100",
+          "pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto",
+          "transition-opacity duration-150 hover:opacity-90"
+        )}
+      >
+        <SvgX className="h-3 w-3 stroke-text-inverted-03" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
 interface ImageFileCardProps {
   file: ProjectFile;
   imageUrl: string | null;
@@ -32,74 +68,41 @@ function ImageFileCard({
   const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
 
   return (
-    <div
-      className={`relative group ${sizeClass} rounded-08 border border-border-01 ${
-        isProcessing ? "bg-background-neutral-02" : ""
-      } ${
-        onFileClick && !isProcessing ? "cursor-pointer hover:opacity-90" : ""
-      }`}
-      onClick={() => {
-        if (onFileClick && !isProcessing) {
-          onFileClick(file);
-        }
-      }}
+    <Removable
+      onRemove={
+        removeFile && doneUploading ? () => removeFile(file.id) : undefined
+      }
     >
-      {removeFile && doneUploading && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            removeFile(file.id);
-          }}
-          title="Delete file"
-          aria-label="Delete file"
-          className={cn(
-            "absolute",
-            "-left-2",
-            "-top-2",
-            "z-10",
-            "h-4",
-            "w-4",
-            "flex",
-            "items-center",
-            "justify-center",
-            "rounded-04",
-            "border",
-            "border-border",
-            "text-[11px]",
-            "bg-background-neutral-inverted-01",
-            "text-text-inverted-05",
-            "shadow-sm",
-            "opacity-0",
-            "group-hover:opacity-100",
-            "focus:opacity-100",
-            "pointer-events-none",
-            "group-hover:pointer-events-auto",
-            "focus:pointer-events-auto",
-            "transition-opacity",
-            "duration-150",
-            "hover:opacity-90"
-          )}
-        >
-          <SvgX className="h-3 w-3 stroke-text-inverted-03" />
-        </button>
-      )}
-      {!doneUploading || !imageUrl ? (
-        <div className="h-full w-full flex items-center justify-center">
-          <SimpleLoader className={loaderSize} />
-        </div>
-      ) : (
-        <img
-          src={imageUrl}
-          alt={file.name}
-          className="h-full w-full object-cover rounded-08"
-          onError={(e) => {
-            // Fallback to regular file card if image fails to load
-            const target = e.target as HTMLImageElement;
-            target.style.display = "none";
-          }}
-        />
-      )}
-    </div>
+      <div
+        className={`${sizeClass} rounded-08 border border-border-01 ${
+          isProcessing ? "bg-background-neutral-02" : ""
+        } ${
+          onFileClick && !isProcessing ? "cursor-pointer hover:opacity-90" : ""
+        }`}
+        onClick={() => {
+          if (onFileClick && !isProcessing) {
+            onFileClick(file);
+          }
+        }}
+      >
+        {!doneUploading || !imageUrl ? (
+          <div className="h-full w-full flex items-center justify-center">
+            <SimpleLoader className={loaderSize} />
+          </div>
+        ) : (
+          <img
+            src={imageUrl}
+            alt={file.name}
+            className="h-full w-full object-cover rounded-08"
+            onError={(e) => {
+              // Fallback to regular file card if image fails to load
+              const target = e.target as HTMLImageElement;
+              target.style.display = "none";
+            }}
+          />
+        )}
+      </div>
+    </Removable>
   );
 }
 
@@ -161,28 +164,11 @@ export function FileCard({
   }
 
   return (
-    <div className="relative group">
-      {removeFile && doneUploading && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            removeFile(file.id);
-          }}
-          title="Delete file"
-          aria-label="Delete file"
-          className={cn(
-            "absolute -left-2 -top-2 z-10 h-4 w-4",
-            "flex items-center justify-center",
-            "rounded-04 border border-border text-[11px]",
-            "bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm",
-            "opacity-0 group-hover:opacity-100 focus:opacity-100",
-            "pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto",
-            "transition-opacity duration-150 hover:opacity-90"
-          )}
-        >
-          <SvgX className="h-3 w-3 stroke-text-inverted-03" />
-        </button>
-      )}
+    <Removable
+      onRemove={
+        removeFile && doneUploading ? () => removeFile(file.id) : undefined
+      }
+    >
       <div className="max-w-[12rem]">
         <Hoverable asChild nonInteractive>
           <HoverableContainer
@@ -206,7 +192,7 @@ export function FileCard({
           </HoverableContainer>
         </Hoverable>
       </div>
-    </div>
+    </Removable>
   );
 }
 
