@@ -25,7 +25,39 @@ import { SvgCircle } from "@opal/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
-const THINKING_STATUS = "Thinking";
+const THINKING_STATUS = "Researching…";
+
+function extractFirstParagraph(content: string): {
+  title: string | null;
+  remainingContent: string;
+} {
+  if (!content || content.trim().length === 0) {
+    return { title: null, remainingContent: content };
+  }
+
+  const trimmed = content.trim();
+
+  // Split by double newline (paragraph break) or single newline
+  const lines = trimmed.split(/\n\n|\n/);
+  const firstLine = lines[0]?.trim();
+
+  if (!firstLine) {
+    return { title: null, remainingContent: content };
+  }
+
+  // Remove markdown heading markers (# ## ### etc.)
+  const cleanTitle = firstLine.replace(/^#+\s*/, "").trim();
+
+  // Only use as title if it's reasonably short (under ~60 chars for UI fit)
+  if (cleanTitle.length > 60) {
+    return { title: null, remainingContent: content };
+  }
+
+  // Remove the first line from content
+  const remainingContent = trimmed.slice(firstLine.length).replace(/^\n+/, "");
+
+  return { title: cleanTitle, remainingContent };
+}
 
 function constructCurrentReasoningState(packets: ReasoningPacket[]) {
   const hasStart = packets.some(
@@ -59,6 +91,15 @@ export const ReasoningRenderer: MessageRenderer<
     () => constructCurrentReasoningState(packets),
     [packets]
   );
+
+  const { title, remainingContent } = useMemo(
+    () => extractFirstParagraph(content),
+    [content]
+  );
+
+  // Use extracted title if available, otherwise default
+  const displayStatus = title || THINKING_STATUS;
+  const displayContent = title ? remainingContent : content;
 
   // Track reasoning timing for minimum display duration
   const [reasoningStartTime, setReasoningStartTime] = useState<number | null>(
@@ -128,7 +169,7 @@ export const ReasoningRenderer: MessageRenderer<
   const reasoningContent = (
     <ExpandableTextDisplay
       title="Full text"
-      content={content}
+      content={displayContent}
       maxLines={5}
       renderContent={renderMarkdown}
       isStreaming={!hasEnd}
@@ -138,7 +179,7 @@ export const ReasoningRenderer: MessageRenderer<
   return children([
     {
       icon: SvgCircle,
-      status: THINKING_STATUS,
+      status: displayStatus,
       content: reasoningContent,
       expandedText: reasoningContent,
     },
