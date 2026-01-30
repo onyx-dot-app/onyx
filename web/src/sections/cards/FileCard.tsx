@@ -23,6 +23,7 @@ function Removable({ onRemove, children }: RemovableProps) {
   return (
     <div className="relative group">
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
