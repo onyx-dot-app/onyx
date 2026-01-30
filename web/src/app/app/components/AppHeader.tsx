@@ -277,7 +277,6 @@ export default function AppHeader() {
           />
         </div>
 
-        {/* Center - contains the custom-header-content */}
         <div className="flex-1 flex flex-col items-center overflow-hidden relative z-sticky">
           <Text
             as="p"
@@ -290,7 +289,7 @@ export default function AppHeader() {
         </div>
 
         {/* Right - contains the share and more-options buttons */}
-        <div className="flex flex-1 px-1 z-sticky justify-end">
+        <div className="flex flex-1 z-sticky justify-end">
           <FrostedDiv className="flex shrink flex-row items-center">
             <Button
               leftIcon={SvgShare}
