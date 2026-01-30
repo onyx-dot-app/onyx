@@ -19,7 +19,7 @@ function HoverableContainer({
   ...props
 }: HoverableContainerProps) {
   // Radix Slot injects className at runtime (bypassing WithoutStyles),
-  // so we extract and merge it to preserve "hoverable-button".
+  // so we extract and merge it to preserve "hoverable-container".
   const { className: slotClassName, ...rest } = props as typeof props & {
     className?: string;
   };
@@ -27,7 +27,7 @@ function HoverableContainer({
     <div
       ref={ref}
       data-variant={variant}
-      className={cn("hoverable-button", slotClassName)}
+      className={cn("hoverable-container", slotClassName)}
       {...rest}
     />
   );
