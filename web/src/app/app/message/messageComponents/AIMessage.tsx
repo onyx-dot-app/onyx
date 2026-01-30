@@ -561,7 +561,7 @@ const AIMessage = React.memo(function AIMessage({
                       User has stopped generation
                     </Text>
                   ) : (
-                    <BlinkingDot />
+                    <BlinkingDot addMargin />
                   )}
                 </div>
               </>
