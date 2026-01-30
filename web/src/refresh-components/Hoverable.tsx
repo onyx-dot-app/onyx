@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
 
+type HoverableVariants = "primary" | "secondary";
 type HoverableContainerVariants = "primary";
 
 interface HoverableContainerProps
@@ -26,9 +27,9 @@ function HoverableContainer({
   return (
     <div
       ref={ref}
+      {...rest}
       data-variant={variant}
       className={cn("hoverable-container", slotClassName)}
-      {...rest}
     />
   );
 }
@@ -51,7 +52,9 @@ export interface HoverableProps
    * Enables group-hover utilities on descendant elements.
    */
   group?: string;
-  disableHoverInteractivity?: boolean;
+  nonInteractive?: boolean;
+  /** Controls background color styling on the hoverable element. */
+  variant?: HoverableVariants;
 }
 
 /**
@@ -106,24 +109,20 @@ export default function Hoverable({
   href,
   ref,
   group,
-  disableHoverInteractivity,
+  nonInteractive,
+  variant = "primary",
   ...props
 }: HoverableProps) {
-  const classes = cn(
-    "flex flex-1 cursor-pointer",
-    !disableHoverInteractivity && [
-      "transition-colors",
-      "hover:bg-background-tint-02",
-      "active:bg-background-tint-00",
-      "data-[pressed=true]:bg-background-tint-00",
-    ],
-    group
-  );
+  const classes = cn("hoverable", group);
+  const dataAttrs = {
+    "data-variant": variant,
+    ...(nonInteractive && { "data-non-interactive": "" }),
+  };
 
   // asChild: merge props onto child element
   if (asChild) {
     return (
-      <Slot ref={ref} className={classes} {...props}>
+      <Slot ref={ref} className={classes} {...dataAttrs} {...props}>
         {children}
       </Slot>
     );
@@ -136,6 +135,7 @@ export default function Hoverable({
         href={href as Route}
         ref={ref as React.Ref<HTMLAnchorElement>}
         className={classes}
+        {...dataAttrs}
         {...props}
       >
         {children}
@@ -149,6 +149,7 @@ export default function Hoverable({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       className={classes}
+      {...dataAttrs}
       {...props}
     >
       {children}
