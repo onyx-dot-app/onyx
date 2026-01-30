@@ -24,7 +24,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
-from onyx.db.document import filter_accessible_documents
+from onyx.db.document_access import get_accessible_documents_by_ids
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentSet
@@ -928,7 +928,7 @@ def upsert_persona(
         external_group_ids = (
             get_user_external_group_ids(db_session, user) if user else []
         )
-        attached_documents = filter_accessible_documents(
+        attached_documents = get_accessible_documents_by_ids(
             db_session=db_session,
             document_ids=document_ids,
             user_email=user_email,

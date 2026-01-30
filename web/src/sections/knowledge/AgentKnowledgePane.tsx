@@ -40,6 +40,8 @@ import {
   HierarchyNodeSummary,
   DocumentSummary,
   DocumentPageCursor,
+  HierarchyItem,
+  HierarchyBreadcrumbProps,
 } from "@/lib/hierarchy/interfaces";
 import {
   fetchHierarchyNodes,
@@ -341,23 +343,8 @@ function DocumentSetsTableContent({
 }
 
 // ============================================================================
-// HIERARCHY ITEM - Union type for folders and documents in the table
-// ============================================================================
-
-type HierarchyItem =
-  | { type: "folder"; data: HierarchyNodeSummary }
-  | { type: "document"; data: DocumentSummary };
-
-// ============================================================================
 // HIERARCHY BREADCRUMB - Navigation path for folder hierarchy
 // ============================================================================
-
-interface HierarchyBreadcrumbProps {
-  source: ValidSources;
-  path: HierarchyNodeSummary[];
-  onNavigateToRoot: () => void;
-  onNavigateToNode: (node: HierarchyNodeSummary, index: number) => void;
-}
 
 function HierarchyBreadcrumb({
   source,
@@ -386,14 +373,13 @@ function HierarchyBreadcrumb({
       height="auto"
     >
       {/* Root source link */}
-      <button
-        onClick={onNavigateToRoot}
-        className="hover:underline cursor-pointer"
-      >
-        <Text text03 secondaryBody={path.length > 0}>
+      {path.length > 0 ? (
+        <Button tertiary onClick={onNavigateToRoot}>
           {sourceMetadata.displayName}
-        </Text>
-      </button>
+        </Button>
+      ) : (
+        <Text text03>{sourceMetadata.displayName}</Text>
+      )}
 
       {/* Collapsed indicator */}
       {shouldCollapse && (
@@ -418,14 +404,12 @@ function HierarchyBreadcrumb({
             {isLast ? (
               <Text text03>{node.title}</Text>
             ) : (
-              <button
+              <Button
+                tertiary
                 onClick={() => onNavigateToNode(node, actualIndex)}
-                className="hover:underline cursor-pointer"
               >
-                <Text text03 secondaryBody>
-                  {node.title}
-                </Text>
-              </button>
+                {node.title}
+              </Button>
             )}
           </React.Fragment>
         );
@@ -487,26 +471,10 @@ function SourceHierarchyBrowser({
   const [savedPath, setSavedPath] = useState<HierarchyNodeSummary[]>([]);
 
   // Store selected document details (for showing all selected documents in view selected mode)
+  // Note: useState (not useMemo) because this is modified independently when users select/deselect documents
   const [selectedDocumentDetails, setSelectedDocumentDetails] = useState<
     Map<string, DocumentSummary>
-  >(() => {
-    // Initialize with initial attached documents if provided
-    if (initialAttachedDocuments && initialAttachedDocuments.length > 0) {
-      const initialMap = new Map<string, DocumentSummary>();
-      initialAttachedDocuments.forEach((doc) => {
-        initialMap.set(doc.id, {
-          id: doc.id,
-          title: doc.title,
-          link: doc.link,
-          parent_id: doc.parent_id,
-          last_modified: doc.last_modified,
-          last_synced: doc.last_synced,
-        });
-      });
-      return initialMap;
-    }
-    return new Map();
-  });
+  >(() => new Map(initialAttachedDocuments?.map((doc) => [doc.id, doc]) ?? []));
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -842,6 +810,41 @@ function SourceHierarchyBrowser({
     });
   };
 
+  // Handler for clicking a row (folder or document)
+  const handleItemClick = (item: HierarchyItem) => {
+    if (item.type === "folder") {
+      onToggleFolder(item.data.id);
+      return;
+    }
+    const docId = item.data.id;
+    const isCurrentlySelected = selectedDocumentIds.includes(docId);
+    if (isCurrentlySelected) {
+      setSelectedDocumentDetails((prev) => {
+        const updated = new Map(prev);
+        updated.delete(docId);
+        return updated;
+      });
+    } else {
+      setSelectedDocumentDetails((prev) => {
+        const updated = new Map(prev);
+        updated.set(docId, item.data);
+        return updated;
+      });
+    }
+    onToggleDocument(docId);
+  };
+
+  // Get the icon for a hierarchy item row
+  const getItemIcon = (item: HierarchyItem, isSelected: boolean) => {
+    if (item.type === "folder") {
+      return <SvgFolder size={16} />;
+    }
+    if (isSelected) {
+      return <Checkbox checked={true} />;
+    }
+    return <SvgFileText size={16} />;
+  };
+
   // Render loading state
   if (isLoadingNodes) {
     return (
@@ -979,53 +982,14 @@ function SourceHierarchyBrowser({
                 ? selectedFolderIds.includes(item.data.id as number)
                 : selectedDocumentIds.includes(item.data.id as string);
 
-              const handleRowClick = () => {
-                if (isFolder) {
-                  onToggleFolder(item.data.id as number);
-                } else {
-                  const docId = item.data.id as string;
-                  const isCurrentlySelected =
-                    selectedDocumentIds.includes(docId);
-                  if (!isCurrentlySelected) {
-                    // Document is being selected - store its details
-                    setSelectedDocumentDetails((prev) => {
-                      const updated = new Map(prev);
-                      updated.set(docId, item.data as DocumentSummary);
-                      return updated;
-                    });
-                  } else {
-                    // Document is being deselected - remove from details
-                    setSelectedDocumentDetails((prev) => {
-                      const updated = new Map(prev);
-                      updated.delete(docId);
-                      return updated;
-                    });
-                  }
-                  onToggleDocument(docId);
-                }
-              };
-
-              // For files: show checked checkbox when selected, file icon when not
-              // For folders: always show folder icon
-              const renderIcon = () => {
-                if (isFolder) {
-                  return <SvgFolder size={16} />;
-                }
-                if (isSelected) {
-                  // Use actual Checkbox component for proper visual (blue fill + white check)
-                  return <Checkbox checked={true} />;
-                }
-                return <SvgFileText size={16} />;
-              };
-
               return (
                 <TableLayouts.TableRow
                   key={id}
                   selected={isSelected}
-                  onClick={handleRowClick}
+                  onClick={() => handleItemClick(item)}
                 >
                   <TableLayouts.CheckboxCell>
-                    {renderIcon()}
+                    {getItemIcon(item, isSelected)}
                   </TableLayouts.CheckboxCell>
                   <TableLayouts.TableCell flex>
                     <GeneralLayouts.Section
