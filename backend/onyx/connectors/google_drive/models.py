@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 from pydantic import field_serializer
 from pydantic import field_validator
 
@@ -150,7 +151,10 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # Hierarchy node raw IDs that have already been yielded.
     # Used to avoid yielding duplicate hierarchy nodes across checkpoints.
     # Thread-safe because multiple impersonation threads access this concurrently.
-    seen_hierarchy_node_raw_ids: ThreadSafeSet[str] = ThreadSafeSet()
+    # Uses default_factory to ensure each checkpoint instance gets a fresh set.
+    seen_hierarchy_node_raw_ids: ThreadSafeSet[str] = Field(
+        default_factory=ThreadSafeSet
+    )
 
     # Hierarchy node raw IDs where we have successfully walked up to a terminal
     # node (a drive root with no parent). This is separate from seen_hierarchy_node_raw_ids
@@ -158,7 +162,10 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # We only skip walking from a node if it's in this set, ensuring that if one user
     # fails to walk to the root, another user with better access can still complete the walk.
     # Thread-safe because multiple impersonation threads access this concurrently.
-    fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str] = ThreadSafeSet()
+    # Uses default_factory to ensure each checkpoint instance gets a fresh set.
+    fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str] = Field(
+        default_factory=ThreadSafeSet
+    )
 
     @field_serializer("completion_map")
     def serialize_completion_map(
