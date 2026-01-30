@@ -402,12 +402,16 @@ class LitellmLLM(LLM):
         )
 
         try:
-            # NOTE: must pass in None instead of empty strings
-            # otherwise litellm can have some issues with bedrock
+            # NOTE: must pass in None instead of empty strings otherwise litellm
+            # can have some issues with bedrock.
+            # NOTE: Sometimes _model_kwargs may have an "api_key" kwarg
+            # depending on what the caller passes in for custom_config. If it
+            # does we allow it to clobber _api_key.
+            if "api_key" not in passthrough_kwargs:
+                passthrough_kwargs["api_key"] = self._api_key or None
             response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 model=model,
-                api_key=self._api_key or None,
                 base_url=self._api_base or None,
                 api_version=self._api_version or None,
                 custom_llm_provider=self._custom_llm_provider or None,
