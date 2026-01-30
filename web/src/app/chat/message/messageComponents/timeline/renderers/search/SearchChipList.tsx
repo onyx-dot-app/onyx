@@ -126,6 +126,7 @@ export function SearchChipList<T>({
                 onSourceClick={onClick ? () => onClick(entry.item) : undefined}
                 showDetailsCard={showDetailsCard}
                 isQuery={isQuery}
+                tooltipText={isQuery ? "View Full Search Term" : undefined}
               />
             ) : (
               <SourceTag
