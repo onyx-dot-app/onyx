@@ -71,13 +71,13 @@ const useTabsContext = () => {
 /** Style classes for TabsList variants */
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex items-center pb-[4px] bg-background-tint-00 px-1 overflow-hidden min-w-0",
+  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
 } as const;
 
 /** Base style classes for TabsTrigger variants */
 const triggerBaseStyles = {
   contained: "p-2 gap-2",
-  pill: "p-1.5 font-secondary-action transition-all duration-200 ease-out",
+  pill: "p-1 font-secondary-action transition-all duration-200 ease-out",
 } as const;
 
 /** Icon style classes for TabsTrigger variants */
@@ -412,8 +412,9 @@ const TabsList = React.forwardRef<
   ) => {
     const listRef = useRef<HTMLDivElement>(null);
     const tabsContainerRef = useRef<HTMLDivElement>(null);
+    const scrollArrowsRef = useRef<HTMLDivElement>(null);
     const rightContentRef = useRef<HTMLDivElement>(null);
-    const [rightContentWidth, setRightContentWidth] = useState(0);
+    const [rightOffset, setRightOffset] = useState(0);
     const isPill = variant === "pill";
     const { style: indicatorStyle } = usePillIndicator(
       listRef,
@@ -431,27 +432,39 @@ const TabsList = React.forwardRef<
     const showScrollArrows =
       isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
 
-    // Track right content width to offset the border line
+    // Track right content and scroll arrows width to offset the border line
     useEffect(() => {
-      if (!isPill || !rightContent) {
-        setRightContentWidth(0);
+      if (!isPill) {
+        setRightOffset(0);
         return;
       }
 
-      const rightEl = rightContentRef.current;
-      if (!rightEl) return;
-
       const updateWidth = () => {
-        setRightContentWidth(rightEl.offsetWidth);
+        let totalWidth = 0;
+
+        // Add scroll arrows width if visible
+        if (scrollArrowsRef.current) {
+          totalWidth += scrollArrowsRef.current.offsetWidth;
+        }
+
+        // Add right content width if present
+        if (rightContentRef.current) {
+          totalWidth += rightContentRef.current.offsetWidth;
+        }
+
+        setRightOffset(totalWidth);
       };
 
       updateWidth();
 
       const resizeObserver = new ResizeObserver(updateWidth);
-      resizeObserver.observe(rightEl);
+      if (scrollArrowsRef.current)
+        resizeObserver.observe(scrollArrowsRef.current);
+      if (rightContentRef.current)
+        resizeObserver.observe(rightContentRef.current);
 
       return () => resizeObserver.disconnect();
-    }, [isPill, rightContent]);
+    }, [isPill, rightContent, showScrollArrows]);
 
     return (
       <TabsPrimitive.List
@@ -486,7 +499,10 @@ const TabsList = React.forwardRef<
           )}
 
           {showScrollArrows && (
-            <div className="flex items-center gap-1 pl-2 flex-shrink-0">
+            <div
+              ref={scrollArrowsRef}
+              className="flex items-center gap-1 pl-2 flex-shrink-0"
+            >
               <IconButton
                 main
                 internal
@@ -513,10 +529,7 @@ const TabsList = React.forwardRef<
           )}
 
           {isPill && (
-            <PillIndicator
-              style={indicatorStyle}
-              rightOffset={rightContentWidth}
-            />
+            <PillIndicator style={indicatorStyle} rightOffset={rightOffset} />
           )}
         </TabsContext.Provider>
       </TabsPrimitive.List>
@@ -597,7 +610,11 @@ const TabsTrigger = React.forwardRef<
 
     const inner = (
       <>
-        {Icon && <Icon size={14} className={cn(iconVariants[variant])} />}
+        {Icon && (
+          <div className="p-0.5">
+            <Icon size={14} className={cn(iconVariants[variant])} />
+          </div>
+        )}
         {typeof children === "string" ? <Text>{children}</Text> : children}
         {isLoading && (
           <span
