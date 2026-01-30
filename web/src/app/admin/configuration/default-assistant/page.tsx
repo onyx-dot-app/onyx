@@ -300,13 +300,7 @@ export default function Page() {
     <>
       <AdminPageTitle
         title="Default Assistant"
-        icon={
-          <SvgOnyxLogo
-            width={32}
-            height={32}
-            className="my-auto stroke-text-04"
-          />
-        }
+        icon={<SvgOnyxLogo size={32} className="my-auto stroke-text-04" />}
       />
       <DefaultAssistantConfig />
     </>
