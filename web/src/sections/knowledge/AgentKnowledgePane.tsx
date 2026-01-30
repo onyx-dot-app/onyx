@@ -938,6 +938,7 @@ export default function AgentKnowledgePane({
             description="Let this agent reference these documents to inform its responses."
           >
             <Switch
+              name="enable_knowledge"
               checked={enableKnowledge}
               onCheckedChange={onEnableKnowledgeChange}
             />
