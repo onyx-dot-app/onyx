@@ -1,5 +1,5 @@
 import { User } from "@/lib/types";
-import { FiX } from "react-icons/fi";
+import { SvgX } from "@opal/icons";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import Button from "@/refresh-components/buttons/Button";
 
@@ -44,7 +44,7 @@ export const UserEditor = ({
                   hover:bg-accent-background
                   cursor-pointer`}
             >
-              {selectedUser.email} <FiX className="ml-1 my-auto" />
+              {selectedUser.email} <SvgX className="ml-1 my-auto" />
             </div>
           ))}
       </div>
