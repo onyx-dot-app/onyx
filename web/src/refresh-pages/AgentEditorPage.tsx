@@ -36,8 +36,6 @@ import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
@@ -89,6 +87,8 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { deleteAgent } from "@/lib/agents";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
+import { ValidSources } from "@/lib/types";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -571,6 +571,8 @@ export default function AgentEditorPage({
         : ("team_knowledge" as "team_knowledge" | "user_knowledge"),
     document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
     user_file_ids: existingAgent?.user_file_ids ?? [],
+    // Selected sources for the new knowledge UI - derived from document sets
+    selected_sources: [] as ValidSources[],
 
     // Advanced
     llm_model_provider_override:
@@ -680,6 +682,7 @@ export default function AgentEditorPage({
     knowledge_source: Yup.string().oneOf(["team_knowledge", "user_knowledge"]),
     document_set_ids: Yup.array().of(Yup.number()),
     user_file_ids: Yup.array().of(Yup.string()),
+    selected_sources: Yup.array().of(Yup.string()),
     num_chunks: Yup.number()
       .nullable()
       .transform((value, originalValue) =>
@@ -894,11 +897,11 @@ export default function AgentEditorPage({
     }
   }
 
-  // FilePickerPopover callbacks - defined outside render to avoid inline functions
+  // FilePickerPopover callbacks for Knowledge section
   function handlePickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: any) => void
+    setFieldValue: (field: string, value: unknown) => void
   ) {
     if (!currentFileIds.includes(file.id)) {
       setFieldValue("user_file_ids", [...currentFileIds, file.id]);
@@ -908,7 +911,7 @@ export default function AgentEditorPage({
   function handleUnpickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: any) => void
+    setFieldValue: (field: string, value: unknown) => void
   ) {
     setFieldValue(
       "user_file_ids",
@@ -926,7 +929,7 @@ export default function AgentEditorPage({
   async function handleUploadChange(
     e: React.ChangeEvent<HTMLInputElement>,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: any) => void
+    setFieldValue: (field: string, value: unknown) => void
   ) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -1191,177 +1194,35 @@ export default function AgentEditorPage({
 
                       <Separator noPadding />
 
-                      <GeneralLayouts.Section>
-                        <GeneralLayouts.Section gap={1}>
-                          <InputLayouts.Title
-                            title="Knowledge"
-                            description="Add specific connectors and documents for this agent to use to inform its responses."
-                          />
-
-                          <Card>
-                            <InputLayouts.Horizontal
-                              name="enable_knowledge"
-                              title="Enable Knowledge"
-                              center
-                            >
-                              <SwitchField name="enable_knowledge" />
-                            </InputLayouts.Horizontal>
-
-                            {values.enable_knowledge && (
-                              <InputLayouts.Horizontal
-                                name="knowledge_source"
-                                title="Knowledge Source"
-                                description="Choose the sources of truth this agent refers to."
-                                center
-                              >
-                                <InputSelectField
-                                  name="knowledge_source"
-                                  className="w-full"
-                                >
-                                  <InputSelect.Trigger />
-                                  <InputSelect.Content>
-                                    <InputSelect.Item value="team_knowledge">
-                                      Team Knowledge
-                                    </InputSelect.Item>
-                                    <InputSelect.Item value="user_knowledge">
-                                      User Knowledge
-                                    </InputSelect.Item>
-                                  </InputSelect.Content>
-                                </InputSelectField>
-                              </InputLayouts.Horizontal>
-                            )}
-
-                            {values.enable_knowledge &&
-                              values.knowledge_source === "team_knowledge" &&
-                              ((documentSets?.length ?? 0) > 0 ? (
-                                <GeneralLayouts.Section
-                                  gap={0.5}
-                                  alignItems="start"
-                                >
-                                  {documentSets!.map((documentSet) => (
-                                    <DocumentSetSelectable
-                                      key={documentSet.id}
-                                      documentSet={documentSet}
-                                      isSelected={values.document_set_ids.includes(
-                                        documentSet.id
-                                      )}
-                                      onSelect={() => {
-                                        const index =
-                                          values.document_set_ids.indexOf(
-                                            documentSet.id
-                                          );
-                                        if (index !== -1) {
-                                          const newIds = [
-                                            ...values.document_set_ids,
-                                          ];
-                                          newIds.splice(index, 1);
-                                          setFieldValue(
-                                            "document_set_ids",
-                                            newIds
-                                          );
-                                        } else {
-                                          setFieldValue("document_set_ids", [
-                                            ...values.document_set_ids,
-                                            documentSet.id,
-                                          ]);
-                                        }
-                                      }}
-                                    />
-                                  ))}
-                                </GeneralLayouts.Section>
-                              ) : (
-                                <CreateButton href="/admin/documents/sets/new">
-                                  Create a Document Set
-                                </CreateButton>
-                              ))}
-
-                            {values.enable_knowledge &&
-                              values.knowledge_source === "user_knowledge" && (
-                                <GeneralLayouts.Section
-                                  gap={0.5}
-                                  alignItems="start"
-                                >
-                                  <FilePickerPopover
-                                    trigger={(open) => (
-                                      <CreateButton transient={open}>
-                                        Add User Files
-                                      </CreateButton>
-                                    )}
-                                    selectedFileIds={values.user_file_ids}
-                                    onPickRecent={(file) =>
-                                      handlePickRecentFile(
-                                        file,
-                                        values.user_file_ids,
-                                        setFieldValue
-                                      )
-                                    }
-                                    onUnpickRecent={(file) =>
-                                      handleUnpickRecentFile(
-                                        file,
-                                        values.user_file_ids,
-                                        setFieldValue
-                                      )
-                                    }
-                                    onFileClick={handleFileClick}
-                                    handleUploadChange={(e) =>
-                                      handleUploadChange(
-                                        e,
-                                        values.user_file_ids,
-                                        setFieldValue
-                                      )
-                                    }
-                                  />
-
-                                  {values.user_file_ids.length > 0 && (
-                                    <GeneralLayouts.Section
-                                      flexDirection="row"
-                                      wrap
-                                      gap={0.5}
-                                      justifyContent="start"
-                                      alignItems="start"
-                                    >
-                                      {values.user_file_ids.map((fileId) => {
-                                        const file = allRecentFiles.find(
-                                          (f) => f.id === fileId
-                                        );
-                                        if (!file) return null;
-
-                                        return (
-                                          <FileCard
-                                            key={fileId}
-                                            file={file}
-                                            removeFile={(id: string) => {
-                                              setFieldValue(
-                                                "user_file_ids",
-                                                values.user_file_ids.filter(
-                                                  (fid) => fid !== id
-                                                )
-                                              );
-                                            }}
-                                            onFileClick={(f: ProjectFile) => {
-                                              setPresentingDocument({
-                                                document_id: `project_file__${f.file_id}`,
-                                                semantic_identifier: f.name,
-                                              });
-                                            }}
-                                          />
-                                        );
-                                      })}
-                                    </GeneralLayouts.Section>
-                                  )}
-                                  {hasProcessingFiles && (
-                                    <Text as="p" text03 secondaryBody>
-                                      Onyx is still processing your uploaded
-                                      files. You can create the agent now, but
-                                      it will not have access to all files until
-                                      processing completes.
-                                    </Text>
-                                  )}
-                                </GeneralLayouts.Section>
-                              )}
-                          </Card>
-                        </GeneralLayouts.Section>
-                      </GeneralLayouts.Section>
+                      <AgentKnowledgePane
+                        enableKnowledge={values.enable_knowledge}
+                        onEnableKnowledgeChange={(enabled) =>
+                          setFieldValue("enable_knowledge", enabled)
+                        }
+                        selectedSources={values.selected_sources}
+                        onSourcesChange={(sources) =>
+                          setFieldValue("selected_sources", sources)
+                        }
+                        documentSets={documentSets ?? []}
+                        selectedDocumentSetIds={values.document_set_ids}
+                        onDocumentSetIdsChange={(ids) =>
+                          setFieldValue("document_set_ids", ids)
+                        }
+                        selectedFileIds={values.user_file_ids}
+                        onFileIdsChange={(ids) =>
+                          setFieldValue("user_file_ids", ids)
+                        }
+                        allRecentFiles={allRecentFiles}
+                        onFileClick={handleFileClick}
+                        onUploadChange={(e) =>
+                          handleUploadChange(
+                            e,
+                            values.user_file_ids,
+                            setFieldValue
+                          )
+                        }
+                        hasProcessingFiles={hasProcessingFiles}
+                      />
 
                       <Separator noPadding />
 

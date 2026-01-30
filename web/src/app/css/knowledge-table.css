@@ -1,0 +1,147 @@
+/* ============================================================================
+   Table Layout Components
+   Based on Figma: Table/Cell component specs
+   ============================================================================ */
+
+/* Table Row Layout
+   Figma specs:
+   - Regular size: min-height 36px (2.25rem)
+   - Padding: 8px (0.5rem) vertical
+   - Gap: 4px (0.25rem) between items
+   - Border radius: 8px on hover
+*/
+.table-row-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0;
+  border-radius: var(--border-radius-08);
+  width: 100%;
+  min-width: 0;
+}
+
+.table-row-layout.cursor-pointer {
+  cursor: pointer;
+}
+
+.table-row-layout:hover {
+  background-color: var(--background-tint-01);
+}
+
+.table-row-layout[data-selected="true"] {
+  background-color: var(--background-tint-01);
+}
+
+/* Table Cell Layout
+   Figma specs:
+   - Gap: 4px (0.25rem) internal
+   - Text padding: 2px (0.125rem) horizontal
+   - min-width: 1px to allow truncation
+*/
+.table-cell-layout {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  align-items: center;
+  min-width: 1px;
+  min-height: 1px;
+  overflow: hidden;
+}
+
+.table-cell-layout[data-flex="true"] {
+  flex: 1 0 0;
+}
+
+.table-cell-layout[data-fixed="true"] {
+  flex-shrink: 0;
+}
+
+/* Sidebar Layout
+   Fixed-width navigation sidebar
+   Figma specs:
+   - Width: 200px (12.5rem)
+   - Gap: 4px (0.25rem)
+*/
+.sidebar-layout {
+  display: flex;
+  flex-direction: column;
+  width: 12.5rem;
+  flex-shrink: 0;
+  gap: 0.25rem;
+}
+
+/* Fix for Truncated text containers in sidebar to prevent vertical clipping
+   The Truncated component wrapper has overflow-hidden which clips text
+   if the container doesn't have sufficient height for the line-height.
+   font-secondary-body uses line-height: 16px (1rem), but we add slightly more
+   (1.125rem = 18px) to accommodate text descenders (like 'p', 'g', 'd').
+*/
+.sidebar-layout .flex-grow.overflow-hidden {
+  min-height: 1.125rem;
+}
+
+/* Two Column Layout
+   Container for sidebar + content pattern
+*/
+.two-column-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Content Column Layout
+   Main content area that fills remaining space
+   Content should align to the top (start)
+*/
+.content-column-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 0;
+  min-width: 1px;
+  min-height: 1px;
+  overflow: hidden;
+  justify-content: flex-start;
+}
+
+/* Hidden Input
+   For file uploads and other hidden inputs
+*/
+.hidden-input {
+  display: none;
+}
+
+/* Checkbox Cell
+   Figma specs:
+   - Width: 24px (1.5rem)
+   - Centered content
+*/
+.checkbox-cell-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  flex-shrink: 0;
+}
+
+/* Source Icons Row
+   Row of source type icons
+   Figma specs:
+   - Gap: 4px (0.25rem)
+   - Icon size: 16px (1rem)
+*/
+.source-icons-layout {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.source-icons-layout > svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}

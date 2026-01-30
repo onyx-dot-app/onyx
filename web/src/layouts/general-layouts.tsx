@@ -405,5 +405,4 @@ function CardItemLayout({
     </div>
   );
 }
-
-export { Section, LineItemLayout, AttachmentItemLayout, CardItemLayout };
+export { Section, LineItemLayout, CardItemLayout, AttachmentItemLayout };
