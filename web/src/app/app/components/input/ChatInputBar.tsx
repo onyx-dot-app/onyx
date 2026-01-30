@@ -24,7 +24,7 @@ import { truncateString, cn } from "@/lib/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
-import { FileCard } from "@/app/app/components/input/FileCard";
+import { FileCard } from "@/sections/cards/FileCard";
 import {
   ProjectFile,
   UserFileStatus,

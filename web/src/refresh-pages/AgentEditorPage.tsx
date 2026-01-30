@@ -45,7 +45,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { FileCard } from "@/app/app/components/input/FileCard";
+import { FileCard } from "@/sections/cards/FileCard";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import {
   ProjectFile,

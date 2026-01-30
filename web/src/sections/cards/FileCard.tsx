@@ -1,13 +1,23 @@
 "use client";
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import type { ProjectFile } from "@/app/app/projects/projectsService";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
-import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { cn, isImageFile } from "@/lib/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgFileText, SvgX } from "@opal/icons";
+import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
+import { AttachmentItemLayout } from "@/layouts/general-layouts";
+import Spacer from "@/refresh-components/Spacer";
+
+interface ImageFileCardProps {
+  file: ProjectFile;
+  imageUrl: string | null;
+  removeFile?: (fileId: string) => void;
+  onFileClick?: (file: ProjectFile) => void;
+  isProcessing?: boolean;
+  compact?: boolean;
+}
 function ImageFileCard({
   file,
   imageUrl,
@@ -15,19 +25,7 @@ function ImageFileCard({
   onFileClick,
   isProcessing = false,
   compact = false,
-}: {
-  file: ProjectFile;
-  imageUrl: string | null;
-  removeFile: (fileId: string) => void;
-  onFileClick?: (file: ProjectFile) => void;
-  isProcessing?: boolean;
-  compact?: boolean;
-}) {
-  const handleRemoveFile = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    removeFile(file.id);
-  };
-
+}: ImageFileCardProps) {
   const sizeClass = compact ? "h-11 w-11" : "h-20 w-20";
   const loaderSize = compact ? "h-5 w-5" : "h-8 w-8";
 
@@ -46,9 +44,12 @@ function ImageFileCard({
         }
       }}
     >
-      {doneUploading && (
+      {removeFile && doneUploading && (
         <button
-          onClick={handleRemoveFile}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeFile(file.id);
+          }}
           title="Delete file"
           aria-label="Delete file"
           className={cn(
@@ -102,21 +103,20 @@ function ImageFileCard({
   );
 }
 
+export interface FileCardProps {
+  file: ProjectFile;
+  removeFile?: (fileId: string) => void;
+  hideProcessingState?: boolean;
+  onFileClick?: (file: ProjectFile) => void;
+  compactImages?: boolean;
+}
 export function FileCard({
   file,
   removeFile,
   hideProcessingState = false,
   onFileClick,
   compactImages = false,
-  className,
-}: {
-  file: ProjectFile;
-  removeFile: (fileId: string) => void;
-  hideProcessingState?: boolean;
-  onFileClick?: (file: ProjectFile) => void;
-  compactImages?: boolean;
-  className?: string;
-}) {
+}: FileCardProps) {
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
     const lastDotIndex = name.lastIndexOf(".");
@@ -144,10 +144,7 @@ export function FileCard({
   // When hideProcessingState is true, we treat processing files as completed for display purposes
   const isProcessing = hideProcessingState ? false : isActuallyProcessing;
 
-  const handleRemoveFile = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    removeFile(file.id);
-  };
+  const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
 
   // For images, always show the larger preview layout (even while processing)
   if (isImage) {
@@ -164,63 +161,58 @@ export function FileCard({
   }
 
   return (
-    <div
-      className={cn(
-        "relative group flex items-center gap-1 border border-border-01 rounded-08",
-        isProcessing ? "bg-background-neutral-02" : "bg-background-tint-00",
-        "p-1 h-11 min-w-[120px] max-w-[240px]",
-        onFileClick &&
-          !isProcessing &&
-          "cursor-pointer hover:bg-accent-background",
-        className
-      )}
-      onClick={() => {
-        if (onFileClick && !isProcessing) {
-          onFileClick(file);
-        }
-      }}
-    >
-      {String(file.status) !== UserFileStatus.UPLOADING && (
+    <div className="relative group">
+      {removeFile && doneUploading && (
         <button
-          onClick={handleRemoveFile}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeFile(file.id);
+          }}
           title="Delete file"
           aria-label="Delete file"
-          className="absolute -left-[5px] -top-[5px] z-10 h-4 w-4 flex items-center justify-center rounded-04 border border-border text-[11px] bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto transition-opacity duration-150 hover:opacity-90"
+          className={cn(
+            "absolute -left-2 -top-2 z-10 h-4 w-4",
+            "flex items-center justify-center",
+            "rounded-04 border border-border text-[11px]",
+            "bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm",
+            "opacity-0 group-hover:opacity-100 focus:opacity-100",
+            "pointer-events-none group-hover:pointer-events-auto focus:pointer-events-auto",
+            "transition-opacity duration-150 hover:opacity-90"
+          )}
         >
           <SvgX className="h-3 w-3 stroke-text-inverted-03" />
         </button>
       )}
-      <div
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-04 p-2
-      ${isProcessing ? "bg-background-neutral-03" : "bg-background-tint-01"}`}
-      >
-        {isProcessing ? (
-          <SimpleLoader />
-        ) : (
-          <SvgFileText className="h-5 w-5 stroke-text-02" />
-        )}
-      </div>
-      <div className="flex flex-col overflow-hidden pr-1">
-        <Truncated
-          className={`font-secondary-action truncate
-          ${isProcessing ? "text-text-03" : "text-text-04"}`}
-          title={file.name}
-        >
-          {file.name}
-        </Truncated>
-        <Text as="p" text03 secondaryBody nowrap className="truncate">
-          {isProcessing
-            ? file.status === UserFileStatus.UPLOADING
-              ? "Uploading..."
-              : "Processing..."
-            : typeLabel}
-        </Text>
+      <div className="max-w-[12rem]">
+        <Hoverable asChild nonInteractive>
+          <HoverableContainer
+            padding={0}
+            rounded="rounded-12"
+            width="fit"
+            border
+          >
+            <AttachmentItemLayout
+              icon={isProcessing ? SimpleLoader : SvgFileText}
+              title={file.name}
+              description={
+                isProcessing
+                  ? file.status === UserFileStatus.UPLOADING
+                    ? "Uploading..."
+                    : "Processing..."
+                  : typeLabel
+              }
+            />
+            <Spacer horizontal rem={0.5} />
+          </HoverableContainer>
+        </Hoverable>
       </div>
     </div>
   );
 }
 
 // Skeleton loading component for file cards
-export const FileCardSkeleton = () => (
-  <div className="min-w-[120px] max-w-[240px] h-11 rounded-08 bg-background-tint-02 animate-pulse" />
-);
+export function FileCardSkeleton() {
+  return (
+    <div className="min-w-[120px] max-w-[240px] h-11 rounded-08 bg-background-tint-02 animate-pulse" />
+  );
+}

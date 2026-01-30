@@ -4,7 +4,11 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
-import { Length, widthClassmap } from "@/layouts/general-layouts";
+import {
+  heightClassmap,
+  Length,
+  widthClassmap,
+} from "@/layouts/general-layouts";
 
 type HoverableVariants = "primary" | "secondary" | "tertiary";
 
@@ -13,6 +17,7 @@ interface HoverableContainerProps
   border?: boolean;
   rounded?: string;
   padding?: number;
+  height?: Length;
   width?: Length;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -21,6 +26,7 @@ function HoverableContainer({
   border,
   rounded = "rounded-08",
   padding = 0.5,
+  height = "full",
   width = "full",
   ref,
   ...props
@@ -35,10 +41,10 @@ function HoverableContainer({
       ref={ref}
       {...rest}
       className={cn(
-        "hoverable-container",
         border && "border",
         rounded,
         widthClassmap[width],
+        heightClassmap[height],
         slotClassName
       )}
       style={{

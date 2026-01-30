@@ -31,7 +31,7 @@ export const widthClassmap: Record<Length, string> = {
   fit: "w-fit flex-shrink-0",
   full: "w-full",
 };
-const heightClassmap: Record<Length, string> = {
+export const heightClassmap: Record<Length, string> = {
   auto: "h-auto",
   fit: "h-fit",
   full: "h-full",
@@ -245,7 +245,7 @@ function LineItemLayout({
         {loading ? (
           <div className="line-item-layout-skeleton-title" />
         ) : (
-          <Text
+          <Truncated
             mainContentEmphasis={!isCompact && !isMini}
             secondaryBody={isMini}
             mainUiAction={variant === "secondary"}
@@ -253,7 +253,7 @@ function LineItemLayout({
             className="line-item-layout-title"
           >
             {title}
-          </Text>
+          </Truncated>
         )}
 
         {/* Row 2: Description (column 2, or column 1 if no icon) */}
