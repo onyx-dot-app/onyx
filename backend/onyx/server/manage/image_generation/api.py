@@ -28,6 +28,7 @@ from onyx.server.manage.image_generation.models import TestImageGenerationReques
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -209,6 +210,25 @@ def test_image_generation(
                 status_code=404,
                 detail=f"Source LLM provider with id {test_request.source_llm_provider_id} not found",
             )
+
+        # SECURITY: In multi-tenant mode, prevent SSRF-based credential exfiltration.
+        # If reusing the existing API key, the api_base and custom_config must not be
+        # changed, otherwise an attacker could redirect requests to their own server
+        # to capture the API key.
+        if MULTI_TENANT:
+            if test_request.api_base != source_provider.api_base:
+                raise HTTPException(
+                    status_code=400,
+                    detail="API base cannot be changed when using credentials from an existing provider",
+                )
+            if (
+                test_request.custom_config
+                and test_request.custom_config != source_provider.custom_config
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Custom config cannot be changed when using credentials from an existing provider",
+                )
 
         api_key = source_provider.api_key
         provider = source_provider.provider

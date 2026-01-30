@@ -161,6 +161,25 @@ def test_llm_configuration(
         )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
+            # SECURITY: In multi-tenant mode, prevent SSRF-based credential exfiltration.
+            # If reusing the existing API key, the api_base and custom_config must not be
+            # changed, otherwise an attacker could redirect requests to their own server
+            # to capture the API key.
+            if MULTI_TENANT:
+                if test_llm_request.api_base != existing_provider.api_base:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="API base cannot be changed without providing a new API key",
+                    )
+                if (
+                    test_llm_request.custom_config
+                    and test_llm_request.custom_config
+                    != existing_provider.custom_config
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Custom config cannot be changed without providing a new API key",
+                    )
             test_api_key = existing_provider.api_key
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
