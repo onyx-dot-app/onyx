@@ -42,6 +42,7 @@ from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
@@ -378,6 +379,19 @@ def test_content_provider(
                 status_code=400,
                 detail="No stored API key found for this provider type.",
             )
+        if MULTI_TENANT:
+            stored_base_url = (
+                existing_provider.config.get("base_url")
+                if existing_provider.config
+                else None
+            )
+            request_base_url = request.config.base_url
+            if request_base_url != stored_base_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Base URL cannot differ from stored provider when using stored API key",
+                )
+
         api_key = existing_provider.api_key
 
     if not api_key:
