@@ -190,6 +190,7 @@ export interface LineItemLayoutProps {
   rightChildren?: React.ReactNode;
 
   variant?: LineItemLayoutVariant;
+  width?: Length;
   strikethrough?: boolean;
   loading?: boolean;
   center?: boolean;
@@ -203,6 +204,7 @@ function LineItemLayout({
   rightChildren,
 
   variant = "primary",
+  width,
   strikethrough,
   loading,
   center,
@@ -228,6 +230,7 @@ function LineItemLayout({
       justifyContent="between"
       alignItems={center || isMini ? "center" : "start"}
       gap={gap}
+      width={width}
     >
       <div
         className="line-item-layout"
