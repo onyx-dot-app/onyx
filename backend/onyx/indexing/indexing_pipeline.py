@@ -29,6 +29,7 @@ from onyx.connectors.models import TextSection
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
+from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
@@ -271,6 +272,17 @@ def index_doc_batch_prepare(
         index_attempt_metadata.credential_id,
         document_ids,
     )
+
+    # Link hierarchy nodes to documents for sources where pages can be both
+    # hierarchy nodes AND documents (e.g., Notion, Confluence).
+    # This must happen after documents are upserted due to FK constraint.
+    if documents:
+        link_hierarchy_nodes_to_documents(
+            db_session=db_session,
+            document_ids=document_ids,
+            source=documents[0].source,
+            commit=False,  # We'll commit with the rest of the transaction
+        )
 
     # No docs to process because the batch is empty or every doc was already indexed
     if not updatable_docs:

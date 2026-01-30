@@ -85,7 +85,10 @@ export const testApiKeyHelper = async (
     api_version: finalApiVersion,
     deployment_name: finalDeploymentName,
     provider: providerName,
+    // since this is used for onboarding, we always specify the
+    // API key and custom config
     api_key_changed: true,
+    custom_config_changed: true,
     custom_config: {
       ...(formValues?.custom_config ?? {}),
       ...(customConfigOverride ?? {}),

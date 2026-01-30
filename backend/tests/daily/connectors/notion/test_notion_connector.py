@@ -4,8 +4,36 @@ import time
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.notion.connector import NotionConnector
+
+
+def compare_hierarchy_nodes(
+    yielded_nodes: list[HierarchyNode],
+    expected_nodes: list[HierarchyNode],
+) -> None:
+    """Compare yielded HierarchyNodes against expected ground truth.
+
+    Compares nodes by their essential fields (raw_node_id, raw_parent_id, display_name, link).
+    Order does not matter.
+    """
+    if not expected_nodes:
+        # Empty ground truth - skip comparison for now
+        return
+
+    yielded_set = {
+        (n.raw_node_id, n.raw_parent_id, n.display_name, n.link) for n in yielded_nodes
+    }
+    expected_set = {
+        (n.raw_node_id, n.raw_parent_id, n.display_name, n.link) for n in expected_nodes
+    }
+
+    missing = expected_set - yielded_set
+    extra = yielded_set - expected_set
+
+    assert not missing, f"Missing expected HierarchyNodes: {missing}"
+    assert not extra, f"Unexpected HierarchyNodes: {extra}"
 
 
 @pytest.fixture
@@ -27,11 +55,24 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     """
     doc_batch_generator = notion_connector.poll_source(0, time.time())
 
-    # Get first batch of documents
-    doc_batch = next(doc_batch_generator)
+    # Collect all documents and hierarchy nodes from all batches
+    documents: list[Document] = []
+    hierarchy_nodes: list[HierarchyNode] = []
+    for doc_batch in doc_batch_generator:
+        for item in doc_batch:
+            if isinstance(item, HierarchyNode):
+                hierarchy_nodes.append(item)
+            else:
+                documents.append(item)
+
+    # Verify document count
     assert (
-        len(doc_batch) == 5
+        len(documents) == 5
     ), "Expected exactly 5 documents (root, two children, table entry, and table entry child)"
+
+    # Verify HierarchyNodes against ground truth (empty for now)
+    expected_hierarchy_nodes: list[HierarchyNode] = []
+    compare_hierarchy_nodes(hierarchy_nodes, expected_hierarchy_nodes)
 
     # Find root and child documents by semantic identifier
     root_doc = None
@@ -39,9 +80,7 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     child2_doc = None
     table_entry_doc = None
     table_entry_child_doc = None
-    for doc in doc_batch:
-        if isinstance(doc, HierarchyNode):
-            continue
+    for doc in documents:
         if doc.semantic_identifier == "Root":
             root_doc = doc
         elif doc.semantic_identifier == "Child1":

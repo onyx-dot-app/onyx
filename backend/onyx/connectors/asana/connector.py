@@ -26,11 +26,17 @@ class AsanaConnector(LoadConnector, PollConnector):
         batch_size: int = INDEX_BATCH_SIZE,
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
     ) -> None:
-        self.workspace_id = asana_workspace_id
-        self.project_ids_to_index: list[str] | None = (
-            asana_project_ids.split(",") if asana_project_ids is not None else None
-        )
-        self.asana_team_id = asana_team_id
+        self.workspace_id = asana_workspace_id.strip()
+        if asana_project_ids:
+            project_ids = [
+                project_id.strip()
+                for project_id in asana_project_ids.split(",")
+                if project_id.strip()
+            ]
+            self.project_ids_to_index = project_ids or None
+        else:
+            self.project_ids_to_index = None
+        self.asana_team_id = (asana_team_id.strip() or None) if asana_team_id else None
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
         logger.info(
