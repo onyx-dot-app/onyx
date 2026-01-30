@@ -22,7 +22,11 @@ def upgrade() -> None:
     op.create_table(
         "flow_mapping",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("flow_type", sa.Enum(ModelFlowType), nullable=False),
+        sa.Column(
+            "flow_type",
+            sa.Enum(ModelFlowType, name="modelflowtype", native_enum=False),
+            nullable=False,
+        ),
         sa.Column("is_default", sa.Boolean(), nullable=False, default=False),
         sa.Column("model_configuration_id", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),

@@ -2725,7 +2725,7 @@ class FlowMapping(Base):
             "ix_one_default_per_flow",
             "flow_type",
             unique=True,
-            postgresql_where=(is_default is True),
+            postgresql_where=(is_default == True),  # noqa: E712
         ),
     )
 
