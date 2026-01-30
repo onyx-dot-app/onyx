@@ -546,8 +546,19 @@ class NotionConnector(LoadConnector, PollConnector):
             hierarchy_nodes=hierarchy_nodes,
         )
 
-    def _read_blocks(self, base_block_id: str) -> BlockReadOutput:
-        """Reads all child blocks for the specified block."""
+    def _read_blocks(
+        self, base_block_id: str, containing_page_id: str | None = None
+    ) -> BlockReadOutput:
+        """Reads all child blocks for the specified block.
+
+        Args:
+            base_block_id: The block ID to read children from
+            containing_page_id: The ID of the page that contains this block tree.
+                Used to correctly map child pages/databases to their parent page
+                rather than intermediate block IDs.
+        """
+        # If no containing_page_id provided, assume base_block_id is the page itself
+        page_id = containing_page_id or base_block_id
         result_blocks: list[NotionBlock] = []
         child_pages: list[str] = []
         hierarchy_nodes: list[HierarchyNode] = []
@@ -606,12 +617,14 @@ class NotionConnector(LoadConnector, PollConnector):
                 if result["has_children"]:
                     if result_type == "child_page":
                         # Child pages will not be included at this top level, it will be a separate document.
-                        # Track parent so we can resolve block_id parents later.
+                        # Track parent page so we can resolve block_id parents later.
+                        # Use page_id (not base_block_id) to ensure we map to the containing page,
+                        # not an intermediate block like a toggle or callout.
                         child_pages.append(result_block_id)
-                        self._child_page_parent_map[result_block_id] = base_block_id
+                        self._child_page_parent_map[result_block_id] = page_id
                     else:
                         logger.debug(f"Entering sub-block: {result_block_id}")
-                        sub_output = self._read_blocks(result_block_id)
+                        sub_output = self._read_blocks(result_block_id, page_id)
                         logger.debug(f"Finished sub-block: {result_block_id}")
                         result_blocks.extend(sub_output.blocks)
                         child_pages.extend(sub_output.child_page_ids)
@@ -622,7 +635,7 @@ class NotionConnector(LoadConnector, PollConnector):
                     db_title = result_obj.get("title", "")
                     db_output = self._read_pages_from_database(
                         result_block_id,
-                        database_parent_raw_id=base_block_id,  # Parent is the containing page
+                        database_parent_raw_id=page_id,  # Parent is the containing page
                         database_name=db_title or None,
                     )
                     # A database on a page often looks like a table, we need to include it for the contents
@@ -697,9 +710,9 @@ class NotionConnector(LoadConnector, PollConnector):
             page_title = raw_page_title or f"Untitled Page with ID {page.id}"
             parent_raw_id = self._get_parent_raw_id(page.parent, page_id=page.id)
 
-            # If this page has children, yield it as a hierarchy node FIRST
+            # If this page has children (pages or databases), yield it as a hierarchy node FIRST
             # This ensures parent nodes are created before child documents reference them
-            if block_output.child_page_ids:
+            if block_output.child_page_ids or block_output.hierarchy_nodes:
                 hierarchy_node = self._maybe_yield_hierarchy_node(
                     raw_node_id=page.id,
                     raw_parent_id=parent_raw_id,
