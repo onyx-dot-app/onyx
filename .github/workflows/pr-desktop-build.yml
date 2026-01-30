@@ -32,10 +32,11 @@ jobs:
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             args: "--bundles deb,rpm"
-          - platform: macos
-            os: macos-latest
-            target: universal-apple-darwin
-            args: "--target universal-apple-darwin"
+          # TODO: Fix and enable the macOS build.
+          #- platform: macos
+          #  os: macos-latest
+          #  target: universal-apple-darwin
+          #  args: "--target universal-apple-darwin"
           - platform: windows
             os: windows-latest
             target: x86_64-pc-windows-msvc
