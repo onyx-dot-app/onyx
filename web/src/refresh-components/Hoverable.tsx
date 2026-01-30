@@ -1,4 +1,4 @@
-import React from "react";
+import React, { createContext, useContext } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -7,6 +7,10 @@ import { WithoutStyles } from "@/types";
 
 type HoverableContainerVariants = "primary";
 
+const HoverableContext = createContext<HoverableContainerVariants | undefined>(
+  undefined
+);
+
 interface HoverableContainerProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
   variant?: HoverableContainerVariants;
@@ -14,10 +18,12 @@ interface HoverableContainerProps
 }
 
 function HoverableContainer({
-  variant = "primary",
+  variant,
   ref,
   ...props
 }: HoverableContainerProps) {
+  const contextVariant = useContext(HoverableContext);
+  const resolvedVariant = variant ?? contextVariant ?? "primary";
   // Radix Slot injects className at runtime (bypassing WithoutStyles),
   // so we extract and merge it to preserve "hoverable-container".
   const { className: slotClassName, ...rest } = props as typeof props & {
@@ -26,7 +32,7 @@ function HoverableContainer({
   return (
     <div
       ref={ref}
-      data-variant={variant}
+      data-variant={resolvedVariant}
       className={cn("hoverable-container", slotClassName)}
       {...rest}
     />
@@ -52,6 +58,12 @@ export interface HoverableProps
    */
   group?: string;
   disableHoverInteractivity?: boolean;
+  /**
+   * Variant passed down to `HoverableContainer` via context.
+   * Any descendant `HoverableContainer` without an explicit `variant`
+   * prop will inherit this value.
+   */
+  variant?: HoverableContainerVariants;
 }
 
 /**
@@ -107,6 +119,7 @@ export default function Hoverable({
   ref,
   group,
   disableHoverInteractivity,
+  variant,
   ...props
 }: HoverableProps) {
   const classes = cn(
@@ -120,39 +133,49 @@ export default function Hoverable({
     group
   );
 
-  // asChild: merge props onto child element
-  if (asChild) {
-    return (
-      <Slot ref={ref} className={classes} {...props}>
-        {children}
-      </Slot>
-    );
-  }
+  const content = (() => {
+    // asChild: merge props onto child element
+    if (asChild) {
+      return (
+        <Slot ref={ref} className={classes} {...props}>
+          {children}
+        </Slot>
+      );
+    }
 
-  // href: render as Link (anchor) directly
-  if (href) {
+    // href: render as Link (anchor) directly
+    if (href) {
+      return (
+        <Link
+          href={href as Route}
+          ref={ref as React.Ref<HTMLAnchorElement>}
+          className={classes}
+          {...props}
+        >
+          {children}
+        </Link>
+      );
+    }
+
+    // default: render as button
     return (
-      <Link
-        href={href as Route}
-        ref={ref as React.Ref<HTMLAnchorElement>}
+      <button
+        ref={ref as React.Ref<HTMLButtonElement>}
+        type="button"
         className={classes}
         {...props}
       >
         {children}
-      </Link>
+      </button>
     );
-  }
+  })();
 
-  // default: render as button
+  if (variant === undefined) return content;
+
   return (
-    <button
-      ref={ref as React.Ref<HTMLButtonElement>}
-      type="button"
-      className={classes}
-      {...props}
-    >
-      {children}
-    </button>
+    <HoverableContext.Provider value={variant}>
+      {content}
+    </HoverableContext.Provider>
   );
 }
 
