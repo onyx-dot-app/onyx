@@ -371,6 +371,8 @@ trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
 echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
 aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
 
+touch /tmp/sync-ready
+
 echo "Initial sync complete, staying alive for incremental syncs"
 # Stay alive - incremental sync commands will be executed via kubectl exec
 # Use 'wait' so shell can respond to signals while sleeping
@@ -387,6 +389,14 @@ done
                 # Reduced resources since sidecar is mostly idle (sleeping)
                 requests={"cpu": "50m", "memory": "128Mi"},
                 limits={"cpu": "1000m", "memory": "1Gi"},
+            ),
+            # Readiness probe checks if initial S3 sync completed
+            readiness_probe=client.V1Probe(
+                exec_=client.V1ExecAction(command=["test", "-f", "/tmp/sync-ready"]),
+                initial_delay_seconds=1,
+                period_seconds=2,
+                timeout_seconds=1,
+                failure_threshold=60,  # 60 * 2s = 120s max for initial sync
             ),
         )
 
@@ -420,16 +430,25 @@ done
                 requests={"cpu": "500m", "memory": "1Gi"},
                 limits={"cpu": "2000m", "memory": "6Gi"},
             ),
-            # TODO: Re-enable probes when sandbox container runs actual services.
-            # Note: Next.js ports are now per-session (dynamic), so container-level
-            # probes would need to check the agent port or use a different approach.
-            # liveness_probe=client.V1Probe(
-            #     http_get=client.V1HTTPGetAction(path="/global/health", port=AGENT_PORT),
-            #     initial_delay_seconds=30,
-            #     period_seconds=30,
-            #     timeout_seconds=5,
-            #     failure_threshold=3,
-            # ),
+            # Use startup probe to give container time to initialize
+            # After startup succeeds, readiness checks if files are synced
+            startup_probe=client.V1Probe(
+                exec_=client.V1ExecAction(command=["sh", "-c", "test -d /workspace"]),
+                initial_delay_seconds=2,
+                period_seconds=3,
+                timeout_seconds=2,
+                failure_threshold=30,  # 30 * 3s = 90s max startup time
+            ),
+            readiness_probe=client.V1Probe(
+                exec_=client.V1ExecAction(
+                    # Check if files directory is mounted and synced
+                    command=["sh", "-c", "test -d /workspace/files"]
+                ),
+                initial_delay_seconds=0,
+                period_seconds=3,
+                timeout_seconds=1,
+                failure_threshold=3,
+            ),
             security_context=client.V1SecurityContext(
                 allow_privilege_escalation=False,
                 read_only_root_filesystem=False,
@@ -613,6 +632,64 @@ done
 
         return None
 
+    def _check_container_status(self, pod: client.V1Pod) -> str | None:
+        """Check if any regular containers have failed.
+
+        Args:
+            pod: The pod object
+
+        Returns:
+            Error message if a container failed, None otherwise
+        """
+        if not pod.status.container_statuses:
+            return None
+
+        for container_status in pod.status.container_statuses:
+            if container_status.state:
+                # Check for terminated state with non-zero exit code
+                if container_status.state.terminated:
+                    if container_status.state.terminated.exit_code != 0:
+                        container_name = container_status.name
+                        exit_code = container_status.state.terminated.exit_code
+                        reason = container_status.state.terminated.reason or "Unknown"
+                        message = container_status.state.terminated.message or ""
+
+                        # Get container logs
+                        try:
+                            logs = self._core_api.read_namespaced_pod_log(
+                                name=pod.metadata.name,
+                                namespace=self._namespace,
+                                container=container_name,
+                                tail_lines=50,
+                            )
+                            logs_str = logs if logs else "(no logs available)"
+                        except ApiException:
+                            logs_str = "(failed to retrieve logs)"
+
+                        return (
+                            f"Container '{container_name}' failed with exit code {exit_code} "
+                            f"(reason: {reason}). "
+                            f"Message: {message}\n"
+                            f"Last 50 lines of logs:\n{logs_str}"
+                        )
+                # Check for waiting state with error reason
+                elif container_status.state.waiting:
+                    if container_status.state.waiting.reason in [
+                        "Error",
+                        "CrashLoopBackOff",
+                        "ImagePullBackOff",
+                        "ErrImagePull",
+                    ]:
+                        container_name = container_status.name
+                        reason = container_status.state.waiting.reason
+                        message = container_status.state.waiting.message or ""
+                        return (
+                            f"Container '{container_name}' is in '{reason}' state. "
+                            f"Message: {message}"
+                        )
+
+        return None
+
     def _wait_for_pod_ready(
         self,
         pod_name: str,
@@ -648,11 +725,15 @@ done
 
                 # Check for failure conditions
                 if phase == "Failed":
-                    # Try to get more details about the failure
+                    # Check both init containers and regular containers for failures
                     init_error = self._check_init_container_status(pod)
+                    container_error = self._check_container_status(pod)
+
                     error_msg = f"Pod {pod_name} failed to start"
                     if init_error:
                         error_msg += f": {init_error}"
+                    elif container_error:
+                        error_msg += f": {container_error}"
                     raise RuntimeError(error_msg)
 
                 if phase == "Succeeded":
@@ -678,15 +759,33 @@ done
 
             time.sleep(POD_READY_POLL_INTERVAL_SECONDS)
 
-        # On timeout, check one more time for init container failures
+        # On timeout, check one more time for container failures
         try:
             pod = self._core_api.read_namespaced_pod(
                 name=pod_name,
                 namespace=self._namespace,
             )
             init_error = self._check_init_container_status(pod)
+            container_error = self._check_container_status(pod)
+
             if init_error:
                 raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
+            if container_error:
+                raise RuntimeError(f"Pod {pod_name} failed to start: {container_error}")
+
+            # If no specific error, provide pod status details
+            phase = pod.status.phase
+            conditions = pod.status.conditions or []
+            ready_condition = next((c for c in conditions if c.type == "Ready"), None)
+            ready_status = ready_condition.status if ready_condition else "Unknown"
+            ready_reason = ready_condition.reason if ready_condition else "Unknown"
+            ready_message = ready_condition.message if ready_condition else ""
+
+            raise RuntimeError(
+                f"Timeout waiting for pod {pod_name} to become ready. "
+                f"Phase: {phase}, Ready: {ready_status}, "
+                f"Reason: {ready_reason}, Message: {ready_message}"
+            )
         except ApiException:
             pass  # Pod might be deleted, ignore
 

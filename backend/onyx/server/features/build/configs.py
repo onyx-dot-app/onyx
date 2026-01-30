@@ -65,8 +65,10 @@ SANDBOX_SNAPSHOTS_BUCKET = os.environ.get(
 )
 
 # Next.js preview server port range
+# Reduced from 90 to 50 ports to minimize Kubernetes service env var injection
+# 50 ports = 50 concurrent sessions per user, which is more than sufficient
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
-SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
+SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3060"))
 
 # File upload configuration
 MAX_UPLOAD_FILE_SIZE_MB = int(os.environ.get("BUILD_MAX_UPLOAD_FILE_SIZE_MB", "50"))
