@@ -153,8 +153,12 @@ class TestDocprocessingPriorityInDocumentExtraction:
     )
     @patch("onyx.background.indexing.run_docfetching.save_checkpoint")
     @patch("onyx.background.indexing.run_docfetching.get_latest_valid_checkpoint")
+    @patch("onyx.background.indexing.run_docfetching.get_redis_client")
+    @patch("onyx.background.indexing.run_docfetching.ensure_source_node_exists")
     def test_docprocessing_priority_based_on_last_successful_index_time(
         self,
+        mock_ensure_source_node_exists: MagicMock,
+        mock_get_redis_client: MagicMock,
         mock_get_latest_valid_checkpoint: MagicMock,
         mock_save_checkpoint: MagicMock,
         mock_get_last_successful_attempt_poll_range_end: MagicMock,
@@ -210,6 +214,11 @@ class TestDocprocessingPriorityInDocumentExtraction:
         mock_memory_tracer = MagicMock()
         mock_memory_tracer_class.return_value = mock_memory_tracer
 
+        # Mock Redis-related functions (not the focus of this test)
+        mock_redis_client = MagicMock()
+        mock_get_redis_client.return_value = mock_redis_client
+        mock_ensure_source_node_exists.return_value = 1  # Return a valid node ID
+
         # Create checkpoint mocks - initial checkpoint has_more=True, final has_more=False
         mock_initial_checkpoint = MagicMock(has_more=True)
         mock_final_checkpoint = MagicMock(has_more=False)
@@ -221,11 +230,14 @@ class TestDocprocessingPriorityInDocumentExtraction:
         mock_connector = MagicMock()
         mock_connector_runner = MagicMock()
         mock_connector_runner.connector = mock_connector
-        # The connector runner yields (document_batch, failure, next_checkpoint)
+        # The connector runner yields (document_batch, hierarchy_nodes, failure, next_checkpoint)
         # We provide one batch of documents to trigger a send_task call
         mock_doc = MagicMock()
         mock_doc.to_short_descriptor.return_value = "test_doc"
         mock_doc.sections = []
+        # Set to None to avoid Redis operations trying to resolve hierarchy
+        mock_doc.parent_hierarchy_raw_node_id = None
+        mock_doc.parent_hierarchy_node_id = None
         mock_connector_runner.run.return_value = iter(
             [([mock_doc], None, None, mock_final_checkpoint)]
         )
