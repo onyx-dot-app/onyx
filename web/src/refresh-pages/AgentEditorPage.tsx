@@ -87,7 +87,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { deleteAgent } from "@/lib/agents";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
-import AgentKnowledgePane from "@/refresh-components/knowledge/AgentKnowledgePane";
+import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 
 interface AgentIconEditorProps {
