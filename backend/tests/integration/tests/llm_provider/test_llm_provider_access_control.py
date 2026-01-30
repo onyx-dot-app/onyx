@@ -87,7 +87,7 @@ def _create_persona(
     db_session: Session,
     *,
     name: str,
-    model_configuration_id_override: int,
+    default_model_configuration_id: int,
 ) -> Persona:
     persona = Persona(
         name=name,
@@ -98,7 +98,7 @@ def _create_persona(
         llm_relevance_filter=True,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.AUTO,
-        model_configuration_id_override=model_configuration_id_override,
+        default_model_configuration_id=default_model_configuration_id,
         system_prompt="System prompt",
         task_prompt="Task prompt",
         datetime_aware=True,
@@ -193,12 +193,12 @@ def test_can_user_access_llm_provider_or_logic(
         allowed_persona = _create_persona(
             db_session,
             name="allowed-persona",
-            model_configuration_id_override=restricted_model_1.id,
+            default_model_configuration_id=restricted_model_1.id,
         )
         blocked_persona = _create_persona(
             db_session,
             name="blocked-persona",
-            model_configuration_id_override=restricted_model_2.id,
+            default_model_configuration_id=restricted_model_2.id,
         )
 
         access_group = UserGroup(name="access-group")
@@ -340,7 +340,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
         persona = _create_persona(
             db_session,
             name="fallback-persona",
-            model_configuration_id_override=restricted_model_configuration.id,
+            default_model_configuration_id=restricted_model_configuration.id,
         )
 
         access_group = UserGroup(name="persona-group")
@@ -470,7 +470,7 @@ def test_provider_delete_clears_persona_references(reset: None) -> None:
     )
 
     persona = PersonaManager.create(
-        model_configuration_id_override=provider.model_configurations[0].id,
+        default_model_configuration_id=provider.model_configurations[0].id,
         user_performing_action=admin_user,
     )
 
@@ -480,11 +480,11 @@ def test_provider_delete_clears_persona_references(reset: None) -> None:
         user_performing_action=admin_user,
     )
 
-    # Verify the persona now falls back to default (model_configuration_id_override cleared)
+    # Verify the persona now falls back to default (default_model_configuration_id cleared)
     persona_response = requests.get(
         f"{API_SERVER_URL}/persona/{persona.id}",
         headers=admin_user.headers,
     )
     assert persona_response.status_code == 200
     updated_persona = persona_response.json()
-    assert updated_persona["model_configuration_id_override"] is None
+    assert updated_persona["default_model_configuration_id"] is None

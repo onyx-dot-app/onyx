@@ -144,7 +144,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     llm_filter_extraction=persona.llm_filter_extraction,
                     recency_bias=RecencyBiasSetting.AUTO,
                     document_set_ids=persona.document_set_ids,
-                    model_configuration_id_override=persona.model_configuration_id_override,
+                    default_model_configuration_id=persona.default_model_configuration_id,
                     starter_messages=persona.starter_messages,
                     is_public=persona.is_public,
                     db_session=db_session,

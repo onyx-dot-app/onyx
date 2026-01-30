@@ -28,7 +28,7 @@ class PersonaManager:
         datetime_aware: bool = False,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
-        model_configuration_id_override: int | None = None,
+        default_model_configuration_id: int | None = None,
         users: list[str] | None = None,
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
@@ -54,7 +54,7 @@ class PersonaManager:
             recency_bias=recency_bias,
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
-            model_configuration_id_override=model_configuration_id_override,
+            default_model_configuration_id=default_model_configuration_id,
             users=[UUID(user) for user in (users or [])],
             groups=groups or [],
             label_ids=label_ids or [],
@@ -88,7 +88,7 @@ class PersonaManager:
             datetime_aware=datetime_aware,
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
-            model_configuration_id_override=model_configuration_id_override,
+            default_model_configuration_id=default_model_configuration_id,
             users=users or [],
             groups=groups or [],
             label_ids=label_ids or [],
@@ -109,7 +109,7 @@ class PersonaManager:
         datetime_aware: bool = False,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
-        model_configuration_id_override: int | None = None,
+        default_model_configuration_id: int | None = None,
         users: list[str] | None = None,
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
@@ -133,9 +133,8 @@ class PersonaManager:
             recency_bias=recency_bias or persona.recency_bias,
             document_set_ids=document_set_ids or persona.document_set_ids,
             tool_ids=tool_ids or persona.tool_ids,
-            model_configuration_id_override=(
-                model_configuration_id_override
-                or persona.model_configuration_id_override
+            default_model_configuration_id=(
+                default_model_configuration_id or persona.default_model_configuration_id
             ),
             users=[UUID(user) for user in (users or persona.users)],
             groups=groups or persona.groups,
@@ -168,8 +167,8 @@ class PersonaManager:
             datetime_aware=datetime_aware,
             document_set_ids=updated_persona_data["document_sets"],
             tool_ids=updated_persona_data["tools"],
-            model_configuration_id_override=updated_persona_data[
-                "model_configuration_id_override"
+            default_model_configuration_id=updated_persona_data[
+                "default_model_configuration_id"
             ],
             users=[user["email"] for user in updated_persona_data["users"]],
             groups=updated_persona_data["groups"],
@@ -258,14 +257,14 @@ class PersonaManager:
                         )
                     )
                 if (
-                    fetched_persona.model_configuration_id_override
-                    != persona.model_configuration_id_override
+                    fetched_persona.default_model_configuration_id
+                    != persona.default_model_configuration_id
                 ):
                     mismatches.append(
                         (
-                            "model_configuration_id_override",
-                            persona.model_configuration_id_override,
-                            fetched_persona.model_configuration_id_override,
+                            "default_model_configuration_id",
+                            persona.default_model_configuration_id,
+                            fetched_persona.default_model_configuration_id,
                         )
                     )
                 if fetched_persona.system_prompt != persona.system_prompt:

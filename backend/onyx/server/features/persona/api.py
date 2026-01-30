@@ -480,12 +480,12 @@ def get_persona(
     )
 
     # Validate and fix default model if it's no longer valid for this persona's restrictions
-    if persona.model_configuration_id_override:
+    if persona.default_model_configuration_id:
         valid_models = get_valid_models_for_persona(persona_id, user, db_session)
 
         model_configuration = fetch_model_configuration_view(
             db_session=db_session,
-            model_configuration_id=persona.model_configuration_id_override,
+            model_configuration_id=persona.default_model_configuration_id,
         )
 
         # If current default model is not in the valid list, update to first valid or None
@@ -493,7 +493,7 @@ def get_persona(
             model_configuration
             and model_configuration.id in [m.id for m in valid_models]
         ):
-            persona.model_configuration_id_override = (
+            persona.default_model_configuration_id = (
                 valid_models[0].id if valid_models else None
             )
             db_session.commit()

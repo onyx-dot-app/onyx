@@ -79,7 +79,7 @@ def create_slack_channel_persona(
         recency_bias=RecencyBiasSetting.AUTO,
         tool_ids=[search_tool.id],
         document_set_ids=document_set_ids,
-        model_configuration_id_override=None,
+        default_model_configuration_id=None,
         starter_messages=None,
         is_public=True,
         is_default_persona=False,

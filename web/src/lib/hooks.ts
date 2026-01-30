@@ -618,10 +618,10 @@ export function useLlmManager(
         setCurrentLlm(
           getValidLlmDescriptor(currentChatSession.current_alternate_model)
         );
-      } else if (liveAssistant?.model_configuration_id_override) {
+      } else if (liveAssistant?.default_model_configuration_id) {
         setCurrentLlm(
           getValidLlmDescriptorFromModelId(
-            liveAssistant.model_configuration_id_override
+            liveAssistant.default_model_configuration_id
           )
         );
       } else if (userHasManuallyOverriddenLLM) {

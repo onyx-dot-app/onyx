@@ -171,7 +171,7 @@ def get_personas_using_provider(
             select(Persona)
             .join(
                 ModelConfiguration,
-                Persona.model_configuration_id_override == ModelConfiguration.id,
+                Persona.default_model_configuration_id == ModelConfiguration.id,
             )
             .where(ModelConfiguration.llm_provider_id == provider.id)
         ).all()
@@ -521,7 +521,7 @@ def remove_llm_provider(db_session: Session, provider_id: int) -> None:
     # This causes them to fall back to the default provider
     personas_using_provider = get_personas_using_provider(db_session, provider)
     for persona in personas_using_provider:
-        persona.model_configuration_id_override = None
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
@@ -545,7 +545,7 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     # This causes them to fall back to the default provider
     personas_using_provider = get_personas_using_provider(db_session, provider)
     for persona in personas_using_provider:
-        persona.model_configuration_id_override = None
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(

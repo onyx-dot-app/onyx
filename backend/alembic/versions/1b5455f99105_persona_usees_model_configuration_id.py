@@ -18,21 +18,21 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add new model_configuration_id_override column with FK
+    # Add new default_model_configuration_id column with FK
     op.add_column(
         "persona",
-        sa.Column("model_configuration_id_override", sa.Integer(), nullable=True),
+        sa.Column("default_model_configuration_id", sa.Integer(), nullable=True),
     )
     op.create_foreign_key(
-        "fk_persona_model_configuration_id_override",
+        "fk_persona_default_model_configuration_id",
         "persona",
         "model_configuration",
-        ["model_configuration_id_override"],
+        ["default_model_configuration_id"],
         ["id"],
         ondelete="SET NULL",
     )
 
-    # We need to migrate from llm_model_provider_override and llm_model_version_override to model_configuration_id_override
+    # We need to migrate from llm_model_provider_override and llm_model_version_override to default_model_configuration_id
     # Migration Strategy:
     # 1. Port over where provider_override + model_version are both present
     # 2. Port over where only provider is present (Provider default)
@@ -46,7 +46,7 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE persona
-            SET model_configuration_id_override = mc.id
+            SET default_model_configuration_id = mc.id
             FROM model_configuration mc
             JOIN llm_provider lp ON mc.llm_provider_id = lp.id
             WHERE persona.llm_model_provider_override IS NOT NULL
@@ -62,12 +62,12 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE persona
-            SET model_configuration_id_override = mc.id
+            SET default_model_configuration_id = mc.id
             FROM model_configuration mc
             JOIN llm_provider lp ON mc.llm_provider_id = lp.id
             WHERE persona.llm_model_provider_override IS NOT NULL
               AND persona.llm_model_version_override IS NULL
-              AND persona.model_configuration_id_override IS NULL
+              AND persona.default_model_configuration_id IS NULL
               AND lp.name = persona.llm_model_provider_override
               AND mc.name = lp.default_model_name
         """
@@ -79,7 +79,7 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE persona
-            SET model_configuration_id_override = (
+            SET default_model_configuration_id = (
                 SELECT mc.id
                 FROM model_configuration mc
                 WHERE mc.name = persona.llm_model_version_override
@@ -87,7 +87,7 @@ def upgrade() -> None:
             )
             WHERE persona.llm_model_provider_override IS NULL
               AND persona.llm_model_version_override IS NOT NULL
-              AND persona.model_configuration_id_override IS NULL
+              AND persona.default_model_configuration_id IS NULL
               AND EXISTS (
                   SELECT 1 FROM model_configuration mc
                   WHERE mc.name = persona.llm_model_version_override
@@ -102,12 +102,12 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE persona
-            SET model_configuration_id_override = mc.id
+            SET default_model_configuration_id = mc.id
             FROM model_configuration mc
             JOIN llm_provider lp ON mc.llm_provider_id = lp.id
             WHERE persona.llm_model_provider_override IS NULL
               AND persona.llm_model_version_override IS NOT NULL
-              AND persona.model_configuration_id_override IS NULL
+              AND persona.default_model_configuration_id IS NULL
               AND lp.is_default_provider = true
               AND mc.name = lp.default_model_name
         """
@@ -130,7 +130,7 @@ def downgrade() -> None:
         sa.Column("llm_model_provider_override", sa.String(), nullable=True),
     )
 
-    # Migrate data back from model_configuration_id_override to old columns
+    # Migrate data back from default_model_configuration_id to old columns
     conn = op.get_bind()
     conn.execute(
         sa.text(
@@ -140,14 +140,14 @@ def downgrade() -> None:
                 llm_model_version_override = mc.name
             FROM model_configuration mc
             JOIN llm_provider lp ON mc.llm_provider_id = lp.id
-            WHERE persona.model_configuration_id_override IS NOT NULL
-              AND persona.model_configuration_id_override = mc.id
+            WHERE persona.default_model_configuration_id IS NOT NULL
+              AND persona.default_model_configuration_id = mc.id
         """
         )
     )
 
     # Drop FK constraint and new column
     op.drop_constraint(
-        "fk_persona_model_configuration_id_override", "persona", type_="foreignkey"
+        "fk_persona_default_model_configuration_id", "persona", type_="foreignkey"
     )
-    op.drop_column("persona", "model_configuration_id_override")
+    op.drop_column("persona", "default_model_configuration_id")

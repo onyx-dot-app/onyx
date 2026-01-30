@@ -86,7 +86,7 @@ class PersonaUpsertRequest(BaseModel):
     recency_bias: RecencyBiasSetting
     llm_filter_extraction: bool
     llm_relevance_filter: bool
-    model_configuration_id_override: int | None = None
+    default_model_configuration_id: int | None = None
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
     users: list[UUID] = Field(default_factory=list)
@@ -130,7 +130,7 @@ class MinimalPersonaSnapshot(BaseModel):
 
     # only show document sets in the UI that the assistant has access to
     document_sets: list[DocumentSetSummary]
-    model_configuration_id_override: int | None
+    default_model_configuration_id: int | None
     hierarchy_nodes: list[HierarchyNodeSnapshot]
 
     uploaded_image_id: str | None
@@ -167,7 +167,7 @@ class MinimalPersonaSnapshot(BaseModel):
                 DocumentSetSummary.from_model(document_set)
                 for document_set in persona.document_sets
             ],
-            model_configuration_id_override=persona.model_configuration_id_override,
+            default_model_configuration_id=persona.default_model_configuration_id,
             hierarchy_nodes=[
                 HierarchyNodeSnapshot.from_model(node)
                 for node in persona.hierarchy_nodes
@@ -210,7 +210,7 @@ class PersonaSnapshot(BaseModel):
     users: list[MinimalUserSnapshot]
     groups: list[int]
     document_sets: list[DocumentSetSummary]
-    model_configuration_id_override: int | None
+    default_model_configuration_id: int | None
     num_chunks: float | None
     # Hierarchy nodes attached for scoped search
     hierarchy_nodes: list[HierarchyNodeSnapshot] = Field(default_factory=list)
@@ -262,7 +262,7 @@ class PersonaSnapshot(BaseModel):
                 DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
-            model_configuration_id_override=persona.model_configuration_id_override,
+            default_model_configuration_id=persona.default_model_configuration_id,
             num_chunks=persona.num_chunks,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
@@ -330,7 +330,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
             search_start_date=persona.search_start_date,
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
-            model_configuration_id_override=persona.model_configuration_id_override,
+            default_model_configuration_id=persona.default_model_configuration_id,
             system_prompt=persona.system_prompt,
             replace_base_system_prompt=persona.replace_base_system_prompt,
             task_prompt=persona.task_prompt,

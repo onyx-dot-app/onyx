@@ -280,7 +280,7 @@ def create_update_persona(
             tool_ids=create_persona_request.tool_ids,
             is_public=create_persona_request.is_public,
             recency_bias=create_persona_request.recency_bias,
-            model_configuration_id_override=create_persona_request.model_configuration_id_override,
+            default_model_configuration_id=create_persona_request.default_model_configuration_id,
             starter_messages=create_persona_request.starter_messages,
             system_prompt=create_persona_request.system_prompt,
             task_prompt=create_persona_request.task_prompt,
@@ -799,7 +799,7 @@ def upsert_persona(
     llm_relevance_filter: bool,
     llm_filter_extraction: bool,
     recency_bias: RecencyBiasSetting,
-    model_configuration_id_override: int | None,
+    default_model_configuration_id: int | None,
     starter_messages: list[StarterMessage] | None,
     # Embedded prompt fields
     system_prompt: str | None,
@@ -922,9 +922,7 @@ def upsert_persona(
         existing_persona.llm_relevance_filter = llm_relevance_filter
         existing_persona.llm_filter_extraction = llm_filter_extraction
         existing_persona.recency_bias = recency_bias
-        existing_persona.model_configuration_id_override = (
-            model_configuration_id_override
-        )
+        existing_persona.default_model_configuration_id = default_model_configuration_id
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
         existing_persona.is_public = is_public
@@ -993,7 +991,7 @@ def upsert_persona(
             datetime_aware=(datetime_aware if datetime_aware is not None else True),
             replace_base_system_prompt=replace_base_system_prompt,
             document_sets=document_sets or [],
-            model_configuration_id_override=model_configuration_id_override,
+            default_model_configuration_id=default_model_configuration_id,
             starter_messages=starter_messages,
             tools=tools or [],
             uploaded_image_id=uploaded_image_id,

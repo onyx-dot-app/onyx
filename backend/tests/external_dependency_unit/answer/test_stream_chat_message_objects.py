@@ -79,7 +79,7 @@ def test_stream_chat_message_objects_without_web_search(
         llm_relevance_filter=True,
         llm_filter_extraction=True,
         recency_bias=RecencyBiasSetting.BASE_DECAY,
-        model_configuration_id_override=None,
+        default_model_configuration_id=None,
         starter_messages=None,
         system_prompt=None,
         task_prompt=None,

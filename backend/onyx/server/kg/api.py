@@ -141,7 +141,7 @@ def enable_or_disable_kg(
         recency_bias=RecencyBiasSetting.NO_DECAY,
         document_set_ids=[],
         tool_ids=[search_tool.id, kg_tool.id],
-        model_configuration_id_override=None,
+        default_model_configuration_id=None,
         starter_messages=None,
         users=[user.id],
         groups=[],

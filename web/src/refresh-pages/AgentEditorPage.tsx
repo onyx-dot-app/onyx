@@ -475,11 +475,11 @@ export default function AgentEditorPage({
 
   const getCurrentLlm = useCallback(
     (values: any, llmProviders: any) =>
-      values.model_configuration_id_override
+      values.default_model_configuration_id
         ? (() => {
             const { provider, model } = findProviderAndModel(
               llmProviders,
-              (m: any) => m.id === values.model_configuration_id_override
+              (m: any) => m.id === values.default_model_configuration_id
             );
             return structureValue(
               provider?.name || "",
@@ -494,7 +494,7 @@ export default function AgentEditorPage({
   const onLlmSelect = useCallback(
     (selected: string | null, setFieldValue: any, llmProviders: any) => {
       if (selected === null) {
-        setFieldValue("model_configuration_id_override", null);
+        setFieldValue("default_model_configuration_id", null);
       } else {
         const { modelName, name } = parseLlmDescriptor(selected);
         if (modelName && name) {
@@ -503,7 +503,7 @@ export default function AgentEditorPage({
             (m: any) => m.name === modelName,
             (p: any) => p.name === name
           );
-          setFieldValue("model_configuration_id_override", model?.id || null);
+          setFieldValue("default_model_configuration_id", model?.id || null);
         }
       }
     },
@@ -595,8 +595,8 @@ export default function AgentEditorPage({
     user_file_ids: existingAgent?.user_file_ids ?? [],
 
     // Advanced
-    model_configuration_id_override:
-      existingAgent?.model_configuration_id_override ?? null,
+    default_model_configuration_id:
+      existingAgent?.default_model_configuration_id ?? null,
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
@@ -715,7 +715,7 @@ export default function AgentEditorPage({
       ),
 
     // Advanced
-    model_configuration_id_override: Yup.number().nullable().optional(),
+    default_model_configuration_id: Yup.number().nullable().optional(),
     knowledge_cutoff_date: Yup.date().nullable().optional(),
     replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
@@ -818,8 +818,8 @@ export default function AgentEditorPage({
         // recency_bias: ...,
         // llm_filter_extraction: ...,
         llm_relevance_filter: false,
-        model_configuration_id_override:
-          values.model_configuration_id_override || null,
+        default_model_configuration_id:
+          values.default_model_configuration_id || null,
         starter_messages: finalStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,
