@@ -77,6 +77,7 @@ import {
   CHAT_BACKGROUND_NONE,
   getBackgroundById,
 } from "@/lib/constants/chatBackgrounds";
+import { useTheme } from "next-themes";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -134,6 +135,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useSettingsContext();
+  const { theme } = useTheme();
+  const isLightMode = theme === "light";
 
   const isInitialLoad = useRef(true);
 
@@ -658,8 +661,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               }
               {...getRootProps({ tabIndex: -1 })}
             >
-              {/* Vignette overlay for custom backgrounds */}
-              {hasBackground && (
+              {/* Vignette overlay for custom backgrounds (disabled in light mode) */}
+              {hasBackground && !isLightMode && (
                 <div
                   className="absolute z-0 inset-0 pointer-events-none"
                   style={{
