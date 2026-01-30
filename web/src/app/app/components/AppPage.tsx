@@ -653,9 +653,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               )}
               style={
                 hasBackground
-                  ? {
-                      backgroundImage: `url(20260129_08h20m13s_grim.png)`,
-                    }
+                  ? { backgroundImage: `url(${chatBackground.url})` }
                   : undefined
               }
               {...getRootProps({ tabIndex: -1 })}
