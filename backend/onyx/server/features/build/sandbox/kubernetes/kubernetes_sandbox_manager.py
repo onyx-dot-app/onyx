@@ -460,6 +460,12 @@ done
             volumes=volumes,
             restart_policy="Never",
             termination_grace_period_seconds=10,  # Fast pod termination
+            # CRITICAL: Disable service environment variable injection
+            # Without this, Kubernetes injects env vars for ALL services in the namespace,
+            # which can exceed ARG_MAX (2.6MB) when there are many sandbox pods.
+            # With 40+ sandboxes × 100 ports × 4 env vars each = ~16k env vars (~2.2MB)
+            # This causes "exec /bin/sh: argument list too long" errors.
+            enable_service_links=False,
             # Node selection for sandbox nodes
             node_selector={"onyx.app/workload": "sandbox"},
             tolerations=[
