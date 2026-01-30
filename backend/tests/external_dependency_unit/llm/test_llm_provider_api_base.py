@@ -25,9 +25,12 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import UserRole
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.api import put_llm_provider
+from onyx.server.manage.llm.api import test_llm_configuration as run_llm_config_test
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import TestLLMRequest as LLMTestRequest
+from tests.external_dependency_unit.mock_llm import LLM
 
 
 def _create_test_provider(
@@ -298,6 +301,7 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
+                    custom_config_changed=True,
                     default_model_name="gpt-4o-mini",
                 )
 
@@ -333,6 +337,7 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
+                    custom_config_changed=True,
                     default_model_name="gpt-4o-mini",
                 )
 
@@ -374,6 +379,7 @@ class TestLLMProviderChanges:
                     provider=LlmProviderNames.OPENAI,
                     api_key="sk-new-key-00000000000000000000000000000000000",
                     api_key_changed=True,
+                    custom_config_changed=True,
                     custom_config=new_config,
                     default_model_name="gpt-4o-mini",
                 )
@@ -409,6 +415,7 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config=original_config,
+                    custom_config_changed=True,
                     default_model_name="gpt-4o-mini",
                 )
 
@@ -447,6 +454,7 @@ class TestLLMProviderChanges:
                     provider=LlmProviderNames.OPENAI,
                     custom_config=new_config,
                     default_model_name="gpt-4o-mini",
+                    custom_config_changed=True,
                 )
 
                 result = put_llm_provider(
@@ -459,3 +467,131 @@ class TestLLMProviderChanges:
                 assert result.custom_config == new_config
         finally:
             _cleanup_provider(db_session, provider_name)
+
+
+def test_upload_with_custom_config_then_change(
+    db_session: Session,
+) -> None:
+    """
+    Run test + upload with a custom config (vertex).
+    Edit attributes of provider that are not custom config or api key.
+    Check that the test and update maintain the same values.
+    """
+    custom_config = {
+        "vertex_credentials": "1234",
+        "vertex_location": "us-east-1",
+    }
+    name = "test-provider-vertex-ai"
+    provider_name = LlmProviderNames.VERTEX_AI.value
+    default_model_name = "gemini-2.5-pro"
+
+    # List to capture LLM inputs passed to test_llm
+    captured_llms: list = []
+
+    def capture_test_llm(llm: LLM) -> str:
+        """Captures the LLM input and returns None (success)."""
+        captured_llms.append(llm)
+        return ""
+
+    try:
+        # Patch the test_llm method
+        with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
+            run_llm_config_test(
+                LLMTestRequest(
+                    name=name,
+                    provider=provider_name,
+                    default_model_name=default_model_name,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=default_model_name, is_visible=True
+                        )
+                    ],
+                    api_key_changed=False,
+                    custom_config_changed=True,
+                    custom_config=custom_config,
+                ),
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=name,
+                    provider=provider_name,
+                    default_model_name=default_model_name,
+                    custom_config=custom_config,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=default_model_name, is_visible=True
+                        )
+                    ],
+                    api_key_changed=False,
+                    custom_config_changed=True,
+                    is_auto_mode=False,
+                ),
+                is_creation=True,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            # Turn auto mode off
+            run_llm_config_test(
+                LLMTestRequest(
+                    name=name,
+                    provider=provider_name,
+                    default_model_name=default_model_name,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=default_model_name, is_visible=True
+                        )
+                    ],
+                    api_key_changed=False,
+                    custom_config_changed=False,
+                ),
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=name,
+                    provider=provider_name,
+                    default_model_name=default_model_name,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=default_model_name, is_visible=True
+                        ),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o-mini", is_visible=True
+                        ),
+                    ],
+                    api_key_changed=False,
+                    custom_config_changed=False,
+                    is_auto_mode=False,
+                ),
+                is_creation=False,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            # Verify that test_llm was called and custom_config matches
+            assert len(captured_llms) == 2, "test_llm should have been called 2 times"
+
+            for llm in captured_llms:
+                assert llm.config.custom_config == custom_config, (
+                    f"Expected custom_config {custom_config}, "
+                    f"but got {llm.config.custom_config}"
+                )
+
+            # Check inside the database and check that custom_config is the same as the original
+            provider = fetch_existing_llm_provider(name=name, db_session=db_session)
+            if not provider:
+                assert False, "Provider not found in the database"
+
+            assert provider.custom_config == custom_config, (
+                f"Expected custom_config {custom_config}, "
+                f"but got {provider.custom_config}"
+            )
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, name)
