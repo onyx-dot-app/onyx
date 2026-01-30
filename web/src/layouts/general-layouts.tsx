@@ -461,33 +461,6 @@ function TableCell({ flex, width, children, ...rest }: TableCellProps) {
 }
 
 /**
- * IconText - Displays an icon next to truncated text
- *
- * @param icon - Icon component to display
- * @param children - Text content (string)
- */
-interface IconTextProps {
-  icon: React.FunctionComponent<{ size?: number }>;
-  children: string;
-}
-function IconText({ icon: Icon, children }: IconTextProps) {
-  return (
-    <Section
-      flexDirection="row"
-      justifyContent="start"
-      alignItems="center"
-      gap={0.5}
-      height="auto"
-    >
-      <Section width="fit" height="fit">
-        <Icon size={16} />
-      </Section>
-      <Truncated>{children}</Truncated>
-    </Section>
-  );
-}
-
-/**
  * SidebarLayout - A fixed-width sidebar container
  *
  * @param children - Sidebar content
@@ -583,7 +556,6 @@ export {
   AttachmentItemLayout,
   TableRow,
   TableCell,
-  IconText,
   SidebarLayout,
   TwoColumnLayout,
   ContentColumn,

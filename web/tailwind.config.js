@@ -17,7 +17,8 @@ const customThemePath = path.join(
 );
 
 if (fs.existsSync(customThemePath)) {
-  customThemes = require(customThemePath);
+  // Use eval to prevent bundler from trying to statically analyze this dynamic require
+  customThemes = eval("require")(customThemePath);
 }
 
 /** @type {import('tailwindcss').Config} */

@@ -270,9 +270,11 @@ function DocumentSetsTableContent({
       header: "Name",
       sortable: true,
       render: (ds) => (
-        <GeneralLayouts.IconText icon={SvgFolder}>
-          {ds.name}
-        </GeneralLayouts.IconText>
+        <GeneralLayouts.LineItemLayout
+          icon={SvgFolder}
+          title={ds.name}
+          variant="secondary"
+        />
       ),
     },
     {
@@ -349,9 +351,11 @@ function SourcesTableContent({
       render: (item) => {
         const metadata = getSourceMetadata(item.source);
         return (
-          <GeneralLayouts.IconText icon={metadata.icon}>
-            {item.name}
-          </GeneralLayouts.IconText>
+          <GeneralLayouts.LineItemLayout
+            icon={metadata.icon}
+            title={item.name}
+            variant="secondary"
+          />
         );
       },
     },
@@ -427,9 +431,11 @@ function RecentFilesTableContent({
       header: "Name",
       sortable: true,
       render: (file) => (
-        <GeneralLayouts.IconText icon={SvgFiles}>
-          {file.name}
-        </GeneralLayouts.IconText>
+        <GeneralLayouts.LineItemLayout
+          icon={SvgFiles}
+          title={file.name}
+          variant="secondary"
+        />
       ),
     },
     {
