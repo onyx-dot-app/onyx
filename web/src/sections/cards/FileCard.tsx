@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ProjectFile } from "@/app/app/projects/projectsService";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
 import { cn, isImageFile } from "@/lib/utils";
@@ -23,6 +23,7 @@ function Removable({ onRemove, children }: RemovableProps) {
   return (
     <div className="relative group">
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
@@ -64,6 +65,8 @@ function ImageFileCard({
 }: ImageFileCardProps) {
   const sizeClass = compact ? "h-11 w-11" : "h-20 w-20";
   const loaderSize = compact ? "h-5 w-5" : "h-8 w-8";
+  const iconSize = compact ? "h-5 w-5" : "h-8 w-8";
+  const [imgError, setImgError] = useState(false);
 
   const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
 
@@ -74,11 +77,12 @@ function ImageFileCard({
       }
     >
       <div
-        className={`${sizeClass} rounded-08 border border-border-01 ${
-          isProcessing ? "bg-background-neutral-02" : ""
-        } ${
-          onFileClick && !isProcessing ? "cursor-pointer hover:opacity-90" : ""
-        }`}
+        className={cn(
+          sizeClass,
+          "rounded-08 border border-border-01",
+          isProcessing && "bg-background-neutral-02",
+          onFileClick && !isProcessing && "cursor-pointer hover:opacity-90"
+        )}
         onClick={() => {
           if (onFileClick && !isProcessing) {
             onFileClick(file);
@@ -89,16 +93,16 @@ function ImageFileCard({
           <div className="h-full w-full flex items-center justify-center">
             <SimpleLoader className={loaderSize} />
           </div>
+        ) : imgError ? (
+          <div className="h-full w-full flex items-center justify-center">
+            <SvgFileText className={iconSize} />
+          </div>
         ) : (
           <img
             src={imageUrl}
             alt={file.name}
             className="h-full w-full object-cover rounded-08"
-            onError={(e) => {
-              // Fallback to regular file card if image fails to load
-              const target = e.target as HTMLImageElement;
-              target.style.display = "none";
-            }}
+            onError={() => setImgError(true)}
           />
         )}
       </div>

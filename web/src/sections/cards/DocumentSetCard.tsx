@@ -31,7 +31,11 @@ export default function DocumentSetCard({
       <div className="max-w-[12rem]">
         <Hoverable
           asChild
-          onClick={disabled ? undefined : () => onSelectToggle?.(!isSelected)}
+          onClick={
+            disabled || isSelected === undefined
+              ? undefined
+              : () => onSelectToggle?.(!isSelected)
+          }
           nonInteractive={disabled || isSelected === undefined}
         >
           <HoverableContainer

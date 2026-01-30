@@ -42,7 +42,7 @@ test.describe("Guild Detail Page & Channel Configuration", () => {
     await gotoGuildDetailPage(adminPage, mockRegisteredGuild.id);
 
     // Should show "Default Agent" section
-    await expect(adminPage.locator("text=Default Agent")).toBeVisible({
+    await expect(adminPage.locator("text=Default Agent").first()).toBeVisible({
       timeout: 10000,
     });
 
