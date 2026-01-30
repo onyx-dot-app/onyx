@@ -48,11 +48,71 @@ const getCreateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Create")');
 const getUpdateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Save")');
-const getKnowledgeSourceSelect = (page: Page) =>
-  page
-    .locator('label:has-text("Knowledge Source")')
-    .locator('button[role="combobox"]')
-    .first();
+
+// Helper to navigate to document sets view in the new Knowledge UI
+const navigateToDocumentSetsView = async (page: Page) => {
+  // First, check if we need to click "View / Edit" or "Add" button to open the knowledge panel
+  const viewEditButton = page.getByLabel("knowledge-view-edit");
+  const addButton = page.getByLabel("knowledge-add-button");
+
+  if (await viewEditButton.isVisible()) {
+    await viewEditButton.click();
+  } else if (await addButton.isVisible()) {
+    await addButton.click();
+  }
+
+  // Now click on "Document Sets" in the add view or sidebar
+  const documentSetsButton = page.getByLabel("knowledge-add-document-sets");
+  if (await documentSetsButton.isVisible()) {
+    await documentSetsButton.click();
+  } else {
+    // Try the sidebar version
+    const sidebarDocumentSets = page.getByLabel(
+      "knowledge-sidebar-document-sets"
+    );
+    if (await sidebarDocumentSets.isVisible()) {
+      await sidebarDocumentSets.click();
+    }
+  }
+
+  // Wait for the document sets table to appear
+  await page.waitForTimeout(500);
+};
+
+// Helper to select a document set by ID in the new Knowledge UI
+const selectDocumentSet = async (page: Page, documentSetId: number) => {
+  const documentSetRow = page.getByLabel(`document-set-row-${documentSetId}`);
+  await expect(documentSetRow).toBeVisible({ timeout: 5000 });
+  await documentSetRow.click();
+};
+
+// Helper to navigate to files view in the new Knowledge UI
+const navigateToFilesView = async (page: Page) => {
+  // First, check if we need to click "View / Edit" or "Add" button to open the knowledge panel
+  const viewEditButton = page.getByLabel("knowledge-view-edit");
+  const addButton = page.getByLabel("knowledge-add-button");
+
+  if (await viewEditButton.isVisible()) {
+    await viewEditButton.click();
+  } else if (await addButton.isVisible()) {
+    await addButton.click();
+  }
+
+  // Now click on "Your Files" in the add view or sidebar
+  const filesButton = page.getByLabel("knowledge-add-files");
+  if (await filesButton.isVisible()) {
+    await filesButton.click();
+  } else {
+    // Try the sidebar version
+    const sidebarFiles = page.getByLabel("knowledge-sidebar-files");
+    if (await sidebarFiles.isVisible()) {
+      await sidebarFiles.click();
+    }
+  }
+
+  // Wait for the files table to appear
+  await page.waitForTimeout(500);
+};
 
 test.describe("Assistant Creation and Edit Verification", () => {
   // Configure this entire suite to run serially
@@ -85,16 +145,14 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(knowledgeToggle).toHaveAttribute("aria-checked", "false");
       await knowledgeToggle.click();
 
-      // Select "User Knowledge" from the knowledge source dropdown
-      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
-      await knowledgeSourceSelect.click();
-      await page.getByRole("option", { name: "User Knowledge" }).click();
+      // Navigate to files view in the new Knowledge UI
+      await navigateToFilesView(page);
 
-      // Verify "Add User Files" button is visible
-      const addUserFilesButton = page.getByRole("button", {
-        name: /add user files/i,
+      // Verify "Add File" button is visible in the new UI
+      const addFileButton = page.getByRole("button", {
+        name: /add file/i,
       });
-      await expect(addUserFilesButton).toBeVisible();
+      await expect(addFileButton).toBeVisible();
 
       // Submit the assistant creation form
       await getCreateSubmitButton(page).click();
@@ -163,7 +221,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const assistantInstructions = "These are the test instructions.";
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
-      const knowledgeCutoffDate = "2023-01-01";
 
       // --- Edited Values ---
       const editedAssistantName = `Edited Assistant ${Date.now()}`;
@@ -171,7 +228,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const editedAssistantInstructions = "These are the edited instructions.";
       const editedAssistantReminder = "Edited reminder.";
       const editedAssistantStarterMessage = "Edited starter message?";
-      const editedKnowledgeCutoffDate = "2024-01-01";
 
       // Navigate to the assistant creation page
       await page.goto("/app/agents/create");
@@ -195,14 +251,9 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(knowledgeToggle).not.toBeDisabled();
       await knowledgeToggle.click();
 
-      // Select "Team Knowledge" from the knowledge source dropdown
-      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
-      await knowledgeSourceSelect.click();
-      await page.getByRole("option", { name: "Team Knowledge" }).click();
-
-      // Select the document set created in beforeAll
-      // Document sets are rendered as clickable cards, not a dropdown
-      await page.getByTestId(`document-set-card-${documentSetId}`).click();
+      // Navigate to document sets view and select the document set
+      await navigateToDocumentSetsView(page);
+      await selectDocumentSet(page, documentSetId);
 
       // Starter Message
       await getStarterMessageInput(page).fill(assistantStarterMessage);
@@ -236,12 +287,15 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "aria-checked",
         "true"
       );
-      // Verify document set is selected (cards show selected state with different background)
-      // The selected document set card should be visible
-      await expect(
-        page.getByTestId(`document-set-card-${documentSetId}`)
-      ).toBeVisible();
-      // Knowledge cutoff date is set to today's date
+      // Verify document set is selected by navigating to the document sets view
+      await navigateToDocumentSetsView(page);
+      const documentSetRow = page.getByLabel(
+        `document-set-row-${documentSetId}`
+      );
+      await expect(documentSetRow).toBeVisible();
+      // The row should have a checked checkbox (data-selected attribute)
+      await expect(documentSetRow).toHaveAttribute("data-selected", "true");
+
       await expect(getStarterMessageInput(page)).toHaveValue(
         assistantStarterMessage
       );
@@ -283,10 +337,16 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "true"
       );
       // Verify document set is still selected after edit
-      await expect(
-        page.getByTestId(`document-set-card-${documentSetId}`)
-      ).toBeVisible();
-      // Knowledge cutoff date is set to today's date
+      await navigateToDocumentSetsView(page);
+      const documentSetRowAfterEdit = page.getByLabel(
+        `document-set-row-${documentSetId}`
+      );
+      await expect(documentSetRowAfterEdit).toBeVisible();
+      await expect(documentSetRowAfterEdit).toHaveAttribute(
+        "data-selected",
+        "true"
+      );
+
       await expect(getStarterMessageInput(page)).toHaveValue(
         editedAssistantStarterMessage
       );

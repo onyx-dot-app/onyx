@@ -60,12 +60,13 @@ function KnowledgeSidebar({
   onNavigateToSource,
 }: KnowledgeSidebarProps) {
   return (
-    <TableLayouts.SidebarLayout>
+    <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
       <LineItem
         icon={SvgFiles}
         onClick={onNavigateToRecent}
         selected={activeView === "recent"}
         emphasized={activeView === "recent" || selectedFileIds.length > 0}
+        aria-label="knowledge-sidebar-files"
       >
         Your Files
       </LineItem>
@@ -78,6 +79,7 @@ function KnowledgeSidebar({
         emphasized={
           activeView === "document-sets" || selectedDocumentSetIds.length > 0
         }
+        aria-label="knowledge-sidebar-document-sets"
       >
         Document Set
       </LineItem>
@@ -97,6 +99,7 @@ function KnowledgeSidebar({
             onClick={() => onNavigateToSource(connectedSource.source)}
             selected={isActive}
             emphasized={isActive || isSelected}
+            aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
           >
             {sourceMetadata.displayName}
           </LineItem>
@@ -142,7 +145,8 @@ function KnowledgeTable<T>({
   searchPlaceholder = "Search...",
   headerActions,
   emptyMessage = "No items available.",
-}: KnowledgeTableProps<T>) {
+  ariaLabelPrefix,
+}: KnowledgeTableProps<T> & { ariaLabelPrefix?: string }) {
   return (
     <GeneralLayouts.Section gap={0} alignItems="stretch" justifyContent="start">
       {/* Header with search and actions */}
@@ -213,6 +217,9 @@ function KnowledgeTable<T>({
                 key={String(id)}
                 selected={isSelected}
                 onClick={() => onToggleItem(id)}
+                aria-label={
+                  ariaLabelPrefix ? `${ariaLabelPrefix}-${id}` : undefined
+                }
               >
                 <TableLayouts.CheckboxCell>
                   <Checkbox
@@ -307,6 +314,7 @@ function DocumentSetsTableContent({
       onSearchChange={setSearchValue}
       searchPlaceholder="Search document sets..."
       emptyMessage="No document sets available."
+      ariaLabelPrefix="document-set-row"
     />
   );
 }
@@ -587,7 +595,12 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
   selectedSources,
 }: KnowledgeAddViewProps) {
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="start" height="auto">
+    <GeneralLayouts.Section
+      gap={0.5}
+      alignItems="start"
+      height="auto"
+      aria-label="knowledge-add-view"
+    >
       <GeneralLayouts.Section
         flexDirection="row"
         justifyContent="start"
@@ -600,6 +613,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
           description="(deprecated)"
           onClick={onNavigateToDocumentSets}
           emphasized={selectedDocumentSetIds.length > 0}
+          aria-label="knowledge-add-document-sets"
         >
           Document Sets
         </LineItem>
@@ -609,6 +623,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
           description="Recent or new uploads"
           onClick={onNavigateToRecent}
           emphasized={selectedFileIds.length > 0}
+          aria-label="knowledge-add-files"
         >
           Your Files
         </LineItem>
@@ -628,6 +643,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
                 icon={sourceMetadata.icon}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 emphasized={isSelected}
+                aria-label={`knowledge-add-source-${connectedSource.source}`}
               >
                 {sourceMetadata.displayName}
               </LineItem>
@@ -685,7 +701,12 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         <Text text03 secondaryBody>
           Add documents or connected sources to use for this agent.
         </Text>
-        <IconButton icon={SvgPlusCircle} onClick={onAddKnowledge} tertiary />
+        <IconButton
+          icon={SvgPlusCircle}
+          onClick={onAddKnowledge}
+          tertiary
+          aria-label="knowledge-add-button"
+        />
       </GeneralLayouts.Section>
     );
   }
@@ -707,7 +728,12 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         {totalSelected} knowledge source{totalSelected !== 1 ? "s" : ""}{" "}
         selected
       </Text>
-      <Button internal leftIcon={SvgArrowUpRight} onClick={onViewEdit}>
+      <Button
+        internal
+        leftIcon={SvgArrowUpRight}
+        onClick={onViewEdit}
+        aria-label="knowledge-view-edit"
+      >
         View / Edit
       </Button>
     </GeneralLayouts.Section>

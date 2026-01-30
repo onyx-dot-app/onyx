@@ -1,6 +1,7 @@
 var merge = require("lodash/merge");
 var path = require("path");
 var fs = require("fs");
+var { createRequire } = require("module");
 
 // Use relative paths for imports
 const baseThemes = require("./tailwind-themes/tailwind.config.js");
@@ -17,8 +18,9 @@ const customThemePath = path.join(
 );
 
 if (fs.existsSync(customThemePath)) {
-  // Use eval to prevent bundler from trying to statically analyze this dynamic require
-  customThemes = eval("require")(customThemePath);
+  // Use createRequire to avoid bundler static analysis without using eval
+  const dynamicRequire = createRequire(__filename);
+  customThemes = dynamicRequire(customThemePath);
 }
 
 /** @type {import('tailwindcss').Config} */
