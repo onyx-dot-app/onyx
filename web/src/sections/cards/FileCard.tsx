@@ -74,11 +74,12 @@ function ImageFileCard({
       }
     >
       <div
-        className={`${sizeClass} rounded-08 border border-border-01 ${
-          isProcessing ? "bg-background-neutral-02" : ""
-        } ${
-          onFileClick && !isProcessing ? "cursor-pointer hover:opacity-90" : ""
-        }`}
+        className={cn(
+          sizeClass,
+          "rounded-08 border border-border-01",
+          isProcessing && "bg-background-neutral-02",
+          onFileClick && !isProcessing && "cursor-pointer hover:opacity-90"
+        )}
         onClick={() => {
           if (onFileClick && !isProcessing) {
             onFileClick(file);
