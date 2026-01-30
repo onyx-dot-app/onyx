@@ -178,8 +178,8 @@ export default function OnboardingUserInfo({
         <div className="flex justify-center min-h-[1.5rem]">
           {personaInfo && positionText && (
             <Text mainContentBody text03 className="text-center">
-              You are a {positionText} named {personaInfo.name} working at{" "}
-              <br />
+              You will play the role of {positionText} named {personaInfo.name}{" "}
+              working at <br />
               {DEMO_COMPANY_NAME}
             </Text>
           )}
