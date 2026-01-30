@@ -68,7 +68,13 @@ export default function InputNumber({
   className,
 }: InputNumberProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const [inputValue, setInputValue] = React.useState(String(value));
   const isDisabled = disabled || variant === "disabled";
+
+  // Sync input value when external value changes (e.g., from stepper buttons or reset)
+  React.useEffect(() => {
+    setInputValue(String(value));
+  }, [value]);
 
   const canIncrement = max === undefined || value < max;
   const canDecrement = min === undefined || value > min;
@@ -95,19 +101,38 @@ export default function InputNumber({
     }
   };
 
+  const handleBlur = () => {
+    // On blur, if empty, set fallback value; otherwise sync display with actual value
+    if (inputValue.trim() === "") {
+      let fallback = min ?? 0;
+      if (max !== undefined) fallback = Math.min(fallback, max);
+      setInputValue(String(fallback));
+      onChange(fallback);
+    } else {
+      setInputValue(String(value));
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value.trim();
-    if (inputValue === "") {
-      onChange(min ?? 0);
+    const rawValue = e.target.value;
+
+    // Only allow digits (and empty string)
+    if (rawValue !== "" && !/^\d+$/.test(rawValue)) {
       return;
     }
-    const val = parseInt(inputValue, 10);
-    if (!isNaN(val)) {
-      let newValue = val;
-      if (min !== undefined) newValue = Math.max(newValue, min);
-      if (max !== undefined) newValue = Math.min(newValue, max);
-      onChange(newValue);
+
+    setInputValue(rawValue);
+
+    // Allow empty input while typing (fallback applied on blur)
+    if (rawValue === "") {
+      return;
     }
+
+    const val = parseInt(rawValue, 10);
+    let newValue = val;
+    if (min !== undefined) newValue = Math.max(newValue, min);
+    if (max !== undefined) newValue = Math.min(newValue, max);
+    onChange(newValue);
   };
 
   return (
@@ -125,8 +150,9 @@ export default function InputNumber({
         inputMode="numeric"
         pattern="[0-9]*"
         disabled={isDisabled}
-        value={value}
+        value={inputValue}
         onChange={handleInputChange}
+        onBlur={handleBlur}
         className={cn(
           "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
           innerClasses[variant],
