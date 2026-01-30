@@ -248,6 +248,7 @@ function LineItemLayout({
           <Text
             mainContentEmphasis={!isCompact && !isMini}
             secondaryBody={isMini}
+            mainUiAction={variant === "secondary"}
             text03={isMuted}
             className="line-item-layout-title"
           >

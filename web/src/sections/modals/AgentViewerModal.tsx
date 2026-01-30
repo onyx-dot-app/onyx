@@ -35,6 +35,7 @@ import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import ChatInputBar from "@/app/app/components/input/ChatInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
+import { formatMmDdYyyy } from "@/lib/utils";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -342,7 +343,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <LineItemLayout
                     title="Instructions"
                     description={agent.system_prompt}
-                    variant="tertiary"
+                    variant="secondary"
                   />
                 )}
                 {/*{agent.llm_model_version_override && (
@@ -352,17 +353,23 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     variant="tertiary"
                   />
                 )}*/}
-                {/*{agent.search_start_date && (
-                  <LineItemLayout
-                    title="Instructions"
-                    description={agent.search_start_date.toDateString()}
-                    variant="tertiary"
-                  />
-                )}*/}
+                {agent.search_start_date && (
+                  <Horizontal
+                    title="Knowledge Cutoff Date"
+                    description="Documents with a last-updated date prior to this will be ignored."
+                    nonInteractive
+                    variant="secondary"
+                  >
+                    <Text mainUiMono>
+                      {formatMmDdYyyy(agent.search_start_date)}
+                    </Text>
+                  </Horizontal>
+                )}
                 <Horizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
                   nonInteractive
+                  variant="secondary"
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </Horizontal>
@@ -382,7 +389,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {agent.starter_messages && agent.starter_messages.length > 0 && (
             <>
               <Separator noPadding />
-              <Title title="Prompt Reminders" />
+              <Title title="Conversation Starters" />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
                   <Hoverable

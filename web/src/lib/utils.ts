@@ -187,3 +187,8 @@ export function mergeRefs<T>(
     });
   };
 }
+
+export function formatMmDdYyyy(d: string): string {
+  const date = new Date(d);
+  return `${date.getMonth() + 1} / ${date.getDate()} / ${date.getFullYear()}`;
+}
