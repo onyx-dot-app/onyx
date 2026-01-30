@@ -80,7 +80,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
       displayName="Sources"
       sources={sources}
       onSourceClick={handleSourceClick}
-      showDetailsCard
+      toggleSource
     />
   );
 });

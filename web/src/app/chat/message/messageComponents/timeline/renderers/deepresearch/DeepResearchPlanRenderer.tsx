@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { FiList } from "react-icons/fi";
+import { SvgCircle } from "@opal/icons";
 
 import {
   DeepResearchPlanPacket,
@@ -39,7 +39,7 @@ export const DeepResearchPlanRenderer: MessageRenderer<
 
   return children([
     {
-      icon: FiList,
+      icon: SvgCircle,
       status: statusText,
       content: (
         <MinimalMarkdown

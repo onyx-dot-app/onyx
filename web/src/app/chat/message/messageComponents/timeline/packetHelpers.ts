@@ -19,6 +19,10 @@ export const isResearchAgentPackets = (packets: Packet[]): boolean =>
 export const isSearchToolPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.SEARCH_TOOL_START);
 
+// Check if packets belong to reasoning
+export const isReasoningPackets = (packets: Packet[]): boolean =>
+  packets.some((p) => p.obj.type === PacketType.REASONING_START);
+
 // Check if step supports collapsed streaming rendering mode
 export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
   packets.some((p) =>
