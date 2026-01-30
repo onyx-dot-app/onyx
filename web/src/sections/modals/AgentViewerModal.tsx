@@ -6,7 +6,11 @@ import type { Route } from "next";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
-import { Section, LineItemLayout } from "@/layouts/general-layouts";
+import {
+  Section,
+  LineItemLayout,
+  AttachmentItemLayout,
+} from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Separator from "@/refresh-components/Separator";
@@ -17,7 +21,6 @@ import {
   SvgExpand,
   SvgFileText,
   SvgFold,
-  SvgFolder,
   SvgOrganization,
   SvgStar,
   SvgUser,
@@ -36,6 +39,8 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import ChatInputBar from "@/app/app/components/input/ChatInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import { formatMmDdYyyy } from "@/lib/utils";
+import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { FileCard } from "@/sections/cards/FileCard";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -174,6 +179,7 @@ export interface AgentViewerModalProps {
 export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
   const router = useRouter();
+  const { allRecentFiles } = useProjectsContext();
 
   const handleStartChat = useCallback(
     (message: string) => {
@@ -280,30 +286,26 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           <Section gap={0.5} alignItems="start">
             <Title title="Knowledge" />
             {hasKnowledge ? (
-              <Section gap={0.25} alignItems="start">
+              <Section
+                gap={0.5}
+                flexDirection="row"
+                justifyContent="start"
+                wrap
+                alignItems="start"
+              >
                 {agent.document_sets?.map((docSet) => (
-                  <LineItemLayout
+                  <AttachmentItemLayout
                     key={docSet.id}
                     icon={SvgFileText}
                     title={docSet.name}
-                    variant="tertiary-muted"
+                    description={docSet.description}
                   />
                 ))}
-                {agent.hierarchy_nodes?.map((node) => (
-                  <LineItemLayout
-                    key={node.id}
-                    icon={SvgFolder}
-                    title={node.display_name}
-                    description={node.source}
-                    variant="tertiary-muted"
-                  />
-                ))}
-                {agent.user_file_ids && agent.user_file_ids.length > 0 && (
-                  <Text secondaryBody text03>
-                    {agent.user_file_ids.length} uploaded file
-                    {agent.user_file_ids.length > 1 ? "s" : ""}
-                  </Text>
-                )}
+                {agent.user_file_ids?.map((fileId) => {
+                  const file = allRecentFiles.find((f) => f.id === fileId);
+                  if (!file) return null;
+                  return <FileCard key={fileId} file={file} />;
+                })}
               </Section>
             ) : (
               <EmptyMessage title="No Knowledge" />
@@ -395,7 +397,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   <Hoverable
                     key={index}
                     onClick={() => handleStartChat(starter.message)}
-                    variant="secondary"
+                    variant="tertiary"
                     asChild
                   >
                     <HoverableContainer>
