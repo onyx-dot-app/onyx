@@ -619,7 +619,7 @@ class GoogleDriveConnector(
             # If we successfully reached a terminal node (or a fully-walked node),
             # mark all nodes in this walk as fully walked
             if reached_terminal:
-                fully_walked_hierarchy_node_raw_ids.update(node_ids_in_walk)
+                fully_walked_hierarchy_node_raw_ids.update(set(node_ids_in_walk))
 
             new_nodes += ancestors_to_add
 
