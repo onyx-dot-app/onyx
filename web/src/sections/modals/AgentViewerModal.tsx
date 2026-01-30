@@ -22,7 +22,7 @@
  * - Advanced options (model, sharing status)
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
@@ -31,7 +31,17 @@ import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import { SvgActions, SvgFileText, SvgFolder } from "@opal/icons";
+import {
+  SvgActions,
+  SvgBubbleText,
+  SvgExpand,
+  SvgFileText,
+  SvgFold,
+  SvgFolder,
+  SvgOrganization,
+  SvgStar,
+  SvgUser,
+} from "@opal/icons";
 import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
@@ -40,6 +50,8 @@ import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Horizontal, Title } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
+import Button from "@/refresh-components/buttons/Button";
+import Hoverable, { HoverableButton } from "@/refresh-components/Hoverable";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -51,24 +63,41 @@ interface ViewerMCPServerCardProps {
 }
 
 function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
+  const [folded, setFolded] = useState(false);
   const serverIcon = getActionIcon(server.server_url, server.name);
 
   return (
-    <ExpandableCard.Root>
-      <ActionsLayouts.Header
-        title={server.name}
-        description={server.description}
-        icon={serverIcon}
-      />
+    <ExpandableCard.Root isFolded={folded} onFoldedChange={setFolded}>
+      <ExpandableCard.Header>
+        <div className="p-2">
+          <LineItemLayout
+            icon={serverIcon}
+            title={server.name}
+            description={server.description}
+            variant="secondary"
+            rightChildren={
+              <Button
+                internal
+                rightIcon={folded ? SvgExpand : SvgFold}
+                onClick={() => setFolded((prev) => !prev)}
+              >
+                {folded ? "Expand" : "Fold"}
+              </Button>
+            }
+            center
+          />
+        </div>
+      </ExpandableCard.Header>
       {tools.length > 0 && (
         <ActionsLayouts.Content>
           {tools.map((tool) => (
-            <ActionsLayouts.Tool
-              key={tool.id}
-              title={tool.display_name}
-              description={tool.description}
-              icon={serverIcon}
-            />
+            <Section key={tool.id} padding={0.25}>
+              <LineItemLayout
+                title={tool.display_name}
+                description={tool.description}
+                variant="secondary"
+              />
+            </Section>
           ))}
         </ActionsLayouts.Content>
       )}
@@ -153,17 +182,37 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
         />
 
         <Modal.Body>
+          {/* Metadata */}
+          <Section flexDirection="row" justifyContent="start">
+            {!agent.is_default_persona && (
+              <LineItemLayout
+                icon={SvgStar}
+                title="Featured"
+                variant="tertiary"
+                width="fit"
+              />
+            )}
+            <LineItemLayout
+              icon={SvgUser}
+              title={agent.owner?.email ?? "Onyx"}
+              variant="tertiary-muted"
+              width="fit"
+            />
+            {agent.is_public && (
+              <LineItemLayout
+                icon={SvgOrganization}
+                title="Public to your organization"
+                variant="tertiary-muted"
+                width="fit"
+              />
+            )}
+          </Section>
+
           {/* Description */}
-          {agent.description && (
-            <>
-              <Text secondaryBody text03>
-                {agent.description}
-              </Text>
-              <Separator noPadding />
-            </>
-          )}
+          {agent.description && <Text text03>{agent.description}</Text>}
 
           {/* Knowledge */}
+          <Separator noPadding />
           <Section gap={0.5} alignItems="start">
             <Title title="Knowledge" />
             {hasKnowledge ? (
@@ -220,9 +269,8 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             </SimpleCollapsible.Content>
           </SimpleCollapsible>
 
-          <Separator noPadding />
-
           {/* More Info (Collapsible) */}
+          <Separator noPadding />
           <SimpleCollapsible>
             <SimpleCollapsible.Header title="More Info" />
             <SimpleCollapsible.Content>
@@ -234,23 +282,24 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     variant="tertiary"
                   />
                 )}
-                {agent.llm_model_version_override && (
+                {/*{agent.llm_model_version_override && (
                   <LineItemLayout
                     title="Model"
                     description={agent.llm_model_version_override}
                     variant="tertiary"
                   />
-                )}
-                {agent.search_start_date && (
+                )}*/}
+                {/*{agent.search_start_date && (
                   <LineItemLayout
                     title="Instructions"
                     description={agent.search_start_date.toDateString()}
                     variant="tertiary"
                   />
-                )}
+                )}*/}
                 <Horizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
+                  nonInteractable
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </Horizontal>
@@ -258,6 +307,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
             </SimpleCollapsible.Content>
           </SimpleCollapsible>
 
+          {/* Prompt Reminders */}
           {agent.task_prompt && (
             <>
               <Separator noPadding />
@@ -269,18 +319,20 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {agent.starter_messages && agent.starter_messages.length > 0 && (
             <>
               <Separator noPadding />
-              <SimpleCollapsible>
-                <SimpleCollapsible.Header title="Conversation Starters" />
-                <SimpleCollapsible.Content>
-                  <Section gap={0.25} alignItems="start">
-                    {agent.starter_messages.map((starter, index) => (
-                      <Text key={index} secondaryBody text03>
-                        {starter.message}
-                      </Text>
-                    ))}
-                  </Section>
-                </SimpleCollapsible.Content>
-              </SimpleCollapsible>
+              <Title title="Prompt Reminders" />
+              <div className="grid grid-cols-2 gap-1 w-full">
+                {agent.starter_messages.map((starter, index) => (
+                  <Hoverable key={index} asChild>
+                    <HoverableButton>
+                      <LineItemLayout
+                        icon={SvgBubbleText}
+                        title={starter.message}
+                        variant="tertiary-muted"
+                      />
+                    </HoverableButton>
+                  </Hoverable>
+                ))}
+              </div>
             </>
           )}
         </Modal.Body>
