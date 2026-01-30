@@ -668,8 +668,13 @@ def get_bedrock_available_models(
     try:
         # Precedence: bearer → keys → IAM
         if request.aws_bearer_token_bedrock:
-            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = request.aws_bearer_token_bedrock
-            session = boto3.Session(region_name=request.aws_region_name)
+            try:
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = (
+                    request.aws_bearer_token_bedrock
+                )
+                session = boto3.Session(region_name=request.aws_region_name)
+            finally:
+                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
                 aws_access_key_id=request.aws_access_key_id,
@@ -775,9 +780,6 @@ def get_bedrock_available_models(
                     ),
                 )
             )
-
-        # Unset the environment variable
-        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
 
         # Sync new models to DB if provider_name is specified
         if request.provider_name:

@@ -84,7 +84,7 @@ def build_litellm_passthrough_kwargs(
     if not (SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity):
         return model_kwargs
 
-    passthrough_kwargs = dict(model_kwargs)
+    passthrough_kwargs = copy.deepcopy(model_kwargs)
 
     if user_identity.user_id:
         passthrough_kwargs["user"] = truncate_litellm_user_id(user_identity.user_id)
@@ -95,7 +95,7 @@ def build_litellm_passthrough_kwargs(
         if existing_metadata is None:
             metadata = {}
         elif isinstance(existing_metadata, dict):
-            metadata = dict(existing_metadata)
+            metadata = copy.deepcopy(existing_metadata)
         else:
             metadata = None
 
