@@ -6,11 +6,7 @@ import type { Route } from "next";
 import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
-import {
-  Section,
-  LineItemLayout,
-  AttachmentItemLayout,
-} from "@/layouts/general-layouts";
+import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Separator from "@/refresh-components/Separator";
@@ -19,7 +15,6 @@ import {
   SvgActions,
   SvgBubbleText,
   SvgExpand,
-  SvgFileText,
   SvgFold,
   SvgOrganization,
   SvgStar,
@@ -41,6 +36,7 @@ import { useFilters, useLlmManager } from "@/lib/hooks";
 import { formatMmDdYyyy } from "@/lib/utils";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
+import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -294,12 +290,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 alignItems="start"
               >
                 {agent.document_sets?.map((docSet) => (
-                  <AttachmentItemLayout
-                    key={docSet.id}
-                    icon={SvgFileText}
-                    title={docSet.name}
-                    description={docSet.description}
-                  />
+                  <DocumentSetCard key={docSet.id} documentSet={docSet} />
                 ))}
                 {agent.user_file_ids?.map((fileId) => {
                   const file = allRecentFiles.find((f) => f.id === fileId);
