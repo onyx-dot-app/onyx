@@ -638,7 +638,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root disableFooter>
+      <AppLayouts.Root disableHeader disableFooter>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -725,13 +725,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               )}
 
               {!currentChatSessionId && !currentProjectId && (
-                <div className="relative w-full flex-1 flex flex-col items-center justify-end">
-                  <WelcomeMessage
-                    agent={liveAssistant}
-                    isDefaultAgent={isDefaultAgent}
-                  />
-                  <Spacer rem={1.5} />
-                </div>
+                <>
+                  <AppLayouts.Header />
+                  <div className="relative w-full flex-1 flex flex-col items-center justify-end">
+                    <WelcomeMessage
+                      agent={liveAssistant}
+                      isDefaultAgent={isDefaultAgent}
+                    />
+                    <Spacer rem={1.5} />
+                  </div>
+                </>
               )}
 
               {/* ChatInputBar container - absolutely positioned when in chat, centered when no session */}
