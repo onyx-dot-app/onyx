@@ -27,17 +27,29 @@ interface LabelProps
   name?: string;
   /** Whether the associated input is disabled */
   disabled?: boolean;
+  nonInteractable?: boolean;
   ref?: React.Ref<HTMLLabelElement>;
 }
 
-export default function Label({ name, disabled, ref, ...props }: LabelProps) {
+export default function Label({
+  name,
+  disabled,
+  nonInteractable,
+  ref,
+  ...props
+}: LabelProps) {
   return (
     <label
       ref={ref}
+      data-non-interactable={nonInteractable ? "true" : undefined}
       className={cn(
         "flex-1 self-stretch",
-        "peer-disabled:cursor-not-allowed",
-        disabled ? "cursor-not-allowed" : "cursor-pointer"
+        "peer-disabled:cursor-not-allowed data-[non-interactable=true]:cursor-default",
+        disabled
+          ? "cursor-not-allowed"
+          : nonInteractable
+            ? undefined
+            : "cursor-pointer"
       )}
       htmlFor={name}
       {...props}

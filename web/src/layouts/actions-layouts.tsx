@@ -220,7 +220,7 @@ export type ActionsToolProps = WithoutStyles<{
   name?: string;
   title: string;
   description: string;
-  icon: React.FunctionComponent<IconProps>;
+  icon?: React.FunctionComponent<IconProps>;
 
   // State
   disabled?: boolean;
@@ -231,8 +231,8 @@ function ActionsTool({
   title,
   description,
   icon,
-  rightChildren,
   disabled,
+  rightChildren,
 }: ActionsToolProps) {
   return (
     <Card padding={0.75} variant={disabled ? "disabled" : undefined}>
