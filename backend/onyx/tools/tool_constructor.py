@@ -95,7 +95,7 @@ def construct_tools(
     persona: Persona,
     db_session: Session,
     emitter: Emitter,
-    user: User | None,
+    user: User,
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
@@ -116,7 +116,7 @@ def construct_tools(
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
     # Get user's OAuth token if available
     user_oauth_token = None
-    if user and user.oauth_accounts:
+    if user.oauth_accounts:
         user_oauth_token = user.oauth_accounts[0].access_token
 
     search_settings = get_current_search_settings(db_session)
@@ -262,7 +262,12 @@ def construct_tools(
             oauth_token_for_tool = None
 
             # Priority 1: OAuth config (per-tool OAuth)
-            if db_tool_model.oauth_config_id and user:
+            if db_tool_model.oauth_config_id:
+                if user.is_anonymous:
+                    logger.warning(
+                        f"Anonymous user cannot use OAuth tool {db_tool_model.id}"
+                    )
+                    continue
                 oauth_config = get_oauth_config(
                     db_tool_model.oauth_config_id, db_session
                 )
@@ -277,6 +282,11 @@ def construct_tools(
 
             # Priority 2: Passthrough auth (user's login OAuth token)
             elif db_tool_model.passthrough_auth:
+                if user.is_anonymous:
+                    logger.warning(
+                        f"Anonymous user cannot use passthrough auth tool {db_tool_model.id}"
+                    )
+                    continue
                 oauth_token_for_tool = user_oauth_token
 
             tool_dict[db_tool_model.id] = cast(
@@ -311,11 +321,16 @@ def construct_tools(
 
             # Get user-specific connection config if needed
             connection_config = None
-            user_email = user.email if user else ""
+            user_email = user.email
             mcp_user_oauth_token = None
 
             if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
                 # Pass-through OAuth: use the user's login OAuth token
+                if user.is_anonymous:
+                    logger.warning(
+                        f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
+                    )
+                    continue
                 mcp_user_oauth_token = user_oauth_token
             elif (
                 mcp_server.auth_type == MCPAuthenticationType.API_TOKEN

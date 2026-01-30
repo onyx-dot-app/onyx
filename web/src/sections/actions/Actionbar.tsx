@@ -13,6 +13,7 @@ interface ActionbarProps {
   onAddAction: () => void;
   className?: string;
   buttonText?: string;
+  barText?: string;
 }
 
 const Actionbar: React.FC<ActionbarProps> = ({
@@ -22,6 +23,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
   onAddAction,
   className,
   buttonText = "Add MCP Server",
+  barText = "Connect MCP server to add custom actions.",
 }) => {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     onSearchQueryChange?.(e.target.value);
@@ -49,7 +51,7 @@ const Actionbar: React.FC<ActionbarProps> = ({
       ) : (
         <div className="flex-1">
           <Text as="p" mainUiMuted text03>
-            Connect MCP server to add custom actions.
+            {barText}
           </Text>
         </div>
       )}

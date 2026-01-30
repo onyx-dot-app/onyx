@@ -1,12 +1,15 @@
+"use client";
+
 import React, { useState, useRef, useEffect } from "react";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { Label } from "@/components/ui/label";
+import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
+
 interface ConnectorMultiSelectProps {
   name: string;
   label: string;
@@ -107,7 +110,11 @@ export const ConnectorMultiSelect = ({
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">
-      {label && <Label className="text-base font-medium">{label}</Label>}
+      {label && (
+        <Label>
+          <Text>{label}</Text>
+        </Label>
+      )}
 
       <Text as="p" mainUiMuted text03>
         All documents indexed by the selected connectors will be part of this

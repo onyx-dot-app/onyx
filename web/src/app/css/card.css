@@ -15,7 +15,7 @@
 }
 
 .card[data-variant="disabled"] {
-  @apply cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50;
+  @apply cursor-not-allowed bg-background-tint-00 border opacity-50;
 }
 
 .card[data-variant="borderless"] {

@@ -79,7 +79,7 @@ def get_cc_pair_index_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
     if user:
@@ -115,7 +115,7 @@ def get_cc_pair_permission_sync_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[PermissionSyncAttemptSnapshot]:
     if user:
@@ -151,7 +151,7 @@ def get_cc_pair_permission_sync_attempts(
 @router.get("/admin/cc-pair/{cc_pair_id}", tags=PUBLIC_API_TAGS)
 def get_cc_pair_full_info(
     cc_pair_id: int,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CCPairFullInfo:
     tenant_id = get_current_tenant_id()
@@ -245,7 +245,7 @@ def get_cc_pair_full_info(
 def update_cc_pair_status(
     cc_pair_id: int,
     status_update_request: CCStatusUpdateRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> JSONResponse:
     """This method returns nearly immediately. It simply sets some signals and
@@ -329,7 +329,7 @@ def update_cc_pair_status(
 def update_cc_pair_name(
     cc_pair_id: int,
     new_name: str,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -358,7 +358,7 @@ def update_cc_pair_name(
 def update_cc_pair_property(
     cc_pair_id: int,
     update_request: CCPropertyUpdateRequest,  # in seconds
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -529,7 +529,7 @@ def associate_credential_to_connector(
     connector_id: int,
     credential_id: int,
     metadata: ConnectorCredentialPairMetadata,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[int]:
@@ -610,7 +610,7 @@ def associate_credential_to_connector(
 def dissociate_credential_from_connector(
     connector_id: int,
     credential_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     return remove_credential_from_connector(

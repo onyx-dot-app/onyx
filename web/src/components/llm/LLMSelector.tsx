@@ -20,6 +20,7 @@ interface LLMOption {
 }
 
 export interface LLMSelectorProps {
+  name?: string;
   userSettings?: boolean;
   llmProviders: LLMProviderDescriptor[];
   currentLlm: string | null;
@@ -29,6 +30,7 @@ export interface LLMSelectorProps {
 }
 
 export default function LLMSelector({
+  name,
   userSettings,
   llmProviders,
   currentLlm,
@@ -158,7 +160,7 @@ export default function LLMSelector({
       value={currentLlm ? currentLlm : "default"}
       onValueChange={(value) => onSelect(value === "default" ? null : value)}
     >
-      <InputSelect.Trigger placeholder={defaultLabel} />
+      <InputSelect.Trigger id={name} name={name} placeholder={defaultLabel} />
 
       <InputSelect.Content className="min-w-[280px]">
         {!excludePublicProviders && (

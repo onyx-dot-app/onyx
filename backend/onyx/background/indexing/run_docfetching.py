@@ -60,6 +60,8 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
+from onyx.redis.redis_hierarchy import get_node_id_from_raw_id
+from onyx.redis.redis_hierarchy import get_source_node_id_from_cache
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.indexing.persistent_document_writer import (
@@ -382,6 +384,9 @@ def connector_document_extraction(
         db_credential = index_attempt.connector_credential_pair.credential
         processing_mode = index_attempt.connector_credential_pair.processing_mode
         is_primary = index_attempt.search_settings.status == IndexModelStatus.PRESENT
+        is_connector_public = (
+            index_attempt.connector_credential_pair.access_type == AccessType.PUBLIC
+        )
 
         from_beginning = index_attempt.from_beginning
         has_successful_attempt = (
@@ -603,6 +608,7 @@ def connector_document_extraction(
                             nodes=hierarchy_node_batch,
                             source=db_connector.source,
                             commit=True,
+                            is_connector_public=is_connector_public,
                         )
 
                         # Cache in Redis for fast ancestor resolution during doc processing
@@ -628,6 +634,26 @@ def connector_document_extraction(
 
                 # Clean documents and create batch
                 doc_batch_cleaned = strip_null_characters(document_batch)
+
+                # Resolve parent_hierarchy_raw_node_id to parent_hierarchy_node_id
+                # using the Redis cache (just populated from hierarchy nodes batch)
+                with get_session_with_current_tenant() as db_session_tmp:
+                    source_node_id = get_source_node_id_from_cache(
+                        redis_client, db_session_tmp, db_connector.source
+                    )
+                for doc in doc_batch_cleaned:
+                    if doc.parent_hierarchy_raw_node_id is not None:
+                        node_id, found = get_node_id_from_raw_id(
+                            redis_client,
+                            db_connector.source,
+                            doc.parent_hierarchy_raw_node_id,
+                        )
+                        doc.parent_hierarchy_node_id = (
+                            node_id if found else source_node_id
+                        )
+                    else:
+                        doc.parent_hierarchy_node_id = source_node_id
+
                 batch_description = []
 
                 for doc in doc_batch_cleaned:

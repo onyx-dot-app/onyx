@@ -12,7 +12,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.sharepoint.connector import SharepointConnector
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 # NOTE: Sharepoint site for tests is "sharepoint-tests"
 
@@ -139,7 +139,7 @@ def test_sharepoint_connector_all_sites__docs_only(
 
         # Not asserting expected sites because that can change in test tenant at any time
         # Finding any docs is good enough to verify that the connector is working
-        document_batches = load_all_docs_from_checkpoint_connector(
+        document_batches = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
@@ -166,7 +166,7 @@ def test_sharepoint_connector_all_sites__pages_only(
 
         # Not asserting expected sites because that can change in test tenant at any time
         # Finding any docs is good enough to verify that the connector is working
-        document_batches = load_all_docs_from_checkpoint_connector(
+        document_batches = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
@@ -194,11 +194,11 @@ def test_sharepoint_connector_specific_folder(
         connector.load_credentials(sharepoint_credentials)
 
         # Get all documents
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
 
         # Should only find documents in the test folder
         test_folder_docs = [
@@ -236,11 +236,11 @@ def test_sharepoint_connector_root_folder__docs_only(
         connector.load_credentials(sharepoint_credentials)
 
         # Get all documents
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
 
         assert len(found_documents) == len(
             EXPECTED_DOCUMENTS
@@ -274,11 +274,11 @@ def test_sharepoint_connector_other_library(
         connector.load_credentials(sharepoint_credentials)
 
         # Get all documents
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
         expected_documents: list[ExpectedDocument] = [
             doc for doc in EXPECTED_DOCUMENTS if doc.library == "Other Library"
         ]
@@ -316,11 +316,11 @@ def test_sharepoint_connector_poll(
         end = datetime(2025, 1, 28, 20, 51, 50, tzinfo=timezone.utc)  # 8 seconds after
 
         # Get documents within the time window
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=start.timestamp(),
             end=end.timestamp(),
-        )
+        ).documents
 
         # Should only find test1.docx
         assert (
@@ -353,11 +353,11 @@ def test_sharepoint_connector_pages(
 
         connector.load_credentials(sharepoint_credentials)
 
-        found_documents = load_all_docs_from_checkpoint_connector(
+        found_documents = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
 
         assert len(found_documents) == len(
             EXPECTED_PAGES

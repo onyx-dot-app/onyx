@@ -156,7 +156,9 @@ test.describe("First user onboarding flow", () => {
     await nextButton.click();
 
     await expect(
-      page.getByText("Almost there! Connect your models to start chatting.")
+      page
+        .getByText("Almost there! Connect your models to start chatting.")
+        .first()
     ).toBeVisible();
     await expect(page.getByText("Step 2 of 3")).toBeVisible();
 
@@ -201,9 +203,11 @@ test.describe("First user onboarding flow", () => {
     await expect(nextButton).toBeEnabled({ timeout: 10000 });
     await nextButton.click();
 
-    const completionHeading = page.getByText(
-      "You're all set, review the optional settings or click Finish Setup"
-    );
+    const completionHeading = page
+      .getByText(
+        "You're all set, review the optional settings or click Finish Setup"
+      )
+      .first();
     await expect(completionHeading).toBeVisible();
     await expect(page.getByText("Step 3 of 3")).toBeVisible();
 
@@ -213,7 +217,7 @@ test.describe("First user onboarding flow", () => {
       "Invite your team",
     ];
     for (const item of checklistItems) {
-      await expect(page.getByText(item)).toBeVisible();
+      await expect(page.getByText(item).first()).toBeVisible();
     }
 
     const finishSetupButton = page.getByRole("button", {

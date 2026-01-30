@@ -29,6 +29,8 @@ alembic==1.10.4
     # via onyx
 amqp==5.3.1
     # via kombu
+annotated-doc==0.0.4
+    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anyio==4.11.0
@@ -256,7 +258,7 @@ exceptiongroup==1.3.0
     #   fastmcp
 fakeredis==2.33.0
     # via pydocket
-fastapi==0.116.1
+fastapi==0.128.0
     # via
     #   fastapi-limiter
     #   fastapi-users
@@ -1110,7 +1112,7 @@ sse-starlette==3.0.3
     # via mcp
 sseclient-py==1.8.0
     # via braintrust
-starlette==0.47.2
+starlette==0.49.3
     # via
     #   fastapi
     #   mcp

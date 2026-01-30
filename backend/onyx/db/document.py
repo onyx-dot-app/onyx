@@ -27,6 +27,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.document_access import apply_document_access_filter
 from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_commit
 from onyx.db.enums import AccessType
@@ -223,6 +224,74 @@ def get_documents_by_ids(
     stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
     documents = db_session.execute(stmt).scalars().all()
     return list(documents)
+
+
+def _apply_document_cursor_filter(
+    stmt: Select,
+    cursor_last_modified: datetime | None,
+    cursor_last_synced: datetime | None,
+    cursor_document_id: str | None,
+) -> Select:
+    if not cursor_last_modified or not cursor_document_id:
+        return stmt
+    if cursor_last_synced is None:
+        return stmt.where(
+            or_(
+                DbDocument.last_modified < cursor_last_modified,
+                and_(
+                    DbDocument.last_modified == cursor_last_modified,
+                    DbDocument.last_synced.is_(None),
+                    DbDocument.id < cursor_document_id,
+                ),
+            )
+        )
+    return stmt.where(
+        or_(
+            DbDocument.last_modified < cursor_last_modified,
+            and_(
+                DbDocument.last_modified == cursor_last_modified,
+                or_(
+                    DbDocument.last_synced < cursor_last_synced,
+                    DbDocument.last_synced.is_(None),
+                    and_(
+                        DbDocument.last_synced == cursor_last_synced,
+                        DbDocument.id < cursor_document_id,
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+def get_accessible_documents_for_hierarchy_node_paginated(
+    db_session: Session,
+    parent_hierarchy_node_id: int,
+    user_email: str | None,
+    external_group_ids: list[str],
+    cursor_last_modified: datetime | None,
+    cursor_last_synced: datetime | None,
+    cursor_document_id: str | None,
+    limit: int,
+) -> list[DbDocument]:
+    stmt = select(DbDocument).where(
+        DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
+    )
+    stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
+    stmt = _apply_document_cursor_filter(
+        stmt,
+        cursor_last_modified=cursor_last_modified,
+        cursor_last_synced=cursor_last_synced,
+        cursor_document_id=cursor_document_id,
+    )
+    stmt = stmt.order_by(
+        DbDocument.last_modified.desc(),
+        DbDocument.last_synced.desc().nulls_last(),
+        DbDocument.id.desc(),
+    )
+    # Use distinct to avoid duplicates when a document belongs to multiple cc_pairs
+    stmt = stmt.distinct()
+    stmt = stmt.limit(limit)
+    return list(db_session.execute(stmt).scalars().all())
 
 
 def filter_existing_document_ids(
@@ -461,6 +530,7 @@ def upsert_documents(
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
                     kg_stage=KGStage.NOT_STARTED,
+                    parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
                     **(
                         {
                             "external_user_emails": list(
@@ -490,6 +560,7 @@ def upsert_documents(
         "primary_owners": insert_stmt.excluded.primary_owners,
         "secondary_owners": insert_stmt.excluded.secondary_owners,
         "doc_metadata": insert_stmt.excluded.doc_metadata,
+        "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
     }
     if includes_permissions:
         # Use COALESCE to preserve existing permissions when new values are NULL.
