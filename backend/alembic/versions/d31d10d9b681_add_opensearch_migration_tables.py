@@ -1,8 +1,8 @@
 """add_opensearch_migration_tables
 
-Revision ID: d7d881a02917
-Revises: 78ebc66946a0
-Create Date: 2026-01-29 20:21:29.231195
+Revision ID: d31d10d9b681
+Revises: e7f8a9b0c1d2
+Create Date: 2026-01-30 09:16:46.467456
 
 """
 
@@ -10,8 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = "d7d881a02917"
-down_revision = "78ebc66946a0"
+revision = "d31d10d9b681"
+down_revision = "e7f8a9b0c1d2"
 branch_labels = None
 depends_on = None
 
@@ -23,8 +23,8 @@ def upgrade() -> None:
         sa.Column(
             "document_migration_record_table_population_status",
             sa.Enum(
-                "PENDING",
-                "COMPLETED",
+                "pending",
+                "completed",
                 name="opensearchtenantmigrationstatus",
                 native_enum=False,
             ),
@@ -38,8 +38,8 @@ def upgrade() -> None:
         sa.Column(
             "overall_document_migration_status",
             sa.Enum(
-                "PENDING",
-                "COMPLETED",
+                "pending",
+                "completed",
                 name="opensearchtenantmigrationstatus",
                 native_enum=False,
             ),
@@ -70,10 +70,10 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "PENDING",
-                "COMPLETED",
-                "FAILED",
-                "PERMANENTLY_FAILED",
+                "pending",
+                "completed",
+                "failed",
+                "permanently_failed",
                 name="opensearchdocumentmigrationstatus",
                 native_enum=False,
             ),

@@ -8,7 +8,13 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_MY_DRIVE_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_hierarchy_nodes_match_expected,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_DOC_SINGLETON,
@@ -17,38 +23,95 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_DOCS_IN_FOLDER,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_URL,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_URL
+from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    get_expected_hierarchy_for_shared_drives,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import id_to_name
-from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
+from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
 from tests.daily.connectors.google_drive.consts_and_utils import (
     MISC_SHARED_DRIVE_FNAMES,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    PILL_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    RESTRICTED_ACCESS_FOLDER_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_URL,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_DRIVE_B_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_1_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_DRIVE_2_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_EXTRA_FOLDER_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_MY_DRIVE_FOLDER_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_1_MY_DRIVE_ID,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_2_MY_DRIVE,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    TEST_USER_3_MY_DRIVE_ID,
+)
 
 
 @patch(
@@ -69,7 +132,7 @@ def test_include_all(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     # Should get everything
     expected_file_ids = (
@@ -89,8 +152,44 @@ def test_include_all(
         + SECTIONS_FILE_IDS
     )
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
+    )
+
+    # Verify hierarchy nodes for shared drives
+    # When include_shared_drives=True, we get ALL shared drives in the organization
+    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
+        include_drive_1=True,
+        include_drive_2=True,
+        include_restricted_folder=False,
+    )
+
+    # Add additional shared drives in the organization
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_ONLY_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
+    expected_ids.add(TEST_USER_1_MY_DRIVE_ID)
+    expected_ids.add(TEST_USER_1_MY_DRIVE_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
+    expected_ids.add(ADMIN_MY_DRIVE_ID)
+    expected_ids.add(TEST_USER_2_MY_DRIVE)
+    expected_ids.add(TEST_USER_3_MY_DRIVE_ID)
+    expected_ids.add(PILL_FOLDER_ID)
+    expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_FOLDER_ID)
+    expected_ids.add(EXTERNAL_SHARED_FOLDER_ID)
+
+    # My Drive folders
+    expected_ids.add(FOLDER_3_ID)
+
+    assert_hierarchy_nodes_match_expected(
+        retrieved_nodes=output.hierarchy_nodes,
+        expected_node_ids=expected_ids,
+        expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
@@ -116,7 +215,7 @@ def test_include_shared_drives_only_with_size_threshold(
     # this threshold will skip one file
     connector.size_threshold = 16384
 
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     expected_file_ids = (
         SHARED_DRIVE_1_FILE_IDS
@@ -132,7 +231,7 @@ def test_include_shared_drives_only_with_size_threshold(
 
     expected_file_names = {id_to_name(file_id) for file_id in expected_file_ids}
     expected_file_names.update(MISC_SHARED_DRIVE_FNAMES)
-    retrieved_file_names = {doc.semantic_identifier for doc in retrieved_docs}
+    retrieved_file_names = {doc.semantic_identifier for doc in output.documents}
     for name in expected_file_names - retrieved_file_names:
         print(f"expected but did not retrieve: {name}")
     for name in retrieved_file_names - expected_file_names:
@@ -148,7 +247,7 @@ def test_include_shared_drives_only_with_size_threshold(
     # the folder and all its files. There is currently no consistency to the order of assignment of users
     # to shared drives, so this is a heisenbug. When we guarantee that restricted folders are retrieved,
     # we can change this to 52
-    assert len(retrieved_docs) == 50 or len(retrieved_docs) == 51
+    assert len(output.documents) == 50 or len(output.documents) == 51
 
 
 @patch(
@@ -170,7 +269,7 @@ def test_include_shared_drives_only(
         my_drive_emails=None,
     )
 
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     # Should only get shared drives
     expected_file_ids = (
@@ -186,14 +285,39 @@ def test_include_shared_drives_only(
     )
 
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
 
     # 2 extra files from shared drive owned by non-admin and not shared with admin
     # another one flaky for unknown reasons
     # TODO: switch to 54 when restricted access issue is resolved
-    assert len(retrieved_docs) == 51 or len(retrieved_docs) == 52
+    assert len(output.documents) == 51 or len(output.documents) == 52
+
+    # Verify hierarchy nodes - should include both shared drives and their folders
+    # When include_shared_drives=True, we get ALL shared drives in the organization
+    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
+        include_drive_1=True,
+        include_drive_2=True,
+        include_restricted_folder=False,
+    )
+
+    # Add additional shared drives in the organization
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_ONLY_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
+    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_ID)
+    expected_ids.add(TEST_USER_1_DRIVE_B_FOLDER_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
+    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
+    expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
+
+    assert_hierarchy_nodes_match_expected(
+        retrieved_nodes=output.hierarchy_nodes,
+        expected_node_ids=expected_ids,
+        expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
+    )
 
 
 @patch(
@@ -214,7 +338,7 @@ def test_include_my_drives_only(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     # Should only get everyone's My Drives
     expected_file_ids = (
@@ -225,8 +349,26 @@ def test_include_my_drives_only(
         + TEST_USER_3_FILE_IDS
     )
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
+    )
+
+    # Verify hierarchy nodes - My Drive roots and folders for all users
+    # Service account impersonates all users, so it sees all My Drives
+    expected_ids = {
+        FOLDER_3_ID,
+        ADMIN_MY_DRIVE_ID,
+        TEST_USER_1_MY_DRIVE_ID,
+        TEST_USER_1_MY_DRIVE_FOLDER_ID,
+        TEST_USER_2_MY_DRIVE,
+        TEST_USER_3_MY_DRIVE_ID,
+        PILL_FOLDER_ID,
+        TEST_USER_1_EXTRA_FOLDER_ID,
+        EXTERNAL_SHARED_FOLDER_ID,
+    }
+    assert_hierarchy_nodes_match_expected(
+        retrieved_nodes=output.hierarchy_nodes,
+        expected_node_ids=expected_ids,
     )
 
 
@@ -249,7 +391,7 @@ def test_drive_one_only(
         shared_drive_urls=",".join([str(url) for url in urls]),
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     # We ignore shared_drive_urls if include_shared_drives is False
     expected_file_ids = (
@@ -259,8 +401,22 @@ def test_drive_one_only(
         + FOLDER_1_2_FILE_IDS
     )
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
+    )
+
+    # Verify hierarchy nodes - should only include shared_drive_1 and its folders
+    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
+        include_drive_1=True,
+        include_drive_2=False,
+        include_restricted_folder=False,
+    )
+    # Restricted folder is non-deterministically returned
+    assert_hierarchy_nodes_match_expected(
+        retrieved_nodes=output.hierarchy_nodes,
+        expected_node_ids=expected_ids,
+        expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
@@ -284,7 +440,7 @@ def test_folder_and_shared_drive(
         shared_folder_urls=",".join([str(url) for url in folder_urls]),
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     # Should get everything except for the top level files in drive 2
     expected_file_ids = (
@@ -297,8 +453,38 @@ def test_folder_and_shared_drive(
         + FOLDER_2_2_FILE_IDS
     )
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
+    )
+
+    # Verify hierarchy nodes - shared_drive_1 and folder_2 with children
+    # SHARED_DRIVE_2_ID is included because folder_2's parent is shared_drive_2
+    expected_ids = {
+        SHARED_DRIVE_1_ID,
+        FOLDER_1_ID,
+        FOLDER_1_1_ID,
+        FOLDER_1_2_ID,
+        SHARED_DRIVE_2_ID,
+        FOLDER_2_ID,
+        FOLDER_2_1_ID,
+        FOLDER_2_2_ID,
+    }
+    expected_parents = {
+        SHARED_DRIVE_1_ID: None,
+        FOLDER_1_ID: SHARED_DRIVE_1_ID,
+        FOLDER_1_1_ID: FOLDER_1_ID,
+        FOLDER_1_2_ID: FOLDER_1_ID,
+        SHARED_DRIVE_2_ID: None,
+        FOLDER_2_ID: SHARED_DRIVE_2_ID,
+        FOLDER_2_1_ID: FOLDER_2_ID,
+        FOLDER_2_2_ID: FOLDER_2_ID,
+    }
+    # Restricted folder is non-deterministically returned
+    assert_hierarchy_nodes_match_expected(
+        retrieved_nodes=output.hierarchy_nodes,
+        expected_node_ids=expected_ids,
+        expected_parent_mapping=expected_parents,
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
@@ -330,7 +516,7 @@ def test_folders_only(
         shared_folder_urls=",".join([str(url) for url in folder_urls]),
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     expected_file_ids = (
         FOLDER_1_1_FILE_IDS
@@ -340,8 +526,27 @@ def test_folders_only(
         + ADMIN_FOLDER_3_FILE_IDS
     )
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
+    )
+
+    # Verify hierarchy nodes - specific folders requested plus their parent nodes
+    # The connector walks up the hierarchy to include parent drives/folders
+    expected_ids = {
+        SHARED_DRIVE_1_ID,
+        FOLDER_1_ID,
+        FOLDER_1_1_ID,
+        FOLDER_1_2_ID,
+        SHARED_DRIVE_2_ID,
+        FOLDER_2_ID,
+        FOLDER_2_1_ID,
+        FOLDER_2_2_ID,
+        ADMIN_MY_DRIVE_ID,
+        FOLDER_3_ID,
+    }
+    assert_hierarchy_nodes_match_expected(
+        retrieved_nodes=output.hierarchy_nodes,
+        expected_node_ids=expected_ids,
     )
 
 
@@ -358,12 +563,12 @@ def test_shared_folder_owned_by_external_user(
         shared_folder_urls=EXTERNAL_SHARED_FOLDER_URL,
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     expected_docs = EXTERNAL_SHARED_DOCS_IN_FOLDER
 
-    assert len(retrieved_docs) == len(expected_docs)  # 1 for now
-    assert expected_docs[0] in retrieved_docs[0].id
+    assert len(output.documents) == len(expected_docs)  # 1 for now
+    assert expected_docs[0] in output.documents[0].id
 
 
 def test_shared_with_me(
@@ -379,9 +584,9 @@ def test_shared_with_me(
         shared_folder_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
-    print(retrieved_docs)
+    print(output.documents)
 
     expected_file_ids = (
         ADMIN_FILE_IDS
@@ -391,11 +596,11 @@ def test_shared_with_me(
         + TEST_USER_3_FILE_IDS
     )
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
 
-    retrieved_ids = {urlparse(doc.id).path.split("/")[-1] for doc in retrieved_docs}
+    retrieved_ids = {urlparse(doc.id).path.split("/")[-1] for doc in output.documents}
     for id in retrieved_ids:
         print(id)
 
@@ -425,11 +630,11 @@ def test_specific_emails(
         shared_drive_urls=None,
         my_drive_emails=",".join([str(email) for email in my_drive_emails]),
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     expected_file_ids = TEST_USER_1_FILE_IDS + TEST_USER_3_FILE_IDS
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
 
@@ -455,11 +660,11 @@ def get_specific_folders_in_my_drive(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
 
     expected_file_ids = ADMIN_FOLDER_3_FILE_IDS
     assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
+        retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
 
@@ -485,8 +690,8 @@ def test_specific_user_emails_restricted_folder(
         my_drive_emails=None,
         specific_user_emails=ADMIN_EMAIL,
     )
-    admin_docs = load_all_docs(admin_connector)
-    assert len(admin_docs) == 1
+    admin_output = load_connector_outputs(admin_connector)
+    assert len(admin_output.documents) == 1
 
     # Test with test users - should get 0 docs
     test_users = [TEST_USER_1_EMAIL, TEST_USER_2_EMAIL, TEST_USER_3_EMAIL]
@@ -500,8 +705,8 @@ def test_specific_user_emails_restricted_folder(
         my_drive_emails=None,
         specific_user_emails=",".join(test_users),
     )
-    test_docs = load_all_docs(test_connector)
-    assert len(test_docs) == 0
+    test_output = load_connector_outputs(test_connector)
+    assert len(test_output.documents) == 0
 
 
 @patch(
@@ -525,7 +730,7 @@ def test_specific_user_email_shared_with_me(
         my_drive_emails=None,
         specific_user_emails=TEST_USER_1_EMAIL,
     )
-    docs = load_all_docs(connector)
+    output = load_connector_outputs(connector)
     expected = [id_to_name(file_id) for file_id in TEST_USER_1_FILE_IDS]
     expected += ["private_file", "shared_file"]  # in My Drive
     expected += ["read only users can't download"]  # Shared with me
@@ -536,5 +741,5 @@ def test_specific_user_email_shared_with_me(
     # expected += ['perm_sync_doc_0ACOrCU1EMD1hUk9PVA_ab63b976-effb-49af-84e7-423d17a17dd7']
     # expected += ['file_22.txt'] # Shared drive
 
-    doc_titles = set(doc.semantic_identifier for doc in docs)
+    doc_titles = set(doc.semantic_identifier for doc in output.documents)
     assert doc_titles == set(expected)

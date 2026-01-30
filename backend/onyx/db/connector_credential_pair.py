@@ -14,7 +14,6 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
@@ -48,11 +47,15 @@ class ConnectorType(str, Enum):
 
 
 def _add_user_filters(
-    stmt: Select[tuple[*R]], user: User | None, get_editable: bool = True
+    stmt: Select[tuple[*R]], user: User, get_editable: bool = True
 ) -> Select[tuple[*R]]:
-    # If user is None and auth is disabled, assume the user is an admin
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user.role == UserRole.ADMIN:
         return stmt
+
+    # If anonymous user, only show public cc_pairs
+    if user.is_anonymous:
+        where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
+        return stmt.where(where_clause)
 
     stmt = stmt.distinct()
     UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
@@ -79,11 +82,6 @@ def _add_user_filters(
     for (as well as public cc_pairs)
     """
 
-    # If user is None, this is an anonymous user and we should only show public cc_pairs
-    if user is None:
-        where_clause = ConnectorCredentialPair.access_type == AccessType.PUBLIC
-        return stmt.where(where_clause)
-
     where_clause = User__UG.user_id == user.id
     if user.role == UserRole.CURATOR and get_editable:
         where_clause &= User__UG.is_curator == True  # noqa: E712
@@ -109,7 +107,7 @@ def _add_user_filters(
 
 def get_connector_credential_pairs_for_user(
     db_session: Session,
-    user: User | None,
+    user: User,
     get_editable: bool = True,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
@@ -163,7 +161,7 @@ def get_connector_credential_pairs_for_user(
 # you wish to use MUST be eagerly loaded, as the session will not be available
 # after this function to allow lazy loading.
 def get_connector_credential_pairs_for_user_parallel(
-    user: User | None,
+    user: User,
     get_editable: bool = True,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
@@ -241,7 +239,7 @@ def get_connector_credential_pair_for_user(
     db_session: Session,
     connector_id: int,
     credential_id: int,
-    user: User | None,
+    user: User,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
@@ -267,7 +265,7 @@ def get_connector_credential_pair(
 def get_connector_credential_pair_from_id_for_user(
     cc_pair_id: int,
     db_session: Session,
-    user: User | None,
+    user: User,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
@@ -504,7 +502,7 @@ def _relate_groups_to_cc_pair__no_commit(
 
 def add_credential_to_connector(
     db_session: Session,
-    user: User | None,
+    user: User,
     connector_id: int,
     credential_id: int,
     cc_pair_name: str | None,
@@ -572,7 +570,7 @@ def add_credential_to_connector(
         )
 
     association = ConnectorCredentialPair(
-        creator_id=user.id if user else None,
+        creator_id=user.id,
         connector_id=connector_id,
         credential_id=credential_id,
         name=cc_pair_name,
@@ -604,7 +602,7 @@ def add_credential_to_connector(
 def remove_credential_from_connector(
     connector_id: int,
     credential_id: int,
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)

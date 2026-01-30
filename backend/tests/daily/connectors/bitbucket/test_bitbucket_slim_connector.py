@@ -6,7 +6,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.bitbucket.connector import BitbucketConnector
 from onyx.connectors.models import HierarchyNode
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 @pytest.fixture
@@ -35,11 +35,11 @@ def test_bitbucket_full_ids_subset_of_slim_ids(
     bitbucket_connector_for_slim: BitbucketConnector,
 ) -> None:
     # Get all full doc IDs from load_from_state
-    docs = load_all_docs_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=bitbucket_connector_for_slim,
         start=0,
         end=time.time(),
-    )
+    ).documents
     all_full_doc_ids: set[str] = set([doc.id for doc in docs])
 
     # Get all doc IDs from the slim connector

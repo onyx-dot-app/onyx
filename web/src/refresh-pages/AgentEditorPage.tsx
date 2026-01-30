@@ -36,22 +36,16 @@ import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
-import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { FileCard } from "@/app/app/components/input/FileCard";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import {
   ProjectFile,
   UserFileStatus,
 } from "@/app/app/projects/projectsService";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -79,17 +73,18 @@ import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
-import { useActionsLayout } from "@/layouts/actions-layouts";
+import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
-import useOnMount from "@/hooks/useOnMount";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { deleteAgent } from "@/lib/agents";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
+import { ValidSources } from "@/lib/types";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -267,21 +262,16 @@ interface OpenApiToolCardProps {
 
 function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
-  const actionsLayouts = useActionsLayout();
-
-  useOnMount(() => actionsLayouts.setIsFolded(true));
 
   return (
-    <actionsLayouts.Provider>
-      <ActionsLayouts.Root>
-        <ActionsLayouts.Header
-          title={tool.display_name || tool.name}
-          description={tool.description}
-          icon={SvgActions}
-          rightChildren={<SwitchField name={toolFieldName} />}
-        />
-      </ActionsLayouts.Root>
-    </actionsLayouts.Provider>
+    <ExpandableCard.Root defaultFolded>
+      <ActionsLayouts.Header
+        title={tool.display_name || tool.name}
+        description={tool.description}
+        icon={SvgActions}
+        rightChildren={<SwitchField name={toolFieldName} />}
+      />
+    </ExpandableCard.Root>
   );
 }
 
@@ -296,8 +286,8 @@ function MCPServerCard({
   tools: enabledTools,
   isLoading,
 }: MCPServerCardProps) {
-  const actionsLayouts = useActionsLayout();
-  const { values, setFieldValue } = useFormikContext<any>();
+  const [isFolded, setIsFolded] = useState(false);
+  const { values, setFieldValue, getFieldMeta } = useFormikContext<any>();
   const serverFieldName = `mcp_server_${server.id}`;
   const isServerEnabled = values[serverFieldName]?.enabled ?? false;
   const {
@@ -313,93 +303,91 @@ function MCPServerCard({
   }).length;
 
   return (
-    <actionsLayouts.Provider>
-      <ActionsLayouts.Root>
-        <ActionsLayouts.Header
-          title={server.name}
-          description={server.description ?? server.server_url}
-          icon={getActionIcon(server.server_url, server.name)}
-          rightChildren={
-            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-              <EnabledCount
-                enabledCount={enabledCount}
-                totalCount={enabledTools.length}
-              />
-              <SwitchField
-                name={`${serverFieldName}.enabled`}
-                onCheckedChange={(checked) => {
-                  enabledTools.forEach((tool) => {
-                    setFieldValue(
-                      `${serverFieldName}.tool_${tool.id}`,
-                      checked
-                    );
-                  });
-                  if (!checked) return;
-                  actionsLayouts.setIsFolded(false);
-                }}
-              />
-            </GeneralLayouts.Section>
-          }
-        >
+    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
+      <ActionsLayouts.Header
+        title={server.name}
+        description={server.description}
+        icon={getActionIcon(server.server_url, server.name)}
+        rightChildren={
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              leftSearchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+            <EnabledCount
+              enabledCount={enabledCount}
+              totalCount={enabledTools.length}
             />
-            {enabledTools.length > 0 && (
-              <Button
-                internal
-                rightIcon={actionsLayouts.isFolded ? SvgExpand : SvgFold}
-                onClick={() => actionsLayouts.setIsFolded((prev) => !prev)}
-              >
-                {actionsLayouts.isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
+            <SwitchField
+              name={`${serverFieldName}.enabled`}
+              onCheckedChange={(checked) => {
+                enabledTools.forEach((tool) => {
+                  setFieldValue(`${serverFieldName}.tool_${tool.id}`, checked);
+                });
+                if (!checked) return;
+                setIsFolded(false);
+              }}
+            />
           </GeneralLayouts.Section>
-        </ActionsLayouts.Header>
-        {isLoading ? (
+        }
+      >
+        <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+          <InputTypeIn
+            placeholder="Search tools..."
+            variant="internal"
+            leftSearchIcon
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {enabledTools.length > 0 && (
+            <Button
+              internal
+              rightIcon={isFolded ? SvgExpand : SvgFold}
+              onClick={() => setIsFolded((prev) => !prev)}
+            >
+              {isFolded ? "Expand" : "Fold"}
+            </Button>
+          )}
+        </GeneralLayouts.Section>
+      </ActionsLayouts.Header>
+      {isLoading ? (
+        <ActionsLayouts.Content>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Card key={index} padding={0.75}>
+              <GeneralLayouts.LineItemLayout
+                // We provide dummy values here.
+                // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
+                title="..."
+                description="..."
+                rightChildren={<></>}
+                loading
+              />
+            </Card>
+          ))}
+        </ActionsLayouts.Content>
+      ) : (
+        enabledTools.length > 0 &&
+        filteredTools.length > 0 && (
           <ActionsLayouts.Content>
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Card key={index} padding={0.75}>
-                <GeneralLayouts.LineItemLayout
-                  // We provide dummy values here.
-                  // The `loading` prop will always render a pulsing box instead, so the dummy-values will actually NOT be rendered at all.
-                  title="..."
-                  description="..."
-                  rightChildren={<></>}
-                  loading
-                />
-              </Card>
+            {filteredTools.map((tool) => (
+              <ActionsLayouts.Tool
+                key={tool.id}
+                name={`${serverFieldName}.tool_${tool.id}`}
+                title={tool.name}
+                description={tool.description}
+                icon={tool.icon ?? SvgSliders}
+                disabled={
+                  !tool.isAvailable ||
+                  !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value
+                }
+                rightChildren={
+                  <SwitchField
+                    name={`${serverFieldName}.tool_${tool.id}`}
+                    disabled={!isServerEnabled}
+                  />
+                }
+              />
             ))}
           </ActionsLayouts.Content>
-        ) : (
-          enabledTools.length > 0 &&
-          filteredTools.length > 0 && (
-            <ActionsLayouts.Content>
-              {filteredTools.map((tool) => (
-                <ActionsLayouts.Tool
-                  key={tool.id}
-                  name={`${serverFieldName}.tool_${tool.id}`}
-                  title={tool.name}
-                  description={tool.description}
-                  icon={tool.icon ?? SvgSliders}
-                  disabled={!tool.isAvailable}
-                  rightChildren={
-                    <SwitchField
-                      name={`${serverFieldName}.tool_${tool.id}`}
-                      disabled={!isServerEnabled}
-                    />
-                  }
-                />
-              ))}
-            </ActionsLayouts.Content>
-          )
-        )}
-      </ActionsLayouts.Root>
-    </actionsLayouts.Provider>
+        )
+      )}
+    </ExpandableCard.Root>
   );
 }
 
@@ -505,8 +493,9 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData } = useMcpServersForAgentEditor();
-  const { openApiTools: openApiToolsRaw } = useOpenApiTools();
+  const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
+  const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
+    useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -516,7 +505,8 @@ export default function AgentEditorPage({
   // - image-gen
   // - web-search
   // - code-interpreter
-  const { tools: availableTools } = useAvailableTools();
+  const { tools: availableTools, isLoading: isToolsLoading } =
+    useAvailableTools();
   const searchTool = availableTools?.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -576,7 +566,14 @@ export default function AgentEditorPage({
         ? "user_knowledge"
         : ("team_knowledge" as "team_knowledge" | "user_knowledge"),
     document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
+    // Individual document IDs from hierarchy browsing
+    document_ids: existingAgent?.attached_documents?.map((doc) => doc.id) ?? [],
+    // Hierarchy node IDs (folders/spaces/channels) for scoped search
+    hierarchy_node_ids:
+      existingAgent?.hierarchy_nodes?.map((node) => node.id) ?? [],
     user_file_ids: existingAgent?.user_file_ids ?? [],
+    // Selected sources for the new knowledge UI - derived from document sets
+    selected_sources: [] as ValidSources[],
 
     // Advanced
     llm_model_provider_override:
@@ -685,7 +682,10 @@ export default function AgentEditorPage({
     enable_knowledge: Yup.boolean(),
     knowledge_source: Yup.string().oneOf(["team_knowledge", "user_knowledge"]),
     document_set_ids: Yup.array().of(Yup.number()),
+    document_ids: Yup.array().of(Yup.string()),
+    hierarchy_node_ids: Yup.array().of(Yup.number()),
     user_file_ids: Yup.array().of(Yup.string()),
+    selected_sources: Yup.array().of(Yup.string()),
     num_chunks: Yup.number()
       .nullable()
       .transform((value, originalValue) =>
@@ -822,6 +822,12 @@ export default function AgentEditorPage({
 
         user_file_ids:
           values.enable_knowledge && !teamKnowledge ? values.user_file_ids : [],
+        hierarchy_node_ids:
+          values.enable_knowledge && teamKnowledge
+            ? values.hierarchy_node_ids
+            : [],
+        document_ids:
+          values.enable_knowledge && teamKnowledge ? values.document_ids : [],
 
         system_prompt: values.instructions,
         replace_base_system_prompt: values.replace_base_system_prompt,
@@ -900,11 +906,11 @@ export default function AgentEditorPage({
     }
   }
 
-  // FilePickerPopover callbacks - defined outside render to avoid inline functions
+  // FilePickerPopover callbacks for Knowledge section
   function handlePickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: any) => void
+    setFieldValue: (field: string, value: unknown) => void
   ) {
     if (!currentFileIds.includes(file.id)) {
       setFieldValue("user_file_ids", [...currentFileIds, file.id]);
@@ -914,7 +920,7 @@ export default function AgentEditorPage({
   function handleUnpickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: any) => void
+    setFieldValue: (field: string, value: unknown) => void
   ) {
     setFieldValue(
       "user_file_ids",
@@ -932,7 +938,7 @@ export default function AgentEditorPage({
   async function handleUploadChange(
     e: React.ChangeEvent<HTMLInputElement>,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: any) => void
+    setFieldValue: (field: string, value: unknown) => void
   ) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -965,6 +971,14 @@ export default function AgentEditorPage({
     } catch (error) {
       console.error("Upload error:", error);
     }
+  }
+
+  // Wait for async tool data before rendering the form. Formik captures
+  // initialValues on mount — if tools haven't loaded yet, the initial values
+  // won't include MCP tool fields. Later, toggling those fields would make
+  // the form permanently dirty since they have no baseline to compare against.
+  if (isToolsLoading || isMcpLoading || isOpenApiLoading) {
+    return null;
   }
 
   return (
@@ -1189,177 +1203,46 @@ export default function AgentEditorPage({
 
                       <Separator noPadding />
 
-                      <GeneralLayouts.Section>
-                        <GeneralLayouts.Section gap={1}>
-                          <InputLayouts.Label
-                            title="Knowledge"
-                            description="Add specific connectors and documents for this agent to use to inform its responses."
-                          />
-
-                          <Card>
-                            <InputLayouts.Horizontal
-                              name="enable_knowledge"
-                              title="Enable Knowledge"
-                              center
-                            >
-                              <SwitchField name="enable_knowledge" />
-                            </InputLayouts.Horizontal>
-
-                            {values.enable_knowledge && (
-                              <InputLayouts.Horizontal
-                                name="knowledge_source"
-                                title="Knowledge Source"
-                                description="Choose the sources of truth this agent refers to."
-                                center
-                              >
-                                <InputSelectField
-                                  name="knowledge_source"
-                                  className="w-full"
-                                >
-                                  <InputSelect.Trigger />
-                                  <InputSelect.Content>
-                                    <InputSelect.Item value="team_knowledge">
-                                      Team Knowledge
-                                    </InputSelect.Item>
-                                    <InputSelect.Item value="user_knowledge">
-                                      User Knowledge
-                                    </InputSelect.Item>
-                                  </InputSelect.Content>
-                                </InputSelectField>
-                              </InputLayouts.Horizontal>
-                            )}
-
-                            {values.enable_knowledge &&
-                              values.knowledge_source === "team_knowledge" &&
-                              ((documentSets?.length ?? 0) > 0 ? (
-                                <GeneralLayouts.Section
-                                  gap={0.5}
-                                  alignItems="start"
-                                >
-                                  {documentSets!.map((documentSet) => (
-                                    <DocumentSetSelectable
-                                      key={documentSet.id}
-                                      documentSet={documentSet}
-                                      isSelected={values.document_set_ids.includes(
-                                        documentSet.id
-                                      )}
-                                      onSelect={() => {
-                                        const index =
-                                          values.document_set_ids.indexOf(
-                                            documentSet.id
-                                          );
-                                        if (index !== -1) {
-                                          const newIds = [
-                                            ...values.document_set_ids,
-                                          ];
-                                          newIds.splice(index, 1);
-                                          setFieldValue(
-                                            "document_set_ids",
-                                            newIds
-                                          );
-                                        } else {
-                                          setFieldValue("document_set_ids", [
-                                            ...values.document_set_ids,
-                                            documentSet.id,
-                                          ]);
-                                        }
-                                      }}
-                                    />
-                                  ))}
-                                </GeneralLayouts.Section>
-                              ) : (
-                                <CreateButton href="/admin/documents/sets/new">
-                                  Create a Document Set
-                                </CreateButton>
-                              ))}
-
-                            {values.enable_knowledge &&
-                              values.knowledge_source === "user_knowledge" && (
-                                <GeneralLayouts.Section
-                                  gap={0.5}
-                                  alignItems="start"
-                                >
-                                  <FilePickerPopover
-                                    trigger={(open) => (
-                                      <CreateButton transient={open}>
-                                        Add User Files
-                                      </CreateButton>
-                                    )}
-                                    selectedFileIds={values.user_file_ids}
-                                    onPickRecent={(file) =>
-                                      handlePickRecentFile(
-                                        file,
-                                        values.user_file_ids,
-                                        setFieldValue
-                                      )
-                                    }
-                                    onUnpickRecent={(file) =>
-                                      handleUnpickRecentFile(
-                                        file,
-                                        values.user_file_ids,
-                                        setFieldValue
-                                      )
-                                    }
-                                    onFileClick={handleFileClick}
-                                    handleUploadChange={(e) =>
-                                      handleUploadChange(
-                                        e,
-                                        values.user_file_ids,
-                                        setFieldValue
-                                      )
-                                    }
-                                  />
-
-                                  {values.user_file_ids.length > 0 && (
-                                    <GeneralLayouts.Section
-                                      flexDirection="row"
-                                      wrap
-                                      gap={0.5}
-                                      justifyContent="start"
-                                      alignItems="start"
-                                    >
-                                      {values.user_file_ids.map((fileId) => {
-                                        const file = allRecentFiles.find(
-                                          (f) => f.id === fileId
-                                        );
-                                        if (!file) return null;
-
-                                        return (
-                                          <FileCard
-                                            key={fileId}
-                                            file={file}
-                                            removeFile={(id: string) => {
-                                              setFieldValue(
-                                                "user_file_ids",
-                                                values.user_file_ids.filter(
-                                                  (fid) => fid !== id
-                                                )
-                                              );
-                                            }}
-                                            onFileClick={(f: ProjectFile) => {
-                                              setPresentingDocument({
-                                                document_id: `project_file__${f.file_id}`,
-                                                semantic_identifier: f.name,
-                                              });
-                                            }}
-                                          />
-                                        );
-                                      })}
-                                    </GeneralLayouts.Section>
-                                  )}
-                                  {hasProcessingFiles && (
-                                    <Text as="p" text03 secondaryBody>
-                                      Onyx is still processing your uploaded
-                                      files. You can create the agent now, but
-                                      it will not have access to all files until
-                                      processing completes.
-                                    </Text>
-                                  )}
-                                </GeneralLayouts.Section>
-                              )}
-                          </Card>
-                        </GeneralLayouts.Section>
-                      </GeneralLayouts.Section>
+                      <AgentKnowledgePane
+                        enableKnowledge={values.enable_knowledge}
+                        onEnableKnowledgeChange={(enabled) =>
+                          setFieldValue("enable_knowledge", enabled)
+                        }
+                        selectedSources={values.selected_sources}
+                        onSourcesChange={(sources) =>
+                          setFieldValue("selected_sources", sources)
+                        }
+                        documentSets={documentSets ?? []}
+                        selectedDocumentSetIds={values.document_set_ids}
+                        onDocumentSetIdsChange={(ids) =>
+                          setFieldValue("document_set_ids", ids)
+                        }
+                        selectedDocumentIds={values.document_ids}
+                        onDocumentIdsChange={(ids) =>
+                          setFieldValue("document_ids", ids)
+                        }
+                        selectedFolderIds={values.hierarchy_node_ids}
+                        onFolderIdsChange={(ids) =>
+                          setFieldValue("hierarchy_node_ids", ids)
+                        }
+                        selectedFileIds={values.user_file_ids}
+                        onFileIdsChange={(ids) =>
+                          setFieldValue("user_file_ids", ids)
+                        }
+                        allRecentFiles={allRecentFiles}
+                        onFileClick={handleFileClick}
+                        onUploadChange={(e) =>
+                          handleUploadChange(
+                            e,
+                            values.user_file_ids,
+                            setFieldValue
+                          )
+                        }
+                        hasProcessingFiles={hasProcessingFiles}
+                        initialAttachedDocuments={
+                          existingAgent?.attached_documents
+                        }
+                      />
 
                       <Separator noPadding />
 
@@ -1372,7 +1255,7 @@ export default function AgentEditorPage({
                           <GeneralLayouts.Section gap={0.5}>
                             <SimpleTooltip
                               tooltip={imageGenerationDisabledTooltip}
-                              side="left"
+                              side="top"
                             >
                               <Card
                                 variant={
@@ -1385,6 +1268,7 @@ export default function AgentEditorPage({
                                   name="image_generation"
                                   title="Image Generation"
                                   description="Generate and manipulate images using AI-powered tools."
+                                  disabled={!isImageGenerationAvailable}
                                 >
                                   <SwitchField
                                     name="image_generation"
@@ -1401,6 +1285,7 @@ export default function AgentEditorPage({
                                 name="web_search"
                                 title="Web Search"
                                 description="Search the web for real-time information and up-to-date results."
+                                disabled={!webSearchTool}
                               >
                                 <SwitchField
                                   name="web_search"
@@ -1416,6 +1301,7 @@ export default function AgentEditorPage({
                                 name="open_url"
                                 title="Open URL"
                                 description="Fetch and read content from web URLs."
+                                disabled={!openURLTool}
                               >
                                 <SwitchField
                                   name="open_url"
@@ -1433,6 +1319,7 @@ export default function AgentEditorPage({
                                 name="code_interpreter"
                                 title="Code Interpreter"
                                 description="Generate and run code."
+                                disabled={!codeInterpreterTool}
                               >
                                 <SwitchField
                                   name="code_interpreter"
@@ -1513,6 +1400,7 @@ export default function AgentEditorPage({
                                 description="Select the LLM model to use for this agent. If not set, the user's default model will be used."
                               >
                                 <LLMSelector
+                                  name="llm_model"
                                   llmProviders={llmProviders ?? []}
                                   currentLlm={getCurrentLlm(
                                     values,

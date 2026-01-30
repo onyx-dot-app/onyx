@@ -35,7 +35,6 @@ import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
-import { AuthType } from "@/lib/constants";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
@@ -59,6 +58,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
+import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
 
 interface PAT {
   id: number;
@@ -273,7 +273,7 @@ function GeneralSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Label title="Profile" />
+          <InputLayouts.Title title="Profile" />
           <Card>
             <InputLayouts.Horizontal
               title="Full Name"
@@ -329,7 +329,7 @@ function GeneralSettings() {
         </Section>
 
         <Section gap={0.75}>
-          <InputLayouts.Label title="Appearance" />
+          <InputLayouts.Title title="Appearance" />
           <Card>
             <InputLayouts.Horizontal
               title="Color Mode"
@@ -434,7 +434,7 @@ function GeneralSettings() {
         <Separator noPadding />
 
         <Section gap={0.75}>
-          <InputLayouts.Label title="Danger Zone" />
+          <InputLayouts.Title title="Danger Zone" />
           <Card>
             <InputLayouts.Horizontal
               title="Delete All Chats"
@@ -962,7 +962,7 @@ function ChatPreferencesSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75}>
-        <InputLayouts.Label title="Chats" />
+        <InputLayouts.Title title="Chats" />
         <Card>
           <InputLayouts.Horizontal
             title="Default Model"
@@ -991,7 +991,7 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Label title="Prompt Shortcuts" />
+        <InputLayouts.Title title="Prompt Shortcuts" />
         <Card>
           <InputLayouts.Horizontal
             title="Use Prompt Shortcuts"
@@ -1010,7 +1010,7 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Label title="Personalization" />
+        <InputLayouts.Title title="Personalization" />
         <Card>
           <InputLayouts.Horizontal
             title="Reference Stored Memories"
@@ -1066,7 +1066,7 @@ function AccountsAccessSettings() {
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType && authType !== AuthType.DISABLED;
+  const showTokensSection = authType !== null;
 
   // Fetch PATs with SWR
   const {
@@ -1354,13 +1354,13 @@ function AccountsAccessSettings() {
 
       <Section gap={2}>
         <Section gap={0.75}>
-          <InputLayouts.Label title="Accounts" />
+          <InputLayouts.Title title="Accounts" />
           <Card>
             <InputLayouts.Horizontal
               title="Email"
               description="Your account email address."
               center
-              cursorPointer={false}
+              nonInteractive
             >
               <Text>{user?.email ?? "anonymous"}</Text>
             </InputLayouts.Horizontal>
@@ -1386,7 +1386,7 @@ function AccountsAccessSettings() {
 
         {showTokensSection && (
           <Section gap={0.75}>
-            <InputLayouts.Label title="Access Tokens" />
+            <InputLayouts.Title title="Access Tokens" />
             <Card padding={0.25}>
               <Section gap={0}>
                 {/* Header with search/empty state and create button */}
@@ -1446,22 +1446,29 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <AttachmentItemLayout
+                      <Hoverable
                         key={pat.id}
-                        icon={SvgKey}
-                        title={pat.name}
-                        description={pat.token_display}
-                        middleText={middleText}
-                        rightChildren={
-                          <IconButton
-                            icon={SvgTrash}
-                            onClick={() => setTokenToDelete(pat)}
-                            internal
-                            aria-label={`Delete token ${pat.name}`}
-                          />
-                        }
+                        asChild
+                        nonInteractive
                         variant="secondary"
-                      />
+                      >
+                        <HoverableContainer rounded="rounded-12" padding={0}>
+                          <AttachmentItemLayout
+                            icon={SvgKey}
+                            title={pat.name}
+                            description={pat.token_display}
+                            middleText={middleText}
+                            rightChildren={
+                              <IconButton
+                                icon={SvgTrash}
+                                onClick={() => setTokenToDelete(pat)}
+                                internal
+                                aria-label={`Delete token ${pat.name}`}
+                              />
+                            }
+                          />
+                        </HoverableContainer>
+                      </Hoverable>
                     );
                   })}
                 </Section>
@@ -1641,7 +1648,7 @@ function ConnectorsSettings() {
   return (
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
-        <InputLayouts.Label title="Connectors" />
+        <InputLayouts.Title title="Connectors" />
         {hasConnectors ? (
           <>
             {/* Indexed Connectors */}

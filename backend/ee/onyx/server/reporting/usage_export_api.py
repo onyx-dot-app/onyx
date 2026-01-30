@@ -58,7 +58,7 @@ def generate_report(
 @router.get("/admin/usage-report/{report_name}")
 def read_usage_report(
     report_name: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     try:
@@ -82,7 +82,7 @@ def read_usage_report(
 
 @router.get("/admin/usage-report")
 def fetch_usage_reports(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UsageReportMetadata]:
     try:

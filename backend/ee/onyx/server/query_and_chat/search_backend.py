@@ -37,8 +37,7 @@ router = APIRouter(prefix="/search")
 @router.post("/search-flow-classification")
 def search_flow_classification(
     request: SearchFlowClassificationRequest,
-    # This is added just to ensure this endpoint isn't spammed by non-authorized users since there's an LLM call underneath it
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> SearchFlowClassificationResponse:
     query = request.user_query
@@ -70,7 +69,7 @@ def search_flow_classification(
 @router.post("/send-search-message", response_model=None)
 def handle_send_search_message(
     request: SendSearchQueryRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse | SearchFullResponse:
     """
@@ -114,7 +113,7 @@ def handle_send_search_message(
 def get_search_history(
     limit: int = 100,
     filter_days: int | None = None,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> SearchHistoryResponse:
     """
@@ -145,11 +144,6 @@ def get_search_history(
             status_code=400,
             detail="filter_days must be greater than 0",
         )
-
-    # TODO(yuhong) remove this
-    if user is None:
-        # Return empty list for unauthenticated users
-        return SearchHistoryResponse(search_queries=[])
 
     search_queries = fetch_search_queries_for_user(
         db_session=db_session,

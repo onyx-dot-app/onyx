@@ -10,7 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.zendesk.connector import ZendeskConnector
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 def load_test_data(file_name: str = "test_zendesk_data.json") -> dict[str, dict]:
@@ -64,7 +64,7 @@ def test_zendesk_connector_basic(
 
     target_doc: Document | None = None
 
-    for doc in load_all_docs_from_checkpoint_connector(connector, 0, time.time()):
+    for doc in load_all_from_connector(connector, 0, time.time()).documents:
         all_docs.append(doc)
         if doc.id == target_test_doc_id:
             target_doc = doc
@@ -113,9 +113,9 @@ def test_zendesk_connector_basic(
 def test_zendesk_connector_slim(zendesk_article_connector: ZendeskConnector) -> None:
     # Get full doc IDs
     all_full_doc_ids = set()
-    for doc in load_all_docs_from_checkpoint_connector(
+    for doc in load_all_from_connector(
         zendesk_article_connector, 0, time.time()
-    ):
+    ).documents:
         all_full_doc_ids.add(doc.id)
 
     # Get slim doc IDs

@@ -62,8 +62,18 @@ function SettingsPopover({
 
   const undismissedCount =
     notifications?.filter((n) => !n.dismissed).length ?? 0;
-  const showLogout =
-    user && !checkUserIsNoAuthUser(user.id) && !LOGOUT_DISABLED;
+  const isAnonymousUser =
+    user?.is_anonymous_user || checkUserIsNoAuthUser(user?.id ?? "");
+  const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
+  const showLogin = isAnonymousUser;
+
+  const handleLogin = () => {
+    const currentUrl = `${pathname}${
+      searchParams?.toString() ? `?${searchParams.toString()}` : ""
+    }`;
+    const encodedRedirect = encodeURIComponent(currentUrl);
+    router.push(`/auth/login?next=${encodedRedirect}`);
+  };
 
   const handleLogout = () => {
     logout()
@@ -123,6 +133,11 @@ function SettingsPopover({
             Help & FAQ
           </LineItem>,
           null,
+          showLogin && (
+            <LineItem key="log-in" icon={SvgUser} onClick={handleLogin}>
+              Log in
+            </LineItem>
+          ),
           showLogout && (
             <LineItem
               key="log-out"

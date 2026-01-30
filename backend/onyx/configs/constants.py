@@ -33,8 +33,14 @@ FASTAPI_USERS_AUTH_COOKIE_NAME = (
 TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
-NO_AUTH_USER_ID = "__no_auth_user__"
-NO_AUTH_USER_EMAIL = "anonymous@onyx.app"
+# ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
+ANONYMOUS_USER_INFO_ID = "__anonymous_user__"
+# Placeholder user for migrating no-auth data to first registered user
+NO_AUTH_PLACEHOLDER_USER_UUID = "00000000-0000-0000-0000-000000000001"
+NO_AUTH_PLACEHOLDER_USER_EMAIL = "no-auth-placeholder@onyx.app"
+# Real anonymous user in DB for anonymous access feature
+ANONYMOUS_USER_UUID = "00000000-0000-0000-0000-000000000002"
+ANONYMOUS_USER_EMAIL = "anonymous@onyx.app"
 
 # For chunking/processing chunks
 RETURN_SEPARATOR = "\n\r\n"
@@ -100,8 +106,8 @@ KV_SEARCH_SETTINGS = "search_settings"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
 KV_PENDING_USERS_KEY = "PENDING_USERS"
-KV_NO_AUTH_USER_PREFERENCES_KEY = "no_auth_user_preferences"
-KV_NO_AUTH_USER_PERSONALIZATION_KEY = "no_auth_user_personalization"
+KV_ANONYMOUS_USER_PREFERENCES_KEY = "anonymous_user_preferences"
+KV_ANONYMOUS_USER_PERSONALIZATION_KEY = "anonymous_user_personalization"
 KV_CRED_KEY = "credential_id_{}"
 KV_GMAIL_CRED_KEY = "gmail_app_credential"
 KV_GMAIL_SERVICE_ACCOUNT_KEY = "gmail_service_account_key"
@@ -256,7 +262,6 @@ class DocumentIndexType(str, Enum):
 
 
 class AuthType(str, Enum):
-    DISABLED = "disabled"
     BASIC = "basic"
     GOOGLE_OAUTH = "google_oauth"
     OIDC = "oidc"

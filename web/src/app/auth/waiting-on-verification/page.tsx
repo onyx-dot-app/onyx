@@ -9,7 +9,6 @@ import { User } from "@/lib/types";
 import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
 import Logo from "@/refresh-components/Logo";
-import { AuthType } from "@/lib/constants";
 
 export default async function Page() {
   // catch cases where the backend is completely unreachable here
@@ -27,9 +26,6 @@ export default async function Page() {
   }
 
   if (!currentUser) {
-    if (authTypeMetadata?.authType === AuthType.DISABLED) {
-      return redirect("/app");
-    }
     return redirect("/auth/login");
   }
 

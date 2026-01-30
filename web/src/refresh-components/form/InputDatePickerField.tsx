@@ -22,6 +22,7 @@ export default function InputDatePickerField({
 
   return (
     <InputDatePicker
+      name={name}
       selectedDate={field.value}
       setSelectedDate={onChange}
       {...props}

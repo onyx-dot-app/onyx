@@ -14,7 +14,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 @pytest.fixture
@@ -49,9 +49,7 @@ def test_confluence_connector_permissions(
 ) -> None:
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
-    doc_batch = load_all_docs_from_checkpoint_connector(
-        confluence_connector, 0, time.time()
-    )
+    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
     all_full_doc_ids.update([doc.id for doc in doc_batch])
 
     # Get all doc IDs from the slim connector

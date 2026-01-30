@@ -4,6 +4,8 @@ import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import InputFile from "@/refresh-components/inputs/InputFile";
+import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ImageGenFormWrapper } from "./ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -12,7 +14,6 @@ import {
 } from "./types";
 import { ImageProvider } from "../constants";
 import { ImageGenerationCredentials } from "@/lib/configuration/imageConfigurationService";
-import { FileUploadFormField } from "@/components/Field";
 
 const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DEFAULT_LOCATION = "global";
@@ -70,19 +71,70 @@ function transformValues(
 function VertexFormFields(
   props: ImageGenFormChildProps<VertexImageGenFormValues>
 ) {
-  const { disabled } = props;
+  const { apiStatus, showApiMessage, errorMessage, disabled, imageProvider } =
+    props;
 
   return (
     <>
-      <FileUploadFormField
+      {/* Credentials File field */}
+      <FormikField<string>
         name="custom_config.vertex_credentials"
-        label="Credentials File"
-        subtext="Upload your Google Cloud service account JSON credentials file."
+        render={(field, helper, meta, state) => (
+          <FormField
+            name="custom_config.vertex_credentials"
+            state={apiStatus === "error" ? "error" : state}
+            className="w-full"
+          >
+            <FormField.Label>Credentials File</FormField.Label>
+            <FormField.Control>
+              <InputFile
+                setValue={(value) => helper.setValue(value)}
+                error={apiStatus === "error"}
+                onBlur={field.onBlur}
+                showClearButton={true}
+                disabled={disabled}
+                accept="application/json"
+                placeholder="Upload or paste your credentials"
+              />
+            </FormField.Control>
+            {showApiMessage ? (
+              <FormField.APIMessage
+                state={apiStatus}
+                messages={{
+                  loading: `Testing credentials with ${imageProvider.title}...`,
+                  success: "Credentials valid. Configuration saved.",
+                  error: errorMessage || "Invalid credentials",
+                }}
+              />
+            ) : (
+              <FormField.Message
+                messages={{
+                  idle: (
+                    <>
+                      {"Upload or paste your "}
+                      <InlineExternalLink href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project">
+                        service account credentials
+                      </InlineExternalLink>
+                      {" from Google Cloud."}
+                    </>
+                  ),
+                  error: meta.error,
+                }}
+              />
+            )}
+          </FormField>
+        )}
       />
+
+      {/* Location field */}
       <FormikField<string>
         name="custom_config.vertex_location"
         render={(field, helper, meta, state) => (
-          <FormField name="custom_config.vertex_location" state={state}>
+          <FormField
+            name="custom_config.vertex_location"
+            state={state}
+            className="w-full"
+          >
             <FormField.Label>Location</FormField.Label>
             <FormField.Control>
               <InputTypeIn
@@ -90,20 +142,24 @@ function VertexFormFields(
                 onChange={(e) => helper.setValue(e.target.value)}
                 onBlur={field.onBlur}
                 placeholder="global"
-                variant={
-                  disabled
-                    ? "disabled"
-                    : state === "error"
-                      ? "error"
-                      : undefined
-                }
+                showClearButton={false}
+                variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>
-            <FormField.Description>
-              The Google Cloud region for your Vertex AI models (e.g., global,
-              us-east1, us-central1, europe-west1).
-            </FormField.Description>
-            <FormField.Message messages={{ error: meta.error }} />
+            <FormField.Message
+              messages={{
+                idle: (
+                  <>
+                    {"The Google Cloud region for your Vertex AI models. See "}
+                    <InlineExternalLink href="https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations">
+                      Google&apos;s documentation
+                    </InlineExternalLink>
+                    {" for available regions."}
+                  </>
+                ),
+                error: meta.error,
+              }}
+            />
           </FormField>
         )}
       />

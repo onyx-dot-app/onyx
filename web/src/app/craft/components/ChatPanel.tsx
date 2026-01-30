@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { usePostHog } from "posthog-js/react";
 import {
   useSession,
   useSessionId,
@@ -60,6 +61,7 @@ export default function BuildChatPanel({
   existingSessionId,
 }: BuildChatPanelProps) {
   const router = useRouter();
+  const posthog = usePostHog();
   const { popup, setPopup } = usePopup();
   const outputPanelOpen = useOutputPanelOpen();
   const session = useSession();
@@ -242,6 +244,8 @@ export default function BuildChatPanel({
         return;
       }
 
+      posthog?.capture("sent_craft_message");
+
       if (hasSession && sessionId) {
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
@@ -376,6 +380,7 @@ export default function BuildChatPanel({
       hasUploadingFiles,
       limits,
       refreshLimits,
+      posthog,
     ]
   );
 

@@ -1,15 +1,27 @@
 var merge = require("lodash/merge");
+var path = require("path");
+var fs = require("fs");
+var { createRequire } = require("module");
 
 // Use relative paths for imports
 const baseThemes = require("./tailwind-themes/tailwind.config.js");
 
-const customThemes = process.env.NEXT_PUBLIC_THEME
-  ? require(
-      process.env.NEXT_PUBLIC_THEME
-        ? `./tailwind-themes/custom/${process.env.NEXT_PUBLIC_THEME}/tailwind.config.js`
-        : "./tailwind-themes/custom/default/tailwind.config.js"
-    )
-  : null;
+let customThemes = null;
+
+// Determine which theme to load: custom theme if specified, otherwise default
+const themeName = process.env.NEXT_PUBLIC_THEME || "default";
+const customThemePath = path.join(
+  __dirname,
+  "tailwind-themes/custom",
+  themeName,
+  "tailwind.config.js"
+);
+
+if (fs.existsSync(customThemePath)) {
+  // Use createRequire to avoid bundler static analysis without using eval
+  const dynamicRequire = createRequire(__filename);
+  customThemes = dynamicRequire(customThemePath);
+}
 
 /** @type {import('tailwindcss').Config} */
 module.exports = customThemes ? merge(baseThemes, customThemes) : baseThemes;

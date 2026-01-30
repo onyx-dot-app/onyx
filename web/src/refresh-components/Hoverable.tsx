@@ -4,6 +4,61 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
+import {
+  heightClassmap,
+  Length,
+  widthClassmap,
+} from "@/layouts/general-layouts";
+
+type HoverableVariants = "primary" | "secondary" | "tertiary";
+
+interface HoverableContainerProps
+  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+  border?: boolean;
+  rounded?: string;
+  padding?: number;
+  height?: Length;
+  width?: Length;
+  ref?: React.Ref<HTMLDivElement>;
+}
+
+function HoverableContainer({
+  border,
+  rounded = "rounded-08",
+  padding = 0.5,
+  height = "full",
+  width = "full",
+  ref,
+  ...props
+}: HoverableContainerProps) {
+  // Radix Slot injects className at runtime (bypassing WithoutStyles),
+  // so we extract and merge it to preserve "hoverable-container".
+  const {
+    className: slotClassName,
+    style: slotStyle,
+    ...rest
+  } = props as typeof props & {
+    className?: string;
+    style?: React.CSSProperties;
+  };
+  return (
+    <div
+      ref={ref}
+      {...rest}
+      className={cn(
+        border && "border",
+        rounded,
+        widthClassmap[width],
+        heightClassmap[height],
+        slotClassName
+      )}
+      style={{
+        ...slotStyle,
+        padding: `${padding}rem`,
+      }}
+    />
+  );
+}
 
 export interface HoverableProps
   extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
@@ -23,7 +78,9 @@ export interface HoverableProps
    * Enables group-hover utilities on descendant elements.
    */
   group?: string;
-  disableHoverInteractivity?: boolean;
+  nonInteractive?: boolean;
+  /** Controls background color styling on the hoverable element. */
+  variant?: HoverableVariants;
 }
 
 /**
@@ -78,24 +135,24 @@ export default function Hoverable({
   href,
   ref,
   group,
-  disableHoverInteractivity,
+  nonInteractive,
+  variant = "primary",
   ...props
 }: HoverableProps) {
   const classes = cn(
-    "flex flex-1 cursor-pointer",
-    !disableHoverInteractivity && [
-      "transition-colors",
-      "hover:bg-background-tint-02",
-      "active:bg-background-tint-00",
-      "data-[pressed=true]:bg-background-tint-00",
-    ],
+    "hoverable",
+    `hoverable--${variant}`,
+    nonInteractive && "cursor-default",
     group
   );
+  const dataAttrs = nonInteractive
+    ? { "data-non-interactive": "true" as const }
+    : {};
 
   // asChild: merge props onto child element
   if (asChild) {
     return (
-      <Slot ref={ref} className={classes} {...props}>
+      <Slot ref={ref} className={classes} {...dataAttrs} {...props}>
         {children}
       </Slot>
     );
@@ -108,6 +165,7 @@ export default function Hoverable({
         href={href as Route}
         ref={ref as React.Ref<HTMLAnchorElement>}
         className={classes}
+        {...dataAttrs}
         {...props}
       >
         {children}
@@ -121,9 +179,12 @@ export default function Hoverable({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       className={classes}
+      {...dataAttrs}
       {...props}
     >
       {children}
     </button>
   );
 }
+
+export { HoverableContainer };

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
+from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_URL
 
 
@@ -36,7 +36,8 @@ def test_google_drive_sections(
         my_drive_emails=None,
     )
     for connector in [oauth_connector, service_acct_connector]:
-        retrieved_docs = load_all_docs(connector)
+        output = load_connector_outputs(connector)
+        retrieved_docs = output.documents
 
         # Verify we got the 1 doc with sections
         assert len(retrieved_docs) == 1

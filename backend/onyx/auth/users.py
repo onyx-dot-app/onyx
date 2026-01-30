@@ -75,7 +75,6 @@ from onyx.auth.schemas import UserUpdateWithRole
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
 from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
@@ -92,6 +91,8 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
@@ -134,12 +135,8 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def is_user_admin(user: User | None) -> bool:
-    if AUTH_TYPE == AuthType.DISABLED:
-        return True
-    if user and user.role == UserRole.ADMIN:
-        return True
-    return False
+def is_user_admin(user: User) -> bool:
+    return user.role == UserRole.ADMIN
 
 
 def verify_auth_setting() -> None:
@@ -1347,15 +1344,26 @@ async def optional_user(
     return user
 
 
+def get_anonymous_user() -> User:
+    """Create anonymous user object."""
+    user = User(
+        id=uuid.UUID(ANONYMOUS_USER_UUID),
+        email=ANONYMOUS_USER_EMAIL,
+        hashed_password="",
+        is_active=True,
+        is_verified=True,
+        is_superuser=False,
+        role=UserRole.LIMITED,
+        use_memories=False,
+    )
+    return user
+
+
 async def double_check_user(
     user: User | None,
-    optional: bool = DISABLE_AUTH,
     include_expired: bool = False,
     allow_anonymous_access: bool = False,
-) -> User | None:
-    if optional:
-        return user
-
+) -> User:
     if user is not None:
         # If user attempted to authenticate, verify them, do not default
         # to anonymous access if it fails.
@@ -1376,7 +1384,7 @@ async def double_check_user(
         return user
 
     if allow_anonymous_access:
-        return None
+        return get_anonymous_user()
 
     raise BasicAuthenticationError(
         detail="Access denied. User is not authenticated.",
@@ -1385,19 +1393,19 @@ async def double_check_user(
 
 async def current_user_with_expired_token(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     return await double_check_user(user, include_expired=True)
 
 
 async def current_limited_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     return await double_check_user(user)
 
 
 async def current_chat_accessible_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     tenant_id = get_current_tenant_id()
 
     return await double_check_user(
@@ -1407,10 +1415,8 @@ async def current_chat_accessible_user(
 
 async def current_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     user = await double_check_user(user)
-    if not user:
-        return None
 
     if user.role == UserRole.LIMITED:
         raise BasicAuthenticationError(
@@ -1420,16 +1426,8 @@ async def current_user(
 
 
 async def current_curator_or_admin_user(
-    user: User | None = Depends(current_user),
-) -> User | None:
-    if DISABLE_AUTH:
-        return None
-
-    if not user or not hasattr(user, "role"):
-        raise BasicAuthenticationError(
-            detail="Access denied. User is not authenticated or lacks role information.",
-        )
-
+    user: User = Depends(current_user),
+) -> User:
     allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
     if user.role not in allowed_roles:
         raise BasicAuthenticationError(
@@ -1439,11 +1437,8 @@ async def current_curator_or_admin_user(
     return user
 
 
-async def current_admin_user(user: User | None = Depends(current_user)) -> User | None:
-    if DISABLE_AUTH:
-        return None
-
-    if not user or not hasattr(user, "role") or user.role != UserRole.ADMIN:
+async def current_admin_user(user: User = Depends(current_user)) -> User:
+    if user.role != UserRole.ADMIN:
         raise BasicAuthenticationError(
             detail="Access denied. User must be an admin to perform this action.",
         )

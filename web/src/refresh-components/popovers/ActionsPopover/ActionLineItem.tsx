@@ -32,7 +32,7 @@ export interface ActionItemProps {
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
-  hasNoDocumentSets?: boolean;
+  hasNoKnowledgeSources?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
   onClose?: () => void;
@@ -55,7 +55,7 @@ export default function ActionLineItem({
   onForceToggle,
   onSourceManagementOpen,
   hasNoConnectors = false,
-  hasNoDocumentSets = false,
+  hasNoKnowledgeSources = false,
   toolAuthStatus,
   onOAuthAuthenticate,
   onClose,
@@ -77,10 +77,10 @@ export default function ActionLineItem({
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
     hasNoConnectors;
 
-  const isSearchToolWithNoDocumentSets =
+  const isSearchToolWithNoKnowledgeSources =
     !currentProjectId &&
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
-    hasNoDocumentSets;
+    hasNoKnowledgeSources;
 
   const isSearchToolAndNotInProject =
     tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
@@ -94,8 +94,8 @@ export default function ActionLineItem({
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
-  const tooltipText = isSearchToolWithNoDocumentSets
-    ? "No connector sources are available. Contact your admin to add a knowledge source to this agent."
+  const tooltipText = isSearchToolWithNoKnowledgeSources
+    ? "No knowledge sources are available. Contact your admin to add a knowledge source to this agent."
     : isUnavailable
       ? unavailableReason
       : tool?.description;
@@ -105,7 +105,10 @@ export default function ActionLineItem({
       <div data-testid={`tool-option-${toolName}`}>
         <LineItem
           onClick={() => {
-            if (isSearchToolWithNoConnectors || isSearchToolWithNoDocumentSets)
+            if (
+              isSearchToolWithNoConnectors ||
+              isSearchToolWithNoKnowledgeSources
+            )
               return;
             if (isUnavailable) {
               if (isForced) onForceToggle();
@@ -121,7 +124,7 @@ export default function ActionLineItem({
           strikethrough={
             disabled ||
             isSearchToolWithNoConnectors ||
-            isSearchToolWithNoDocumentSets ||
+            isSearchToolWithNoKnowledgeSources ||
             isUnavailable
           }
           icon={Icon}
@@ -196,7 +199,7 @@ export default function ActionLineItem({
               )}
 
               {isSearchToolAndNotInProject &&
-                !isSearchToolWithNoDocumentSets && (
+                !isSearchToolWithNoKnowledgeSources && (
                   <IconButton
                     icon={
                       isSearchToolWithNoConnectors

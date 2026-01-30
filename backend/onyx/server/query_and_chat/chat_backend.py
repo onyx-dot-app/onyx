@@ -116,7 +116,7 @@ router = APIRouter(prefix="/chat")
 def _get_available_tokens_for_persona(
     persona: Persona,
     db_session: Session,
-    user: User | None,
+    user: User,
 ) -> int:
     def _get_non_reserved_input_tokens(
         model_max_input_tokens: int,
@@ -154,13 +154,13 @@ def _get_available_tokens_for_persona(
 
 @router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
 def get_user_chat_sessions(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
     include_failed_chats: bool = False,
 ) -> ChatSessionsResponse:
-    user_id = user.id if user is not None else None
+    user_id = user.id
 
     try:
         chat_sessions = get_chat_sessions_by_user(
@@ -195,12 +195,12 @@ def get_user_chat_sessions(
 @router.put("/update-chat-session-temperature")
 def update_chat_session_temperature(
     update_thread_req: UpdateChatSessionTemperatureRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     chat_session = get_chat_session_by_id(
         chat_session_id=update_thread_req.chat_session_id,
-        user_id=user.id if user is not None else None,
+        user_id=user.id,
         db_session=db_session,
     )
 
@@ -235,12 +235,12 @@ def update_chat_session_temperature(
 @router.put("/update-chat-session-model")
 def update_chat_session_model(
     update_thread_req: UpdateChatSessionThreadRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     chat_session = get_chat_session_by_id(
         chat_session_id=update_thread_req.chat_session_id,
-        user_id=user.id if user is not None else None,
+        user_id=user.id,
         db_session=db_session,
     )
     chat_session.current_alternate_model = update_thread_req.new_alternate_model
@@ -254,10 +254,10 @@ def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
     include_deleted: bool = False,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     try:
         chat_session = get_chat_session_by_id(
             chat_session_id=session_id,
@@ -336,10 +336,10 @@ def get_chat_session(
 @router.post("/create-chat-session", tags=PUBLIC_API_TAGS)
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
-    user_id = user.id if user is not None else None
+    user_id = user.id
 
     try:
         new_chat_session = create_chat_session_from_request(
@@ -361,7 +361,7 @@ def create_new_chat_session(
 def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
     # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
@@ -370,7 +370,7 @@ def rename_chat_session(
 
     name = rename_req.name
     chat_session_id = rename_req.chat_session_id
-    user_id = user.id if user is not None else None
+    user_id = user.id
 
     if name:
         update_chat_session(
@@ -430,10 +430,10 @@ def rename_chat_session(
 def patch_chat_session(
     session_id: UUID,
     chat_session_update_req: ChatSessionUpdateRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     update_chat_session(
         db_session=db_session,
         user_id=user_id,
@@ -445,7 +445,7 @@ def patch_chat_session(
 
 @router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -458,10 +458,10 @@ def delete_all_chat_sessions(
 def delete_chat_session_by_id(
     session_id: UUID,
     hard_delete: bool | None = None,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_id = user.id if user is not None else None
+    user_id = user.id
     try:
         # Use the provided hard_delete parameter if specified, otherwise use the default config
         actual_hard_delete = (
@@ -479,7 +479,7 @@ def delete_chat_session_by_id(
 def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> StreamingResponse:
@@ -495,7 +495,7 @@ def handle_new_chat_message(
     Args:
         chat_message_req (CreateChatMessageRequest): Details about the new chat message.
         request (Request): The current HTTP request context.
-        user (User | None): The current user, obtained via dependency injection.
+        user (User): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
 
     Returns:
@@ -509,7 +509,7 @@ def handle_new_chat_message(
 
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
+        distinct_id=tenant_id if user.is_anonymous else user.email,
         event=MilestoneRecordType.RAN_QUERY,
     )
 
@@ -566,7 +566,7 @@ def handle_new_chat_message(
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> StreamingResponse | ChatFullResponse:
@@ -578,7 +578,7 @@ def handle_send_chat_message(
             - When stream=True (default): Returns StreamingResponse with SSE
             - When stream=False: Returns ChatFullResponse with complete data
         request (Request): The current HTTP request context.
-        user (User | None): The current user, obtained via dependency injection.
+        user (User): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
 
     Returns:
@@ -589,7 +589,7 @@ def handle_send_chat_message(
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
+        distinct_id=tenant_id if user.is_anonymous else user.email,
         event=MilestoneRecordType.RAN_QUERY,
     )
 
@@ -668,10 +668,10 @@ def handle_send_chat_message(
 @router.put("/set-message-as-latest")
 def set_message_as_latest(
     message_identifier: ChatMessageIdentifier,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_id = user.id if user is not None else None
+    user_id = user.id
 
     chat_message = get_chat_message(
         chat_message_id=message_identifier.message_id,
@@ -689,10 +689,10 @@ def set_message_as_latest(
 @router.post("/create-chat-message-feedback")
 def create_chat_feedback(
     feedback: ChatFeedbackRequest,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_id = user.id if user else None
+    user_id = user.id
 
     create_chat_message_feedback(
         is_positive=feedback.is_positive,
@@ -707,10 +707,10 @@ def create_chat_feedback(
 @router.delete("/remove-chat-message-feedback")
 def remove_chat_feedback(
     chat_message_id: int,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_id = user.id if user else None
+    user_id = user.id
 
     remove_chat_message_feedback(
         chat_message_id=chat_message_id,
@@ -726,7 +726,7 @@ class MaxSelectedDocumentTokens(BaseModel):
 @router.get("/max-selected-document-tokens")
 def get_max_document_tokens(
     persona_id: int,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> MaxSelectedDocumentTokens:
     try:
@@ -755,7 +755,7 @@ class AvailableContextTokensResponse(BaseModel):
 @router.get("/available-context-tokens/{session_id}")
 def get_available_context_tokens_for_session(
     session_id: UUID,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> AvailableContextTokensResponse:
     """Return available context tokens for a chat session based on its persona."""
@@ -763,7 +763,7 @@ def get_available_context_tokens_for_session(
     try:
         chat_session = get_chat_session_by_id(
             chat_session_id=session_id,
-            user_id=user.id if user else None,
+            user_id=user.id,
             db_session=db_session,
             is_shared=False,
             include_deleted=False,
@@ -811,7 +811,7 @@ def seed_chat(
     # rather than authenticated user sessions. The user parameter is used for access control
     # but the created chat session is "unassigned" (user_id=None) until a user visits the web UI.
     # This allows external systems to pre-seed chat sessions that users can then access.
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSeedResponse:
 
@@ -868,7 +868,7 @@ class SeedChatFromSlackResponse(BaseModel):
 @router.post("/seed-chat-session-from-slack")
 def seed_chat_from_slack(
     chat_seed_request: SeedChatFromSlackRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> SeedChatFromSlackResponse:
     slack_chat_session_id = chat_seed_request.chat_session_id
@@ -893,7 +893,7 @@ def seed_chat_from_slack(
 def fetch_chat_file(
     file_id: str,
     request: Request,
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
 
@@ -942,7 +942,7 @@ async def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSearchResponse:
     """
@@ -952,7 +952,7 @@ async def search_chats(
 
     # Use the enhanced database function for chat search
     chat_sessions, has_more = search_chat_sessions(
-        user_id=user.id if user else None,
+        user_id=user.id,
         db_session=db_session,
         query=query,
         page=page,
@@ -1020,7 +1020,7 @@ async def search_chats(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     redis_client: Redis = Depends(get_redis_client),
 ) -> dict[str, str]:
     """

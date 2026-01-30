@@ -75,7 +75,22 @@ class UserFileFilters(BaseModel):
     project_id: int | None = None
 
 
-class IndexFilters(BaseFilters, UserFileFilters):
+class AssistantKnowledgeFilters(BaseModel):
+    """Filters for knowledge attached to an assistant (persona).
+
+    These filters scope search to documents/folders explicitly attached
+    to the assistant. When present, only documents matching these criteria
+    are searched (in addition to ACL filtering).
+    """
+
+    # Document IDs explicitly attached to the assistant
+    attached_document_ids: list[str] | None = None
+    # Hierarchy node IDs (folders/spaces) attached to the assistant.
+    # Matches chunks where ancestor_hierarchy_node_ids contains any of these.
+    hierarchy_node_ids: list[int] | None = None
+
+
+class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # NOTE: These strings must be formatted in the same way as the output of
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
