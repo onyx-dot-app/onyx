@@ -1,33 +1,33 @@
-/* Hoverable */
+/* Hoverable - base (structural only, no color changes) */
 .hoverable {
   @apply flex flex-1 cursor-pointer;
 }
 
-.hoverable:not([data-non-interactive]) {
-  @apply transition-colors;
+/* Primary: tint-00 base, hover → tint-02 */
+.hoverable--primary {
+  @apply bg-background-tint-00 transition-colors;
 }
 
-/* Primary: static tint-02 bg, hover stays tint-02 */
-.hoverable[data-variant="primary"] {
+.hoverable--primary:hover {
   @apply bg-background-tint-02;
 }
 
-.hoverable[data-variant="primary"]:not([data-non-interactive]):hover {
-  @apply bg-background-tint-02;
+.hoverable--primary:active,
+.hoverable--primary[data-pressed="true"] {
+  @apply bg-background-tint-00;
 }
 
-/* Secondary: tint-02 bg, hover → tint-03 */
-.hoverable[data-variant="secondary"] {
-  @apply bg-background-tint-02;
+/* Secondary: tint-02 base, hover → tint-03 */
+.hoverable--secondary {
+  @apply bg-background-tint-02 transition-colors;
 }
 
-.hoverable[data-variant="secondary"]:not([data-non-interactive]):hover {
+.hoverable--secondary:hover {
   @apply bg-background-tint-03;
 }
 
-/* Active & pressed (all variants) */
-.hoverable:not([data-non-interactive]):active,
-.hoverable:not([data-non-interactive])[data-pressed="true"] {
+.hoverable--secondary:active,
+.hoverable--secondary[data-pressed="true"] {
   @apply bg-background-tint-00;
 }
 
