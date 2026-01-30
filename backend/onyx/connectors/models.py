@@ -5,6 +5,7 @@ from typing import Any
 from typing import cast
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import model_validator
 
 from onyx.access.models import ExternalAccess
@@ -191,6 +192,10 @@ class DocumentBase(BaseModel):
     # Parent hierarchy node raw ID - the folder/space/page containing this document
     # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
     parent_hierarchy_raw_node_id: str | None = None
+
+    # Resolved database ID of the parent hierarchy node
+    # Set during docfetching after hierarchy nodes are cached
+    parent_hierarchy_node_id: int | None = None
 
     def get_title_for_document_index(
         self,
@@ -445,7 +450,7 @@ class ConnectorFailure(BaseModel):
     failed_document: DocumentFailure | None = None
     failed_entity: EntityFailure | None = None
     failure_message: str
-    exception: Exception | None = None
+    exception: Exception | None = Field(default=None, exclude=True)
 
     model_config = {"arbitrary_types_allowed": True}
 

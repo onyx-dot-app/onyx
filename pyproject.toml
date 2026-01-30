@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "aioboto3==15.1.0",
     "cohere==5.6.1",
-    "fastapi==0.116.1",
+    "fastapi==0.128.0",
     "google-cloud-aiplatform==1.121.0",
     "google-genai==1.52.0",
     "litellm==1.80.11",
@@ -109,7 +109,7 @@ backend = [
     "simple-salesforce==1.12.6",
     "slack-sdk==3.20.2",
     "SQLAlchemy[mypy]==2.0.15",
-    "starlette==0.47.2",
+    "starlette==0.49.3",
     "supervisor==4.3.0",
     "RapidFuzz==3.13.0",
     "tiktoken==0.7.0",

@@ -58,10 +58,10 @@ SLIM_FILE_FIELDS = (
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
 
-HIERARCHY_FIELDS = "id, name, parents, webViewLink, mimeType"
+HIERARCHY_FIELDS = "id, name, parents, webViewLink, mimeType, driveId"
 
 HIERARCHY_FIELDS_WITH_PERMISSIONS = (
-    "id, name, parents, webViewLink, mimeType, permissionIds"
+    "id, name, parents, webViewLink, mimeType, permissionIds, driveId"
 )
 
 

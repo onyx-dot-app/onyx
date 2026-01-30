@@ -25,6 +25,7 @@ from onyx.server.manage.image_generation.models import ImageGenerationConfigUpda
 from onyx.server.manage.image_generation.models import ImageGenerationConfigView
 from onyx.server.manage.image_generation.models import ImageGenerationCredentials
 from onyx.server.manage.image_generation.models import TestImageGenerationRequest
+from onyx.server.manage.llm.api import _validate_llm_provider_change
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.utils.logger import setup_logger
@@ -77,6 +78,14 @@ def _build_llm_provider_request(
                 status_code=404,
                 detail=f"Source LLM provider with id {source_llm_provider_id} not found",
             )
+
+        _validate_llm_provider_change(
+            existing_api_base=source_provider.api_base,
+            existing_custom_config=source_provider.custom_config,
+            new_api_base=api_base,
+            new_custom_config=custom_config,
+            api_key_changed=False,  # Using stored key from source provider
+        )
 
         return LLMProviderUpsertRequest(
             name=f"Image Gen - {image_provider_id}",
@@ -209,6 +218,14 @@ def test_image_generation(
                 status_code=404,
                 detail=f"Source LLM provider with id {test_request.source_llm_provider_id} not found",
             )
+
+        _validate_llm_provider_change(
+            existing_api_base=source_provider.api_base,
+            existing_custom_config=source_provider.custom_config,
+            new_api_base=test_request.api_base,
+            new_custom_config=test_request.custom_config,
+            api_key_changed=False,  # Using stored key from source provider
+        )
 
         api_key = source_provider.api_key
         provider = source_provider.provider
@@ -406,6 +423,13 @@ def update_config(
             if not config_update.api_key_changed and (
                 not config_update.api_key or provided_key_is_masked
             ):
+                _validate_llm_provider_change(
+                    existing_api_base=old_provider.api_base,
+                    existing_custom_config=old_provider.custom_config,
+                    new_api_base=config_update.api_base,
+                    new_custom_config=config_update.custom_config,
+                    api_key_changed=False,
+                )
                 # Preserve existing API key when user didn't change it
                 actual_api_key = old_provider.api_key
 

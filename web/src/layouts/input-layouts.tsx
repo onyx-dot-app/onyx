@@ -9,7 +9,7 @@ import Label from "@/refresh-components/form/Label";
 interface OrientationLayoutProps extends TitleLayoutProps {
   name?: string;
   disabled?: boolean;
-  nonInteractable?: boolean;
+  nonInteractive?: boolean;
   children?: React.ReactNode;
 }
 
@@ -41,7 +41,7 @@ export interface VerticalLayoutProps extends OrientationLayoutProps {
 function VerticalInputLayout({
   name,
   disabled,
-  nonInteractable = false,
+  nonInteractive,
   children,
   subDescription,
   ...titleLayoutProps
@@ -59,7 +59,7 @@ function VerticalInputLayout({
     </Section>
   );
 
-  if (nonInteractable) return content;
+  if (nonInteractive) return content;
   return (
     <Label name={name} disabled={disabled}>
       {content}
@@ -107,7 +107,7 @@ export interface HorizontalLayoutProps extends OrientationLayoutProps {
 function HorizontalInputLayout({
   name,
   disabled,
-  nonInteractable,
+  nonInteractive,
   children,
   center,
   ...titleLayoutProps
@@ -128,7 +128,7 @@ function HorizontalInputLayout({
     </Section>
   );
 
-  if (nonInteractable) return content;
+  if (nonInteractive) return content;
   return (
     <Label name={name} disabled={disabled}>
       {content}
@@ -163,17 +163,20 @@ function HorizontalInputLayout({
  * />
  * ```
  */
+type TitleLayoutVariants = "primary" | "secondary";
 export interface TitleLayoutProps {
   title: string;
   description?: string;
   optional?: boolean;
   center?: boolean;
+  variant?: TitleLayoutVariants;
 }
 function TitleLayout({
   title,
   description,
   optional,
   center,
+  variant = "primary",
 }: TitleLayoutProps) {
   return (
     <Section gap={0} height="fit">
@@ -182,7 +185,11 @@ function TitleLayout({
         justifyContent={center ? "center" : "start"}
         gap={0.25}
       >
-        <Text mainContentEmphasis text04>
+        <Text
+          mainContentEmphasis={variant === "primary"}
+          mainUiAction={variant === "secondary"}
+          text04
+        >
           {title}
         </Text>
         {optional && (

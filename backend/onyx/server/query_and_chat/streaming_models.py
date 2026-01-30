@@ -74,7 +74,7 @@ class TopLevelBranching(BaseObj):
 class PacketException(BaseObj):
     type: Literal["error"] = StreamingType.ERROR.value
 
-    exception: Exception
+    exception: Exception = Field(exclude=True)
     model_config = {"arbitrary_types_allowed": True}
 
 

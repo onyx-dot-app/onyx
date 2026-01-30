@@ -123,6 +123,38 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
         provider_view.custom_config = masked_config
 
 
+def _validate_llm_provider_change(
+    existing_api_base: str | None,
+    existing_custom_config: dict[str, str] | None,
+    new_api_base: str | None,
+    new_custom_config: dict[str, str] | None,
+    api_key_changed: bool,
+) -> None:
+    """Validate that api_base and custom_config changes are safe.
+
+    When using a stored API key (api_key_changed=False), we must ensure api_base and
+    custom_config match the stored values.
+
+    Only enforced in MULTI_TENANT mode.
+
+    Raises:
+        HTTPException: If api_base or custom_config changed without changing API key
+    """
+    if not MULTI_TENANT or api_key_changed:
+        return
+
+    api_base_changed = new_api_base != existing_api_base
+    custom_config_changed = (
+        new_custom_config and new_custom_config != existing_custom_config
+    )
+
+    if api_base_changed or custom_config_changed:
+        raise HTTPException(
+            status_code=400,
+            detail="API base and/or custom config cannot be changed without changing the API key",
+        )
+
+
 @admin_router.get("/built-in/options")
 def fetch_llm_options(
     _: User = Depends(current_admin_user),
@@ -153,6 +185,7 @@ def test_llm_configuration(
     # the api key is sanitized if we are testing a provider already in the system
 
     test_api_key = test_llm_request.api_key
+    test_custom_config = test_llm_request.custom_config
     if test_llm_request.name:
         # NOTE: we are querying by name. we probably should be querying by an invariant id, but
         # as it turns out the name is not editable in the UI and other code also keys off name,
@@ -162,7 +195,16 @@ def test_llm_configuration(
         )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
+            _validate_llm_provider_change(
+                existing_api_base=existing_provider.api_base,
+                existing_custom_config=existing_provider.custom_config,
+                new_api_base=test_llm_request.api_base,
+                new_custom_config=test_llm_request.custom_config,
+                api_key_changed=False,
+            )
             test_api_key = existing_provider.api_key
+        if existing_provider and not test_llm_request.custom_config_changed:
+            test_custom_config = existing_provider.custom_config
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -174,7 +216,7 @@ def test_llm_configuration(
         api_key=test_api_key,
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
-        custom_config=test_llm_request.custom_config,
+        custom_config=test_custom_config,
         deployment_name=test_llm_request.deployment_name,
         max_input_tokens=max_input_tokens,
     )
@@ -257,24 +299,15 @@ def put_llm_provider(
             status_code=400,
             detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
         )
-    if (
-        MULTI_TENANT
-        and existing_provider
-        and (
-            (llm_provider_upsert_request.api_base != existing_provider.api_base)
-            or (
-                llm_provider_upsert_request.custom_config
-                and (
-                    llm_provider_upsert_request.custom_config
-                    != existing_provider.custom_config
-                )
-            )
-        )
-        and not llm_provider_upsert_request.api_key_changed
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="API base and/or custom config cannot be changed without changing the API key",
+
+    # SSRF Protection: Validate api_base and custom_config match stored values
+    if existing_provider:
+        _validate_llm_provider_change(
+            existing_api_base=existing_provider.api_base,
+            existing_custom_config=existing_provider.custom_config,
+            new_api_base=llm_provider_upsert_request.api_base,
+            new_custom_config=llm_provider_upsert_request.custom_config,
+            api_key_changed=llm_provider_upsert_request.api_key_changed,
         )
 
     persona_ids = llm_provider_upsert_request.personas
@@ -314,6 +347,8 @@ def put_llm_provider(
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
         llm_provider_upsert_request.api_key = existing_provider.api_key
+    if existing_provider and not llm_provider_upsert_request.custom_config_changed:
+        llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
@@ -644,8 +679,13 @@ def get_bedrock_available_models(
     try:
         # Precedence: bearer → keys → IAM
         if request.aws_bearer_token_bedrock:
-            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = request.aws_bearer_token_bedrock
-            session = boto3.Session(region_name=request.aws_region_name)
+            try:
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = (
+                    request.aws_bearer_token_bedrock
+                )
+                session = boto3.Session(region_name=request.aws_region_name)
+            finally:
+                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
                 aws_access_key_id=request.aws_access_key_id,
@@ -751,9 +791,6 @@ def get_bedrock_available_models(
                     ),
                 )
             )
-
-        # Unset the environment variable
-        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
 
         # Sync new models to DB if provider_name is specified
         if request.provider_name:
