@@ -143,6 +143,7 @@ export { default as SvgStep3End } from "@opal/icons/step3-end";
 export { default as SvgStop } from "@opal/icons/stop";
 export { default as SvgStopCircle } from "@opal/icons/stop-circle";
 export { default as SvgSun } from "@opal/icons/sun";
+export { default as SvgTag } from "@opal/icons/tag";
 export { default as SvgTerminal } from "@opal/icons/terminal";
 export { default as SvgTerminalSmall } from "@opal/icons/terminal-small";
 export { default as SvgTextLinesSmall } from "@opal/icons/text-lines-small";
