@@ -37,6 +37,11 @@ import { formatMmDdYyyy } from "@/lib/utils";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
+import {
+  getLLMProviderOverrideForPersona,
+  getDisplayName,
+} from "@/lib/llm/utils";
+import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -176,6 +181,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
+  const { llmProviders } = useLLMProviders(agent.id);
 
   const handleStartChat = useCallback(
     (message: string) => {
@@ -230,6 +236,18 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   );
 
   const hasActions = mcpServersWithTools.length > 0 || openApiTools.length > 0;
+  const defaultModel = getDisplayName(agent, llmProviders ?? []);
+  // const llmDescriptor = getLLMProviderOverrideForPersona(
+  //   agent,
+  //   llmProviders ?? []
+  // );
+  // const x = llmProviders?.find(
+  //   (llmProvider) => llmProvider.name === agent.llm_model_provider_override
+  // );
+  // const y = x?.model_configurations.find(
+  //   (y) => y.name === llmDescriptor?.modelName
+  // );
+  // console.log(y?.provider_display_name);
 
   return (
     <Modal
@@ -339,13 +357,16 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                     variant="secondary"
                   />
                 )}
-                {/*{agent.llm_model_version_override && (
-                  <LineItemLayout
-                    title="Model"
-                    description={agent.llm_model_version_override}
-                    variant="tertiary"
-                  />
-                )}*/}
+                {defaultModel && (
+                  <Horizontal
+                    title="Default Model"
+                    description="This model will be used by Onyx by default in your chats."
+                    nonInteractive
+                    variant="secondary"
+                  >
+                    <Text>{defaultModel}</Text>
+                  </Horizontal>
+                )}
                 {agent.search_start_date && (
                   <Horizontal
                     title="Knowledge Cutoff Date"
