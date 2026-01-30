@@ -1,7 +1,7 @@
 "use client";
 
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { buildImgUrl } from "@/app/chat/components/files/images/utils";
+import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { OnyxIcon } from "@/components/icons/icons";
 import { useSettingsContext } from "@/components/settings/SettingsProvider";
 import {

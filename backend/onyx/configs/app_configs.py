@@ -11,6 +11,9 @@ from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 #####
 # App Configs
@@ -71,8 +74,16 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 #####
 # Auth Configs
 #####
-AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
-DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
+# Upgrades users from disabled auth to basic auth and shows warning.
+_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
+if not _auth_type_str or _auth_type_str in ("disabled", "none"):
+    logger.warning(
+        "AUTH_TYPE='disabled' is no longer supported. "
+        "Defaulting to 'basic'. Please update your configuration. "
+        "Your existing data will be migrated automatically."
+    )
+    _auth_type_str = AuthType.BASIC.value
+AUTH_TYPE = AuthType(_auth_type_str)
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
@@ -145,6 +156,10 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+
+# Whether Google OAuth is enabled (requires both client ID and secret)
+OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
+
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
@@ -207,6 +222,9 @@ OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
+USING_AWS_MANAGED_OPENSEARCH = (
+    os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
+)
 
 # This is the "base" config for now, the idea is that at least for our dev
 # environments we always want to be dual indexing into both OpenSearch and Vespa
@@ -410,7 +428,7 @@ CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
     os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
 )
 
-# Consolidated background worker (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
+# Consolidated background worker (light, docprocessing, docfetching, heavy, monitoring, user_file_processing)
 # separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
 # Total would be 40, but we use a more conservative default of 20 for the consolidated worker
 CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
@@ -420,10 +438,6 @@ CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
 # Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
 CELERY_WORKER_HEAVY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_HEAVY_CONCURRENCY") or 4
-)
-
-CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 2
 )
 
 CELERY_WORKER_MONITORING_CONCURRENCY = int(

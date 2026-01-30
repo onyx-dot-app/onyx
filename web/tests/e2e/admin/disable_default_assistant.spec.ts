@@ -76,8 +76,8 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     // First enable the setting
     await setDisableDefaultAssistantSetting(page, true);
 
-    // Navigate to chat and create a new assistant to ensure there's one besides the default
-    await page.goto("/chat");
+    // Navigate to app and create a new assistant to ensure there's one besides the default
+    await page.goto("/app");
     const assistantName = `Test Assistant ${Date.now()}`;
     await createAssistant(page, {
       name: assistantName,
@@ -104,14 +104,14 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     ).toBeVisible();
   });
 
-  test("direct navigation to /chat uses first pinned assistant when setting is enabled", async ({
+  test("direct navigation to /app uses first pinned assistant when setting is enabled", async ({
     page,
   }) => {
     // First enable the setting
     await setDisableDefaultAssistantSetting(page, true);
 
-    // Navigate directly to /chat
-    await page.goto("/chat");
+    // Navigate directly to /app
+    await page.goto("/app");
 
     // Verify that we didn't land on the default assistant (ID 0)
     // The assistant selection should be a pinned or available assistant (not ID 0)
@@ -157,25 +157,25 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     // Navigate to settings and ensure setting is disabled
     await setDisableDefaultAssistantSetting(page, false);
 
-    // Navigate directly to /chat without parameters
-    await page.goto("/chat");
+    // Navigate directly to /app without parameters
+    await page.goto("/app");
 
     // The default assistant (ID 0) should be available
-    // We can verify this by checking that the chat loads successfully
+    // We can verify this by checking that the app loads successfully
     // and doesn't force navigation to a specific assistant
     const currentUrl = page.url();
     // URL might not have assistantId, or it might be 0, or might redirect to default behavior
-    expect(page.url()).toContain("/chat");
+    expect(page.url()).toContain("/app");
 
-    // Verify the new session button navigates to /chat without assistantId
+    // Verify the new session button navigates to /app without assistantId
     const newSessionButton = page.locator(
       '[data-testid="AppSidebar/new-session"]'
     );
     await newSessionButton.click();
 
-    // Should navigate to /chat without assistantId parameter
+    // Should navigate to /app without assistantId parameter
     const newUrl = page.url();
-    expect(newUrl).toContain("/chat");
+    expect(newUrl).toContain("/app");
   });
 
   test("default assistant config panel shows configuration UI when setting is disabled", async ({

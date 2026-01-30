@@ -455,9 +455,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         />
       )}
 
-      <BackButton
-        behaviorOverride={() => router.push("/admin/indexing/status")}
-      />
+      <BackButton />
       <div
         className="flex
         items-center

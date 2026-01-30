@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.connectors.web.connector import WebConnector
 
@@ -30,6 +31,8 @@ def test_web_connector_scroll(quotes_to_scroll_web_connector: WebConnector) -> N
     document_batches = quotes_to_scroll_web_connector.load_from_state()
     for doc_batch in document_batches:
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             all_docs.append(doc)
 
     assert len(all_docs) == 1
@@ -44,6 +47,8 @@ def test_web_connector_no_scroll(quotes_to_scroll_web_connector: WebConnector) -
     document_batches = quotes_to_scroll_web_connector.load_from_state()
     for doc_batch in document_batches:
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             all_docs.append(doc)
 
     assert len(all_docs) == 1
@@ -71,6 +76,7 @@ def test_web_connector_bot_protection() -> None:
     doc_batch = document_batches[0]
     assert len(doc_batch) == 1
     doc = doc_batch[0]
+    assert not isinstance(doc, HierarchyNode)
     assert doc.sections[0].text is not None
     assert MERCURY_EXPECTED_QUOTE in doc.sections[0].text
 
@@ -83,7 +89,12 @@ def test_web_connector_recursive_www_redirect() -> None:
             base_url="https://onyx.app",
             web_connector_type=WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
         )
-        return [doc for batch in connector.load_from_state() for doc in batch]
+        return [
+            doc
+            for batch in connector.load_from_state()
+            for doc in batch
+            if not isinstance(doc, HierarchyNode)
+        ]
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(_run_connector)

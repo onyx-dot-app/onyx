@@ -118,7 +118,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	// Create the CI branch
 	ciBranch := fmt.Sprintf("run-ci/%s", prNumber)
 	prTitle := fmt.Sprintf("chore: [Running GitHub actions for #%s]", prNumber)
-	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**", prNumber)
+	prBody := fmt.Sprintf("This PR runs GitHub Actions CI for #%s.\n\n- [x] I have considered whether this PR needs to be cherry-picked to the latest beta branch.\n- [x] Override Linear Check\n\n**This PR should be closed (not merged) after CI completes.**", prNumber)
 
 	// Fetch the fork's branch
 	if forkRepo == "" {
@@ -133,25 +133,15 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	// Create or update the CI branch from FETCH_HEAD
 	if originalBranch == ciBranch {
 		// Already on the CI branch - stash any uncommitted changes before resetting
-		stashed := false
-		if git.HasUncommittedChanges() {
-			log.Info("Stashing uncommitted changes...")
-			if err := git.RunCommand("stash", "--include-untracked"); err != nil {
-				log.Fatalf("Failed to stash changes: %v", err)
-			}
-			stashed = true
+		stashResult, err := git.StashChanges()
+		if err != nil {
+			log.Fatalf("Failed to stash changes: %v", err)
 		}
 		log.Infof("Already on %s, resetting to fork's HEAD", ciBranch)
 		if err := git.RunCommand("reset", "--hard", "FETCH_HEAD"); err != nil {
 			log.Fatalf("Failed to reset branch to fork's HEAD: %v", err)
 		}
-		if stashed {
-			log.Info("Restoring stashed changes...")
-			if err := git.RunCommand("stash", "pop"); err != nil {
-				log.Warnf("Failed to restore stashed changes (may have conflicts): %v", err)
-				log.Info("Your changes are still in the stash. Run 'git stash pop' to restore them manually.")
-			}
-		}
+		git.RestoreStash(stashResult)
 	} else {
 		// Delete branch if it already exists locally (to ensure we're in sync with fork)
 		if git.BranchExists(ciBranch) {

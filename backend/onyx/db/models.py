@@ -11,6 +11,7 @@ from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 from pydantic import ValidationError
 
+from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
@@ -44,8 +45,8 @@ from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from onyx.configs.constants import (
+    ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
     FederatedConnectorSource,
     MilestoneRecordType,
@@ -55,8 +56,13 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.db.enums import (
     AccessType,
+    ArtifactType,
+    BuildSessionStatus,
     EmbeddingPrecision,
+    HierarchyNodeType,
     IndexingMode,
+    ProcessingMode,
+    SandboxStatus,
     SyncType,
     SyncStatus,
     MCPAuthenticationType,
@@ -90,8 +96,10 @@ from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import RerankerProvider
 from onyx.context.search.enums import RecencyBiasSetting
+
+# TODO: After anonymous user migration has been deployed, make user_id columns NOT NULL
+# and update Mapped[User | None] relationships to Mapped[User] where needed.
 
 
 logger = setup_logger()
@@ -270,6 +278,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         Returns True if the user has at least one OAuth (or OIDC) account.
         """
         return not bool(self.oauth_accounts)
+
+    @property
+    def is_anonymous(self) -> bool:
+        """Returns True if this is the anonymous user."""
+        return str(self.id) == ANONYMOUS_USER_UUID
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -603,10 +616,25 @@ class ConnectorCredentialPair(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
 
+    # last successful hierarchy fetch
+    last_time_hierarchy_fetch: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     total_docs_indexed: Mapped[int] = mapped_column(Integer, default=0)
 
     indexing_trigger: Mapped[IndexingMode | None] = mapped_column(
         Enum(IndexingMode, native_enum=False), nullable=True
+    )
+
+    # Determines how documents are processed after fetching:
+    # REGULAR: Full pipeline (chunk → embed → Vespa)
+    # FILE_SYSTEM: Write to file system only (for CLI agent sandbox)
+    processing_mode: Mapped[ProcessingMode] = mapped_column(
+        Enum(ProcessingMode, native_enum=False),
+        nullable=False,
+        default=ProcessingMode.REGULAR,
+        server_default="REGULAR",
     )
 
     connector: Mapped["Connector"] = relationship(
@@ -639,6 +667,105 @@ class ConnectorCredentialPair(Base):
 
     background_errors: Mapped[list["BackgroundError"]] = relationship(
         "BackgroundError", back_populates="cc_pair", cascade="all, delete-orphan"
+    )
+
+
+class HierarchyNode(Base):
+    """
+    Represents a structural node in a connected source's hierarchy.
+    Examples: folders, drives, spaces, projects, channels.
+
+    Stores hierarchy structure WITH permission information, using the same
+    permission model as Documents (external_user_emails, external_user_group_ids,
+    is_public). This enables user-scoped hierarchy browsing in the UI.
+
+    Some hierarchy nodes (e.g., Confluence pages) can also be documents.
+    In these cases, `document_id` will be set.
+    """
+
+    __tablename__ = "hierarchy_node"
+
+    # Primary key - Integer for simplicity
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    # Raw identifier from the source system
+    # e.g., "1h7uWUR2BYZjtMfEXFt43tauj-Gp36DTPtwnsNuA665I" for Google Drive
+    # For SOURCE nodes, this is the source name (e.g., "google_drive")
+    raw_node_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Human-readable name for display
+    # e.g., "Engineering", "Q4 Planning", "Google Drive"
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Link to view this node in the source system
+    link: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
+
+    # Source type (google_drive, confluence, etc.)
+    source: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False), nullable=False
+    )
+
+    # What kind of structural node this is
+    node_type: Mapped[HierarchyNodeType] = mapped_column(
+        Enum(HierarchyNodeType, native_enum=False), nullable=False
+    )
+
+    # ============= PERMISSION FIELDS (same pattern as Document) =============
+    # Email addresses of external users with access to this node in the source system
+    external_user_emails: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    # External group IDs with access (prefixed by source type)
+    external_user_group_ids: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    # Whether this node is publicly accessible (org-wide or world-public)
+    # SOURCE nodes are always public. Other nodes get this from source permissions.
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    # ==========================================================================
+
+    # Foreign keys
+    # For hierarchy nodes that are also documents (e.g., Confluence pages)
+    # SET NULL when document is deleted - node can exist without its document
+    document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("document.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Self-referential FK for tree structure
+    # SET NULL when parent is deleted - orphan children for cleanup via pruning
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Relationships
+    document: Mapped["Document | None"] = relationship(
+        "Document", back_populates="hierarchy_node", foreign_keys=[document_id]
+    )
+    parent: Mapped["HierarchyNode | None"] = relationship(
+        "HierarchyNode", remote_side=[id], back_populates="children"
+    )
+    children: Mapped[list["HierarchyNode"]] = relationship(
+        "HierarchyNode", back_populates="parent"
+    )
+    child_documents: Mapped[list["Document"]] = relationship(
+        "Document",
+        back_populates="parent_hierarchy_node",
+        foreign_keys="Document.parent_hierarchy_node_id",
+    )
+    # Personas that have this hierarchy node attached for scoped search
+    personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="persona__hierarchy_node",
+        back_populates="hierarchy_nodes",
+        viewonly=True,
+    )
+
+    __table_args__ = (
+        # Unique constraint: same raw_node_id + source should not exist twice
+        UniqueConstraint(
+            "raw_node_id", "source", name="uq_hierarchy_node_raw_id_source"
+        ),
+        Index("ix_hierarchy_node_source_type", source, node_type),
     )
 
 
@@ -705,6 +832,13 @@ class Document(Base):
     )
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Reference to parent hierarchy node (the folder/space containing this doc)
+    # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
+    # SET NULL when hierarchy node is deleted - document should not be blocked by node deletion
+    parent_hierarchy_node_id: Mapped[int | None] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     # tables for the knowledge graph data
     kg_stage: Mapped[KGStage] = mapped_column(
         Enum(KGStage, native_enum=False),
@@ -727,6 +861,27 @@ class Document(Base):
         "Tag",
         secondary=Document__Tag.__table__,
         back_populates="documents",
+    )
+
+    # Relationship to parent hierarchy node (the folder/space containing this doc)
+    parent_hierarchy_node: Mapped["HierarchyNode | None"] = relationship(
+        "HierarchyNode",
+        back_populates="child_documents",
+        foreign_keys=[parent_hierarchy_node_id],
+    )
+
+    # For documents that ARE hierarchy nodes (e.g., Confluence pages with children)
+    hierarchy_node: Mapped["HierarchyNode | None"] = relationship(
+        "HierarchyNode",
+        back_populates="document",
+        foreign_keys="HierarchyNode.document_id",
+    )
+    # Personas that have this document directly attached for scoped search
+    attached_personas: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary="persona__document",
+        back_populates="attached_documents",
+        viewonly=True,
     )
 
     __table_args__ = (
@@ -1660,17 +1815,6 @@ class SearchSettings(Base):
         postgresql.ARRAY(String), default=[]
     )
 
-    # Reranking settings
-    disable_rerank_for_streaming: Mapped[bool] = mapped_column(Boolean, default=False)
-    rerank_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    rerank_provider_type: Mapped[RerankerProvider | None] = mapped_column(
-        Enum(RerankerProvider, native_enum=False), nullable=True
-    )
-    rerank_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
-    rerank_api_url: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    num_rerank: Mapped[int] = mapped_column(Integer, default=NUM_POSTPROCESSED_RESULTS)
-
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
         "CloudEmbeddingProvider",
         back_populates="search_settings",
@@ -1908,6 +2052,60 @@ class IndexAttempt(Base):
             self.total_batches is not None
             and self.completed_batches >= self.total_batches
         )
+
+
+class HierarchyFetchAttempt(Base):
+    """Tracks attempts to fetch hierarchy nodes from a source"""
+
+    __tablename__ = "hierarchy_fetch_attempt"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    status: Mapped[IndexingStatus] = mapped_column(
+        Enum(IndexingStatus, native_enum=False), nullable=False, index=True
+    )
+
+    # Statistics
+    nodes_fetched: Mapped[int | None] = mapped_column(Integer, default=0)
+    nodes_updated: Mapped[int | None] = mapped_column(Integer, default=0)
+
+    # Error information (only filled if status = "failed")
+    error_msg: Mapped[str | None] = mapped_column(Text, default=None)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Timestamps
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Relationships
+    connector_credential_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_hierarchy_fetch_attempt_cc_pair",
+            connector_credential_pair_id,
+        ),
+    )
 
 
 class IndexAttemptError(Base):
@@ -2903,6 +3101,18 @@ class Persona(Base):
         secondary=Persona__PersonaLabel.__table__,
         back_populates="personas",
     )
+    # Hierarchy nodes attached to this persona for scoped search
+    hierarchy_nodes: Mapped[list["HierarchyNode"]] = relationship(
+        "HierarchyNode",
+        secondary="persona__hierarchy_node",
+        back_populates="personas",
+    )
+    # Individual documents attached to this persona for scoped search
+    attached_documents: Mapped[list["Document"]] = relationship(
+        "Document",
+        secondary="persona__document",
+        back_populates="attached_personas",
+    )
 
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
@@ -2918,9 +3128,46 @@ class Persona(Base):
 class Persona__UserFile(Base):
     __tablename__ = "persona__user_file"
 
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
     user_file_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user_file.id"), primary_key=True
+        ForeignKey("user_file.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class Persona__HierarchyNode(Base):
+    """Association table linking personas to hierarchy nodes.
+
+    This allows assistants to be configured with specific hierarchy nodes
+    (folders, spaces, channels, etc.) for scoped search/retrieval.
+    """
+
+    __tablename__ = "persona__hierarchy_node"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    hierarchy_node_id: Mapped[int] = mapped_column(
+        ForeignKey("hierarchy_node.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class Persona__Document(Base):
+    """Association table linking personas to individual documents.
+
+    This allows assistants to be configured with specific documents
+    for scoped search/retrieval. Complements hierarchy_nodes which
+    allow attaching folders/spaces.
+    """
+
+    __tablename__ = "persona__document"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -4141,4 +4388,206 @@ class TenantUsage(Base):
     __table_args__ = (
         # Ensure only one row per window start (tenant_id is in the schema name)
         UniqueConstraint("window_start", name="uq_tenant_usage_window"),
+    )
+
+
+"""Tables related to Build Mode (CLI Agent Platform)"""
+
+
+class BuildSession(Base):
+    """Stores metadata about CLI agent build sessions."""
+
+    __tablename__ = "build_session"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[BuildSessionStatus] = mapped_column(
+        Enum(BuildSessionStatus, native_enum=False, name="buildsessionstatus"),
+        nullable=False,
+        default=BuildSessionStatus.ACTIVE,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_activity_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    demo_data_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+
+    # Relationships
+    user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
+    artifacts: Mapped[list["Artifact"]] = relationship(
+        "Artifact", back_populates="session", cascade="all, delete-orphan"
+    )
+    messages: Mapped[list["BuildMessage"]] = relationship(
+        "BuildMessage", back_populates="session", cascade="all, delete-orphan"
+    )
+    snapshots: Mapped[list["Snapshot"]] = relationship(
+        "Snapshot", back_populates="session", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_build_session_user_created", "user_id", desc("created_at")),
+        Index("ix_build_session_status", "status"),
+    )
+
+
+class Sandbox(Base):
+    """Stores sandbox container metadata for users (one sandbox per user)."""
+
+    __tablename__ = "sandbox"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    container_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[SandboxStatus] = mapped_column(
+        Enum(SandboxStatus, native_enum=False, name="sandboxstatus"),
+        nullable=False,
+        default=SandboxStatus.PROVISIONING,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    user: Mapped[User] = relationship("User")
+
+    __table_args__ = (
+        Index("ix_sandbox_status", "status"),
+        Index("ix_sandbox_container_id", "container_id"),
+    )
+
+
+class Artifact(Base):
+    """Stores metadata about artifacts generated by CLI agents."""
+
+    __tablename__ = "artifact"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    type: Mapped[ArtifactType] = mapped_column(
+        Enum(ArtifactType, native_enum=False, name="artifacttype"), nullable=False
+    )
+    # path of artifact in sandbox relative to outputs/
+    path: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    session: Mapped[BuildSession] = relationship(
+        "BuildSession", back_populates="artifacts"
+    )
+
+    __table_args__ = (
+        Index("ix_artifact_session_created", "session_id", desc("created_at")),
+        Index("ix_artifact_type", "type"),
+    )
+
+
+class Snapshot(Base):
+    """Stores metadata about session output snapshots."""
+
+    __tablename__ = "snapshot"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    storage_path: Mapped[str] = mapped_column(String, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    session: Mapped[BuildSession] = relationship(
+        "BuildSession", back_populates="snapshots"
+    )
+
+    __table_args__ = (
+        Index("ix_snapshot_session_created", "session_id", desc("created_at")),
+    )
+
+
+class BuildMessage(Base):
+    """Stores messages exchanged in build sessions.
+
+    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    The turn_index groups all assistant responses under the user prompt they respond to.
+
+    Packet types stored in message_metadata:
+    - user_message: {type: "user_message", content: {...}}
+    - agent_message: {type: "agent_message", content: {...}} (accumulated from chunks)
+    - agent_thought: {type: "agent_thought", content: {...}} (accumulated from chunks)
+    - tool_call_progress: {type: "tool_call_progress", status: "completed", ...} (only completed)
+    - agent_plan_update: {type: "agent_plan_update", entries: [...]} (upserted, latest only)
+    """
+
+    __tablename__ = "build_message"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    turn_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    type: Mapped[MessageType] = mapped_column(
+        Enum(MessageType, native_enum=False, name="messagetype"), nullable=False
+    )
+    message_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    session: Mapped[BuildSession] = relationship(
+        "BuildSession", back_populates="messages"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
+        ),
     )

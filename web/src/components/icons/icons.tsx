@@ -75,6 +75,11 @@ import salesforceIcon from "@public/Salesforce.png";
 import sharepointIcon from "@public/Sharepoint.png";
 import slackIcon from "@public/Slack.png";
 import teamsIcon from "@public/Teams.png";
+import outlookIcon from "@public/Outlook.png";
+import oneDriveIcon from "@public/OneDrive.png";
+import boxIcon from "@public/Box.png";
+import trelloIcon from "@public/Trello.png";
+import serviceNowIcon from "@public/Servicenow.png";
 import wikipediaIcon from "@public/Wikipedia.png";
 import xenforoIcon from "@public/Xenforo.svg";
 import zAIIcon from "@public/Z_AI.png";
@@ -108,7 +113,7 @@ export const LogoIcon = ({
 }: LogoIconProps) => (
   <Image
     style={{ width: `${size}px`, height: `${size}px` }}
-    className={`w-[${size}px] h-[${size}px] ` + className}
+    className={`w-[${size}px] h-[${size}px] object-contain ` + className}
     src={src}
     alt="Logo"
     width="96"
@@ -927,6 +932,11 @@ export const S3Icon = createLogoIcon(s3Icon);
 export const SalesforceIcon = createLogoIcon(salesforceIcon);
 export const SharepointIcon = createLogoIcon(sharepointIcon);
 export const SlabIcon = createLogoIcon(slabLogoIcon);
+export const OutlookIcon = createLogoIcon(outlookIcon);
+export const OneDriveIcon = createLogoIcon(oneDriveIcon);
+export const BoxIcon = createLogoIcon(boxIcon);
+export const TrelloIcon = createLogoIcon(trelloIcon);
+export const ServiceNowIcon = createLogoIcon(serviceNowIcon);
 export const SlackIcon = ({
   size = 16,
   className = defaultTailwindCSS,

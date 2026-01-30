@@ -1,13 +1,10 @@
 "use client";
 
 import { useCallback } from "react";
-import { useChatSessionStore } from "@/app/chat/stores/useChatSessionStore";
-import { FeedbackType } from "@/app/chat/interfaces";
-import {
-  handleChatFeedback,
-  removeChatFeedback,
-} from "@/app/chat/services/lib";
-import { getMessageByMessageId } from "@/app/chat/services/messageTree";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { FeedbackType } from "@/app/app/interfaces";
+import { handleChatFeedback, removeChatFeedback } from "@/app/app/services/lib";
+import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 interface UseFeedbackControllerProps {

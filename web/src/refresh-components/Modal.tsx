@@ -121,6 +121,7 @@ interface ModalContentProps
   height?: keyof typeof heightClasses;
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
+  background?: "default" | "gray";
 }
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
@@ -133,6 +134,7 @@ const ModalContent = React.forwardRef<
       height = "fit",
       preventAccidentalClose = true,
       skipOverlay = false,
+      background = "default",
       ...props
     },
     ref
@@ -274,7 +276,10 @@ const ModalContent = React.forwardRef<
             className={cn(
               "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden",
               "z-modal",
-              "bg-background-tint-00 border rounded-16 shadow-2xl",
+              background === "gray"
+                ? "bg-background-tint-01"
+                : "bg-background-tint-00",
+              "border rounded-16 shadow-2xl",
               "flex flex-col",
               // Never exceed viewport on small screens
               "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
@@ -346,14 +351,14 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
 
     return (
       <Section ref={ref} padding={1} alignItems="start" {...props}>
-        <Section gap={0.25} alignItems="start">
+        <Section gap={0.5}>
           <Section
             gap={0}
             padding={0}
             flexDirection="row"
             justifyContent="between"
           >
-            <Icon className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+            <Icon className="stroke-text-04" size={24} />
             {onClose && (
               <div
                 tabIndex={-1}
@@ -365,16 +370,19 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
               </div>
             )}
           </Section>
-          <DialogPrimitive.Title asChild>
-            <Text headingH3>{title}</Text>
-          </DialogPrimitive.Title>
-          {description && (
-            <DialogPrimitive.Description asChild>
-              <Text secondaryBody text03>
-                {description}
-              </Text>
-            </DialogPrimitive.Description>
-          )}
+
+          <Section alignItems="start" gap={0}>
+            <DialogPrimitive.Title asChild>
+              <Text headingH3>{title}</Text>
+            </DialogPrimitive.Title>
+            {description && (
+              <DialogPrimitive.Description asChild>
+                <Text secondaryBody text03>
+                  {description}
+                </Text>
+              </DialogPrimitive.Description>
+            )}
+          </Section>
         </Section>
         {children}
       </Section>

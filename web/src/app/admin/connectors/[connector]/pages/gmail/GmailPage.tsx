@@ -25,7 +25,21 @@ import {
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
 
-export const GmailMain = () => {
+interface GmailMainProps {
+  buildMode?: boolean;
+  onOAuthRedirect?: () => void;
+  onCredentialCreated?: (
+    credential: Credential<
+      GmailCredentialJson | GmailServiceAccountCredentialJson
+    >
+  ) => void;
+}
+
+export const GmailMain = ({
+  buildMode = false,
+  onOAuthRedirect,
+  onCredentialCreated,
+}: GmailMainProps) => {
   const { isAdmin, user } = useUser();
   const { popup, setPopup } = usePopup();
 
@@ -191,6 +205,12 @@ export const GmailMain = () => {
             serviceAccountKeyData={serviceAccountKeyData}
             connectorExists={connectorExists}
             user={user}
+            buildMode={buildMode}
+            onOAuthRedirect={onOAuthRedirect}
+            // Necessary prop drilling for build mode v1.
+            // TODO: either integrate gmail into normal flow
+            // or create a build-mode specific Gmail flow
+            onCredentialCreated={onCredentialCreated}
           />
         </>
       )}

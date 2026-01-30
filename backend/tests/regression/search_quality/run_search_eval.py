@@ -41,8 +41,6 @@ from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.constants import AuthType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -437,7 +435,8 @@ class SearchAnswerAnalyzer:
         try:
             request_data = search_request.model_dump()
             headers = GENERAL_HEADERS.copy()
-            if AUTH_TYPE != AuthType.DISABLED:
+            # Add API key if present
+            if os.environ.get("ONYX_API_KEY"):
                 headers["Authorization"] = f"Bearer {os.environ.get('ONYX_API_KEY')}"
 
             start_time = time.monotonic()
@@ -614,10 +613,10 @@ def run_search_eval(
             "Please add it to the root .vscode/.env file."
         )
 
-    # check onyx api key is set if auth is enabled
-    if AUTH_TYPE != AuthType.DISABLED and not os.environ.get("ONYX_API_KEY"):
+    # check onyx api key is set (auth is always required)
+    if not os.environ.get("ONYX_API_KEY"):
         raise RuntimeError(
-            "ONYX_API_KEY is required if auth is enabled. "
+            "ONYX_API_KEY is required. "
             "Please create one in the admin panel and add it to the root .vscode/.env file."
         )
 

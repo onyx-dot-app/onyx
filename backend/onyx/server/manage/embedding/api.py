@@ -16,6 +16,7 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.embedding.models import TestEmbeddingRequest
+from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
@@ -26,6 +27,12 @@ from shared_configs.enums import EmbedTextType
 logger = setup_logger()
 
 
+def _mask_embedding_provider_api_key(provider: CloudEmbeddingProvider) -> None:
+    """Mask the API key in the embedding provider to avoid leaking secrets."""
+    if provider.api_key:
+        provider.api_key = mask_string(provider.api_key)
+
+
 admin_router = APIRouter(prefix="/admin/embedding")
 basic_router = APIRouter(prefix="/embedding")
 
@@ -33,7 +40,7 @@ basic_router = APIRouter(prefix="/embedding")
 @admin_router.post("/test-embedding")
 def test_embedding_configuration(
     test_llm_request: TestEmbeddingRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> None:
     try:
         test_model = EmbeddingModel(
@@ -64,7 +71,7 @@ def test_embedding_configuration(
 
 @admin_router.get("", response_model=list[EmbeddingModelDetail])
 def list_embedding_models(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[EmbeddingModelDetail]:
     search_settings = get_all_search_settings(db_session)
@@ -73,19 +80,21 @@ def list_embedding_models(
 
 @admin_router.get("/embedding-provider")
 def list_embedding_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[CloudEmbeddingProvider]:
-    return [
-        CloudEmbeddingProvider.from_request(embedding_provider_model)
-        for embedding_provider_model in fetch_existing_embedding_providers(db_session)
-    ]
+    embedding_providers = []
+    for embedding_provider_model in fetch_existing_embedding_providers(db_session):
+        provider = CloudEmbeddingProvider.from_request(embedding_provider_model)
+        _mask_embedding_provider_api_key(provider)
+        embedding_providers.append(provider)
+    return embedding_providers
 
 
 @admin_router.delete("/embedding-provider/{provider_type}")
 def delete_embedding_provider(
     provider_type: EmbeddingProvider,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     embedding_provider = get_current_db_embedding_provider(db_session=db_session)
@@ -106,4 +115,6 @@ def put_cloud_embedding_provider(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CloudEmbeddingProvider:
-    return upsert_cloud_embedding_provider(db_session, provider)
+    cloud_embedding_provider = upsert_cloud_embedding_provider(db_session, provider)
+    _mask_embedding_provider_api_key(cloud_embedding_provider)
+    return cloud_embedding_provider

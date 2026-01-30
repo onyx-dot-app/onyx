@@ -415,7 +415,6 @@
         "onyx.background.celery.versioned_apps.docfetching",
         "worker",
         "--pool=threads",
-        "--concurrency=1",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docfetching@%n",
@@ -446,7 +445,6 @@
         "onyx.background.celery.versioned_apps.docprocessing",
         "worker",
         "--pool=threads",
-        "--concurrency=6",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
@@ -594,6 +592,23 @@
       "presentation": {
         "group": "3"
       }
+    },
+    {
+      "name": "Build Sandbox Templates",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "onyx.server.features.build.sandbox.build_templates",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
+      },
+      "consoleTitle": "Build Sandbox Templates"
     },
     {
       // Dummy entry used to label the group

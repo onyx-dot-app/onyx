@@ -21,6 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
@@ -278,7 +279,7 @@ class DiscordConnector(PollConnector, LoadConnector):
         start: datetime | None = None,
         end: datetime | None = None,
     ) -> GenerateDocumentsOutput:
-        doc_batch = []
+        doc_batch: list[Document | HierarchyNode] = []
         for doc in _manage_async_retrieval(
             token=self.discord_bot_token,
             requested_start_date_string=self.requested_start_date_string,

@@ -47,6 +47,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -676,7 +677,7 @@ class JiraConnector(
         checkpoint_callback = make_checkpoint_callback(checkpoint)
         prev_offset = 0
         current_offset = 0
-        slim_doc_batch = []
+        slim_doc_batch: list[SlimDocument | HierarchyNode] = []
 
         while checkpoint.has_more:
             for issue in _perform_jql_search(
@@ -824,7 +825,7 @@ def make_checkpoint_callback(
 if __name__ == "__main__":
     import os
     from onyx.utils.variable_functionality import global_version
-    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+    from tests.daily.connectors.utils import load_all_from_connector
 
     # For connector permission testing, set EE to true.
     global_version.set_ee()
@@ -851,9 +852,9 @@ if __name__ == "__main__":
     ):
         print(slim_doc)
 
-    for doc in load_all_docs_from_checkpoint_connector(
+    for doc in load_all_from_connector(
         connector=connector,
         start=start,
         end=end,
-    ):
+    ).documents:
         print(doc)

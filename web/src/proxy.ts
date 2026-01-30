@@ -11,7 +11,7 @@ const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
 const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
 // Protected route prefixes (require authentication)
-const PROTECTED_ROUTES = ["/chat", "/admin", "/assistants", "/connector"];
+const PROTECTED_ROUTES = ["/app", "/admin", "/assistants", "/connector"];
 
 // Public route prefixes (no authentication required)
 const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
@@ -21,7 +21,7 @@ const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 export const config = {
   matcher: [
     // Auth-protected routes (for middleware auth check)
-    "/chat/:path*",
+    "/app/:path*",
     "/admin/:path*",
     "/assistants/:path*",
     "/connector/:path*",
@@ -58,28 +58,24 @@ export async function proxy(request: NextRequest) {
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
-  // Skip auth checks entirely if auth is disabled
-  if (SERVER_SIDE_ONLY__AUTH_TYPE !== AuthType.DISABLED) {
-    const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-      pathname.startsWith(route)
-    );
-    const isPublicRoute = PUBLIC_ROUTES.some((route) =>
-      pathname.startsWith(route)
-    );
+  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
+  const isPublicRoute = PUBLIC_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
 
-    if (isProtectedRoute && !isPublicRoute) {
-      const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
-      const anonymousCookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME);
+  if (isProtectedRoute && !isPublicRoute) {
+    const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
+    const anonymousCookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME);
 
-      // Allow access if user has either a regular auth cookie or anonymous user cookie
-      if (!authCookie && !anonymousCookie) {
-        const loginUrl = new URL("/auth/login", request.url);
-        // Preserve full URL including query params and hash for deep linking
-        const fullPath =
-          pathname + request.nextUrl.search + request.nextUrl.hash;
-        loginUrl.searchParams.set("next", fullPath);
-        return NextResponse.redirect(loginUrl);
-      }
+    // Allow access if user has either a regular auth cookie or anonymous user cookie
+    if (!authCookie && !anonymousCookie) {
+      const loginUrl = new URL("/auth/login", request.url);
+      // Preserve full URL including query params and hash for deep linking
+      const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
+      loginUrl.searchParams.set("next", fullPath);
+      return NextResponse.redirect(loginUrl);
     }
   }
 

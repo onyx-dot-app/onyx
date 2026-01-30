@@ -5,7 +5,7 @@
 //
 // This is useful in determining what `SidebarTab` should be active, for example.
 
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { usePathname, useSearchParams } from "next/navigation";
 
 export type AppFocusType =
@@ -61,12 +61,12 @@ export default function useAppFocus(): AppFocus {
   const searchParams = useSearchParams();
 
   // Check if we're on the user settings page
-  if (pathname.startsWith("/chat/settings")) {
+  if (pathname.startsWith("/app/settings")) {
     return new AppFocus("user-settings");
   }
 
   // Check if we're on the agents page
-  if (pathname.startsWith("/chat/agents")) {
+  if (pathname.startsWith("/app/agents")) {
     return new AppFocus("more-agents");
   }
 

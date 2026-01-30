@@ -7,7 +7,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.models import Document
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 def _make_connector(scoped_token: bool = False) -> JiraConnector:
@@ -77,11 +77,11 @@ def test_jira_connector_basic_scoped(
 
 
 def _test_jira_connector_basic(jira_connector: JiraConnector) -> None:
-    docs = load_all_docs_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=jira_connector,
         start=0,
         end=time.time(),
-    )
+    ).documents
     assert len(docs) == 2
 
     # Find story and epic
@@ -171,11 +171,11 @@ def test_jira_connector_with_jql(
     This test verifies that when a JQL query is provided, only issues matching the query are returned.
     The JQL query used is "project = \'AS\' AND issuetype = Story", which should only return Story-type issues.
     """
-    docs = load_all_docs_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=jira_connector_with_jql,
         start=0,
         end=time.time(),
-    )
+    ).documents
 
     # Should only return Story-type issues
     assert len(docs) == 1

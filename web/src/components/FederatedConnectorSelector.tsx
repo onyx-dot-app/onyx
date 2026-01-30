@@ -5,7 +5,7 @@ import {
   federatedSourceToRegularSource,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Label } from "@/components/ui/label";
+import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -128,7 +128,11 @@ export const FederatedConnectorSelector = ({
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">
-      {label && <Label className="text-base font-medium">{label}</Label>}
+      {label && (
+        <Label>
+          <Text>{label}</Text>
+        </Label>
+      )}
 
       <Text as="p" mainUiMuted text03>
         Documents from selected federated connectors will be searched in

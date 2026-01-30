@@ -66,7 +66,7 @@ class TestGetOllamaAvailableModels:
             mock_httpx.post.return_value = mock_post_response
 
             request = OllamaModelsRequest(api_base="http://localhost:11434")
-            results = get_ollama_available_models(request, None, mock_session)
+            results = get_ollama_available_models(request, MagicMock(), mock_session)
 
             assert len(results) == 3
             assert all(isinstance(r, OllamaFinalModelResponse) for r in results)
@@ -105,7 +105,7 @@ class TestGetOllamaAvailableModels:
                 api_base="http://localhost:11434",
                 provider_name="my-ollama",
             )
-            get_ollama_available_models(request, None, mock_session)
+            get_ollama_available_models(request, MagicMock(), mock_session)
 
             # Verify DB operations were called
             assert mock_session.execute.call_count == 3  # 3 models inserted
@@ -131,7 +131,7 @@ class TestGetOllamaAvailableModels:
             mock_httpx.post.return_value = mock_post_response
 
             request = OllamaModelsRequest(api_base="http://localhost:11434")
-            get_ollama_available_models(request, None, mock_session)
+            get_ollama_available_models(request, MagicMock(), mock_session)
 
             # No DB operations should happen
             mock_session.execute.assert_not_called()
@@ -183,7 +183,9 @@ class TestGetOpenRouterAvailableModels:
                 api_base="https://openrouter.ai/api/v1",
                 api_key="test-key",
             )
-            results = get_openrouter_available_models(request, None, mock_session)
+            results = get_openrouter_available_models(
+                request, MagicMock(), mock_session
+            )
 
             assert len(results) == 3
             assert all(isinstance(r, OpenRouterFinalModelResponse) for r in results)
@@ -207,7 +209,9 @@ class TestGetOpenRouterAvailableModels:
                 api_base="https://openrouter.ai/api/v1",
                 api_key="test-key",
             )
-            results = get_openrouter_available_models(request, None, mock_session)
+            results = get_openrouter_available_models(
+                request, MagicMock(), mock_session
+            )
 
             # Models with "image" in modality should have vision support
             claude = next(r for r in results if "claude" in r.name.lower())
@@ -243,7 +247,7 @@ class TestGetOpenRouterAvailableModels:
                 api_key="test-key",
                 provider_name="my-openrouter",
             )
-            get_openrouter_available_models(request, None, mock_session)
+            get_openrouter_available_models(request, MagicMock(), mock_session)
 
             # Verify DB operations were called
             assert mock_session.execute.call_count == 3  # 3 models inserted
@@ -281,7 +285,7 @@ class TestGetOpenRouterAvailableModels:
                 api_key="test-key",
                 provider_name="my-openrouter",
             )
-            get_openrouter_available_models(request, None, mock_session)
+            get_openrouter_available_models(request, MagicMock(), mock_session)
 
             # Only 2 new models should be inserted (claude already exists)
             assert mock_session.execute.call_count == 2
@@ -304,7 +308,7 @@ class TestGetOpenRouterAvailableModels:
                 api_base="https://openrouter.ai/api/v1",
                 api_key="test-key",
             )
-            get_openrouter_available_models(request, None, mock_session)
+            get_openrouter_available_models(request, MagicMock(), mock_session)
 
             # No DB operations should happen
             mock_session.execute.assert_not_called()

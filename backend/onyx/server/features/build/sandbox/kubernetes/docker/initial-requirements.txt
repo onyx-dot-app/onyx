@@ -1,0 +1,17 @@
+google-genai>=1.0.0
+matplotlib==3.9.1
+matplotlib-inline>=0.1.7
+matplotlib-venn>=1.1.2
+numpy==1.26.4
+opencv-python>=4.11.0.86
+openpyxl>=3.1.5
+pandas==2.2.2
+pdfplumber>=0.11.7
+Pillow>=10.0.0
+pydantic>=2.11.9
+python-pptx>=1.0.2
+scikit-image>=0.25.2
+scikit-learn>=1.7.2
+scipy>=1.16.2
+seaborn>=0.13.2
+xgboost>=3.0.5

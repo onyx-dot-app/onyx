@@ -129,6 +129,7 @@ def test_jira_doc_sync(
         actual_docs = {
             doc.doc_id: DocExternalAccessSet.from_doc_external_access(doc)
             for doc in doc_sync_iter
+            if isinstance(doc, DocExternalAccess)
         }
         assert expected_docs == actual_docs, (
             f"Expected docs: {expected_docs}\n" f"Actual docs: {actual_docs}"
@@ -214,6 +215,8 @@ def test_jira_doc_sync_with_specific_permissions(
         _EXPECTED_USER_GROUP_IDS = set(["jira-users-danswerai"])
 
         for doc in docs:
+            if not isinstance(doc, DocExternalAccess):
+                continue
             assert doc.doc_id.startswith("https://danswerai.atlassian.net/browse/SUP-")
             # SUP project has specific users assigned, not applicationRole
             assert (

@@ -11,6 +11,7 @@ from onyx.connectors.hubspot.connector import AVAILABLE_OBJECT_TYPES
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 
 
 class TestHubSpotConnector:
@@ -94,7 +95,9 @@ class TestHubSpotConnector:
         # Collect a few batches to test different object types
         batch_count = 0
         for batch in document_batches:
-            all_docs.extend(batch)
+            all_docs.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
             batch_count += 1
             if (
                 batch_count >= 3 or len(all_docs) >= 20
@@ -161,6 +164,8 @@ class TestHubSpotConnector:
 
         for batch in document_batches:
             for doc in batch:
+                if isinstance(doc, HierarchyNode):
+                    continue
                 if len(doc.sections) > 1:
                     found_multi_section_doc = True
 
@@ -225,6 +230,8 @@ class TestHubSpotConnector:
 
             # Check that documents have proper timestamps
             for doc in first_batch:
+                if isinstance(doc, HierarchyNode):
+                    continue
                 assert doc.doc_updated_at is not None
                 # Note: We don't strictly enforce the time range here since
                 # the test data might not have recent updates
@@ -244,8 +251,12 @@ class TestHubSpotConnector:
         # Collect several batches to ensure we see all object types
         batch_count = 0
         for batch in document_batches:
-            all_docs.extend(batch)
+            all_docs.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
             for doc in batch:
+                if isinstance(doc, HierarchyNode):
+                    continue
                 object_types_found.add(doc.metadata["object_type"])
 
             batch_count += 1
@@ -362,7 +373,9 @@ class TestHubSpotConnector:
         # Collect a few batches
         batch_count = 0
         for batch in document_batches:
-            all_docs.extend(batch)
+            all_docs.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
             batch_count += 1
             if batch_count >= 3 or len(all_docs) >= 10:
                 break
@@ -392,8 +405,12 @@ class TestHubSpotConnector:
         # Collect a few batches
         batch_count = 0
         for batch in document_batches:
-            all_docs.extend(batch)
+            all_docs.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
             for doc in batch:
+                if isinstance(doc, HierarchyNode):
+                    continue
                 object_types_found.add(doc.metadata["object_type"])
             batch_count += 1
             if batch_count >= 3 or len(all_docs) >= 10:
@@ -433,7 +450,9 @@ class TestHubSpotConnector:
         # Try to collect batches
         batch_count = 0
         for batch in document_batches:
-            all_docs.extend(batch)
+            all_docs.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
             batch_count += 1
             if batch_count >= 2:  # Don't wait too long
                 break
@@ -462,7 +481,9 @@ class TestHubSpotConnector:
         # Collect a few batches
         batch_count = 0
         for batch in document_batches:
-            all_docs.extend(batch)
+            all_docs.extend(
+                [doc for doc in batch if not isinstance(doc, HierarchyNode)]
+            )
             batch_count += 1
             if batch_count >= 2 or len(all_docs) >= 5:
                 break
@@ -559,6 +580,7 @@ class TestHubSpotConnector:
             assert len(first_batch) == 1
 
             doc = first_batch[0]
+            assert not isinstance(doc, HierarchyNode)
             assert doc.id == "hubspot_ticket_12345"
             assert doc.semantic_identifier == "Test Ticket"
 

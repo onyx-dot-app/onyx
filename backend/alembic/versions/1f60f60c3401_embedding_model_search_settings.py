@@ -10,8 +10,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
-
 # revision identifiers, used by Alembic.
 revision = "1f60f60c3401"
 down_revision = "f17bf3b0d9f1"
@@ -66,7 +64,7 @@ def upgrade() -> None:
             "num_rerank",
             sa.Integer(),
             nullable=False,
-            server_default=str(NUM_POSTPROCESSED_RESULTS),
+            server_default=str(20),
         ),
     )
 

@@ -20,6 +20,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.connectors.zulip.schemas import GetMessagesResponse
 from onyx.connectors.zulip.schemas import Message
@@ -198,7 +199,7 @@ class ZulipConnector(LoadConnector, PollConnector):
         # and go backwards.
         anchor = "newest"
 
-        docs = []
+        docs: list[Document | HierarchyNode] = []
         for doc in self._get_docs(anchor=anchor, start=start):
             docs.append(doc)
             if len(docs) == self.batch_size:

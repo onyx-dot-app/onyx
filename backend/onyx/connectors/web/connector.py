@@ -34,6 +34,7 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
@@ -54,7 +55,7 @@ class ScrapeSessionContext:
         self.visited_links: set[str] = set()
         self.content_hashes: set[int] = set()
 
-        self.doc_batch: list[Document] = []
+        self.doc_batch: list[Document | HierarchyNode] = []
 
         self.at_least_one_doc: bool = False
         self.last_error: str | None = None
