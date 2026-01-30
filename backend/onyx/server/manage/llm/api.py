@@ -184,6 +184,7 @@ def test_llm_configuration(
     # the api key is sanitized if we are testing a provider already in the system
 
     test_api_key = test_llm_request.api_key
+    test_custom_config = test_llm_request.custom_config
     if test_llm_request.name:
         # NOTE: we are querying by name. we probably should be querying by an invariant id, but
         # as it turns out the name is not editable in the UI and other code also keys off name,
@@ -201,6 +202,8 @@ def test_llm_configuration(
                 api_key_changed=False,
             )
             test_api_key = existing_provider.api_key
+        if existing_provider and not test_llm_request.custom_config_changed:
+            test_custom_config = existing_provider.custom_config
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -212,7 +215,7 @@ def test_llm_configuration(
         api_key=test_api_key,
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
-        custom_config=test_llm_request.custom_config,
+        custom_config=test_custom_config,
         deployment_name=test_llm_request.deployment_name,
         max_input_tokens=max_input_tokens,
     )
@@ -343,6 +346,8 @@ def put_llm_provider(
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
         llm_provider_upsert_request.api_key = existing_provider.api_key
+    if existing_provider and not llm_provider_upsert_request.custom_config_changed:
+        llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (

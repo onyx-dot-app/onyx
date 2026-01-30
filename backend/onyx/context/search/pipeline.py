@@ -46,6 +46,9 @@ def _build_index_filters(
     query: str | None = None,
     llm: LLM | None = None,
     bypass_acl: bool = False,
+    # Assistant knowledge filters
+    attached_document_ids: list[str] | None = None,
+    hierarchy_node_ids: list[int] | None = None,
 ) -> IndexFilters:
     if auto_detect_filters and (llm is None or query is None):
         raise RuntimeError("LLM and query are required for auto detect filters")
@@ -113,6 +116,9 @@ def _build_index_filters(
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
+        # Assistant knowledge filters
+        attached_document_ids=attached_document_ids,
+        hierarchy_node_ids=hierarchy_node_ids,
     )
 
     return final_filters
@@ -265,6 +271,18 @@ def search_pipeline(
         persona.search_start_date if persona else None
     )
 
+    # Extract assistant knowledge filters from persona
+    attached_document_ids: list[str] | None = (
+        [doc.id for doc in persona.attached_documents]
+        if persona and persona.attached_documents
+        else None
+    )
+    hierarchy_node_ids: list[int] | None = (
+        [node.id for node in persona.hierarchy_nodes]
+        if persona and persona.hierarchy_nodes
+        else None
+    )
+
     filters = _build_index_filters(
         user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
@@ -277,6 +295,8 @@ def search_pipeline(
         query=chunk_search_request.query,
         llm=llm,
         bypass_acl=chunk_search_request.bypass_acl,
+        attached_document_ids=attached_document_ids,
+        hierarchy_node_ids=hierarchy_node_ids,
     )
 
     query_keywords = strip_stopwords(chunk_search_request.query)
