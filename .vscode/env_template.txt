@@ -6,8 +6,8 @@
 # processes.
 
 
-# For local dev, often user Authentication is not needed.
-AUTH_TYPE=disabled
+AUTH_TYPE=basic
+DEV_MODE=true
 
 
 # Always keep these on for Dev.
@@ -35,7 +35,6 @@ GEN_AI_API_KEY=<REPLACE THIS>
 OPENAI_API_KEY=<REPLACE THIS>
 # If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper.
 GEN_AI_MODEL_VERSION=gpt-4o
-FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
 
 # Python stuff
