@@ -160,8 +160,6 @@ def transform_vespa_chunks_to_opensearch_chunks(
 
         # This should exist; fail loudly if it does not.
         chunk_index: int = vespa_chunk[CHUNK_ID]
-        if not chunk_index:
-            raise ValueError("Missing chunk_index in Vespa chunk.")
 
         title: str | None = vespa_chunk.get(TITLE)
         # WARNING: Should supply format.tensors=short-value to the Vespa client

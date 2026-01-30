@@ -1,5 +1,6 @@
 """Celery tasks for migrating documents from Vespa to OpenSearch."""
 
+import traceback
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -117,6 +118,8 @@ def check_for_documents_for_opensearch_migration_task(
         )
         return None
 
+    task_logger.info("Checking for documents for OpenSearch migration.")
+
     r = get_redis_client()
 
     # Use a lock to prevent overlapping tasks. Only this task or
@@ -176,6 +179,9 @@ def check_for_documents_for_opensearch_migration_task(
             # Create the migration records for the next batch of documents with
             # status PENDING.
             create_opensearch_migration_records_with_commit(db_session, document_ids)
+            task_logger.info(
+                f"Created {len(document_ids)} migration records for the next batch of documents."
+            )
     except Exception:
         task_logger.exception("Error in the OpenSearch migration check task.")
         return False
@@ -222,6 +228,8 @@ def migrate_documents_from_vespa_to_opensearch_task(
             "OpenSearch migration is not enabled, skipping trying to migrate documents from Vespa to OpenSearch."
         )
         return None
+
+    task_logger.info("Trying to migrate documents from Vespa to OpenSearch.")
 
     r = get_redis_client()
 
@@ -285,6 +293,10 @@ def migrate_documents_from_vespa_to_opensearch_task(
                 large_chunks_enabled=False,
             )
 
+            task_logger.info(
+                f"Trying to migrate {len(records_needing_migration)} documents from Vespa to OpenSearch."
+            )
+
             for record in records_needing_migration:
                 try:
                     # If the Document's chunk count is not known, it was
@@ -316,10 +328,11 @@ def migrate_documents_from_vespa_to_opensearch_task(
                         )
 
                     record.status = OpenSearchDocumentMigrationStatus.COMPLETED
-                except Exception as e:
+                except Exception:
                     record.status = OpenSearchDocumentMigrationStatus.FAILED
-                    record.error_message = (
-                        f"Attempt {record.attempts_count + 1}: {str(e)}"
+                    record.error_message = f"Attempt {record.attempts_count + 1}:\n{traceback.format_exc()}"
+                    task_logger.exception(
+                        f"Error migrating document {record.document_id} from Vespa to OpenSearch."
                     )
                 finally:
                     record.attempts_count += 1

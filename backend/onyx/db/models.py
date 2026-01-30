@@ -951,6 +951,9 @@ class OpenSearchTenantMigrationRecord(Base):
     num_times_observed_no_additional_docs_to_migrate: Mapped[int] = mapped_column(
         Integer, default=0
     )
+    last_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class KGEntityType(Base):

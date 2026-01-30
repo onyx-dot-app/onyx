@@ -21,11 +21,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
 # opensearch. By default it emits INFO-level logs for every request.
-# TODO(andrei): I don't think this is working as intended, I still see spam in
-# logs. The module name is probably wrong or opensearchpy initializes a logger
-# dynamically along with an instance of a client class. Look at the constructor
-# for OpenSearch.
-opensearch_logger = logging.getLogger("opensearchpy")
+# The opensearch-py library uses "opensearch" as the logger name for HTTP
+# requests (see opensearchpy/connection/base.py)
+opensearch_logger = logging.getLogger("opensearch")
 opensearch_logger.setLevel(logging.WARNING)
 
 
@@ -273,10 +271,12 @@ class OpenSearchClient:
             case "created":
                 return
             case "updated":
-                raise RuntimeError(
-                    f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
-                    "This indicates that a document chunk with that ID already exists, which is not expected."
-                )
+                if not update_if_exists:
+                    raise RuntimeError(
+                        f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
+                        "This indicates that a document chunk with that ID already exists, which is not expected."
+                    )
+                return
             case _:
                 raise RuntimeError(
                     f'Unknown OpenSearch indexing result: "{result_string}".'
