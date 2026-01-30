@@ -16,7 +16,7 @@ const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
 
 // Fade configuration
 const TOP_FADE_HEIGHT = "6rem";
-const TOP_OPAQUE_ZONE = "1.5rem";
+const TOP_OPAQUE_ZONE = "2.5rem";
 const BOTTOM_FADE_HEIGHT = "16px";
 
 export interface ScrollState {
