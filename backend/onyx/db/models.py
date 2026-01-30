@@ -3018,6 +3018,13 @@ class Persona(Base):
         ForeignKey("model_configuration.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # llm_model_provider_override and llm_model_version_override are deprecated and will be removed in a future release
+    llm_model_provider_override: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    llm_model_version_override: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(
         PydanticListType(StarterMessage), nullable=True
     )

@@ -18,20 +18,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add new default_model_configuration_id column with FK
-    op.add_column(
-        "persona",
-        sa.Column("default_model_configuration_id", sa.Integer(), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_persona_default_model_configuration_id",
-        "persona",
-        "model_configuration",
-        ["default_model_configuration_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-
     # We need to migrate from llm_model_provider_override and llm_model_version_override to default_model_configuration_id
     # Migration Strategy:
     # 1. Port over where provider_override + model_version are both present
@@ -92,22 +78,8 @@ def upgrade() -> None:
         )
     )
 
-    # Drop old columns
-    op.drop_column("persona", "llm_model_provider_override")
-    op.drop_column("persona", "llm_model_version_override")
-
 
 def downgrade() -> None:
-    # Re-add old columns
-    op.add_column(
-        "persona",
-        sa.Column("llm_model_version_override", sa.String(), nullable=True),
-    )
-    op.add_column(
-        "persona",
-        sa.Column("llm_model_provider_override", sa.String(), nullable=True),
-    )
-
     # Migrate data back from default_model_configuration_id to old columns
     conn = op.get_bind()
     conn.execute(
@@ -123,9 +95,3 @@ def downgrade() -> None:
         """
         )
     )
-
-    # Drop FK constraint and new column
-    op.drop_constraint(
-        "fk_persona_default_model_configuration_id", "persona", type_="foreignkey"
-    )
-    op.drop_column("persona", "default_model_configuration_id")
