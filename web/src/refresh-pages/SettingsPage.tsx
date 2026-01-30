@@ -35,7 +35,6 @@ import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
-import { AuthType } from "@/lib/constants";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
@@ -59,6 +58,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
+import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
 
 interface PAT {
   id: number;
@@ -1446,22 +1446,29 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <AttachmentItemLayout
+                      <Hoverable
                         key={pat.id}
-                        icon={SvgKey}
-                        title={pat.name}
-                        description={pat.token_display}
-                        middleText={middleText}
-                        rightChildren={
-                          <IconButton
-                            icon={SvgTrash}
-                            onClick={() => setTokenToDelete(pat)}
-                            internal
-                            aria-label={`Delete token ${pat.name}`}
-                          />
-                        }
+                        asChild
+                        nonInteractive
                         variant="secondary"
-                      />
+                      >
+                        <HoverableContainer rounded="rounded-12" padding={0}>
+                          <AttachmentItemLayout
+                            icon={SvgKey}
+                            title={pat.name}
+                            description={pat.token_display}
+                            middleText={middleText}
+                            rightChildren={
+                              <IconButton
+                                icon={SvgTrash}
+                                onClick={() => setTokenToDelete(pat)}
+                                internal
+                                aria-label={`Delete token ${pat.name}`}
+                              />
+                            }
+                          />
+                        </HoverableContainer>
+                      </Hoverable>
                     );
                   })}
                 </Section>

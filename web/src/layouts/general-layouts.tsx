@@ -245,14 +245,15 @@ function LineItemLayout({
         {loading ? (
           <div className="line-item-layout-skeleton-title" />
         ) : (
-          <Text
+          <Truncated
             mainContentEmphasis={!isCompact && !isMini}
             secondaryBody={isMini}
+            mainUiAction={variant === "secondary"}
             text03={isMuted}
             className="line-item-layout-title"
           >
             {title}
-          </Text>
+          </Truncated>
         )}
 
         {/* Row 2: Description (column 2, or column 1 if no icon) */}
@@ -288,12 +289,12 @@ function LineItemLayout({
   );
 }
 
-export interface AttachmentItemLayoutProps
-  // Omitted because this interface mandates them to be defined.
-  extends Omit<LineItemLayoutProps, "description" | "icon"> {
+export interface AttachmentItemLayoutProps {
+  title: string;
   description: string;
   icon: React.FunctionComponent<IconProps>;
-  variant?: "primary" | "secondary";
+  middleText?: string;
+  rightChildren?: React.ReactNode;
 }
 function AttachmentItemLayout({
   title,
@@ -301,18 +302,14 @@ function AttachmentItemLayout({
   icon: Icon,
   middleText,
   rightChildren,
-  variant = "primary",
 }: AttachmentItemLayoutProps) {
-  const content = (
+  return (
     <Section flexDirection="row" gap={0.25} padding={0.25}>
-      <div
-        className={cn(
-          "h-[2.25rem] aspect-square",
-          variant === "primary" && "bg-background-tint-02 rounded-08"
-        )}
-      >
+      <div className={cn("h-[2.25rem] aspect-square rounded-08")}>
         <Section>
-          <Icon className="attachment-button__icon" />
+          <div className="attachment-button__icon-wrapper">
+            <Icon className="attachment-button__icon" />
+          </div>
         </Section>
       </div>
       <LineItemLayout
@@ -328,12 +325,6 @@ function AttachmentItemLayout({
         variant="secondary"
       />
     </Section>
-  );
-
-  if (variant === "primary") return content;
-
-  return (
-    <div className="w-full bg-background-tint-01 rounded-12">{content}</div>
   );
 }
 

@@ -163,17 +163,20 @@ function HorizontalInputLayout({
  * />
  * ```
  */
+type TitleLayoutVariants = "primary" | "secondary";
 export interface TitleLayoutProps {
   title: string;
   description?: string;
   optional?: boolean;
   center?: boolean;
+  variant?: TitleLayoutVariants;
 }
 function TitleLayout({
   title,
   description,
   optional,
   center,
+  variant = "primary",
 }: TitleLayoutProps) {
   return (
     <Section gap={0} height="fit">
@@ -182,7 +185,11 @@ function TitleLayout({
         justifyContent={center ? "center" : "start"}
         gap={0.25}
       >
-        <Text mainContentEmphasis text04>
+        <Text
+          mainContentEmphasis={variant === "primary"}
+          mainUiAction={variant === "secondary"}
+          text04
+        >
           {title}
         </Text>
         {optional && (
