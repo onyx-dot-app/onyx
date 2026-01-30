@@ -26,6 +26,7 @@ import { ValidSources, DocumentSetSummary } from "@/lib/types";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ConnectedSource } from "@/lib/hierarchy/types";
 import { ProjectFile } from "@/app/app/projects/projectsService";
+import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 
 // Knowledge pane view states
@@ -187,11 +188,6 @@ function KnowledgeTable<T>({
               <Text secondaryBody text03>
                 {column.header}
               </Text>
-              {column.sortable && (
-                <Text text03 secondaryBody>
-                  ↕
-                </Text>
-              )}
             </GeneralLayouts.Section>
           </TableLayouts.TableCell>
         ))}
@@ -412,20 +408,6 @@ function RecentFilesTableContent({
     return allRecentFiles.filter((f) => f.name.toLowerCase().includes(lower));
   }, [allRecentFiles, searchValue]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 60) return `${diffMins} minutes ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays < 30) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
-  };
-
   const columns: KnowledgeTableColumn<ProjectFile>[] = [
     {
       key: "name",
@@ -446,7 +428,7 @@ function RecentFilesTableContent({
       width: 8,
       render: (file) => (
         <Text text03 secondaryBody>
-          {formatDate(file.last_accessed_at || file.created_at)}
+          {timeAgo(file.last_accessed_at || file.created_at)}
         </Text>
       ),
     },
@@ -700,10 +682,10 @@ function KnowledgeMainContent({
         alignItems="center"
         height="auto"
       >
-        <Text as="p" text03 secondaryBody>
+        <Text text03 secondaryBody>
           Add documents or connected sources to use for this agent.
         </Text>
-        <IconButton icon={SvgPlusCircle} onClick={onAddKnowledge} />
+        <IconButton icon={SvgPlusCircle} onClick={onAddKnowledge} tertiary />
       </GeneralLayouts.Section>
     );
   }
