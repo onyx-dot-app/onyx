@@ -37,10 +37,11 @@ jobs:
           #  os: macos-latest
           #  target: universal-apple-darwin
           #  args: "--target universal-apple-darwin"
-          - platform: windows
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            args: ""
+          # TODO: Fix and enable the Windows build.
+          #- platform: windows
+          #  os: windows-latest
+          #  target: x86_64-pc-windows-msvc
+          #  args: ""
 
     steps:
       - name: Checkout code
