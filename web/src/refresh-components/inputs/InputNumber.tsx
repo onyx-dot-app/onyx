@@ -96,7 +96,12 @@ export default function InputNumber({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseInt(e.target.value, 10);
+    const inputValue = e.target.value.trim();
+    if (inputValue === "") {
+      onChange(min ?? 0);
+      return;
+    }
+    const val = parseInt(inputValue, 10);
     if (!isNaN(val)) {
       let newValue = val;
       if (min !== undefined) newValue = Math.max(newValue, min);
