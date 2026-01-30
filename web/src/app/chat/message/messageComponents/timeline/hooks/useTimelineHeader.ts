@@ -60,7 +60,7 @@ export function useTimelineHeader(
         currentStep.packets as SearchToolPacket[]
       );
       let headerText: string;
-      if (searchState.hasResults) {
+      if (searchState.hasResults && !searchState.isInternetSearch) {
         headerText = "Reading";
       } else {
         headerText = searchState.isInternetSearch
@@ -71,7 +71,7 @@ export function useTimelineHeader(
     }
 
     if (packetType === PacketType.FETCH_TOOL_START) {
-      return { headerText: "Opening URLs", hasPackets, userStopped };
+      return { headerText: "Reading", hasPackets, userStopped };
     }
 
     if (packetType === PacketType.PYTHON_TOOL_START) {
