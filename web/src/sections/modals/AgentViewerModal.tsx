@@ -1,27 +1,5 @@
 "use client";
 
-/**
- * AgentViewerModal - A read-only view of an agent's configuration
- *
- * This modal is the view-only counterpart to `AgentEditorPage.tsx`. While
- * AgentEditorPage allows creating and editing agents with forms and inputs,
- * AgentViewerModal displays the same information in a read-only format.
- *
- * Key differences from AgentEditorPage:
- * - Modal presentation instead of full page
- * - Read-only display (no form inputs, switches, or editable fields)
- * - Static text/badges instead of form controls
- * - Designed to be opened from AgentCard when clicking on the card body
- *
- * Sections displayed (mirroring AgentEditorPage):
- * - Agent info: name, description, avatar
- * - Instructions (system prompt)
- * - Conversation starters
- * - Knowledge configuration
- * - Actions/tools
- * - Advanced options (model, sharing status)
- */
-
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -138,13 +116,11 @@ const EMPTY_DOCS: [] = [];
  * Floating ChatInputBar below the AgentViewerModal.
  * On submit, navigates to the agent's chat with the message pre-filled.
  */
-function AgentChatInput({
-  agent,
-  onSubmit,
-}: {
+interface AgentChatInputProps {
   agent: FullPersona;
   onSubmit: (message: string) => void;
-}) {
+}
+function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
   const filterManager = useFilters();
 
@@ -170,10 +146,30 @@ function AgentChatInput({
   );
 }
 
+/**
+ * AgentViewerModal - A read-only view of an agent's configuration
+ *
+ * This modal is the view-only counterpart to `AgentEditorPage.tsx`. While
+ * AgentEditorPage allows creating and editing agents with forms and inputs,
+ * AgentViewerModal displays the same information in a read-only format.
+ *
+ * Key differences from AgentEditorPage:
+ * - Modal presentation instead of full page
+ * - Read-only display (no form inputs, switches, or editable fields)
+ * - Static text/badges instead of form controls
+ * - Designed to be opened from AgentCard when clicking on the card body
+ *
+ * Sections displayed (mirroring AgentEditorPage):
+ * - Agent info: name, description, avatar
+ * - Instructions (system prompt)
+ * - Conversation starters
+ * - Knowledge configuration
+ * - Actions/tools
+ * - Advanced options (model, sharing status)
+ */
 export interface AgentViewerModalProps {
   agent: FullPersona;
 }
-
 export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
   const router = useRouter();
