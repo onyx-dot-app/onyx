@@ -31,12 +31,15 @@ jobs:
           - platform: linux
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            args: "--bundles deb,rpm"
           - platform: macos
             os: macos-latest
             target: universal-apple-darwin
+            args: "--target universal-apple-darwin"
           - platform: windows
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            args: ""
 
     steps:
       - name: Checkout code
@@ -93,7 +96,7 @@ jobs:
 
       - name: Build desktop app
         working-directory: ./desktop
-        run: npm run build
+        run: npx tauri build ${{ matrix.args }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
