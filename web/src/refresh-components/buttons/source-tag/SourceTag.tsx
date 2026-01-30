@@ -68,6 +68,9 @@ export interface SourceTagProps {
 
   /** When true, hides icon, removes background, shows bg-background-tint-02 on hover */
   isMore?: boolean;
+
+  /** When true, no details card, no background, tint-02 on hover */
+  toggleSource?: boolean;
 }
 
 const SourceTagInner = ({
@@ -80,6 +83,7 @@ const SourceTagInner = ({
   className,
   isQuery,
   isMore,
+  toggleSource,
 }: SourceTagProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -121,8 +125,8 @@ const SourceTagInner = ({
       className={cn(
         "group inline-flex items-center cursor-pointer transition-all duration-150",
         "appearance-none border-none",
-        !isMore && "bg-background-tint-02",
-        isMore && "hover:bg-background-tint-02",
+        !isMore && !toggleSource && "bg-background-tint-02",
+        (isMore || toggleSource) && "hover:bg-background-tint-02",
         isOpen && "bg-background-tint-inverted-03",
         !showDetailsCard && !isQuery && "hover:bg-background-tint-inverted-03",
         styles.container,
@@ -238,7 +242,7 @@ const SourceTagInner = ({
     </button>
   );
 
-  if (!showDetailsCard) {
+  if (!showDetailsCard || toggleSource) {
     return buttonContent;
   }
 
