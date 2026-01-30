@@ -1,7 +1,7 @@
 """Persona uses model configuration id
 
 Revision ID: 1b5455f99105
-Revises: 81c22b1e2e78
+Revises: e7f8a9b0c1d2
 Create Date: 2026-01-27 19:11:34.510574
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "1b5455f99105"
-down_revision = "81c22b1e2e78"
+down_revision = "e7f8a9b0c1d2"
 branch_labels = None
 depends_on = None
 

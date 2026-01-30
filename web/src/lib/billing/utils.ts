@@ -1,53 +1,32 @@
-import { BillingInformation } from "./interfaces";
-import useSWR, { mutate } from "swr";
+/**
+ * Backwards-compatible exports from billing module.
+ *
+ * New code should import directly from:
+ * - @/lib/billing/interfaces (types)
+ * - @/lib/billing/svc (mutations)
+ * - @/hooks/useBillingInformation (hook)
+ * - @/hooks/useLicense (hook)
+ */
 
-export const updateSubscriptionQuantity = async (seats: number) => {
-  return await fetch("/api/tenants/update-subscription-quantity", {
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+
+// Re-export hook
+export { useBillingInformation } from "@/hooks/useBillingInformation";
+
+// Re-export utilities and types
+export { statusToDisplay, hasActiveSubscription } from "./interfaces";
+export type { BillingInformation } from "./interfaces";
+
+// Legacy function - returns raw Response for backwards compatibility
+export async function fetchCustomerPortal(): Promise<Response> {
+  const url = NEXT_PUBLIC_CLOUD_ENABLED
+    ? "/api/tenants/create-customer-portal-session"
+    : "/api/admin/billing/create-customer-portal-session";
+
+  return fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ quantity: seats }),
   });
-};
-
-export const fetchCustomerPortal = async () => {
-  return await fetch("/api/tenants/create-customer-portal-session", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-};
-
-export const statusToDisplay = (status: string) => {
-  switch (status) {
-    case "trialing":
-      return "Trialing";
-    case "active":
-      return "Active";
-    case "canceled":
-      return "Canceled";
-    default:
-      return "Unknown";
-  }
-};
-
-export const useBillingInformation = () => {
-  const url = "/api/tenants/billing-information";
-  const swrResponse = useSWR<BillingInformation>(url, async (url: string) => {
-    const res = await fetch(url);
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(
-        errorData.message || "Failed to fetch billing information"
-      );
-    }
-    return res.json();
-  });
-
-  return {
-    ...swrResponse,
-    refreshBillingInformation: () => mutate(url),
-  };
-};
+}

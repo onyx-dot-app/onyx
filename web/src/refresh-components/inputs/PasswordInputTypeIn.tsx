@@ -283,6 +283,7 @@ export default function PasswordInputTypeIn({
       variant={disabled ? "disabled" : error ? "error" : undefined}
       showClearButton={showClearButton}
       autoComplete="off"
+      data-ph-no-capture
       rightSection={
         showToggleButton ? (
           <IconButton

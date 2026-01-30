@@ -320,6 +320,7 @@ class KubernetesSandboxManager(SandboxManager):
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
             files_path=None,  # Files are synced after pod creation
+            attachments_path=None,  # Attachments won't exist until session workspace is created
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -363,13 +364,20 @@ class KubernetesSandboxManager(SandboxManager):
                 f"""
 set -e
 
+# Handle SIGTERM for fast container termination
+trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
+
 # Initial sync on startup - sync knowledge files for this user/tenant
 echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
 aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
 
 echo "Initial sync complete, staying alive for incremental syncs"
 # Stay alive - incremental sync commands will be executed via kubectl exec
-sleep infinity
+# Use 'wait' so shell can respond to signals while sleeping
+while true; do
+    sleep 30 &
+    wait $!
+done
 """
             ],
             volume_mounts=[
@@ -410,7 +418,7 @@ sleep infinity
             ],
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "500m", "memory": "1Gi"},
-                limits={"cpu": "2000m", "memory": "4Gi"},
+                limits={"cpu": "2000m", "memory": "6Gi"},
             ),
             # TODO: Re-enable probes when sandbox container runs actual services.
             # Note: Next.js ports are now per-session (dynamic), so container-level

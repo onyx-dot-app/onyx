@@ -29,7 +29,7 @@ TOKEN_BUDGET_UNIT = 1_000
 
 
 def check_token_rate_limits(
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
 ) -> None:
     # short circuit if no rate limits are set up
     # NOTE: result of `any_rate_limit_exists` is cached, so this call is fast 99% of the time
@@ -42,7 +42,7 @@ def check_token_rate_limits(
     return versioned_rate_limit_strategy(user)
 
 
-def _check_token_rate_limits(_: User | None) -> None:
+def _check_token_rate_limits(_: User) -> None:
     _user_is_rate_limited_by_global()
 
 

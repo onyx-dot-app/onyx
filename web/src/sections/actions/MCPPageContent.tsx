@@ -552,6 +552,7 @@ export default function MCPPageContent() {
           onSearchQueryChange={setSearchQuery}
           onAddAction={handleAddServer}
           buttonText="Add MCP Server"
+          barText="Connect MCP server to add custom actions."
         />
       </div>
 

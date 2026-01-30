@@ -225,8 +225,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         tool_id: int,
         db_session: Session,
         emitter: Emitter,
-        # Used for ACLs and federated search
-        user: User | None,
+        # Used for ACLs and federated search, anonymous users only see public docs
+        user: User,
         # Used for filter settings
         persona: Persona,
         llm: LLM,

@@ -277,7 +277,7 @@ def extract_headers(
 
 
 def create_temporary_persona(
-    persona_config: PersonaOverrideConfig, db_session: Session, user: User | None = None
+    persona_config: PersonaOverrideConfig, db_session: Session, user: User
 ) -> Persona:
     if not is_user_admin(user):
         raise HTTPException(

@@ -43,7 +43,7 @@ router = APIRouter(prefix="/onyx-api", tags=PUBLIC_API_TAGS)
 @router.get("/connector-docs/{cc_pair_id}")
 def get_docs_by_connector_credential_pair(
     cc_pair_id: int,
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
     db_docs = get_documents_by_cc_pair(cc_pair_id=cc_pair_id, db_session=db_session)
@@ -59,7 +59,7 @@ def get_docs_by_connector_credential_pair(
 
 @router.get("/ingestion")
 def get_ingestion_docs(
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[DocMinimalInfo]:
     db_docs = get_ingestion_documents(db_session)
@@ -76,7 +76,7 @@ def get_ingestion_docs(
 @router.post("/ingestion")
 def upsert_ingestion_doc(
     doc_info: IngestionDocument,
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> IngestionResult:
     tenant_id = get_current_tenant_id()
@@ -178,7 +178,7 @@ def upsert_ingestion_doc(
 @router.delete("/ingestion/{document_id}")
 def delete_ingestion_doc(
     document_id: str,
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     tenant_id = get_current_tenant_id()

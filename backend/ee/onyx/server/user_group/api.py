@@ -31,10 +31,10 @@ router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 
 @router.get("/admin/user-group")
 def list_user_groups(
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
-    if user is None or user.role == UserRole.ADMIN:
+    if user.role == UserRole.ADMIN:
         user_groups = fetch_user_groups(db_session, only_up_to_date=False)
     else:
         user_groups = fetch_user_groups_for_user(
@@ -48,7 +48,7 @@ def list_user_groups(
 @router.post("/admin/user-group")
 def create_user_group(
     user_group: UserGroupCreate,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -66,7 +66,7 @@ def create_user_group(
 def patch_user_group(
     user_group_id: int,
     user_group_update: UserGroupUpdate,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -86,7 +86,7 @@ def patch_user_group(
 def add_users(
     user_group_id: int,
     add_users_request: AddUsersToUserGroupRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -106,7 +106,7 @@ def add_users(
 def set_user_curator(
     user_group_id: int,
     set_curator_request: SetCuratorRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -124,7 +124,7 @@ def set_user_curator(
 @router.delete("/admin/user-group/{user_group_id}")
 def delete_user_group(
     user_group_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:

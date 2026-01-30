@@ -44,7 +44,7 @@ def build_hashed_file_key(file: UploadFile) -> str:
 def create_user_files(
     files: List[UploadFile],
     project_id: int | None,
-    user: User | None,
+    user: User,
     db_session: Session,
     link_url: str | None = None,
     temp_id_map: dict[str, str] | None = None,
@@ -70,7 +70,7 @@ def create_user_files(
             id_to_temp_id[str(new_id)] = new_temp_id
         new_file = UserFile(
             id=new_id,
-            user_id=user.id if user else None,
+            user_id=user.id,
             file_id=file_path,
             name=file.filename,
             token_count=categorized_files.acceptable_file_to_token_count[
@@ -102,7 +102,7 @@ def create_user_files(
 def upload_files_to_user_files_with_indexing(
     files: List[UploadFile],
     project_id: int | None,
-    user: User | None,
+    user: User,
     temp_id_map: dict[str, str] | None,
     db_session: Session,
 ) -> CategorizedFilesResult:

@@ -33,7 +33,7 @@ basic_router = APIRouter(prefix="/query")
 @admin_router.post("/search")
 def admin_search(
     question: AdminSearchRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> AdminSearchResponse:
     tenant_id = get_current_tenant_id()

@@ -12,7 +12,7 @@ export interface LayoutProps {
  * Build Layout - Minimal wrapper that handles authentication and feature flag check
  *
  * Child routes (/craft and /craft/v1) handle their own UI structure.
- * Redirects to /chat if Onyx Craft is disabled via feature flag.
+ * Redirects to /app if Onyx Craft is disabled via feature flag.
  */
 export default async function Layout({ children }: LayoutProps) {
   noStore();
@@ -28,7 +28,7 @@ export default async function Layout({ children }: LayoutProps) {
   // Only explicit true enables the feature; false or undefined = disabled
   const settings = await fetchSettingsSS();
   if (settings?.settings?.onyx_craft_enabled !== true) {
-    redirect("/chat" as Route);
+    redirect("/app" as Route);
   }
 
   return <>{children}</>;
