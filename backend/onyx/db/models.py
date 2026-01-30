@@ -8,7 +8,6 @@ from uuid import uuid4
 from pydantic import BaseModel
 from sqlalchemy.orm import validates
 
-from onyx.db.enums import ModelFlowType
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 from pydantic import ValidationError
@@ -74,6 +73,7 @@ from onyx.db.enums import (
     MCPServerStatus,
     ThemePreference,
     SwitchoverType,
+    ModelFlowType,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
