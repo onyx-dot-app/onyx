@@ -110,6 +110,9 @@ env:
   # Slack
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 
+  # Discord
+  DISCORD_CONNECTOR_BOT_TOKEN: ${{ secrets.DISCORD_CONNECTOR_BOT_TOKEN }}
+
   # Teams
   TEAMS_APPLICATION_ID: ${{ secrets.TEAMS_APPLICATION_ID }}
   TEAMS_DIRECTORY_ID: ${{ secrets.TEAMS_DIRECTORY_ID }}
