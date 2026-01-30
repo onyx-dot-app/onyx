@@ -23,8 +23,11 @@ export interface ExpandableTextDisplayProps {
   maxLines?: 1 | 2 | 3 | 4 | 5 | 6;
   /** Additional className for the container */
   className?: string;
-  /** Optional custom renderer for content (e.g., markdown). Falls back to plain text. */
-  renderContent?: (content: string) => React.ReactNode;
+  /** Optional custom renderer for content (e.g., markdown). Falls back to plain text.
+   * @param content - The text content to render
+   * @param isExpanded - Whether the content is being rendered in expanded (modal) view
+   */
+  renderContent?: (content: string, isExpanded: boolean) => React.ReactNode;
   /** When true, uses scrollable container with auto-scroll instead of line-clamp */
   isStreaming?: boolean;
 }
@@ -146,7 +149,7 @@ export default function ExpandableTextDisplay({
           : undefined
       }
     >
-      {renderContent!(displayContent ?? content)}
+      {renderContent!(displayContent ?? content, false)}
     </div>
   );
 
@@ -226,7 +229,7 @@ export default function ExpandableTextDisplay({
           {/* Body */}
           <Modal.Body>
             {renderContent ? (
-              renderContent(content)
+              renderContent(content, true)
             ) : (
               <Text as="p" mainUiMuted text03 className="whitespace-pre-wrap">
                 {content}

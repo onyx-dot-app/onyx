@@ -60,8 +60,9 @@ export function StepContainer({
     <div className={cn("flex w-full", className)}>
       <div
         className={cn(
-          "flex flex-col items-center w-9 pt-1",
-          isFirstStep && "pt-2"
+          "flex flex-col items-center w-9",
+          isFirstStep && "pt-0.5",
+          !isFirstStep && "pt-1.5"
         )}
       >
         {/* Icon */}
@@ -96,7 +97,7 @@ export function StepContainer({
       >
         {!hideHeader && header && (
           <div className="flex items-center justify-between pl-2 pr-1 h-8">
-            <Text as="p" mainUiMuted text03>
+            <Text as="p" mainUiMuted text04>
               {header}
             </Text>
 

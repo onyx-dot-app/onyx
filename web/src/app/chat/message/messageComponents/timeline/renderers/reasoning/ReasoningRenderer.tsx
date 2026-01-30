@@ -17,7 +17,10 @@ import {
 } from "@/app/chat/message/messageComponents/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import { mutedTextMarkdownComponents } from "@/app/chat/message/messageComponents/timeline/renderers/sharedMarkdownComponents";
+import {
+  mutedTextMarkdownComponents,
+  collapsedMarkdownComponents,
+} from "@/app/chat/message/messageComponents/timeline/renderers/sharedMarkdownComponents";
 import { SvgCircle } from "@opal/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
@@ -105,11 +108,14 @@ export const ReasoningRenderer: MessageRenderer<
   }, []);
 
   // Markdown renderer callback for ExpandableTextDisplay
+  // Uses collapsed components (no spacing) in collapsed view, normal spacing in expanded modal
   const renderMarkdown = useCallback(
-    (text: string) => (
+    (text: string, isExpanded: boolean) => (
       <MinimalMarkdown
         content={text}
-        components={mutedTextMarkdownComponents}
+        components={
+          isExpanded ? mutedTextMarkdownComponents : collapsedMarkdownComponents
+        }
       />
     ),
     []
