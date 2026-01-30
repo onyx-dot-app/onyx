@@ -24,6 +24,8 @@ aiosignal==1.4.0
     # via aiohttp
 alembic==1.10.4
     # via pytest-alembic
+annotated-doc==0.0.4
+    # via fastapi
 annotated-types==0.7.0
     # via pydantic
 anyio==4.11.0
@@ -123,7 +125,7 @@ executing==2.2.1
     # via stack-data
 faker==37.1.0
     # via onyx
-fastapi==0.116.1
+fastapi==0.128.0
     # via
     #   onyx
     #   onyx-devtools
@@ -546,7 +548,7 @@ sse-starlette==3.0.3
     # via mcp
 stack-data==0.6.3
     # via ipython
-starlette==0.47.2
+starlette==0.49.3
     # via
     #   fastapi
     #   mcp
