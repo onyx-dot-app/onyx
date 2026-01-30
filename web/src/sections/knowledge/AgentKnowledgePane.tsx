@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, memo } from "react";
+import React, { useState, useMemo, useRef, memo, useCallback } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -8,7 +8,6 @@ import { Card } from "@/refresh-components/cards";
 import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
-import Truncated from "@/refresh-components/texts/Truncated";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
@@ -24,10 +23,12 @@ import type { CCPairSummary } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources, DocumentSetSummary } from "@/lib/types";
 import useCCPairs from "@/hooks/useCCPairs";
-import { ConnectedSource } from "@/lib/hierarchy/types";
+import { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import { ProjectFile } from "@/app/app/projects/projectsService";
+import { AttachedDocumentSnapshot } from "@/app/admin/assistants/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
+import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
 
 // Knowledge pane view states
 type KnowledgeView = "main" | "add" | "document-sets" | "sources" | "recent";
@@ -319,73 +320,47 @@ function DocumentSetsTableContent({
   );
 }
 
-// ============================================================================
-// SOURCES TABLE - Table content for connected sources view
-// ============================================================================
-
-interface SourceItem {
-  source: ValidSources;
-  name: string;
-}
-
 interface SourcesTableContentProps {
   source: ValidSources;
-  isSelected: boolean;
-  onToggle: () => void;
+  selectedDocumentIds: string[];
+  onToggleDocument: (documentId: string) => void;
+  onSetDocumentIds: (ids: string[]) => void;
+  selectedFolderIds: number[];
+  onToggleFolder: (folderId: number) => void;
+  onSetFolderIds: (ids: number[]) => void;
+  onDeselectAllDocuments: () => void;
+  onDeselectAllFolders: () => void;
+  initialAttachedDocuments?: AttachedDocumentSnapshot[];
 }
 
 function SourcesTableContent({
   source,
-  isSelected,
-  onToggle,
+  selectedDocumentIds,
+  onToggleDocument,
+  onSetDocumentIds,
+  selectedFolderIds,
+  onToggleFolder,
+  onSetFolderIds,
+  onDeselectAllDocuments,
+  onDeselectAllFolders,
+  initialAttachedDocuments,
 }: SourcesTableContentProps) {
-  const sourceMetadata = getSourceMetadata(source);
-
-  const items: SourceItem[] = [
-    {
-      source,
-      name: `All ${sourceMetadata.displayName} documents`,
-    },
-  ];
-
-  const columns: KnowledgeTableColumn<SourceItem>[] = [
-    {
-      key: "name",
-      header: "Name",
-      sortable: true,
-      render: (item) => {
-        const metadata = getSourceMetadata(item.source);
-        return (
-          <GeneralLayouts.LineItemLayout
-            icon={metadata.icon}
-            title={item.name}
-            variant="secondary"
-          />
-        );
-      },
-    },
-    {
-      key: "lastUpdated",
-      header: "Last Updated",
-      sortable: true,
-      width: 8,
-      render: () => (
-        <Text text03 secondaryBody>
-          —
-        </Text>
-      ),
-    },
-  ];
-
   return (
-    <KnowledgeTable
-      items={items}
-      columns={columns}
-      getItemId={(item) => item.source}
-      selectedIds={isSelected ? [source] : []}
-      onToggleItem={() => onToggle()}
-      emptyMessage="No sources available."
-    />
+    <GeneralLayouts.Section gap={0.5} alignItems="stretch">
+      {/* Hierarchy browser */}
+      <SourceHierarchyBrowser
+        source={source}
+        selectedDocumentIds={selectedDocumentIds}
+        onToggleDocument={onToggleDocument}
+        onSetDocumentIds={onSetDocumentIds}
+        selectedFolderIds={selectedFolderIds}
+        onToggleFolder={onToggleFolder}
+        onSetFolderIds={onSetFolderIds}
+        initialAttachedDocuments={initialAttachedDocuments}
+        onDeselectAllDocuments={onDeselectAllDocuments}
+        onDeselectAllFolders={onDeselectAllFolders}
+      />
+    </GeneralLayouts.Section>
   );
 }
 
@@ -498,6 +473,8 @@ interface KnowledgeTwoColumnViewProps {
   selectedSources: ValidSources[];
   selectedDocumentSetIds: number[];
   selectedFileIds: string[];
+  selectedDocumentIds: string[];
+  selectedFolderIds: number[];
   documentSets: DocumentSetSummary[];
   allRecentFiles: ProjectFile[];
   onNavigateToRecent: () => void;
@@ -506,8 +483,15 @@ interface KnowledgeTwoColumnViewProps {
   onDocumentSetToggle: (id: number) => void;
   onSourceToggle: (source: ValidSources) => void;
   onFileToggle: (fileId: string) => void;
+  onToggleDocument: (documentId: string) => void;
+  onToggleFolder: (folderId: number) => void;
+  onSetDocumentIds: (ids: string[]) => void;
+  onSetFolderIds: (ids: number[]) => void;
+  onDeselectAllDocuments: () => void;
+  onDeselectAllFolders: () => void;
   onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   hasProcessingFiles: boolean;
+  initialAttachedDocuments?: AttachedDocumentSnapshot[];
 }
 
 const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
@@ -517,6 +501,8 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   selectedSources,
   selectedDocumentSetIds,
   selectedFileIds,
+  selectedDocumentIds,
+  selectedFolderIds,
   documentSets,
   allRecentFiles,
   onNavigateToRecent,
@@ -525,8 +511,15 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   onDocumentSetToggle,
   onSourceToggle,
   onFileToggle,
+  onToggleDocument,
+  onToggleFolder,
+  onSetDocumentIds,
+  onSetFolderIds,
+  onDeselectAllDocuments,
+  onDeselectAllFolders,
   onUploadChange,
   hasProcessingFiles,
+  initialAttachedDocuments,
 }: KnowledgeTwoColumnViewProps) {
   return (
     <TableLayouts.TwoColumnLayout minHeight={18.75}>
@@ -553,8 +546,15 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
         {activeView === "sources" && activeSource && (
           <SourcesTableContent
             source={activeSource}
-            isSelected={selectedSources.includes(activeSource)}
-            onToggle={() => onSourceToggle(activeSource)}
+            selectedDocumentIds={selectedDocumentIds}
+            onToggleDocument={onToggleDocument}
+            onSetDocumentIds={onSetDocumentIds}
+            selectedFolderIds={selectedFolderIds}
+            onToggleFolder={onToggleFolder}
+            onSetFolderIds={onSetFolderIds}
+            onDeselectAllDocuments={onDeselectAllDocuments}
+            onDeselectAllFolders={onDeselectAllFolders}
+            initialAttachedDocuments={initialAttachedDocuments}
           />
         )}
         {activeView === "recent" && (
@@ -663,6 +663,8 @@ interface KnowledgeMainContentProps {
   enableKnowledge: boolean;
   hasAnyKnowledge: boolean;
   selectedDocumentSetIds: number[];
+  selectedDocumentIds: string[];
+  selectedFolderIds: number[];
   selectedFileIds: string[];
   selectedSources: ValidSources[];
   documentSets: DocumentSetSummary[];
@@ -677,6 +679,8 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
   enableKnowledge,
   hasAnyKnowledge,
   selectedDocumentSetIds,
+  selectedDocumentIds,
+  selectedFolderIds,
   selectedFileIds,
   selectedSources,
   documentSets,
@@ -714,6 +718,8 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
   // Has knowledge - show preview with count
   const totalSelected =
     selectedDocumentSetIds.length +
+    selectedDocumentIds.length +
+    selectedFolderIds.length +
     selectedFileIds.length +
     selectedSources.length;
 
@@ -752,12 +758,18 @@ interface AgentKnowledgePaneProps {
   documentSets: DocumentSetSummary[];
   selectedDocumentSetIds: number[];
   onDocumentSetIdsChange: (ids: number[]) => void;
+  selectedDocumentIds: string[];
+  onDocumentIdsChange: (ids: string[]) => void;
+  selectedFolderIds: number[];
+  onFolderIdsChange: (ids: number[]) => void;
   selectedFileIds: string[];
   onFileIdsChange: (ids: string[]) => void;
   allRecentFiles: ProjectFile[];
   onFileClick?: (file: ProjectFile) => void;
   onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   hasProcessingFiles: boolean;
+  // Initial attached documents for existing agents (to populate selectedDocumentDetails)
+  initialAttachedDocuments?: AttachedDocumentSnapshot[];
 }
 
 export default function AgentKnowledgePane({
@@ -768,12 +780,17 @@ export default function AgentKnowledgePane({
   documentSets,
   selectedDocumentSetIds,
   onDocumentSetIdsChange,
+  selectedDocumentIds,
+  onDocumentIdsChange,
+  selectedFolderIds,
+  onFolderIdsChange,
   selectedFileIds,
   onFileIdsChange,
   allRecentFiles,
   onFileClick,
   onUploadChange,
   hasProcessingFiles,
+  initialAttachedDocuments,
 }: AgentKnowledgePaneProps) {
   // View state
   const [view, setView] = useState<KnowledgeView>("main");
@@ -794,6 +811,8 @@ export default function AgentKnowledgePane({
   // Check if any knowledge is selected
   const hasAnyKnowledge =
     selectedDocumentSetIds.length > 0 ||
+    selectedDocumentIds.length > 0 ||
+    selectedFolderIds.length > 0 ||
     selectedFileIds.length > 0 ||
     selectedSources.length > 0;
 
@@ -841,6 +860,34 @@ export default function AgentKnowledgePane({
     [selectedFileIds, onFileIdsChange]
   );
 
+  const handleDocumentToggle = useCallback(
+    (documentId: string) => {
+      const newIds = selectedDocumentIds.includes(documentId)
+        ? selectedDocumentIds.filter((id) => id !== documentId)
+        : [...selectedDocumentIds, documentId];
+      onDocumentIdsChange(newIds);
+    },
+    [selectedDocumentIds, onDocumentIdsChange]
+  );
+
+  const handleFolderToggle = useCallback(
+    (folderId: number) => {
+      const newIds = selectedFolderIds.includes(folderId)
+        ? selectedFolderIds.filter((id) => id !== folderId)
+        : [...selectedFolderIds, folderId];
+      onFolderIdsChange(newIds);
+    },
+    [selectedFolderIds, onFolderIdsChange]
+  );
+
+  const handleDeselectAllDocuments = useCallback(() => {
+    onDocumentIdsChange([]);
+  }, [onDocumentIdsChange]);
+
+  const handleDeselectAllFolders = useCallback(() => {
+    onFolderIdsChange([]);
+  }, [onFolderIdsChange]);
+
   // Memoized content based on view - prevents unnecessary re-renders
   const renderedContent = useMemo(() => {
     switch (view) {
@@ -850,6 +897,8 @@ export default function AgentKnowledgePane({
             enableKnowledge={enableKnowledge}
             hasAnyKnowledge={hasAnyKnowledge}
             selectedDocumentSetIds={selectedDocumentSetIds}
+            selectedDocumentIds={selectedDocumentIds}
+            selectedFolderIds={selectedFolderIds}
             selectedFileIds={selectedFileIds}
             selectedSources={selectedSources}
             documentSets={documentSets}
@@ -885,6 +934,8 @@ export default function AgentKnowledgePane({
             selectedSources={selectedSources}
             selectedDocumentSetIds={selectedDocumentSetIds}
             selectedFileIds={selectedFileIds}
+            selectedDocumentIds={selectedDocumentIds}
+            selectedFolderIds={selectedFolderIds}
             documentSets={documentSets}
             allRecentFiles={allRecentFiles}
             onNavigateToRecent={handleNavigateToRecent}
@@ -893,8 +944,15 @@ export default function AgentKnowledgePane({
             onDocumentSetToggle={handleDocumentSetToggle}
             onSourceToggle={handleSourceToggle}
             onFileToggle={handleFileToggle}
+            onToggleDocument={handleDocumentToggle}
+            onToggleFolder={handleFolderToggle}
+            onSetDocumentIds={onDocumentIdsChange}
+            onSetFolderIds={onFolderIdsChange}
+            onDeselectAllDocuments={handleDeselectAllDocuments}
+            onDeselectAllFolders={handleDeselectAllFolders}
             onUploadChange={onUploadChange}
             hasProcessingFiles={hasProcessingFiles}
+            initialAttachedDocuments={initialAttachedDocuments}
           />
         );
 
@@ -907,14 +965,19 @@ export default function AgentKnowledgePane({
     enableKnowledge,
     hasAnyKnowledge,
     selectedDocumentSetIds,
+    selectedDocumentIds,
+    selectedFolderIds,
     selectedFileIds,
     selectedSources,
     documentSets,
     allRecentFiles,
     connectedSources,
     hasProcessingFiles,
+    initialAttachedDocuments,
     onFileClick,
     onUploadChange,
+    onDocumentIdsChange,
+    onFolderIdsChange,
     handleNavigateToAdd,
     handleNavigateToDocumentSets,
     handleNavigateToRecent,
@@ -922,6 +985,10 @@ export default function AgentKnowledgePane({
     handleDocumentSetToggle,
     handleSourceToggle,
     handleFileToggle,
+    handleDocumentToggle,
+    handleFolderToggle,
+    handleDeselectAllDocuments,
+    handleDeselectAllFolders,
   ]);
 
   return (

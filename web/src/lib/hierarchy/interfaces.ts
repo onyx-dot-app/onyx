@@ -48,3 +48,16 @@ export interface ConnectedSource {
   source: ValidSources;
   connectorCount: number;
 }
+
+// Union type for folders and documents in hierarchy tables
+export type HierarchyItem =
+  | { type: "folder"; data: HierarchyNodeSummary }
+  | { type: "document"; data: DocumentSummary };
+
+// Props for hierarchy breadcrumb navigation
+export interface HierarchyBreadcrumbProps {
+  source: ValidSources;
+  path: HierarchyNodeSummary[];
+  onNavigateToRoot: () => void;
+  onNavigateToNode: (node: HierarchyNodeSummary, index: number) => void;
+}

@@ -566,6 +566,11 @@ export default function AgentEditorPage({
         ? "user_knowledge"
         : ("team_knowledge" as "team_knowledge" | "user_knowledge"),
     document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
+    // Individual document IDs from hierarchy browsing
+    document_ids: existingAgent?.attached_documents?.map((doc) => doc.id) ?? [],
+    // Hierarchy node IDs (folders/spaces/channels) for scoped search
+    hierarchy_node_ids:
+      existingAgent?.hierarchy_nodes?.map((node) => node.id) ?? [],
     user_file_ids: existingAgent?.user_file_ids ?? [],
     // Selected sources for the new knowledge UI - derived from document sets
     selected_sources: [] as ValidSources[],
@@ -677,6 +682,8 @@ export default function AgentEditorPage({
     enable_knowledge: Yup.boolean(),
     knowledge_source: Yup.string().oneOf(["team_knowledge", "user_knowledge"]),
     document_set_ids: Yup.array().of(Yup.number()),
+    document_ids: Yup.array().of(Yup.string()),
+    hierarchy_node_ids: Yup.array().of(Yup.number()),
     user_file_ids: Yup.array().of(Yup.string()),
     selected_sources: Yup.array().of(Yup.string()),
     num_chunks: Yup.number()
@@ -815,6 +822,12 @@ export default function AgentEditorPage({
 
         user_file_ids:
           values.enable_knowledge && !teamKnowledge ? values.user_file_ids : [],
+        hierarchy_node_ids:
+          values.enable_knowledge && teamKnowledge
+            ? values.hierarchy_node_ids
+            : [],
+        document_ids:
+          values.enable_knowledge && teamKnowledge ? values.document_ids : [],
 
         system_prompt: values.instructions,
         replace_base_system_prompt: values.replace_base_system_prompt,
@@ -1204,6 +1217,14 @@ export default function AgentEditorPage({
                         onDocumentSetIdsChange={(ids) =>
                           setFieldValue("document_set_ids", ids)
                         }
+                        selectedDocumentIds={values.document_ids}
+                        onDocumentIdsChange={(ids) =>
+                          setFieldValue("document_ids", ids)
+                        }
+                        selectedFolderIds={values.hierarchy_node_ids}
+                        onFolderIdsChange={(ids) =>
+                          setFieldValue("hierarchy_node_ids", ids)
+                        }
                         selectedFileIds={values.user_file_ids}
                         onFileIdsChange={(ids) =>
                           setFieldValue("user_file_ids", ids)
@@ -1218,6 +1239,9 @@ export default function AgentEditorPage({
                           )
                         }
                         hasProcessingFiles={hasProcessingFiles}
+                        initialAttachedDocuments={
+                          existingAgent?.attached_documents
+                        }
                       />
 
                       <Separator noPadding />

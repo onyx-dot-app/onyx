@@ -15,6 +15,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
@@ -23,6 +24,9 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
+from onyx.db.document_access import get_accessible_documents_by_ids
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Document
 from onyx.db.models import DocumentSet
 from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
@@ -300,6 +304,7 @@ def create_update_persona(
             user_file_ids=converted_user_file_ids,
             commit=False,
             hierarchy_node_ids=create_persona_request.hierarchy_node_ids,
+            document_ids=create_persona_request.document_ids,
         )
 
         versioned_update_persona_access = fetch_versioned_implementation(
@@ -415,8 +420,13 @@ def get_minimal_persona_snapshots_for_user(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.labels),
-        selectinload(Persona.document_sets),
+        selectinload(Persona.document_sets)
+        .selectinload(DocumentSet.connector_credential_pairs)
+        .selectinload(ConnectorCredentialPair.connector),
         selectinload(Persona.hierarchy_nodes),
+        selectinload(Persona.attached_documents).selectinload(
+            Document.parent_hierarchy_node
+        ),
         selectinload(Persona.user),
     )
     results = db_session.scalars(stmt).all()
@@ -439,6 +449,7 @@ def get_persona_snapshots_for_user(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.hierarchy_nodes),
+        selectinload(Persona.attached_documents),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -533,8 +544,13 @@ def get_minimal_persona_snapshots_paginated(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.hierarchy_nodes),
+        selectinload(Persona.attached_documents).selectinload(
+            Document.parent_hierarchy_node
+        ),
         selectinload(Persona.labels),
-        selectinload(Persona.document_sets),
+        selectinload(Persona.document_sets)
+        .selectinload(DocumentSet.connector_credential_pairs)
+        .selectinload(ConnectorCredentialPair.connector),
         selectinload(Persona.user),
     )
 
@@ -589,6 +605,7 @@ def get_persona_snapshots_paginated(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.hierarchy_nodes),
+        selectinload(Persona.attached_documents),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -824,6 +841,7 @@ def upsert_persona(
     label_ids: list[int] | None = None,
     user_file_ids: list[UUID] | None = None,
     hierarchy_node_ids: list[int] | None = None,
+    document_ids: list[str] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
     replace_base_system_prompt: bool = False,
@@ -903,6 +921,22 @@ def upsert_persona(
         if not hierarchy_nodes and hierarchy_node_ids:
             raise ValueError("hierarchy_nodes not found")
 
+    # Fetch and attach documents by IDs, filtering for access permissions
+    attached_documents = None
+    if document_ids is not None:
+        user_email = user.email if user else None
+        external_group_ids = (
+            get_user_external_group_ids(db_session, user) if user else []
+        )
+        attached_documents = get_accessible_documents_by_ids(
+            db_session=db_session,
+            document_ids=document_ids,
+            user_email=user_email,
+            external_group_ids=external_group_ids,
+        )
+        if not attached_documents and document_ids:
+            raise ValueError("documents not found or not accessible")
+
     # ensure all specified tools are valid
     if tools:
         validate_persona_tools(tools, db_session)
@@ -968,6 +1002,10 @@ def upsert_persona(
             existing_persona.hierarchy_nodes.clear()
             existing_persona.hierarchy_nodes = hierarchy_nodes or []
 
+        if document_ids is not None:
+            existing_persona.attached_documents.clear()
+            existing_persona.attached_documents = attached_documents or []
+
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
@@ -1009,6 +1047,7 @@ def upsert_persona(
             user_files=user_files or [],
             labels=labels or [],
             hierarchy_nodes=hierarchy_nodes or [],
+            attached_documents=attached_documents or [],
         )
         db_session.add(new_persona)
         persona = new_persona

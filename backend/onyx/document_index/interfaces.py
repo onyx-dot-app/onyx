@@ -93,6 +93,9 @@ class DocumentMetadata:
     external_access: ExternalAccess | None = None
     doc_metadata: dict[str, Any] | None = None
 
+    # The resolved database ID of the parent hierarchy node (folder/container)
+    parent_hierarchy_node_id: int | None = None
+
 
 @dataclass
 class VespaDocumentFields:

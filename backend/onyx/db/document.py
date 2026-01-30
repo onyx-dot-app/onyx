@@ -8,7 +8,6 @@ from datetime import timedelta
 from datetime import timezone
 
 from sqlalchemy import and_
-from sqlalchemy import any_
 from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
@@ -17,12 +16,10 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import tuple_
 from sqlalchemy import update
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST
@@ -30,6 +27,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.document_access import apply_document_access_filter
 from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_commit
 from onyx.db.enums import AccessType
@@ -228,22 +226,6 @@ def get_documents_by_ids(
     return list(documents)
 
 
-def _build_document_access_filter(
-    user_email: str | None,
-    external_group_ids: list[str],
-) -> ColumnElement[bool]:
-    access_filters: list[ColumnElement[bool]] = [DbDocument.is_public.is_(True)]
-    if user_email:
-        access_filters.append(any_(DbDocument.external_user_emails) == user_email)
-    if external_group_ids:
-        access_filters.append(
-            DbDocument.external_user_group_ids.overlap(
-                postgresql.array(external_group_ids)
-            )
-        )
-    return or_(*access_filters)
-
-
 def _apply_document_cursor_filter(
     stmt: Select,
     cursor_last_modified: datetime | None,
@@ -294,7 +276,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     stmt = select(DbDocument).where(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
-    stmt = stmt.where(_build_document_access_filter(user_email, external_group_ids))
+    stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
     stmt = _apply_document_cursor_filter(
         stmt,
         cursor_last_modified=cursor_last_modified,
@@ -306,6 +288,8 @@ def get_accessible_documents_for_hierarchy_node_paginated(
         DbDocument.last_synced.desc().nulls_last(),
         DbDocument.id.desc(),
     )
+    # Use distinct to avoid duplicates when a document belongs to multiple cc_pairs
+    stmt = stmt.distinct()
     stmt = stmt.limit(limit)
     return list(db_session.execute(stmt).scalars().all())
 
@@ -546,6 +530,7 @@ def upsert_documents(
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
                     kg_stage=KGStage.NOT_STARTED,
+                    parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
                     **(
                         {
                             "external_user_emails": list(
@@ -575,6 +560,7 @@ def upsert_documents(
         "primary_owners": insert_stmt.excluded.primary_owners,
         "secondary_owners": insert_stmt.excluded.secondary_owners,
         "doc_metadata": insert_stmt.excluded.doc_metadata,
+        "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
     }
     if includes_permissions:
         # Use COALESCE to preserve existing permissions when new values are NULL.
