@@ -382,6 +382,9 @@ def connector_document_extraction(
         db_credential = index_attempt.connector_credential_pair.credential
         processing_mode = index_attempt.connector_credential_pair.processing_mode
         is_primary = index_attempt.search_settings.status == IndexModelStatus.PRESENT
+        is_connector_public = (
+            index_attempt.connector_credential_pair.access_type == AccessType.PUBLIC
+        )
 
         from_beginning = index_attempt.from_beginning
         has_successful_attempt = (
@@ -603,6 +606,7 @@ def connector_document_extraction(
                             nodes=hierarchy_node_batch,
                             source=db_connector.source,
                             commit=True,
+                            is_connector_public=is_connector_public,
                         )
 
                         # Cache in Redis for fast ancestor resolution during doc processing

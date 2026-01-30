@@ -174,6 +174,109 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
             return val, new_val
 
 
+ST = TypeVar("ST")  # Set element type
+
+
+class ThreadSafeSet(Generic[ST]):
+    """
+    A thread-safe set implementation that uses a lock to ensure thread safety.
+
+    Example usage:
+        # Create a thread-safe set
+        safe_set: ThreadSafeSet[str] = ThreadSafeSet()
+
+        # Basic operations (atomic)
+        safe_set.add("item")
+        if "item" in safe_set:
+            ...
+        safe_set.discard("item")
+
+        # Bulk operations (atomic)
+        safe_set.update({"item1", "item2"})
+
+        # Atomic check-and-add (returns True if item was already present)
+        was_present = safe_set.check_and_add("item")
+    """
+
+    def __init__(self, input_set: set[ST] | None = None) -> None:
+        self._set: set[ST] = input_set.copy() if input_set else set()
+        self.lock = threading.Lock()
+
+    def __contains__(self, item: ST) -> bool:
+        with self.lock:
+            return item in self._set
+
+    def __len__(self) -> int:
+        with self.lock:
+            return len(self._set)
+
+    def __iter__(self) -> Iterator[ST]:
+        # Return a snapshot to avoid modification during iteration
+        with self.lock:
+            return iter(list(self._set))
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        return core_schema.no_info_after_validator_function(
+            cls.validate, handler(set[ST])
+        )
+
+    @classmethod
+    def validate(cls, v: Any) -> "ThreadSafeSet[ST]":
+        if isinstance(v, set):
+            return ThreadSafeSet(v)
+        return v
+
+    def __deepcopy__(self, memo: Any) -> "ThreadSafeSet[ST]":
+        with self.lock:
+            return ThreadSafeSet(copy.deepcopy(self._set))
+
+    def add(self, item: ST) -> None:
+        """Add an item to the set atomically."""
+        with self.lock:
+            self._set.add(item)
+
+    def discard(self, item: ST) -> None:
+        """Remove an item if present, atomically."""
+        with self.lock:
+            self._set.discard(item)
+
+    def remove(self, item: ST) -> None:
+        """Remove an item, raise KeyError if not present, atomically."""
+        with self.lock:
+            self._set.remove(item)
+
+    def clear(self) -> None:
+        """Remove all items from the set atomically."""
+        with self.lock:
+            self._set.clear()
+
+    def copy(self) -> set[ST]:
+        """Return a shallow copy of the set atomically."""
+        with self.lock:
+            return self._set.copy()
+
+    def update(self, *others: set[ST]) -> None:
+        """Update the set with items from other sets atomically."""
+        with self.lock:
+            for other in others:
+                self._set.update(other)
+
+    def check_and_add(self, item: ST) -> bool:
+        """
+        Atomically check if item exists and add it if not.
+        Returns True if the item was already present, False if it was added.
+        This prevents race conditions in check-then-add patterns.
+        """
+        with self.lock:
+            if item in self._set:
+                return True
+            self._set.add(item)
+            return False
+
+
 class CallableProtocol(Protocol):
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
