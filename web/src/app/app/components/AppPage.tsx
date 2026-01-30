@@ -658,6 +658,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               }
               {...getRootProps({ tabIndex: -1 })}
             >
+              {/* Vignette overlay for custom backgrounds */}
+              {hasBackground && (
+                <div
+                  className="absolute z-0 inset-0 pointer-events-none"
+                  style={{
+                    background: `
+                      linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
+                      linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
+                    `,
+                  }}
+                />
+              )}
+
               {/* Semi-transparent overlay for readability when background is set */}
               {!!currentChatSessionId && liveAssistant && hasBackground && (
                 <>
