@@ -55,6 +55,8 @@ import Switch from "@/refresh-components/inputs/Switch";
 import Button from "@/refresh-components/buttons/Button";
 import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import ChatInputBar from "@/app/app/components/input/ChatInputBar";
+import { useFilters, useLlmManager } from "@/lib/hooks";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -130,6 +132,44 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   );
 }
 
+const EMPTY_DOCS: [] = [];
+
+/**
+ * Floating ChatInputBar below the AgentViewerModal.
+ * On submit, navigates to the agent's chat with the message pre-filled.
+ */
+function AgentChatInput({
+  agent,
+  onSubmit,
+}: {
+  agent: FullPersona;
+  onSubmit: (message: string) => void;
+}) {
+  const llmManager = useLlmManager(undefined, agent);
+  const filterManager = useFilters();
+
+  return (
+    <ChatInputBar
+      onSubmit={onSubmit}
+      llmManager={llmManager}
+      chatState="input"
+      filterManager={filterManager}
+      selectedAssistant={agent}
+      selectedDocuments={EMPTY_DOCS}
+      removeDocs={() => {}}
+      stopGenerating={() => {}}
+      handleFileUpload={() => {}}
+      toggleDocumentSidebar={() => {}}
+      currentSessionFileTokenCount={0}
+      availableContextTokens={Infinity}
+      retrievalEnabled={false}
+      deepResearchEnabled={false}
+      toggleDeepResearch={() => {}}
+      disabled={false}
+    />
+  );
+}
+
 export interface AgentViewerModalProps {
   agent: FullPersona;
 }
@@ -138,7 +178,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
   const router = useRouter();
 
-  const handleStarterClick = useCallback(
+  const handleStartChat = useCallback(
     (message: string) => {
       const params = new URLSearchParams({
         [SEARCH_PARAM_NAMES.PERSONA_ID]: String(agent.id),
@@ -197,7 +237,11 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
       open={agentViewerModal.isOpen}
       onOpenChange={agentViewerModal.toggle}
     >
-      <Modal.Content width="md-sm" height="lg">
+      <Modal.Content
+        width="md-sm"
+        height="lg"
+        bottomSlot={<AgentChatInput agent={agent} onSubmit={handleStartChat} />}
+      >
         <Modal.Header
           icon={(props) => <AgentAvatar agent={agent} {...props} size={24} />}
           title={agent.name}
@@ -347,7 +391,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 {agent.starter_messages.map((starter, index) => (
                   <Hoverable
                     key={index}
-                    onClick={() => handleStarterClick(starter.message)}
+                    onClick={() => handleStartChat(starter.message)}
                     variant="secondary"
                     asChild
                   >
