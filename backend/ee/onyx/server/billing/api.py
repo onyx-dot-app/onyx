@@ -27,6 +27,7 @@ import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ee.onyx.auth.users import current_admin_user
@@ -56,6 +57,7 @@ from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
+from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -67,6 +69,63 @@ router = APIRouter(prefix="/admin/billing")
 # Cache for Stripe publishable key to avoid hitting S3 on every request
 _stripe_publishable_key_cache: str | None = None
 _stripe_key_lock = asyncio.Lock()
+
+# Redis key for billing circuit breaker (self-hosted only)
+# When set, billing requests to Stripe are disabled until user manually retries
+BILLING_CIRCUIT_BREAKER_KEY = "billing_circuit_open"
+# Circuit breaker auto-expires after 1 hour (user can manually retry sooner)
+BILLING_CIRCUIT_BREAKER_TTL_SECONDS = 3600
+
+
+def _is_billing_circuit_open() -> bool:
+    """Check if the billing circuit breaker is open (self-hosted only)."""
+    if MULTI_TENANT:
+        return False
+    try:
+        redis_client = get_shared_redis_client()
+        is_open = bool(redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY))
+        logger.debug(
+            f"Circuit breaker check: key={BILLING_CIRCUIT_BREAKER_KEY}, is_open={is_open}"
+        )
+        return is_open
+    except Exception as e:
+        logger.error(f"Failed to check circuit breaker: {e}")
+        return False
+
+
+def _open_billing_circuit() -> None:
+    """Open the billing circuit breaker after a failure (self-hosted only)."""
+    if MULTI_TENANT:
+        return
+    try:
+        redis_client = get_shared_redis_client()
+        redis_client.set(
+            BILLING_CIRCUIT_BREAKER_KEY,
+            "1",
+            ex=BILLING_CIRCUIT_BREAKER_TTL_SECONDS,
+        )
+        # Verify it was set
+        exists = redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY)
+        logger.warning(
+            f"Billing circuit breaker opened (TTL={BILLING_CIRCUIT_BREAKER_TTL_SECONDS}s, "
+            f"verified={exists}). Stripe billing requests are disabled until manually reset."
+        )
+    except Exception as e:
+        logger.error(f"Failed to open circuit breaker: {e}")
+
+
+def _close_billing_circuit() -> None:
+    """Close the billing circuit breaker (re-enable Stripe requests)."""
+    if MULTI_TENANT:
+        return
+    try:
+        redis_client = get_shared_redis_client()
+        redis_client.delete(BILLING_CIRCUIT_BREAKER_KEY)
+        logger.info(
+            "Billing circuit breaker closed. Stripe billing requests re-enabled."
+        )
+    except Exception as e:
+        logger.error(f"Failed to close circuit breaker: {e}")
 
 
 def _get_license_data(db_session: Session) -> str | None:
@@ -102,6 +161,7 @@ async def create_checkout_session(
     license_data = _get_license_data(db_session)
     tenant_id = _get_tenant_id()
     billing_period = request.billing_period if request else "monthly"
+    seats = request.seats if request else None
     email = request.email if request else None
 
     # Build redirect URL for after checkout completion
@@ -110,6 +170,7 @@ async def create_checkout_session(
     try:
         return await create_checkout_service(
             billing_period=billing_period,
+            seats=seats,
             email=email,
             license_data=license_data,
             redirect_url=redirect_url,
@@ -156,6 +217,8 @@ async def get_billing_information(
     """Get billing information for the current subscription.
 
     Returns subscription status and details from Stripe.
+    For self-hosted: If the circuit breaker is open (previous failure),
+    returns a 503 error without making the request.
     """
     license_data = _get_license_data(db_session)
     tenant_id = _get_tenant_id()
@@ -164,12 +227,22 @@ async def get_billing_information(
     if not MULTI_TENANT and not license_data:
         return SubscriptionStatusResponse(subscribed=False)
 
+    # Check circuit breaker (self-hosted only)
+    if _is_billing_circuit_open():
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe connection temporarily disabled. Click 'Connect to Stripe' to retry.",
+        )
+
     try:
         return await get_billing_service(
             license_data=license_data,
             tenant_id=tenant_id,
         )
     except BillingServiceError as e:
+        # Open circuit breaker on connection failures (self-hosted only)
+        if e.status_code in (502, 503, 504):
+            _open_billing_circuit()
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
@@ -182,6 +255,8 @@ async def update_seats(
     """Update the seat count for the current subscription.
 
     Handles Stripe proration and license regeneration via control plane.
+    For self-hosted, the frontend should call /license/claim after a short delay
+    to fetch the regenerated license.
     """
     license_data = _get_license_data(db_session)
     tenant_id = _get_tenant_id()
@@ -191,11 +266,17 @@ async def update_seats(
         raise HTTPException(status_code=400, detail="No license found")
 
     try:
-        return await update_seat_service(
+        result = await update_seat_service(
             new_seat_count=request.new_seat_count,
             license_data=license_data,
             tenant_id=tenant_id,
         )
+
+        # Note: Don't store license here - the control plane may still be processing
+        # the subscription update. The frontend should call /license/claim after a
+        # short delay to get the freshly generated license.
+
+        return result
     except BillingServiceError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
@@ -262,3 +343,31 @@ async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
                 status_code=500,
                 detail="Failed to fetch Stripe publishable key",
             )
+
+
+class ResetConnectionResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post("/reset-connection")
+async def reset_stripe_connection(
+    _: User = Depends(current_admin_user),
+) -> ResetConnectionResponse:
+    """Reset the Stripe connection circuit breaker.
+
+    Called when user clicks "Connect to Stripe" to retry after a previous failure.
+    This clears the circuit breaker flag, allowing billing requests to proceed again.
+    Self-hosted only - cloud deployments don't use the circuit breaker.
+    """
+    if MULTI_TENANT:
+        return ResetConnectionResponse(
+            success=True,
+            message="Circuit breaker not applicable for cloud deployments",
+        )
+
+    _close_billing_circuit()
+    return ResetConnectionResponse(
+        success=True,
+        message="Stripe connection reset. Billing requests re-enabled.",
+    )

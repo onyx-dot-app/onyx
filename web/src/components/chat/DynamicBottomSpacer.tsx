@@ -82,20 +82,24 @@ const DynamicBottomSpacer = React.memo(
     }, [getScrollContainer]);
 
     /**
-     * Get the sticky header height dynamically.
-     * Measures the actual header element if found, falls back to default.
+     * Get the "top offset" that the anchor should sit below.
+     *
+     * The header is positioned *outside* the scroll container,
+     * and the scroll content includes an explicit spacer div for the header height.
+     *
+     * We measure that spacer when present.
      */
-    const getStickyHeaderHeight = useCallback(() => {
+    const getAnchorTopOffsetPx = useCallback(() => {
       const scrollContainer = getScrollContainer();
       if (!scrollContainer) return DEFAULT_ANCHOR_TOP_PADDING_PX;
 
-      // Look for the sticky header element (marked with data-sticky-header)
-      const stickyHeader = scrollContainer.querySelector(
-        "[data-sticky-header]"
+      // Look for the dedicated spacer element that reserves header height.
+      const headerSpacer = scrollContainer.querySelector(
+        "[data-chat-header-spacer]"
       ) as HTMLElement | null;
 
-      if (stickyHeader) {
-        return stickyHeader.offsetHeight;
+      if (headerSpacer) {
+        return headerSpacer.offsetHeight;
       }
 
       return DEFAULT_ANCHOR_TOP_PADDING_PX;
@@ -209,22 +213,22 @@ const DynamicBottomSpacer = React.memo(
       const anchorOffsetInContent =
         anchorVisualOffset + scrollContainer.scrollTop;
 
-      // Measure the sticky header height dynamically
-      const stickyHeaderHeight = getStickyHeaderHeight();
+      // Measure top offset (header spacer height) dynamically
+      const anchorTopOffsetPx = getAnchorTopOffsetPx();
 
-      // Calculate spacer height needed to position anchor just below the sticky header
+      // Calculate spacer height needed to position anchor just below the top offset
       // when scrolled to the absolute bottom.
       //
       // At bottom: scrollTop = scrollHeight - clientHeight = (content + spacer) - viewport
       // Anchor visual position = anchorOffset - scrollTop
-      // We want: anchorOffset - scrollTop = stickyHeaderHeight
+      // We want: anchorOffset - scrollTop = anchorTopOffsetPx
       // So: anchorOffset - (content + spacer - viewport) = stickyHeaderHeight
-      // Solving: spacer = anchorOffset - content + viewport - stickyHeaderHeight
+      // Solving: spacer = anchorOffset - content + viewport - anchorTopOffsetPx
       const spacerHeight =
         anchorOffsetInContent -
         contentHeight +
         viewportHeight -
-        stickyHeaderHeight;
+        anchorTopOffsetPx;
 
       // If spacer height is <= 0, no push-up effect is needed.
       // This naturally handles new chats and short conversations where
@@ -263,7 +267,7 @@ const DynamicBottomSpacer = React.memo(
       anchorNodeId,
       setHeight,
       getScrollContainer,
-      getStickyHeaderHeight,
+      getAnchorTopOffsetPx,
       startObserving,
       stopObserving,
     ]);
