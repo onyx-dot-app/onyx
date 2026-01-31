@@ -25,6 +25,7 @@ import {
   SvgArrowUpDown,
   SvgKeystroke,
 } from "@opal/icons";
+import TextSeparator from "@/refresh-components/TextSeparator";
 
 /**
  * Dynamic footer that shows contextual action labels based on highlighted item type
@@ -328,6 +329,11 @@ export default function ChatSearchCommandMenu({
                   {`Create New Project "${searchValue.trim()}"`}
                 </CommandMenu.Action>
               )}
+
+            {/* No more results separator - shown when no chats/projects to display */}
+            {displayedChats.length === 0 && displayedProjects.length === 0 && (
+              <TextSeparator text="No more results" className="mt-auto mb-2" />
+            )}
           </CommandMenu.List>
 
           <DynamicFooter />
