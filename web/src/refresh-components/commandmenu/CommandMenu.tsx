@@ -544,7 +544,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
     <ScrollIndicatorDiv
       role="listbox"
       aria-label="Command menu options"
-      className="p-1 gap-0 max-h-[60vh] bg-background-tint-01"
+      className="p-1 gap-1 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
       data-command-menu-list
       data-keyboard-nav={isKeyboardNav ? "true" : undefined}
