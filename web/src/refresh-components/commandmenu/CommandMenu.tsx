@@ -105,6 +105,20 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     }
   }, [open]);
 
+  // Auto-highlight first item when menu opens
+  useEffect(() => {
+    if (open) {
+      // Wait for items to render before highlighting
+      const frame = requestAnimationFrame(() => {
+        const items = getOrderedItems();
+        if (items.length > 0 && items[0]) {
+          setHighlightedValue(items[0]);
+        }
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [open]);
+
   // Registration functions (items call on mount)
   const registerItem = useCallback(
     (
@@ -198,7 +212,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
           // Continue normal keyboard navigation
           const currentIndex = highlightedValue
             ? items.indexOf(highlightedValue)
-            : -1;
+            : 0;
           const nextIndex =
             currentIndex < items.length - 1 ? currentIndex + 1 : 0;
           const nextItem = items[nextIndex];
