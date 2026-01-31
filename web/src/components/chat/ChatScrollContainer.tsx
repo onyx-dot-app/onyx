@@ -15,6 +15,9 @@ const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
 const DEFAULT_FADE_THRESHOLD_PX = 80; // 5rem
 const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
 
+// Smooth scroll animation duration estimate (Safari is ~500ms, add buffer).
+const SMOOTH_SCROLL_TIMEOUT_MS = 600;
+
 // Fade configuration
 const TOP_FADE_HEIGHT = "6rem";
 const TOP_OPAQUE_ZONE = "2.5rem";
@@ -88,6 +91,7 @@ const ChatScrollContainer = React.memo(
       const isAtBottomRef = useRef(true); // Ref for use in callbacks
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
       const prevScrollTopRef = useRef(0); // Track scroll position to detect scroll direction
+      const smoothScrollTimeoutRef = useRef<number | null>(null);
       const [isScrollReady, setIsScrollReady] = useState(false);
 
       // Use refs for values that change during streaming to prevent effect re-runs
@@ -123,11 +127,15 @@ const ChatScrollContainer = React.memo(
         };
       }, [buttonThresholdPx, fadeThresholdPx]);
 
-      // Update scroll state and notify parent about button visibility
+      // Update scroll state and notify parent about button visibility.
+      // NOTE: This intentionally does NOT update isAtBottomRef. The ref is only
+      // updated in specific scenarios (handleScroll when user scrolls up/down,
+      // scrollToBottom) to preserve the "follow output" intent even when content
+      // grows. This separation allows the UI state (isAtBottom) to reflect the
+      // visual position while the ref tracks whether auto-scroll should continue.
       const updateScrollState = useCallback(() => {
         const state = getScrollState();
         setIsAtBottom(state.isAtBottom);
-        isAtBottomRef.current = state.isAtBottom; // Keep ref in sync
         setHasContentAbove(state.hasContentAbove);
         setHasContentBelow(state.hasContentBelow);
 
@@ -141,12 +149,19 @@ const ChatScrollContainer = React.memo(
           const container = scrollContainerRef.current;
           if (!container || !endDivRef.current) return;
 
+          // Clear any prior smooth-scroll bookkeeping.
+          if (smoothScrollTimeoutRef.current != null) {
+            clearTimeout(smoothScrollTimeoutRef.current);
+            smoothScrollTimeoutRef.current = null;
+          }
+
           // Mark as auto-scrolling to prevent handleScroll interference
           isAutoScrollingRef.current = true;
 
           // Use scrollTo instead of scrollIntoView for better cross-browser support
           const targetScrollTop =
             container.scrollHeight - container.clientHeight;
+
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Update tracking refs
@@ -155,13 +170,14 @@ const ChatScrollContainer = React.memo(
 
           // For smooth scrolling, keep isAutoScrollingRef true longer
           if (behavior === "smooth") {
-            // Clear after animation likely completes (Safari smooth scroll is ~500ms)
-            setTimeout(() => {
+            // Clear after animation likely completes
+            smoothScrollTimeoutRef.current = window.setTimeout(() => {
               isAutoScrollingRef.current = false;
               if (container) {
                 prevScrollTopRef.current = container.scrollTop;
               }
-            }, 600);
+              smoothScrollTimeoutRef.current = null;
+            }, SMOOTH_SCROLL_TIMEOUT_MS);
           } else {
             isAutoScrollingRef.current = false;
           }
@@ -171,6 +187,16 @@ const ChatScrollContainer = React.memo(
 
       // Expose scrollToBottom via ref
       useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
+
+      // Cleanup timeouts on unmount
+      useEffect(() => {
+        return () => {
+          if (smoothScrollTimeoutRef.current != null) {
+            clearTimeout(smoothScrollTimeoutRef.current);
+            smoothScrollTimeoutRef.current = null;
+          }
+        };
+      }, []);
 
       // Re-evaluate button visibility when at-bottom state changes
       useEffect(() => {
@@ -189,24 +215,32 @@ const ChatScrollContainer = React.memo(
         const scrolledUp = currentScrollTop < prevScrollTopRef.current - 5; // 5px threshold to ignore micro-movements
         prevScrollTopRef.current = currentScrollTop;
 
-        // Only update isAtBottomRef when user explicitly scrolls UP
-        // This prevents content growth or programmatic scrolls from disabling auto-scroll
-        if (scrolledUp) {
-          updateScrollState();
-        } else {
-          // Still update fade overlays, but preserve isAtBottomRef
-          const state = getScrollState();
-          setHasContentAbove(state.hasContentAbove);
-          setHasContentBelow(state.hasContentBelow);
-          // Update button visibility based on actual position
-          onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
+        const state = getScrollState();
+
+        // Only update isAtBottomRef when user explicitly scrolls UP (disable auto-follow),
+        // or when the user returns to the bottom (re-enable auto-follow).
+        //
+        // This prevents content growth / programmatic scrolls from disabling auto-scroll,
+        // but still allows a user scrolling back down to restore "follow output" behavior.
+        if (scrolledUp || state.isAtBottom) {
+          setIsAtBottom(state.isAtBottom);
+          isAtBottomRef.current = state.isAtBottom;
         }
-      }, [updateScrollState, getScrollState]);
+
+        setHasContentAbove(state.hasContentAbove);
+        setHasContentBelow(state.hasContentBelow);
+        onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
+      }, [getScrollState]);
 
       // Watch for content changes (MutationObserver + ResizeObserver)
       useEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
+
+        // Observe the content wrapper when available so we catch layout-driven
+        // height changes (e.g. horizontal scrollbars in code blocks, font loads,
+        // syntax highlight reflows) that don't necessarily trigger DOM mutations.
+        const observedElement = contentWrapperRef.current ?? container;
 
         let rafId: number | null = null;
 
@@ -237,15 +271,15 @@ const ChatScrollContainer = React.memo(
 
         // MutationObserver for content changes
         const mutationObserver = new MutationObserver(onContentChange);
-        mutationObserver.observe(container, {
+        mutationObserver.observe(observedElement, {
           childList: true,
           subtree: true,
           characterData: true,
         });
 
-        // ResizeObserver for container size changes
+        // ResizeObserver for content size/layout changes
         const resizeObserver = new ResizeObserver(onContentChange);
-        resizeObserver.observe(container);
+        resizeObserver.observe(observedElement);
 
         return () => {
           mutationObserver.disconnect();
@@ -321,9 +355,14 @@ const ChatScrollContainer = React.memo(
 
           updateScrollState();
 
-          // Mark as "at bottom" after scrolling to bottom so auto-scroll continues
-          if (isLoadingExistingContent || autoScrollRef.current) {
+          // Auto-follow intent:
+          // - Loading an existing conversation scrolls to bottom and should enable follow.
+          // - Scrolling to an anchor is an explicit “read history” action and should
+          //   disable follow until the user returns to bottom or clicks scroll-to-bottom.
+          if (isLoadingExistingContent) {
             isAtBottomRef.current = true;
+          } else {
+            isAtBottomRef.current = false;
           }
 
           setIsScrollReady(true);
