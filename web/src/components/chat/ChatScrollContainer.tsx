@@ -338,10 +338,8 @@ const ChatScrollContainer = React.memo(
             style={{
               scrollbarGutter: "stable both-edges",
               // Apply mask to fade content opacity at edges
-              ...(contentMask !== "none" && {
-                maskImage: contentMask,
-                WebkitMaskImage: contentMask,
-              }),
+              maskImage: contentMask,
+              WebkitMaskImage: contentMask,
             }}
           >
             <div
