@@ -29,6 +29,12 @@ export interface FrostedDivProps extends React.HTMLAttributes<HTMLDivElement> {
   borderRadius?: string;
 
   /**
+   * Allows the bloom to exceed the container bounds (use care with layouts).
+   * Default to "false"
+   */
+  exceedBounds?: boolean;
+
+  /**
    * Additional classes for the frost overlay element itself
    */
   overlayClassName?: string;
@@ -59,6 +65,7 @@ export default function FrostedDiv({
   blur = "20px",
   backdropBlur = "6px",
   borderRadius = "1rem",
+  exceedBounds = false,
   overlayClassName,
   className,
   style,
@@ -71,6 +78,8 @@ export default function FrostedDiv({
       <div
         className={cn("absolute pointer-events-none", overlayClassName)}
         style={{
+          // Extend beyond bounds to allow blur to bloom outward
+          inset: exceedBounds ? `-${blur}` : undefined,
           borderRadius,
           background: backgroundColor,
           filter: `blur(${blur})`,
