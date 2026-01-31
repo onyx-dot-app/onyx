@@ -17,6 +17,7 @@ depends_on = None
 
 def upgrade() -> None:
     # Add each model config to the text flow, setting the global default if it exists
+    # Exclude models that are part of ImageGenerationConfig
     op.execute(
         """
         INSERT INTO flow_mapping (flow_type, is_default, model_configuration_id)
@@ -29,7 +30,11 @@ def upgrade() -> None:
             mc.id AS model_configuration_id
         FROM model_configuration mc
         LEFT JOIN llm_provider lp
-            ON lp.id = mc.llm_provider_id;
+            ON lp.id = mc.llm_provider_id
+        WHERE NOT EXISTS (
+            SELECT 1 FROM image_generation_config igc
+            WHERE igc.model_configuration_id = mc.id
+        );
         """
     )
 

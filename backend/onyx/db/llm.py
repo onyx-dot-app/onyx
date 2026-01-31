@@ -369,36 +369,83 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
     )
 
 
-def fetch_existing_llm_providers(
+def fetch_existing_llm_providers_supporting_flows(
     db_session: Session,
+    flows: list[ModelFlowType],
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
-    """Fetch all LLM providers with optional filtering.
+    """Fetch LLM providers that have at least one model supporting one of the specified flows.
 
     Args:
         db_session: Database session
+        flows: List of flow types to filter by (providers must have at least one model
+               with a ModelFlow matching any of these flow types)
         only_public: If True, only return public providers
-        exclude_image_generation_providers: If True, exclude providers that are
-            used for image generation configs
+        exclude_image_generation_providers: If True, only match on flows.
+            If False, include image generation providers in addition to
+            flow-filtered providers.
+
+    Returns:
+        List of LLM providers matching the criteria
     """
-    stmt = select(LLMProviderModel).options(
+    # Subquery to find provider IDs that have at least one model supporting any of the flows
+    providers_with_flows = (
+        select(ModelConfiguration.llm_provider_id)
+        .join(ModelFlow)
+        .where(ModelFlow.model_flow_type.in_(flows))
+        .distinct()
+    )
+
+    if exclude_image_generation_providers:
+        # Only include providers with matching flows
+        stmt = select(LLMProviderModel).where(
+            LLMProviderModel.id.in_(providers_with_flows)
+        )
+    else:
+        # Include providers with matching flows OR image generation providers
+        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
+            ImageGenerationConfig
+        )
+        stmt = select(LLMProviderModel).where(
+            LLMProviderModel.id.in_(providers_with_flows)
+            | LLMProviderModel.id.in_(image_gen_provider_ids)
+        )
+
+    stmt = stmt.options(
         selectinload(LLMProviderModel.model_configurations),
         selectinload(LLMProviderModel.groups),
         selectinload(LLMProviderModel.personas),
     )
 
-    if exclude_image_generation_providers:
-        # Get LLM provider IDs used by ImageGenerationConfig
-        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
-            ImageGenerationConfig
-        )
-        stmt = stmt.where(LLMProviderModel.id.not_in(image_gen_provider_ids))
-
     providers = list(db_session.scalars(stmt).all())
+
     if only_public:
         return [provider for provider in providers if provider.is_public]
+
     return providers
+
+
+def fetch_existing_model_configs_for_flow(
+    db_session: Session,
+    flows: list[ModelFlowType],
+) -> list[ModelConfiguration]:
+    """Fetch all model configurations that support any of the specified flow types.
+
+    Args:
+        db_session: Database session
+        flows: List of flow types to filter by
+
+    Returns:
+        List of model configurations that have a ModelFlow matching any of the flows
+    """
+    stmt = (
+        select(ModelConfiguration)
+        .join(ModelFlow)
+        .where(ModelFlow.model_flow_type.in_(flows))
+        .options(selectinload(ModelConfiguration.llm_provider))
+    )
+    return list(db_session.scalars(stmt).all())
 
 
 def fetch_existing_llm_provider(

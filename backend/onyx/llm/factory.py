@@ -10,7 +10,7 @@ from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_model_configs_for_flow
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_llm_provider_view_from_id
 from onyx.db.llm import fetch_llm_provider_view_from_model_id
@@ -24,7 +24,6 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
-from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView
@@ -209,25 +208,29 @@ def get_default_llm_with_vision(
             )
             if provider_view:
                 return create_vision_llm(provider_view, default_model.model_name)
-        # Fall back to searching all providers
-        providers = fetch_existing_llm_providers(db_session)
+        # Fall back to searching all vision models
+        models = fetch_existing_model_configs_for_flow(
+            db_session=db_session,
+            flows=[ModelFlowType.VISION],
+        )
 
-    if not providers:
+    if not models:
         return None
 
-    # Check all providers for viable vision models
+    # Check for viable vision models
     non_public_vision_llm: LLM | None = None
 
-    for provider in providers:
-        provider_view = LLMProviderView.from_model(provider)
-        for model in provider.model_configurations:
-            # First priority: public vision models
-            if model_supports_image_input(model.name, provider.provider):
-                if model.is_visible:
-                    return create_vision_llm(provider_view, model.name)
-                # Second priority: Give a non-public vision model
-                elif not non_public_vision_llm:
-                    non_public_vision_llm = create_vision_llm(provider_view, model.name)
+    for model in models:
+        if model.is_visible:
+            return create_vision_llm(
+                provider=LLMProviderView.from_model(model.llm_provider),
+                model=model.name,
+            )
+        elif not non_public_vision_llm:
+            non_public_vision_llm = create_vision_llm(
+                provider=LLMProviderView.from_model(model.llm_provider),
+                model=model.name,
+            )
 
     return non_public_vision_llm
 
