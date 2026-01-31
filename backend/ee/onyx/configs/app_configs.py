@@ -137,6 +137,10 @@ LICENSE_ENFORCEMENT_ENABLED = (
     os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "").lower() == "true"
 )
 
+# Air-gapped mode - when True, skips all external billing service calls
+# Use this for deployments without internet access that use manually uploaded licenses
+AIR_GAPPED = os.environ.get("AIR_GAPPED", "").lower() == "true"
+
 # Cloud data plane URL - self-hosted instances call this to reach cloud proxy endpoints
 # Used when MULTI_TENANT=false (self-hosted mode)
 CLOUD_DATA_PLANE_URL = os.environ.get(

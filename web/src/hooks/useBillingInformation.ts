@@ -36,7 +36,12 @@ export function useBillingInformation() {
     BillingInformation | SubscriptionStatus
   >(url, errorHandlingFetcher, {
     revalidateOnFocus: false,
+    revalidateOnReconnect: false,
     dedupingInterval: 30000,
+    // Don't auto-retry on errors (circuit breaker will block requests anyway)
+    shouldRetryOnError: false,
+    // Keep previous data while revalidating to prevent UI flashing
+    keepPreviousData: true,
   });
 
   return {

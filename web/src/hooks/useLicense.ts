@@ -31,7 +31,10 @@ export function useLicense() {
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
+      revalidateOnReconnect: false,
       dedupingInterval: 30000,
+      shouldRetryOnError: false,
+      keepPreviousData: true,
     }
   );
 

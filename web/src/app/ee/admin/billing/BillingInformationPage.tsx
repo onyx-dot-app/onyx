@@ -1,13 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
-  fetchCustomerPortal,
+  createCustomerPortalSession,
   useBillingInformation,
   hasActiveSubscription,
-} from "@/lib/billing/utils";
+} from "@/lib/billing";
 
 import {
   Card,
@@ -21,7 +20,6 @@ import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
 import { SvgClipboard, SvgWallet } from "@opal/icons";
 export default function BillingInformationPage() {
-  const router = useRouter();
   const { popup, setPopup } = usePopup();
 
   const {
@@ -64,21 +62,11 @@ export default function BillingInformationPage() {
 
   const handleManageSubscription = async () => {
     try {
-      const response = await fetchCustomerPortal();
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          `Failed to create customer portal session: ${
-            errorData.message || response.statusText
-          }`
-        );
-      }
-
-      const { url } = await response.json();
-      if (!url) {
+      const response = await createCustomerPortalSession();
+      if (!response.stripe_customer_portal_url) {
         throw new Error("No portal URL returned from the server");
       }
-      router.push(url);
+      window.location.href = response.stripe_customer_portal_url;
     } catch (error) {
       console.error("Error creating customer portal session:", error);
       setPopup({

@@ -35,9 +35,6 @@ export const config = {
     "/admin/performance/custom-analytics/:path*",
     "/admin/standard-answer/:path*",
     "/assistants/stats/:path*",
-
-    // Cloud only
-    "/admin/billing/:path*",
   ],
 };
 
@@ -50,7 +47,6 @@ const EE_ROUTES = [
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
   "/assistants/stats",
-  "/admin/billing",
 ];
 
 export async function proxy(request: NextRequest) {
