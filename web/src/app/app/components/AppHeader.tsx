@@ -33,7 +33,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import Truncated from "@/refresh-components/texts/Truncated";
+import Text from "@/refresh-components/texts/Text";
 
 /**
  * Chat Header Component
@@ -283,9 +283,9 @@ export default function AppHeader() {
           - custom-header-content
         */}
         <div className="flex-1 flex flex-col items-center overflow-hidden">
-          <Truncated text03 className="text-center break-words w-full">
+          <Text text03 className="text-center line-clamp-1 break-all w-full">
             {customHeaderContent}
-          </Truncated>
+          </Text>
         </div>
 
         {/*
