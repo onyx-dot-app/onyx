@@ -112,7 +112,6 @@ export function CustomForm({
                 // Build model configurations from the form
                 const modelConfigurations = values.model_configurations
                   .map((mc) => ({
-                    id: mc.id,
                     name: mc.name,
                     is_visible: mc.is_visible,
                     max_input_tokens: mc.max_input_tokens ?? null,

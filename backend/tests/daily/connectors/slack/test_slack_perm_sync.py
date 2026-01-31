@@ -3,12 +3,11 @@ from collections.abc import Generator
 
 import pytest
 
-from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.connector import SlackConnector
 from onyx.utils.variable_functionality import global_version
-from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 PUBLIC_CHANNEL_NAME = "#daily-connector-test-channel"
@@ -46,24 +45,29 @@ def test_load_from_checkpoint_access__public_channel(
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
-    docs = load_everything_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=slack_connector,
         start=0.0,
         end=time.time(),
         include_permissions=True,
-    )
-
-    doc_list = list(docs)
-    documents = [doc for doc in doc_list if isinstance(doc, Document)]
+    ).documents
 
     # We should have at least some documents
-    assert len(documents) > 0, "Expected to find at least one document"
+    assert len(docs) > 0, "Expected to find at least one document"
 
-    for doc in documents:
-        assert doc.external_access is not None
-        assert doc.external_access.is_public is True
-        assert doc.external_access.external_user_emails == set()
-        assert doc.external_access.external_user_group_ids == set()
+    for doc in docs:
+        assert (
+            doc.external_access is not None
+        ), f"Document {doc.id} should have external_access when using perm sync"
+        assert (
+            doc.external_access.is_public is True
+        ), f"Document {doc.id} should have public access when using perm sync"
+        assert (
+            doc.external_access.external_user_emails == set()
+        ), f"Document {doc.id} should have no external user emails when using perm sync"
+        assert (
+            doc.external_access.external_user_group_ids == set()
+        ), f"Document {doc.id} should have no external user group ids when using perm sync"
 
 
 @pytest.mark.parametrize(
@@ -80,24 +84,29 @@ def test_load_from_checkpoint_access__private_channel(
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
-    docs = load_everything_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=slack_connector,
         start=0.0,
         end=time.time(),
         include_permissions=True,
-    )
-
-    doc_list = list(docs)
-    documents = [doc for doc in doc_list if isinstance(doc, Document)]
+    ).documents
 
     # We should have at least some documents
-    assert len(documents) > 0, "Expected to find at least one document"
+    assert len(docs) > 0, "Expected to find at least one document"
 
-    for doc in documents:
-        assert doc.external_access is not None
-        assert doc.external_access.is_public is False
-        assert doc.external_access.external_user_emails == set(PRIVATE_CHANNEL_USERS)
-        assert doc.external_access.external_user_group_ids == set()
+    for doc in docs:
+        assert (
+            doc.external_access is not None
+        ), f"Document {doc.id} should have external_access when using perm sync"
+        assert (
+            doc.external_access.is_public is False
+        ), f"Document {doc.id} should have private access when using perm sync"
+        assert doc.external_access.external_user_emails == set(
+            PRIVATE_CHANNEL_USERS
+        ), f"Document {doc.id} should have private channel users when using perm sync"
+        assert (
+            doc.external_access.external_user_group_ids == set()
+        ), f"Document {doc.id} should have no external user group ids when using perm sync"
 
 
 @pytest.mark.parametrize(

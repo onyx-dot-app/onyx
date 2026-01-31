@@ -7,10 +7,7 @@ Contains utilities for:
 """
 
 from onyx.server.features.build.sandbox.util.agent_instructions import (
-    build_connector_descriptions_section,
-)
-from onyx.server.features.build.sandbox.util.agent_instructions import (
-    build_file_structure_section,
+    build_knowledge_sources_section,
 )
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_skills_section,
@@ -32,8 +29,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 
 __all__ = [
-    "build_connector_descriptions_section",
-    "build_file_structure_section",
+    "build_knowledge_sources_section",
     "build_opencode_config",
     "build_skills_section",
     "build_user_context",

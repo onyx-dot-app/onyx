@@ -8,8 +8,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.constants import AuthType
 from onyx.db.models import InputPrompt
 from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
@@ -66,7 +64,7 @@ def insert_input_prompt(
 
 
 def update_input_prompt(
-    user: User | None,
+    user: User,
     input_prompt_id: int,
     prompt: str,
     content: str,
@@ -98,23 +96,15 @@ def update_input_prompt(
     return input_prompt
 
 
-def validate_user_prompt_authorization(
-    user: User | None, input_prompt: InputPrompt
-) -> bool:
-    """
-    Check if the user is authorized to modify the given input prompt.
-    Returns True only if the user owns the prompt.
-    Returns False for public prompts (only admins can modify those),
-    unless auth is disabled (then anyone can manage public prompts).
-    """
+def validate_user_prompt_authorization(user: User, input_prompt: InputPrompt) -> bool:
     prompt = InputPromptSnapshot.from_model(input_prompt=input_prompt)
 
-    # Public prompts cannot be modified via the user API (unless auth is disabled)
+    # Public prompts cannot be modified via the user API (only admins via admin endpoints)
     if prompt.is_public or prompt.user_id is None:
-        return AUTH_TYPE == AuthType.DISABLED
+        return False
 
-    # User must be logged in
-    if user is None:
+    # Anonymous users cannot modify user-owned prompts
+    if user.is_anonymous:
         return False
 
     # User must own the prompt
@@ -138,7 +128,7 @@ def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> Non
 
 
 def remove_input_prompt(
-    user: User | None,
+    user: User,
     input_prompt_id: int,
     db_session: Session,
     delete_public: bool = False,
@@ -198,7 +188,6 @@ def fetch_input_prompts_by_user(
     """
     Returns all prompts belonging to the user or public prompts,
     excluding those the user has specifically disabled.
-    Also, if `user_id` is None and AUTH_TYPE is DISABLED, then all prompts are returned.
     """
 
     query = select(InputPrompt)
@@ -228,15 +217,12 @@ def fetch_input_prompts_by_user(
             query = query.where(InputPrompt.user_id == user_id)
 
     else:
-        # user_id is None
-        if AUTH_TYPE == AuthType.DISABLED:
-            # If auth is disabled, return all prompts
-            query = query.where(True)  # type: ignore
-        elif include_public:
-            # Anonymous usage
+        # user_id is None - anonymous usage
+        if include_public:
             query = query.where(InputPrompt.is_public)
-
-        # Default to returning all prompts
+        else:
+            # No user and not requesting public prompts - return nothing
+            return []
 
     if active is not None:
         query = query.where(InputPrompt.active == active)

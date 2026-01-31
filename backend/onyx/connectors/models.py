@@ -5,6 +5,7 @@ from typing import Any
 from typing import cast
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import model_validator
 
 from onyx.access.models import ExternalAccess
@@ -191,6 +192,10 @@ class DocumentBase(BaseModel):
     # Parent hierarchy node raw ID - the folder/space/page containing this document
     # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
     parent_hierarchy_raw_node_id: str | None = None
+
+    # Resolved database ID of the parent hierarchy node
+    # Set during docfetching after hierarchy nodes are cached
+    parent_hierarchy_node_id: int | None = None
 
     def get_title_for_document_index(
         self,
@@ -398,9 +403,11 @@ class HierarchyNode(BaseModel):
     # What kind of structural node this is (folder, space, page, etc.)
     node_type: HierarchyNodeType
 
-    # Optional: if this hierarchy node represents a document (e.g., Confluence page),
-    # this is the document ID. Set by the connector when the node IS a document.
-    document_id: str | None = None
+    # If this hierarchy node represents a document (e.g., Confluence page),
+    # The db model stores that doc's document_id. This gets set during docprocessing
+    # after the document row is created. Matching is done by raw_node_id matching document.id.
+    # so, we don't allow connectors to specify this as it would be unused
+    # document_id: str | None = None
 
     # External access information for the node
     external_access: ExternalAccess | None = None
@@ -445,7 +452,7 @@ class ConnectorFailure(BaseModel):
     failed_document: DocumentFailure | None = None
     failed_entity: EntityFailure | None = None
     failure_message: str
-    exception: Exception | None = None
+    exception: Exception | None = Field(default=None, exclude=True)
 
     model_config = {"arbitrary_types_allowed": True}
 

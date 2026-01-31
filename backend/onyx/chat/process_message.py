@@ -293,7 +293,7 @@ def _get_project_search_availability(
 
 def handle_stream_message_objects(
     new_msg_req: SendMessageRequest,
-    user: User | None,
+    user: User,
     db_session: Session,
     # if specified, uses the last user message and does not create a new user message based
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a
@@ -317,12 +317,11 @@ def handle_stream_message_objects(
     chat_session: ChatSession | None = None
     redis_client: Redis | None = None
 
-    user_id = user.id if user is not None else None
-    llm_user_identifier = (
-        user.email
-        if user is not None and getattr(user, "email", None)
-        else (str(user_id) if user_id else "anonymous_user")
-    )
+    user_id = user.id
+    if user.is_anonymous:
+        llm_user_identifier = "anonymous_user"
+    else:
+        llm_user_identifier = user.email or str(user_id)
     try:
         if not new_msg_req.chat_session_id:
             if not new_msg_req.chat_session_info:
@@ -357,7 +356,7 @@ def handle_stream_message_objects(
         # Milestone tracking, most devs using the API don't need to understand this
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email if not user.is_anonymous else tenant_id,
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
@@ -367,7 +366,7 @@ def handle_stream_message_objects(
             attribute="event_telemetry",
             fallback=noop_fallback,
         )(
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email if not user.is_anonymous else tenant_id,
             event="user_message_sent",
             properties={
                 "origin": new_msg_req.origin.value,
@@ -758,7 +757,7 @@ def llm_loop_completion_handle(
 
 def stream_chat_message_objects(
     new_msg_req: CreateChatMessageRequest,
-    user: User | None,
+    user: User,
     db_session: Session,
     # if specified, uses the last user message and does not create a new user message based
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a

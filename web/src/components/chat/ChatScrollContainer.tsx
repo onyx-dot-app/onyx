@@ -13,7 +13,11 @@ import React, {
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
 const DEFAULT_FADE_THRESHOLD_PX = 80; // 5rem
 const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
-const FADE_OVERLAY_HEIGHT = "h-8"; // 2rem
+
+// Fade configuration
+const TOP_FADE_HEIGHT = "6rem";
+const TOP_OPAQUE_ZONE = "2.5rem";
+const BOTTOM_FADE_HEIGHT = "16px";
 
 export interface ScrollState {
   isAtBottom: boolean;
@@ -45,31 +49,15 @@ export interface ChatScrollContainerProps {
 
   /** Session ID - resets scroll state when changed */
   sessionId?: string;
-
-  /** Disable fade overlays (e.g., when a background image is set) */
-  disableFadeOverlay?: boolean;
 }
 
-const FadeOverlay = React.memo(
-  ({ show, position }: { show: boolean; position: "top" | "bottom" }) => {
-    if (!show) return null;
-    const isTop = position === "top";
-    return (
-      <div
-        aria-hidden="true"
-        className={`absolute left-0 right-0 ${FADE_OVERLAY_HEIGHT} z-sticky pointer-events-none ${
-          isTop ? "top-0" : "bottom-0"
-        }`}
-        style={{
-          background: `linear-gradient(${
-            isTop ? "to bottom" : "to top"
-          }, var(--background-tint-01) 0%, transparent 100%)`,
-        }}
-      />
-    );
-  }
-);
-FadeOverlay.displayName = "FadeOverlay";
+// Build a CSS mask that fades content opacity at top/bottom edges
+function buildContentMask(): string {
+  // Mask uses black = visible, transparent = hidden
+  // Top: completely transparent for first 2.5rem (~50% of 6rem), then fades to visible over remaining 3.5rem
+  // Bottom: simple 16px fade
+  return `linear-gradient(to bottom, transparent 0%, transparent ${TOP_OPAQUE_ZONE}, black ${TOP_FADE_HEIGHT}, black calc(100% - ${BOTTOM_FADE_HEIGHT}), transparent 100%)`;
+}
 
 const ChatScrollContainer = React.memo(
   React.forwardRef(
@@ -81,7 +69,6 @@ const ChatScrollContainer = React.memo(
         isStreaming = false,
         onScrollButtonVisibilityChange,
         sessionId,
-        disableFadeOverlay = false,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -338,17 +325,11 @@ const ChatScrollContainer = React.memo(
         return () => clearTimeout(timeoutId);
       }, [sessionId, anchorSelector, anchorOffsetPx, updateScrollState]);
 
+      // Build mask to fade content opacity at edges
+      const contentMask = buildContentMask();
+
       return (
         <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-[7.5rem]">
-          <FadeOverlay
-            show={!disableFadeOverlay && hasContentAbove}
-            position="top"
-          />
-          <FadeOverlay
-            show={!disableFadeOverlay && hasContentBelow}
-            position="bottom"
-          />
-
           <div
             key={sessionId}
             ref={scrollContainerRef}
@@ -356,6 +337,9 @@ const ChatScrollContainer = React.memo(
             onScroll={handleScroll}
             style={{
               scrollbarGutter: "stable both-edges",
+              // Apply mask to fade content opacity at edges
+              maskImage: contentMask,
+              WebkitMaskImage: contentMask,
             }}
           >
             <div

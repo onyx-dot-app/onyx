@@ -9,6 +9,7 @@ import { SvgCalendar } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
 export interface InputDatePickerProps {
+  name?: string;
   selectedDate: Date | null;
   setSelectedDate: (date: Date | null) => void;
   startYear?: number;
@@ -20,6 +21,7 @@ function extractYear(date: Date | null): number {
 }
 
 export default function InputDatePicker({
+  name,
   selectedDate,
   setSelectedDate,
   startYear = 1970,
@@ -37,7 +39,7 @@ export default function InputDatePicker({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
+      <Popover.Trigger asChild id={name} name={name}>
         <Button leftIcon={SvgCalendar} secondary disabled={disabled}>
           {selectedDate ? selectedDate.toLocaleDateString() : "Select Date"}
         </Button>

@@ -11,7 +11,7 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.utils import AttachmentProcessingResult
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import Document
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 def _make_connector(
@@ -77,9 +77,7 @@ def _test_confluence_connector_basic(
     confluence_connector: ConfluenceConnector, expect_attachments: bool = True
 ) -> None:
     confluence_connector.set_allow_images(False)
-    doc_batch = load_all_docs_from_checkpoint_connector(
-        confluence_connector, 0, time.time()
-    )
+    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
 
     assert len(doc_batch) == (3 if expect_attachments else 2)
 
@@ -156,9 +154,7 @@ def test_confluence_connector_skip_images(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
 ) -> None:
     confluence_connector.set_allow_images(False)
-    doc_batch = load_all_docs_from_checkpoint_connector(
-        confluence_connector, 0, time.time()
-    )
+    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
 
     assert len(doc_batch) == 8
     assert sum(len(doc.sections) for doc in doc_batch) == 8
@@ -193,9 +189,7 @@ def test_confluence_connector_allow_images(
 ) -> None:
     confluence_connector.set_allow_images(True)
 
-    doc_batch = load_all_docs_from_checkpoint_connector(
-        confluence_connector, 0, time.time()
-    )
+    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
 
     assert len(doc_batch) == 12
     assert sum(len(doc.sections) for doc in doc_batch) == 12

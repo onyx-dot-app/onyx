@@ -9,8 +9,21 @@ from onyx.db.enums import HierarchyNodeType
 from onyx.db.models import Document
 from onyx.db.models import HierarchyNode
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
+
+# Sources where hierarchy nodes can also be documents.
+# For these sources, pages/items can be both a hierarchy node (with children)
+# AND a document with indexed content. For example:
+# - Notion: Pages with child pages are hierarchy nodes, but also documents
+# - Confluence: Pages can have child pages and also contain content
+# Other sources like Google Drive have folders as hierarchy nodes, but folders
+# are not documents themselves.
+SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS: set[DocumentSource] = {
+    DocumentSource.NOTION,
+    DocumentSource.CONFLUENCE,
+}
 
 
 def _get_source_display_name(source: DocumentSource) -> str:
@@ -149,6 +162,7 @@ def upsert_parents(
     source: DocumentSource,
     node_by_id: dict[str, PydanticHierarchyNode],
     done_ids: set[str],
+    is_connector_public: bool = False,
 ) -> None:
     """
     Upsert the parents of a hierarchy node.
@@ -160,8 +174,21 @@ def upsert_parents(
     ):
         return
     parent_node = node_by_id[node.raw_parent_id]
-    upsert_parents(db_session, parent_node, source, node_by_id, done_ids)
-    upsert_hierarchy_node(db_session, parent_node, source, commit=False)
+    upsert_parents(
+        db_session,
+        parent_node,
+        source,
+        node_by_id,
+        done_ids,
+        is_connector_public=is_connector_public,
+    )
+    upsert_hierarchy_node(
+        db_session,
+        parent_node,
+        source,
+        commit=False,
+        is_connector_public=is_connector_public,
+    )
     done_ids.add(parent_node.raw_node_id)
 
 
@@ -170,12 +197,23 @@ def upsert_hierarchy_node(
     node: PydanticHierarchyNode,
     source: DocumentSource,
     commit: bool = True,
+    is_connector_public: bool = False,
 ) -> HierarchyNode:
     """
     Upsert a hierarchy node from a Pydantic model.
 
     If a node with the same raw_node_id and source exists, updates it.
     Otherwise, creates a new node.
+
+    Args:
+        db_session: SQLAlchemy session
+        node: The Pydantic hierarchy node to upsert
+        source: Document source type
+        commit: Whether to commit the transaction
+        is_connector_public: If True, the connector is public (organization-wide access)
+            and all hierarchy nodes should be marked as public regardless of their
+            external_access settings. This ensures nodes from public connectors are
+            accessible to all users.
     """
     # Resolve parent_id from raw_parent_id
     parent_id = (
@@ -184,12 +222,13 @@ def upsert_hierarchy_node(
         else resolve_parent_hierarchy_node_id(db_session, node.raw_parent_id, source)
     )
 
-    # Extract permission fields from external_access if present
-    is_public = False
-    external_user_emails: list[str] | None = None
-    external_user_group_ids: list[str] | None = None
-
-    if node.external_access:
+    # For public connectors, all nodes are public
+    # Otherwise, extract permission fields from external_access if present
+    if is_connector_public:
+        is_public = True
+        external_user_emails: list[str] | None = None
+        external_user_group_ids: list[str] | None = None
+    elif node.external_access:
         is_public = node.external_access.is_public
         external_user_emails = (
             list(node.external_access.external_user_emails)
@@ -201,6 +240,10 @@ def upsert_hierarchy_node(
             if node.external_access.external_user_group_ids
             else None
         )
+    else:
+        is_public = False
+        external_user_emails = None
+        external_user_group_ids = None
 
     # Check if node already exists
     existing_node = get_hierarchy_node_by_raw_id(db_session, node.raw_node_id, source)
@@ -210,7 +253,6 @@ def upsert_hierarchy_node(
         existing_node.display_name = node.display_name
         existing_node.link = node.link
         existing_node.node_type = node.node_type
-        existing_node.document_id = node.document_id
         existing_node.parent_id = parent_id
         # Update permission fields
         existing_node.is_public = is_public
@@ -225,7 +267,6 @@ def upsert_hierarchy_node(
             link=node.link,
             source=source,
             node_type=node.node_type,
-            document_id=node.document_id,
             parent_id=parent_id,
             is_public=is_public,
             external_user_emails=external_user_emails,
@@ -246,6 +287,7 @@ def upsert_hierarchy_nodes_batch(
     nodes: list[PydanticHierarchyNode],
     source: DocumentSource,
     commit: bool = True,
+    is_connector_public: bool = False,
 ) -> list[HierarchyNode]:
     """
     Batch upsert hierarchy nodes.
@@ -254,6 +296,15 @@ def upsert_hierarchy_nodes_batch(
     its ancestors exist in either the database or elsewhere in the nodes list.
     This function handles parent dependencies for you as long as that condition is met
     (so you don't need to worry about parent nodes appearing before their children in the list).
+
+    Args:
+        db_session: SQLAlchemy session
+        nodes: List of Pydantic hierarchy nodes to upsert
+        source: Document source type
+        commit: Whether to commit the transaction
+        is_connector_public: If True, the connector is public (organization-wide access)
+            and all hierarchy nodes should be marked as public regardless of their
+            external_access settings.
     """
     node_by_id = {}
     for node in nodes:
@@ -265,8 +316,21 @@ def upsert_hierarchy_nodes_batch(
     for node in nodes:
         if node.raw_node_id in done_ids:
             continue
-        upsert_parents(db_session, node, source, node_by_id, done_ids)
-        hierarchy_node = upsert_hierarchy_node(db_session, node, source, commit=False)
+        upsert_parents(
+            db_session,
+            node,
+            source,
+            node_by_id,
+            done_ids,
+            is_connector_public=is_connector_public,
+        )
+        hierarchy_node = upsert_hierarchy_node(
+            db_session,
+            node,
+            source,
+            commit=False,
+            is_connector_public=is_connector_public,
+        )
         done_ids.add(node.raw_node_id)
         results.append(hierarchy_node)
 
@@ -274,6 +338,61 @@ def upsert_hierarchy_nodes_batch(
         db_session.commit()
 
     return results
+
+
+def link_hierarchy_nodes_to_documents(
+    db_session: Session,
+    document_ids: list[str],
+    source: DocumentSource,
+    commit: bool = True,
+) -> int:
+    """
+    Link hierarchy nodes to their corresponding documents.
+
+    For connectors like Notion and Confluence where pages can be both hierarchy nodes
+    AND documents, we need to set the document_id field on hierarchy nodes after the
+    documents are created. This is because hierarchy nodes are processed before documents,
+    and the FK constraint on document_id requires the document to exist first.
+
+    Args:
+        db_session: SQLAlchemy session
+        document_ids: List of document IDs that were just created/updated
+        source: The document source (e.g., NOTION, CONFLUENCE)
+        commit: Whether to commit the transaction
+
+    Returns:
+        Number of hierarchy nodes that were linked to documents
+    """
+    # Skip for sources where hierarchy nodes cannot also be documents
+    if source not in SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS:
+        return 0
+
+    if not document_ids:
+        return 0
+
+    # Find hierarchy nodes where raw_node_id matches a document_id
+    # These are pages that are both hierarchy nodes and documents
+    stmt = select(HierarchyNode).where(
+        HierarchyNode.source == source,
+        HierarchyNode.raw_node_id.in_(document_ids),
+        HierarchyNode.document_id.is_(None),  # Only update if not already linked
+    )
+    nodes_to_update = list(db_session.execute(stmt).scalars().all())
+
+    # Update document_id for each matching node
+    for node in nodes_to_update:
+        node.document_id = node.raw_node_id
+
+    if commit:
+        db_session.commit()
+
+    if nodes_to_update:
+        logger.debug(
+            f"Linked {len(nodes_to_update)} hierarchy nodes to documents "
+            f"for source {source.value}"
+        )
+
+    return len(nodes_to_update)
 
 
 def get_hierarchy_node_children(
@@ -332,6 +451,52 @@ def get_all_hierarchy_nodes_for_source(
     """
     stmt = select(HierarchyNode).where(HierarchyNode.source == source)
     return list(db_session.execute(stmt).scalars().all())
+
+
+def _get_accessible_hierarchy_nodes_for_source(
+    db_session: Session,
+    source: DocumentSource,
+    user_email: str | None,
+    external_group_ids: list[str],
+) -> list[HierarchyNode]:
+    """
+    MIT version: Returns all hierarchy nodes for the source without permission filtering.
+
+    In the MIT version, permission checks are not performed on hierarchy nodes.
+    The EE version overrides this to apply permission filtering based on user
+    email and external group IDs.
+
+    Args:
+        db_session: SQLAlchemy session
+        source: Document source type
+        user_email: User's email (unused in MIT version)
+        external_group_ids: User's external group IDs (unused in MIT version)
+
+    Returns:
+        List of all HierarchyNode objects for the source
+    """
+    stmt = select(HierarchyNode).where(HierarchyNode.source == source)
+    stmt = stmt.order_by(HierarchyNode.display_name)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def get_accessible_hierarchy_nodes_for_source(
+    db_session: Session,
+    source: DocumentSource,
+    user_email: str | None,
+    external_group_ids: list[str],
+) -> list[HierarchyNode]:
+    """
+    Get hierarchy nodes for a source that are accessible to the user.
+
+    Uses fetch_versioned_implementation to get the appropriate version:
+    - MIT version: Returns all nodes (no permission filtering)
+    - EE version: Filters based on user email and external group IDs
+    """
+    versioned_fn = fetch_versioned_implementation(
+        "onyx.db.hierarchy", "_get_accessible_hierarchy_nodes_for_source"
+    )
+    return versioned_fn(db_session, source, user_email, external_group_ids)
 
 
 def get_document_parent_hierarchy_node_ids(

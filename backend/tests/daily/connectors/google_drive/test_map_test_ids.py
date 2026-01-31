@@ -17,7 +17,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_FILE
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
+from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
@@ -46,7 +46,7 @@ def generate_test_id_to_drive_id_mapping() -> dict[int, str]:
     connector.load_credentials(get_credentials_from_env(email=ADMIN_EMAIL, oauth=False))
 
     # Get all documents from the connector
-    docs = load_all_docs(connector)
+    docs = load_connector_outputs(connector).documents
 
     # Create a mapping from test file ID to actual Drive file ID
     test_id_to_drive_id = {}

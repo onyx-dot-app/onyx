@@ -63,7 +63,7 @@ def _oauth_config_to_snapshot(
 def create_oauth_config_endpoint(
     oauth_data: OAuthConfigCreate,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
 ) -> OAuthConfigSnapshot:
     """Create a new OAuth configuration (admin only)."""
     try:
@@ -85,7 +85,7 @@ def create_oauth_config_endpoint(
 @admin_router.get("")
 def list_oauth_configs(
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
 ) -> list[OAuthConfigSnapshot]:
     """List all OAuth configurations (admin only)."""
     oauth_configs = get_oauth_configs(db_session)
@@ -96,7 +96,7 @@ def list_oauth_configs(
 def get_oauth_config_endpoint(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
 ) -> OAuthConfigSnapshot:
     """Retrieve a single OAuth configuration (admin only)."""
     oauth_config = get_oauth_config(oauth_config_id, db_session)
@@ -112,7 +112,7 @@ def update_oauth_config_endpoint(
     oauth_config_id: int,
     oauth_data: OAuthConfigUpdate,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
 ) -> OAuthConfigSnapshot:
     """Update an OAuth configuration (admin only)."""
     try:
@@ -138,7 +138,7 @@ def update_oauth_config_endpoint(
 def delete_oauth_config_endpoint(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_curator_or_admin_user),
+    _: User = Depends(current_curator_or_admin_user),
 ) -> dict[str, str]:
     """Delete an OAuth configuration (admin only)."""
     try:
@@ -155,16 +155,13 @@ def delete_oauth_config_endpoint(
 def initiate_oauth_flow(
     request: OAuthInitiateRequest,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> OAuthInitiateResponse:
     """
     Initiate OAuth flow for the current user.
 
     Returns an authorization URL that the frontend should redirect the user to.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
     # Get OAuth config
     oauth_config = get_oauth_config(request.oauth_config_id, db_session)
     if not oauth_config:
@@ -195,7 +192,7 @@ def handle_oauth_callback(
     code: str,
     state: str,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> OAuthCallbackResponse:
     """
     Handle OAuth callback after user authorizes the application.
@@ -203,9 +200,6 @@ def handle_oauth_callback(
     Exchanges the authorization code for an access token and stores it.
     Accepts code and state as query parameters (standard OAuth flow).
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
     try:
         # Verify state and retrieve session data
         session = verify_oauth_state(state)
@@ -259,14 +253,11 @@ def handle_oauth_callback(
 def revoke_oauth_token(
     oauth_config_id: int,
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> dict[str, str]:
     """
     Revoke (delete) the current user's OAuth token for a specific OAuth config.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-
     try:
         delete_user_oauth_token(oauth_config_id, user.id, db_session)
         return {"message": "OAuth token revoked successfully"}

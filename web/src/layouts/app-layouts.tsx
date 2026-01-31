@@ -64,17 +64,13 @@ const footerMarkdownComponents = {
   },
 } satisfies Partial<Components>;
 
-function AppHeader() {
+function Header() {
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
-  const { currentChatSessionId } = useChatSessions();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
-
-  // Don't render when there's a chat session - ChatHeader handles that
-  if (currentChatSessionId) return null;
 
   // Only render when on mobile or there's custom header content
   if (!isMobile && !customHeaderContent) return null;
@@ -119,7 +115,7 @@ function Footer() {
     }](https://www.onyx.app/) - Open Source AI Platform`;
 
   return (
-    <footer className="w-full flex flex-row justify-center items-center gap-2 pb-2 mt-auto">
+    <footer className="relative w-full flex flex-row justify-center items-center gap-2 pb-2 mt-auto">
       <MinimalMarkdown
         content={customFooterContent}
         className={cn("max-w-full text-center")}
@@ -181,19 +177,23 @@ function Footer() {
  */
 export interface AppRootProps {
   /**
+   * @deprecated This prop should rarely be used. Prefer letting the Header render.
+   */
+  disableHeader?: boolean;
+  /**
    * @deprecated This prop should rarely be used. Prefer letting the Footer render.
    */
   disableFooter?: boolean;
   children?: React.ReactNode;
 }
 
-function AppRoot({ children, disableFooter }: AppRootProps) {
+function AppRoot({ children, disableHeader, disableFooter }: AppRootProps) {
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
       breakout of their immediate containers using cqw units.
     */
     <div className="@container flex flex-col h-full w-full">
-      <AppHeader />
+      {!disableHeader && <Header />}
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
       {!disableFooter && <Footer />}
     </div>
@@ -229,4 +229,4 @@ function StickyHeader({ children, className }: StickyHeaderProps) {
   );
 }
 
-export { AppRoot as Root, StickyHeader, Footer };
+export { AppRoot as Root, Header, StickyHeader, Footer };

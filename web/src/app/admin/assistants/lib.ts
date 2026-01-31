@@ -16,7 +16,7 @@ interface PersonaUpsertRequest {
   recency_bias: string;
   llm_filter_extraction: boolean;
   llm_relevance_filter: boolean | null;
-  model_configuration_id_override: number | null;
+  default_model_configuration_id: number | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
@@ -30,9 +30,10 @@ interface PersonaUpsertRequest {
   label_ids: number[] | null;
   user_file_ids: string[] | null;
   replace_base_system_prompt: boolean;
-  // TODO: Add UI for selecting hierarchy nodes (folders, spaces, channels)
-  // for scoped search. See file-structure-lightweight.md for implementation details.
+  // Hierarchy nodes (folders, spaces, channels) for scoped search
   hierarchy_node_ids: number[];
+  // Individual documents for scoped search
+  document_ids: string[];
 }
 
 export interface PersonaUpsertParameters {
@@ -46,7 +47,7 @@ export interface PersonaUpsertParameters {
   num_chunks: number | null;
   is_public: boolean;
   llm_relevance_filter: boolean | null;
-  model_configuration_id_override: number | null;
+  default_model_configuration_id: number | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
@@ -58,9 +59,10 @@ export interface PersonaUpsertParameters {
   is_default_persona: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
-  // TODO: Add UI for selecting hierarchy nodes (folders, spaces, channels)
-  // for scoped search. See file-structure-lightweight.md for implementation details.
+  // Hierarchy nodes (folders, spaces, channels) for scoped search
   hierarchy_node_ids?: number[];
+  // Individual documents for scoped search
+  document_ids?: string[];
 }
 
 function buildPersonaUpsertRequest({
@@ -78,11 +80,13 @@ function buildPersonaUpsertRequest({
   remove_image,
   search_start_date,
   user_file_ids,
+  hierarchy_node_ids,
+  document_ids,
   icon_name,
   uploaded_image_id,
   is_default_persona,
   llm_relevance_filter,
-  model_configuration_id_override,
+  default_model_configuration_id,
   starter_messages,
   label_ids,
   replace_base_system_prompt,
@@ -107,14 +111,14 @@ function buildPersonaUpsertRequest({
     recency_bias: "base_decay",
     llm_filter_extraction: false,
     llm_relevance_filter: llm_relevance_filter ?? null,
-    model_configuration_id_override: model_configuration_id_override ?? null,
+    default_model_configuration_id: default_model_configuration_id ?? null,
     starter_messages: starter_messages ?? null,
     display_priority: null,
     label_ids: label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
     replace_base_system_prompt,
-    // TODO: Pass actual hierarchy_node_ids when UI is implemented
-    hierarchy_node_ids: [],
+    hierarchy_node_ids: hierarchy_node_ids ?? [],
+    document_ids: document_ids ?? [],
   };
 }
 

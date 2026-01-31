@@ -1,5 +1,4 @@
 export enum AuthType {
-  DISABLED = "disabled",
   BASIC = "basic",
   GOOGLE_OAUTH = "google_oauth",
   OIDC = "oidc",
@@ -21,7 +20,7 @@ export const MCP_INTERNAL_URL =
 // NOTE: this should ONLY be used on the server-side (including middleware).
 // The AUTH_TYPE environment variable is set in the backend and shared with Next.js
 export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
-  AuthType.DISABLED) as AuthType;
+  AuthType.BASIC) as AuthType;
 
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
@@ -39,12 +38,6 @@ export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
-
-// Default sidebar open is true if the environment variable is not set
-export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
-  process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "false"
-    ? false
-    : true;
 
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
@@ -85,9 +78,6 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
-
-export const NEXT_PUBLIC_ENABLE_CHROME_EXTENSION =
-  process.env.NEXT_PUBLIC_ENABLE_CHROME_EXTENSION?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===

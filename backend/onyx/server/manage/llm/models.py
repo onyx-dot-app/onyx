@@ -44,6 +44,7 @@ class TestLLMRequest(BaseModel):
 
     # if try and use the existing API key
     api_key_changed: bool
+    custom_config_changed: bool
 
     @field_validator("provider", mode="before")
     @classmethod
@@ -100,6 +101,7 @@ class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
     api_key_changed: bool = False
+    custom_config_changed: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
     @field_validator("provider", mode="before")

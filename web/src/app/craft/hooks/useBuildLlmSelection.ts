@@ -5,7 +5,7 @@ import {
   getBuildLlmSelection,
   setBuildLlmSelection,
   clearBuildLlmSelection,
-  RECOMMENDED_BUILD_MODELS,
+  getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
 
 /**
@@ -13,8 +13,7 @@ import {
  *
  * Resolution priority:
  * 1. Cookie - User's explicit selection (via onboarding or configure page)
- * 2. Smart default - Anthropic Opus 4.5 if available and no cookie exists
- * 3. System default - System default provider if no Anthropic and no cookie
+ * 2. Smart default - via getDefaultLlmSelection()
  */
 export function useBuildLlmSelection(
   llmProviders: LLMProviderDescriptor[] | undefined
@@ -35,49 +34,15 @@ export function useBuildLlmSelection(
     [llmProviders]
   );
 
-  // Compute effective selection: cookie > smart default > system default
+  // Compute effective selection: cookie > smart default
   const effectiveSelection = useMemo((): BuildLlmSelection | null => {
-    if (!llmProviders || llmProviders.length === 0) return null;
-
-    // 1. Use cookie if valid
+    // Use cookie if valid
     if (selection && isSelectionValid(selection)) {
       return selection;
     }
 
-    // 2. Smart default: Anthropic Opus 4.5 if Anthropic provider is configured
-    const anthropicProvider = llmProviders.find(
-      (p) =>
-        p.provider === "anthropic" || p.name.toLowerCase().includes("anthropic")
-    );
-    if (anthropicProvider) {
-      return {
-        providerName: anthropicProvider.name,
-        provider: anthropicProvider.provider,
-        modelName: RECOMMENDED_BUILD_MODELS.preferred.modelName,
-      };
-    }
-
-    // 3. Fall back to system default provider
-    const defaultProvider = llmProviders.find((p) => p.is_default_provider);
-    if (defaultProvider) {
-      return {
-        providerName: defaultProvider.name,
-        provider: defaultProvider.provider,
-        modelName: defaultProvider.default_model_name,
-      };
-    }
-
-    // 4. First available provider
-    const firstProvider = llmProviders[0];
-    if (firstProvider) {
-      return {
-        providerName: firstProvider.name,
-        provider: firstProvider.provider,
-        modelName: firstProvider.default_model_name,
-      };
-    }
-
-    return null;
+    // Fall back to smart default
+    return getDefaultLlmSelection(llmProviders);
   }, [selection, llmProviders, isSelectionValid]);
 
   // Update selection and persist to cookie

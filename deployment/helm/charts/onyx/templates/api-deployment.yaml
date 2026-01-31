@@ -69,7 +69,7 @@ spec:
             - |
               alembic upgrade head &&
               echo "Starting Onyx Api Server" &&
-              uvicorn onyx.main:app --host 0.0.0.0 --port {{ .Values.api.containerPorts.server }}
+              uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
           ports:
             - name: api-server-port
               containerPort: {{ .Values.api.containerPorts.server }}

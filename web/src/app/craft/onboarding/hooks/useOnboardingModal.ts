@@ -118,8 +118,10 @@ export function useOnboardingModal(): OnboardingModalController {
   // Complete user info callback
   const completeUserInfo = useCallback(
     async (info: BuildUserInfo) => {
-      // Save name via API
-      const fullName = `${info.firstName} ${info.lastName}`.trim();
+      // Save name via API (handle optional lastName)
+      const fullName = info.lastName
+        ? `${info.firstName} ${info.lastName}`.trim()
+        : info.firstName.trim();
       await updateUserPersonalization({ name: fullName });
 
       // Save persona to cookie

@@ -59,7 +59,7 @@ def _build_provider_extra_headers(
 
 def get_llm_for_persona(
     persona: Persona | PersonaOverrideConfig | None,
-    user: User | None,
+    user: User,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
@@ -77,10 +77,7 @@ def get_llm_for_persona(
     model_version_override = llm_override.model_version if llm_override else None
     temperature_override = llm_override.temperature if llm_override else None
 
-    if (
-        not (provider_name_override and model_version_override)
-        and not persona.model_configuration_id_override
-    ):
+    if not provider_name_override and not persona.default_model_configuration_id:
         return get_default_llm(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
@@ -91,7 +88,7 @@ def get_llm_for_persona(
         # Resolve the provider model
         # Atleast one of the vars in non-None due to above check, so we should get something
         provider_model = _resolve_provider_model(
-            db_session, provider_name_override, persona.model_configuration_id_override
+            db_session, provider_name_override, persona.default_model_configuration_id
         )
         if not provider_model:
             raise ValueError("No LLM provider found")
@@ -110,7 +107,7 @@ def get_llm_for_persona(
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",
-                getattr(user, "id", None),
+                user.id,
                 getattr(persona_model, "id", None),
                 provider_model.name,
             )
@@ -124,9 +121,9 @@ def get_llm_for_persona(
 
         # Resolve the model name
         model = model_version_override
-        if not model and persona.model_configuration_id_override:
+        if not model and persona.default_model_configuration_id:
             model_config = fetch_model_configuration_view(
-                db_session, persona.model_configuration_id_override
+                db_session, persona.default_model_configuration_id
             )
             model = model_config.name if model_config else None
 

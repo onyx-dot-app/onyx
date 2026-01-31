@@ -76,17 +76,17 @@ def update_llm_provider_persona_relationships__no_commit(
         )
 
 
-def fetch_user_group_ids(db_session: Session, user: User | None) -> set[int]:
+def fetch_user_group_ids(db_session: Session, user: User) -> set[int]:
     """Fetch the set of user group IDs for a given user.
 
     Args:
         db_session: Database session
-        user: User to fetch groups for, or None for anonymous users
+        user: User to fetch groups for
 
     Returns:
-        Set of user group IDs. Empty set if user is None.
+        Set of user group IDs. Empty set for anonymous users.
     """
-    if not user:
+    if user.is_anonymous:
         return set()
 
     return set(
@@ -177,7 +177,7 @@ def get_personas_using_provider(
             select(Persona)
             .join(
                 ModelConfiguration,
-                Persona.model_configuration_id_override == ModelConfiguration.id,
+                Persona.default_model_configuration_id == ModelConfiguration.id,
             )
             .where(ModelConfiguration.llm_provider_id == provider.id)
         ).all()
@@ -234,7 +234,7 @@ def upsert_llm_provider(
             k: v for k, v in custom_config.items() if v is not None and v.strip() != ""
         }
         # Set to None if the dict is empty after filtering
-        custom_config = custom_config if custom_config else None
+        custom_config = custom_config or None
 
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     existing_llm_provider.api_key = llm_provider_upsert_request.api_key
@@ -533,7 +533,7 @@ def remove_llm_provider(
     # This causes them to fall back to the default provider
     personas_using_provider = get_personas_using_provider(db_session, provider)
     for persona in personas_using_provider:
-        persona.model_configuration_id_override = None
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(

@@ -55,7 +55,7 @@ def _ignore_credential_permissions(source: DocumentSource) -> bool:
 
 @router.get("/admin/credential")
 def list_credentials_admin(
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     """Lists all public credentials"""
@@ -73,7 +73,7 @@ def list_credentials_admin(
 @router.get("/admin/similar-credentials/{source_type}")
 def get_cc_source_full_info(
     source_type: DocumentSource,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable credentials"
@@ -108,7 +108,7 @@ def delete_credential_by_id_admin(
 @router.put("/admin/credential/swap")
 def swap_credentials_for_connector(
     credential_swap_req: CredentialSwapRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     validate_ccpair_for_user(
@@ -135,7 +135,7 @@ def swap_credentials_for_connector(
 @router.post("/credential")
 def create_credential_from_model(
     credential_info: CredentialBase,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     if not _ignore_credential_permissions(credential_info.source):
@@ -167,7 +167,7 @@ def create_credential_with_private_key(
     groups: list[int] = Form([]),
     name: str | None = Form(None),
     source: str = Form(...),
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     uploaded_file: UploadFile = File(...),
     field_key: str = Form(...),
     type_definition_key: str = Form(...),
@@ -228,7 +228,7 @@ def create_credential_with_private_key(
 
 @router.get("/credential")
 def list_credentials(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     credentials = fetch_credentials_for_user(db_session=db_session, user=user)

@@ -38,6 +38,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.models import ConnectorCredentialPair
@@ -268,6 +269,10 @@ def _run_hierarchy_extraction(
     start_time = last_fetch.timestamp() if last_fetch else 0
     end_time = datetime.now(timezone.utc).timestamp()
 
+    # Check if connector is public - all hierarchy nodes from public connectors
+    # should be accessible to all users
+    is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+
     total_nodes = 0
     node_batch: list[PydanticHierarchyNode] = []
 
@@ -281,6 +286,7 @@ def _run_hierarchy_extraction(
             nodes=node_batch,
             source=source,
             commit=True,
+            is_connector_public=is_connector_public,
         )
 
         # Cache in Redis for fast ancestor resolution

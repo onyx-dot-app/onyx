@@ -197,7 +197,6 @@ jobs:
               --set=auth.opensearch.enabled=true \
               --set=slackbot.enabled=false \
               --set=postgresql.enabled=true \
-              --set=postgresql.nameOverride=cloudnative-pg \
               --set=postgresql.cluster.storage.storageClass=standard \
               --set=redis.enabled=true \
               --set=redis.storageSpec.volumeClaimTemplate.spec.storageClassName=standard \

@@ -1,4 +1,3 @@
-import os
 import traceback
 from collections.abc import Iterator
 from typing import Any
@@ -28,7 +27,24 @@ from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
+from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG
+from onyx.llm.well_known_providers.constants import (
+    AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT,
+)
+from onyx.llm.well_known_providers.constants import (
+    AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT,
+)
+from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG
+from onyx.llm.well_known_providers.constants import AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT
+from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
+from onyx.llm.well_known_providers.constants import (
+    AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
+)
+from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.well_known_providers.constants import (
+    VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
+)
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -118,30 +134,33 @@ class LitellmLLM(LLM):
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
 
-        # NOTE: have to set these as environment variables for Litellm since
-        # not all are able to passed in but they always support them set as env
-        # variables. We'll also try passing them in, since litellm just ignores
-        # addtional kwargs (and some kwargs MUST be passed in rather than set as
-        # env variables)
         if custom_config:
-            # Specifically pass in "vertex_credentials" / "vertex_location" as a
-            # model_kwarg to the completion call for vertex AI. More details here:
-            # https://docs.litellm.ai/docs/providers/vertex
             for k, v in custom_config.items():
                 if model_provider == LlmProviderNames.VERTEX_AI:
                     if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v
-                        continue
+                    elif k == VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT:
+                        model_kwargs[VERTEX_CREDENTIALS_FILE_KWARG] = v
                     elif k == VERTEX_LOCATION_KWARG:
                         model_kwargs[k] = v
-                        continue
-
-                # If there are any empty or null values,
-                # they MUST NOT be set in the env
-                if v is not None and v.strip():
-                    os.environ[k] = v
-                else:
-                    os.environ.pop(k, None)
+                elif model_provider == LlmProviderNames.OLLAMA_CHAT:
+                    if k == OLLAMA_API_KEY_CONFIG_KEY:
+                        model_kwargs["api_key"] = v
+                elif model_provider == LlmProviderNames.BEDROCK:
+                    if k == AWS_REGION_NAME_KWARG:
+                        model_kwargs[k] = v
+                    elif k == AWS_REGION_NAME_KWARG_ENV_VAR_FORMAT:
+                        model_kwargs[AWS_REGION_NAME_KWARG] = v
+                    elif k == AWS_BEARER_TOKEN_BEDROCK_KWARG_ENV_VAR_FORMAT:
+                        model_kwargs["api_key"] = v
+                    elif k == AWS_ACCESS_KEY_ID_KWARG:
+                        model_kwargs[k] = v
+                    elif k == AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT:
+                        model_kwargs[AWS_ACCESS_KEY_ID_KWARG] = v
+                    elif k == AWS_SECRET_ACCESS_KEY_KWARG:
+                        model_kwargs[k] = v
+                    elif k == AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT:
+                        model_kwargs[AWS_SECRET_ACCESS_KEY_KWARG] = v
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
@@ -153,7 +172,7 @@ class LitellmLLM(LLM):
 
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
-            os.environ["OLLAMA_API_BASE"] = api_base
+            model_kwargs["api_base"] = api_base
         if extra_headers:
             model_kwargs.update({"extra_headers": extra_headers})
         if extra_body:
@@ -383,12 +402,16 @@ class LitellmLLM(LLM):
         )
 
         try:
-            # NOTE: must pass in None instead of empty strings
-            # otherwise litellm can have some issues with bedrock
+            # NOTE: must pass in None instead of empty strings otherwise litellm
+            # can have some issues with bedrock.
+            # NOTE: Sometimes _model_kwargs may have an "api_key" kwarg
+            # depending on what the caller passes in for custom_config. If it
+            # does we allow it to clobber _api_key.
+            if "api_key" not in passthrough_kwargs:
+                passthrough_kwargs["api_key"] = self._api_key or None
             response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 model=model,
-                api_key=self._api_key or None,
                 base_url=self._api_base or None,
                 api_version=self._api_version or None,
                 custom_llm_provider=self._custom_llm_provider or None,

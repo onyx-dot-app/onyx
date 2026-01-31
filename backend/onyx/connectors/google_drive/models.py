@@ -3,12 +3,14 @@ from typing import Any
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 from pydantic import field_serializer
 from pydantic import field_validator
 
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 
 class GDriveMimeType(str, Enum):
@@ -148,7 +150,22 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     # Hierarchy node raw IDs that have already been yielded.
     # Used to avoid yielding duplicate hierarchy nodes across checkpoints.
-    seen_hierarchy_node_raw_ids: set[str] = set()
+    # Thread-safe because multiple impersonation threads access this concurrently.
+    # Uses default_factory to ensure each checkpoint instance gets a fresh set.
+    seen_hierarchy_node_raw_ids: ThreadSafeSet[str] = Field(
+        default_factory=ThreadSafeSet
+    )
+
+    # Hierarchy node raw IDs where we have successfully walked up to a terminal
+    # node (a drive root with no parent). This is separate from seen_hierarchy_node_raw_ids
+    # because a node might be yielded before we've walked its full ancestry chain.
+    # We only skip walking from a node if it's in this set, ensuring that if one user
+    # fails to walk to the root, another user with better access can still complete the walk.
+    # Thread-safe because multiple impersonation threads access this concurrently.
+    # Uses default_factory to ensure each checkpoint instance gets a fresh set.
+    fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str] = Field(
+        default_factory=ThreadSafeSet
+    )
 
     @field_serializer("completion_map")
     def serialize_completion_map(
@@ -156,9 +173,41 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     ) -> dict[str, StageCompletion]:
         return completion_map._dict
 
+    @field_serializer("seen_hierarchy_node_raw_ids")
+    def serialize_seen_hierarchy(
+        self, seen_hierarchy_node_raw_ids: ThreadSafeSet[str], _info: Any
+    ) -> set[str]:
+        return seen_hierarchy_node_raw_ids.copy()
+
+    @field_serializer("fully_walked_hierarchy_node_raw_ids")
+    def serialize_fully_walked_hierarchy(
+        self, fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str], _info: Any
+    ) -> set[str]:
+        return fully_walked_hierarchy_node_raw_ids.copy()
+
     @field_validator("completion_map", mode="before")
     def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:
         assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
         return ThreadSafeDict(
             {k: StageCompletion.model_validate(val) for k, val in v.items()}
         )
+
+    @field_validator("seen_hierarchy_node_raw_ids", mode="before")
+    def validate_seen_hierarchy(cls, v: Any) -> ThreadSafeSet[str]:
+        if isinstance(v, ThreadSafeSet):
+            return v
+        if isinstance(v, set):
+            return ThreadSafeSet(v)
+        if isinstance(v, list):
+            return ThreadSafeSet(set(v))
+        return ThreadSafeSet()
+
+    @field_validator("fully_walked_hierarchy_node_raw_ids", mode="before")
+    def validate_fully_walked_hierarchy(cls, v: Any) -> ThreadSafeSet[str]:
+        if isinstance(v, ThreadSafeSet):
+            return v
+        if isinstance(v, set):
+            return ThreadSafeSet(v)
+        if isinstance(v, list):
+            return ThreadSafeSet(set(v))
+        return ThreadSafeSet()

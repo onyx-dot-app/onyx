@@ -244,8 +244,9 @@ class DirectoryManager:
                 )
 
         # Create additional output directories for generated content
-        (output_dir / "slides").mkdir(parents=True, exist_ok=True)
         (output_dir / "markdown").mkdir(parents=True, exist_ok=True)
+        # TODO: no images for now
+        # (output_dir / "slides").mkdir(parents=True, exist_ok=True)
         # TODO: No graphs for now
         # (output_dir / "graphs").mkdir(parents=True, exist_ok=True)
 
@@ -299,11 +300,15 @@ class DirectoryManager:
         # Get the files path (symlink to knowledge sources)
         files_path = sandbox_path / "files"
 
+        # Get the attachments path (user-uploaded files)
+        attachments_path = sandbox_path / "attachments"
+
         # Use shared utility to generate content
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
             files_path=files_path if files_path.exists() else None,
+            attachments_path=attachments_path if attachments_path.exists() else None,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -389,7 +394,7 @@ class DirectoryManager:
             disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
             overwrite: If True, overwrite existing config. If False, preserve existing config.
             dev_mode: If True, allow all external directories (local dev).
-                      If False (default), only whitelist /workspace/files and /workspace/demo-data.
+                      If False (default), only whitelist /workspace/files and /workspace/demo_data.
         """
         config_path = sandbox_path / "opencode.json"
         if not overwrite and config_path.exists():

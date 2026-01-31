@@ -19,15 +19,15 @@ export function getFinalLLM(
 
   if (persona) {
     // Map "model override" to actual model
-    if (persona.model_configuration_id_override) {
+    if (persona.default_model_configuration_id) {
       const underlyingProvider = llmProviders.find(
         (item: LLMProviderDescriptor) =>
           item.model_configurations.find(
-            (m) => m.id === persona.model_configuration_id_override
+            (m) => m.id === persona.default_model_configuration_id
           )
       );
       const underlyingModel = underlyingProvider?.model_configurations.find(
-        (m) => m.id === persona.model_configuration_id_override
+        (m) => m.id === persona.default_model_configuration_id
       );
       provider = underlyingProvider?.provider || provider;
       model = underlyingModel?.name || model;
@@ -46,17 +46,20 @@ export function getLLMProviderOverrideForPersona(
   liveAssistant: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
-  const overrideModelId = liveAssistant.model_configuration_id_override;
+  const defaultModelConfigurationId =
+    liveAssistant.default_model_configuration_id;
 
-  if (!overrideModelId) {
+  if (!defaultModelConfigurationId) {
     return null;
   }
 
   const matchingProvider = llmProviders.find((provider) =>
-    provider.model_configurations.find((m) => m.id === overrideModelId)
+    provider.model_configurations.find(
+      (m) => m.id === defaultModelConfigurationId
+    )
   );
   const underlyingModel = matchingProvider?.model_configurations.find(
-    (m) => m.id === overrideModelId
+    (m) => m.id === defaultModelConfigurationId
   );
 
   if (matchingProvider && underlyingModel) {

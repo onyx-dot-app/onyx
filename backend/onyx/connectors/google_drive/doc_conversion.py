@@ -258,6 +258,9 @@ def download_request(
     return _download_request(request, file_id, size_threshold)
 
 
+_DOWNLOAD_NUM_RETRIES = 3
+
+
 def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
     response_bytes = io.BytesIO()
     downloader = MediaIoBaseDownload(
@@ -265,7 +268,10 @@ def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
     )
     done = False
     while not done:
-        download_progress, done = downloader.next_chunk()
+        # num_retries enables automatic retry with exponential backoff for transient errors
+        download_progress, done = downloader.next_chunk(
+            num_retries=_DOWNLOAD_NUM_RETRIES
+        )
         if download_progress.resumable_progress > size_threshold:
             logger.warning(
                 f"File {file_id} exceeds size threshold of {size_threshold}. Skipping2."
@@ -694,7 +700,7 @@ def _convert_drive_item_to_document(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
             external_access=external_access,
-            parent_hierarchy_raw_node_id=file.get("parents", [None])[0],
+            parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
         )
     except Exception as e:
         doc_id = "unknown"

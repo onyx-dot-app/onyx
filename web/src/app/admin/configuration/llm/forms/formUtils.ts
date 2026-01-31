@@ -87,6 +87,7 @@ export interface BaseLLMFormValues {
   groups: number[];
   personas: number[];
   selected_model_names: string[];
+  custom_config?: Record<string, string>;
 }
 
 export interface SubmitLLMProviderParams<
@@ -192,11 +193,17 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     );
   }
 
+  const customConfigChanged = !isEqual(
+    values.custom_config,
+    initialValues.custom_config
+  );
+
   const finalValues = {
     ...rest,
     default_model_name: finalDefaultModelName,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),
+    custom_config_changed: customConfigChanged,
     model_configurations: filteredModelConfigurations,
   };
 
