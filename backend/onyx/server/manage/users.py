@@ -655,10 +655,11 @@ def verify_user_logged_in(
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
-    # User can no longer be None. However, we need to use optional_user dependency
+    # User should no longer be None (unless not auth-ed).
+    # However, we need to use optional_user dependency
     # to allow unverified users to access this endpoint
     if user is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise BasicAuthenticationError(detail="Unauthorized")
     # If anonymous user, return the fake UserInfo (maintains backward compatibility)
     if user.is_anonymous:
         store = get_kv_store()
