@@ -31,6 +31,9 @@ const STEADY_REVEAL_STREAMING_OPTIONS: SteadyRevealOptions = {
 
 function getPacketText(packet: unknown): string {
   const maybe = packet as { obj?: { type?: string; content?: string } };
+  if (!maybe?.obj || !maybe.obj.type) {
+    throw new Error("Malformed chat packet: missing obj.type");
+  }
   const type = maybe?.obj?.type;
   if (type === PacketType.MESSAGE_START || type === PacketType.MESSAGE_DELTA) {
     return maybe.obj?.content ?? "";
