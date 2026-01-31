@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { ScrollContainerProvider } from "./ScrollContainerContext";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
@@ -89,6 +90,7 @@ const ChatScrollContainer = React.memo(
       const fadeThresholdPx = DEFAULT_FADE_THRESHOLD_PX;
       const buttonThresholdPx = DEFAULT_BUTTON_THRESHOLD_PX;
       const scrollContainerRef = useRef<HTMLDivElement>(null);
+      const contentWrapperRef = useRef<HTMLDivElement>(null);
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
@@ -226,6 +228,13 @@ const ChatScrollContainer = React.memo(
           rafId = requestAnimationFrame(() => {
             rafId = null;
 
+            // Skip instant auto-scroll if DynamicBottomSpacer is doing a smooth scroll
+            // (indicated by data attribute on the container)
+            if (container.dataset.smoothScrollActive === "true") {
+              updateScrollState();
+              return;
+            }
+
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
 
@@ -359,13 +368,19 @@ const ChatScrollContainer = React.memo(
             }}
           >
             <div
+              ref={contentWrapperRef}
               className="w-full flex-1 flex flex-col items-center"
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",
               }}
             >
-              {children}
+              <ScrollContainerProvider
+                scrollContainerRef={scrollContainerRef}
+                contentWrapperRef={contentWrapperRef}
+              >
+                {children}
+              </ScrollContainerProvider>
 
               {/* End marker to measure content end */}
               <div ref={endDivRef} />

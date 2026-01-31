@@ -10,6 +10,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import AIMessage from "@/app/app/message/messageComponents/AIMessage";
 import Spacer from "@/refresh-components/Spacer";
+import DynamicBottomSpacer from "./DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,
   useCurrentMessageTree,
@@ -231,6 +232,9 @@ const MessageList = React.memo(
             />
           </div>
         )}
+
+        {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
+        <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
       </div>
     );
   }

@@ -223,7 +223,10 @@ export interface StickyHeaderProps {
 
 function StickyHeader({ children, className }: StickyHeaderProps) {
   return (
-    <header className={cn("sticky top-0 z-sticky w-full", className)}>
+    <header
+      data-sticky-header
+      className={cn("sticky top-0 z-sticky w-full", className)}
+    >
       {children}
     </header>
   );
