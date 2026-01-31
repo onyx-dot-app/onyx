@@ -619,12 +619,10 @@ def handle_stream_message_objects(
         ) -> None:
             llm_loop_completion_handle(
                 state_container=state_container,
-                db_session=db_session,
-                chat_session_id=chat_session.id,
                 is_connected=check_is_connected,
+                db_session=db_session,
                 assistant_message=assistant_response,
                 llm=llm,
-                tool_id_to_name=tool_id_to_name_map,
                 reserved_tokens=reserved_token_count,
             )
 
@@ -744,12 +742,12 @@ def llm_loop_completion_handle(
     state_container: ChatStateContainer,
     is_connected: Callable[[], bool],
     db_session: Session,
-    chat_session_id: UUID,
     assistant_message: ChatMessage,
     llm: LLM,
-    tool_id_to_name: dict[int, str],
     reserved_tokens: int,
 ) -> None:
+    chat_session_id = assistant_message.chat_session_id
+
     # Determine if stopped by user
     completed_normally = is_connected()
     # Build final answer based on completion status
@@ -788,12 +786,17 @@ def llm_loop_completion_handle(
         db_session=db_session,
     )
     total_tokens = calculate_total_history_tokens(updated_chat_history)
+
     compression_params = get_compression_params(
         max_input_tokens=llm.config.max_input_tokens,
         current_history_tokens=total_tokens,
         reserved_tokens=reserved_tokens,
     )
     if compression_params.should_compress:
+        # Build tool mapping for formatting messages
+        all_tools = get_tools(db_session)
+        tool_id_to_name = {tool.id: tool.name for tool in all_tools}
+
         compress_chat_history(
             db_session=db_session,
             chat_history=updated_chat_history,
