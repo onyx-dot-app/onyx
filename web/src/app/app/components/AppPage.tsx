@@ -135,8 +135,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useSettingsContext();
-  const { theme } = useTheme();
-  const isLightMode = theme === "light";
+  const { resolvedTheme } = useTheme();
+  const isLightMode = resolvedTheme === "light";
 
   const isInitialLoad = useRef(true);
 
