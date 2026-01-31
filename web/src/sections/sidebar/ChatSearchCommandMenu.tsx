@@ -80,7 +80,7 @@ export default function ChatSearchCommandMenu({
 
   // Constants for preview limits
   const PREVIEW_CHATS_LIMIT = 4;
-  const PREVIEW_PROJECTS_LIMIT = 2;
+  const PREVIEW_PROJECTS_LIMIT = 3;
 
   // Determine if we should enable optimistic search (when searching or viewing chats filter)
   const shouldUseOptimisticSearch =
@@ -234,7 +234,10 @@ export default function ChatSearchCommandMenu({
                     <CommandMenu.Filter
                       value="recent-sessions"
                       onSelect={() => setActiveFilter("chats")}
-                      isApplied={activeFilter === "chats"}
+                      isApplied={
+                        activeFilter === "chats" ||
+                        filteredChats.length <= PREVIEW_CHATS_LIMIT
+                      }
                     >
                       {activeFilter === "chats" ? "Recent" : "Recent Sessions"}
                     </CommandMenu.Filter>
@@ -274,49 +277,51 @@ export default function ChatSearchCommandMenu({
               )}
 
             {/* Projects section - show if filter is 'all' or 'projects' */}
-            {(activeFilter === "all" || activeFilter === "projects") &&
-              displayedProjects.length > 0 && (
-                <>
-                  <CommandMenu.Filter
-                    value="projects"
-                    onSelect={() => setActiveFilter("projects")}
-                    isApplied={activeFilter === "projects"}
+            {(activeFilter === "all" || activeFilter === "projects") && (
+              <>
+                <CommandMenu.Filter
+                  value="projects"
+                  onSelect={() => setActiveFilter("projects")}
+                  isApplied={
+                    activeFilter === "projects" ||
+                    filteredProjects.length <= PREVIEW_PROJECTS_LIMIT
+                  }
+                >
+                  Projects
+                </CommandMenu.Filter>
+                {/* New Project action - shown after Projects filter when no search term */}
+                {!hasSearchValue && activeFilter === "all" && (
+                  <CommandMenu.Action
+                    value="new-project"
+                    icon={SvgFolderPlus}
+                    onSelect={() => handleNewProject()}
                   >
-                    Projects
-                  </CommandMenu.Filter>
-                  {/* New Project action - shown after Projects filter when no search term */}
-                  {!hasSearchValue && activeFilter === "all" && (
-                    <CommandMenu.Action
-                      value="new-project"
-                      icon={SvgFolderPlus}
-                      onSelect={() => handleNewProject()}
-                    >
-                      New Project
-                    </CommandMenu.Action>
-                  )}
-                  {displayedProjects.map((project) => (
-                    <CommandMenu.Item
-                      key={project.id}
-                      value={`project-${project.id}`}
-                      icon={SvgFolder}
-                      rightContent={({ isHighlighted }) =>
-                        isHighlighted ? (
-                          <Text figureKeystroke text02>
-                            ↵
-                          </Text>
-                        ) : (
-                          <Text secondaryBody text03>
-                            {formatDisplayTime(project.time)}
-                          </Text>
-                        )
-                      }
-                      onSelect={() => handleProjectSelect(project.id)}
-                    >
-                      {project.label}
-                    </CommandMenu.Item>
-                  ))}
-                </>
-              )}
+                    New Project
+                  </CommandMenu.Action>
+                )}
+                {displayedProjects.map((project) => (
+                  <CommandMenu.Item
+                    key={project.id}
+                    value={`project-${project.id}`}
+                    icon={SvgFolder}
+                    rightContent={({ isHighlighted }) =>
+                      isHighlighted ? (
+                        <Text figureKeystroke text02>
+                          ↵
+                        </Text>
+                      ) : (
+                        <Text secondaryBody text03>
+                          {formatDisplayTime(project.time)}
+                        </Text>
+                      )
+                    }
+                    onSelect={() => handleProjectSelect(project.id)}
+                  >
+                    {project.label}
+                  </CommandMenu.Item>
+                ))}
+              </>
+            )}
 
             {/* Create New Project with search term - shown at bottom when searching */}
             {hasSearchValue &&
