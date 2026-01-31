@@ -66,6 +66,9 @@ export default function ChatSearchCommandMenu({
   const [activeFilter, setActiveFilter] = useState<
     "all" | "chats" | "projects"
   >("all");
+  const [initialProjectName, setInitialProjectName] = useState<
+    string | undefined
+  >();
   const router = useRouter();
 
   // Data hooks
@@ -171,10 +174,14 @@ export default function ChatSearchCommandMenu({
     [router]
   );
 
-  const handleNewProject = useCallback(() => {
-    setOpen(false);
-    createProjectModal.toggle(true);
-  }, [createProjectModal]);
+  const handleNewProject = useCallback(
+    (initialName?: string) => {
+      setInitialProjectName(initialName);
+      setOpen(false);
+      createProjectModal.toggle(true);
+    },
+    [createProjectModal]
+  );
 
   const handleOpenChange = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
@@ -269,14 +276,22 @@ export default function ChatSearchCommandMenu({
             {(activeFilter === "all" || activeFilter === "projects") &&
               displayedProjects.length > 0 && (
                 <>
-                  {(activeFilter === "all" || activeFilter === "projects") && (
-                    <CommandMenu.Filter
-                      value="projects"
-                      onSelect={() => setActiveFilter("projects")}
-                      isApplied={activeFilter === "projects"}
+                  <CommandMenu.Filter
+                    value="projects"
+                    onSelect={() => setActiveFilter("projects")}
+                    isApplied={activeFilter === "projects"}
+                  >
+                    Projects
+                  </CommandMenu.Filter>
+                  {/* New Project action - shown after Projects filter when no search term */}
+                  {!hasSearchValue && activeFilter === "all" && (
+                    <CommandMenu.Action
+                      value="new-project"
+                      icon={SvgFolderPlus}
+                      onSelect={() => handleNewProject()}
                     >
-                      Projects
-                    </CommandMenu.Filter>
+                      New Project
+                    </CommandMenu.Action>
                   )}
                   {displayedProjects.map((project) => (
                     <CommandMenu.Item
@@ -302,15 +317,15 @@ export default function ChatSearchCommandMenu({
                 </>
               )}
 
-            {/* New Project action - shown when no search and no filter or projects filter */}
-            {!hasSearchValue &&
+            {/* Create New Project with search term - shown at bottom when searching */}
+            {hasSearchValue &&
               (activeFilter === "all" || activeFilter === "projects") && (
                 <CommandMenu.Action
-                  value="new-project"
+                  value="create-project-with-name"
                   icon={SvgFolderPlus}
-                  onSelect={handleNewProject}
+                  onSelect={() => handleNewProject(searchValue.trim())}
                 >
-                  New Project
+                  {`Create New Project "${searchValue.trim()}"`}
                 </CommandMenu.Action>
               )}
           </CommandMenu.List>
@@ -321,7 +336,7 @@ export default function ChatSearchCommandMenu({
 
       {/* Project creation modal */}
       <createProjectModal.Provider>
-        <CreateProjectModal />
+        <CreateProjectModal initialProjectName={initialProjectName} />
       </createProjectModal.Provider>
     </>
   );

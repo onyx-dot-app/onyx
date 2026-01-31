@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Button from "@/refresh-components/buttons/Button";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
@@ -12,12 +12,23 @@ import Modal from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
-export default function CreateProjectModal() {
+interface CreateProjectModalProps {
+  initialProjectName?: string;
+}
+
+export default function CreateProjectModal({
+  initialProjectName,
+}: CreateProjectModalProps) {
   const { createProject } = useProjectsContext();
   const modal = useModal();
   const route = useAppRouter();
-  const [projectName, setProjectName] = useState("");
+  const [projectName, setProjectName] = useState(initialProjectName ?? "");
   const { popup, setPopup } = usePopup();
+
+  // Reset when prop changes (modal reopens with different value)
+  useEffect(() => {
+    setProjectName(initialProjectName ?? "");
+  }, [initialProjectName]);
 
   async function handleSubmit() {
     const name = projectName.trim();
