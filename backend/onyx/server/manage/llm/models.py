@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 from typing import Any
+from typing import Generic
 from typing import TYPE_CHECKING
+from typing import TypeVar
 
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
+from onyx.db.enums import ModelFlowType
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
@@ -21,22 +26,23 @@ if TYPE_CHECKING:
     )
 
 
+T = TypeVar("T", bound="LLMProviderDescriptor | LLMProviderView")
+
+
 class TestLLMRequest(BaseModel):
     # provider level
-    name: str | None = None
+    name: str
     provider: str
+    model: str
     api_key: str | None = None
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
 
     # model level
-    default_model_name: str
     deployment_name: str | None = None
 
-    model_configurations: list["ModelConfigurationUpsertRequest"]
-
-    # if try and use the existing API/custom config key
+    # if try and use the existing API key
     api_key_changed: bool
     custom_config_changed: bool
 
@@ -54,10 +60,6 @@ class LLMProviderDescriptor(BaseModel):
     name: str
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
-    default_model_name: str
-    is_default_provider: bool | None
-    is_default_vision_provider: bool | None
-    default_vision_model: str | None
     model_configurations: list["ModelConfigurationView"]
 
     @classmethod
@@ -75,10 +77,6 @@ class LLMProviderDescriptor(BaseModel):
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            default_model_name=llm_provider_model.default_model_name,
-            is_default_provider=llm_provider_model.is_default_provider,
-            is_default_vision_provider=llm_provider_model.is_default_vision_provider,
-            default_vision_model=llm_provider_model.default_vision_model,
             model_configurations=filter_model_configurations(
                 llm_provider_model.model_configurations, provider
             ),
@@ -92,13 +90,11 @@ class LLMProvider(BaseModel):
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
-    default_model_name: str
     is_public: bool = True
     is_auto_mode: bool = False
     groups: list[int] = Field(default_factory=list)
     personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
-    default_vision_model: str | None = None
 
 
 class LLMProviderUpsertRequest(LLMProvider):
@@ -119,8 +115,6 @@ class LLMProviderView(LLMProvider):
     """Stripped down representation of LLMProvider for display / limited access info only"""
 
     id: int
-    is_default_provider: bool | None = None
-    is_default_vision_provider: bool | None = None
     model_configurations: list["ModelConfigurationView"]
 
     @classmethod
@@ -150,10 +144,6 @@ class LLMProviderView(LLMProvider):
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
-            default_model_name=llm_provider_model.default_model_name,
-            is_default_provider=llm_provider_model.is_default_provider,
-            is_default_vision_provider=llm_provider_model.is_default_vision_provider,
-            default_vision_model=llm_provider_model.default_vision_model,
             is_public=llm_provider_model.is_public,
             is_auto_mode=llm_provider_model.is_auto_mode,
             groups=groups,
@@ -182,7 +172,8 @@ class ModelConfigurationUpsertRequest(ModelConfiguration):
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
-            supports_image_input=model_configuration_model.supports_image_input,
+            supports_image_input=ModelFlowType.VISION
+            in (flow for flow in model_configuration_model.model_flow_types),
             display_name=model_configuration_model.display_name,
         )
 
@@ -214,9 +205,8 @@ class ModelConfigurationView(ModelConfiguration):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
-                supports_image_input=(
-                    model_configuration_model.supports_image_input or False
-                ),
+                supports_image_input=ModelFlowType.VISION
+                in (flow for flow in model_configuration_model.model_flow_types),
                 # Infer reasoning support from model name/display name
                 supports_reasoning=is_reasoning_model(
                     model_configuration_model.name,
@@ -259,7 +249,11 @@ class ModelConfigurationView(ModelConfiguration):
             ),
             supports_image_input=(
                 val
-                if (val := model_configuration_model.supports_image_input) is not None
+                if (
+                    val := ModelFlowType.VISION
+                    in (flow for flow in model_configuration_model.model_flow_types)
+                )
+                is not None
                 else litellm_thinks_model_supports_image_input(
                     model_configuration_model.name, provider
                 )
@@ -368,3 +362,27 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+
+
+class DefaultModel(BaseModel):
+    provider_id: int
+    model_name: str
+
+
+class LLMProviderResponse(BaseModel, Generic[T]):
+    providers: list[T]
+    default_text: DefaultModel | None = None
+    default_vision: DefaultModel | None = None
+
+    @classmethod
+    def from_models(
+        cls,
+        providers: list[T],
+        default_text: DefaultModel | None = None,
+        default_vision: DefaultModel | None = None,
+    ) -> LLMProviderResponse[T]:
+        return cls(
+            default_text=default_text,
+            default_vision=default_vision,
+            providers=providers,
+        )

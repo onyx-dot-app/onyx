@@ -49,11 +49,6 @@ def _create_llm_provider(
         default_model_name=default_model_name,
         deployment_name=None,
         is_public=is_public,
-        # Use None instead of False to avoid unique constraint violation
-        # The is_default_provider column has unique=True, so only one True and one False allowed
-        is_default_provider=is_default if is_default else None,
-        is_default_vision_provider=False,
-        default_vision_model=None,
     )
     db_session.add(provider)
     db_session.flush()
@@ -376,13 +371,13 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
             persona=persona,
             user=admin_model,
         )
-        assert allowed_llm.config.model_name == restricted_provider.default_model_name
+        assert allowed_llm.config.model_name == "gpt-4o-mini"
 
         fallback_llm = get_llm_for_persona(
             persona=persona,
             user=basic_model,
         )
-        assert fallback_llm.config.model_name == default_provider.default_model_name
+        assert fallback_llm.config.model_name == "gpt-4o"
 
 
 def test_list_llm_provider_basics_excludes_non_public_unrestricted(

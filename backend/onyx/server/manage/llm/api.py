@@ -19,14 +19,17 @@ from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_default_model
 from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_llm_providers_supporting_flows
+from onyx.db.llm import fetch_existing_model_configs_for_flow
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import sync_model_configurations
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.llm import validate_persona_ids_exist
@@ -37,7 +40,6 @@ from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
-from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -50,11 +52,12 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 )
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
+from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
+from onyx.server.manage.llm.models import LLMProviderResponse
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
@@ -212,7 +215,7 @@ def test_llm_configuration(
 
     llm = get_llm(
         provider=test_llm_request.provider,
-        model=test_llm_request.default_model_name,
+        model=test_llm_request.model,
         api_key=test_api_key,
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
@@ -247,13 +250,15 @@ def list_llm_providers(
     include_image_gen: bool = Query(False),
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderView]:
+) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers")
 
     llm_provider_list: list[LLMProviderView] = []
-    for llm_provider_model in fetch_existing_llm_providers(
-        db_session, exclude_image_generation_providers=not include_image_gen
+    for llm_provider_model in fetch_existing_llm_providers_supporting_flows(
+        db_session=db_session,
+        flows=[ModelFlowType.CONVERSATION, ModelFlowType.VISION],
+        exclude_image_generation_providers=not include_image_gen,
     ):
         from_model_start = datetime.now(timezone.utc)
         full_llm_provider = LLMProviderView.from_model(llm_provider_model)
@@ -270,7 +275,18 @@ def list_llm_providers(
     duration = (end_time - start_time).total_seconds()
     logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
 
-    return llm_provider_list
+    default_text = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.CONVERSATION
+    )
+    default_vision = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.VISION
+    )
+
+    return LLMProviderResponse[LLMProviderView].from_models(
+        default_text=default_text,
+        default_vision=default_vision,
+        providers=llm_provider_list,
+    )
 
 
 @admin_router.put("/provider")
@@ -329,20 +345,6 @@ def put_llm_provider(
                 deduplicated_personas.append(persona_id)
         llm_provider_upsert_request.personas = deduplicated_personas
 
-    default_model_found = False
-
-    for model_configuration in llm_provider_upsert_request.model_configurations:
-        if model_configuration.name == llm_provider_upsert_request.default_model_name:
-            model_configuration.is_visible = True
-            default_model_found = True
-
-    if not default_model_found:
-        llm_provider_upsert_request.model_configurations.append(
-            ModelConfigurationUpsertRequest(
-                name=llm_provider_upsert_request.default_model_name, is_visible=True
-            )
-        )
-
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
@@ -354,6 +356,28 @@ def put_llm_provider(
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
         not existing_provider or not existing_provider.is_auto_mode
     )
+
+    default_vision_model = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.VISION
+    )
+
+    # Check that we're not disabling vision on the default vision model
+    if (
+        default_vision_model
+        and existing_provider
+        and default_vision_model.provider_id == existing_provider.id
+        and any(
+            m.name == default_vision_model.model_name and not m.supports_image_input
+            for m in llm_provider_upsert_request.model_configurations
+        )
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot disable vision for '{default_vision_model.model_name}' because it is the default vision model."
+                "Select another model as default first."
+            ),
+        )
 
     try:
         result = upsert_llm_provider(
@@ -394,31 +418,51 @@ def delete_llm_provider(
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
+        default_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.CONVERSATION
+        )
+        if default_model and default_model.provider_id == provider_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete default provider. Select another provider as default",
+            )
+        default_vision_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.VISION
+        )
+        if default_vision_model and default_vision_model.provider_id == provider_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot delete default vision provider. Select another provider as default",
+            )
+
         remove_llm_provider(db_session, provider_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@admin_router.post("/provider/{provider_id}/default")
-def set_provider_as_default(
-    provider_id: int,
-    _: User = Depends(current_admin_user),
+@admin_router.post("/default")
+def set_default_model(
+    default_model_request: DefaultModel,
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_provider(provider_id=provider_id, db_session=db_session)
+    update_default_text_provider(
+        provider_id=default_model_request.provider_id,
+        model=default_model_request.model_name,
+        db_session=db_session,
+    )
 
 
-@admin_router.post("/provider/{provider_id}/default-vision")
-def set_provider_as_default_vision(
-    provider_id: int,
-    vision_model: str | None = Query(
-        None, description="The default vision model to use"
-    ),
-    _: User = Depends(current_admin_user),
+@admin_router.post("/default-vision")
+def set_default_vision_model(
+    default_vision_request: DefaultModel,
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_vision_provider(
-        provider_id=provider_id, vision_model=vision_model, db_session=db_session
+        provider_id=default_vision_request.provider_id,
+        vision_model=default_vision_request.model_name,
+        db_session=db_session,
     )
 
 
@@ -447,40 +491,34 @@ def get_vision_capable_providers(
 ) -> list[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
 
-    providers = fetch_existing_llm_providers(db_session)
-    vision_providers = []
+    vision_providers = fetch_existing_llm_providers_supporting_flows(
+        db_session=db_session,
+        flows=[ModelFlowType.VISION],
+    )
 
-    logger.info("Fetching vision-capable providers")
+    response: list[VisionProviderResponse] = []
 
-    for provider in providers:
-        vision_models = []
+    for provider in vision_providers:
+        provider_view = LLMProviderView.from_model(provider)
+        _mask_provider_credentials(provider_view)
 
-        # Check each model for vision capability
-        for model_configuration in provider.model_configurations:
-            if model_supports_image_input(model_configuration.name, provider.provider):
-                vision_models.append(model_configuration.name)
-                logger.debug(
-                    f"Vision model found: {provider.provider}/{model_configuration.name}"
-                )
-
-        # Only include providers with at least one vision-capable model
-        if vision_models:
-            provider_view = LLMProviderView.from_model(provider)
-            _mask_provider_credentials(provider_view)
-
-            vision_providers.append(
-                VisionProviderResponse(
-                    **provider_view.model_dump(),
-                    vision_models=vision_models,
-                )
+        response.append(
+            VisionProviderResponse(
+                **provider_view.model_dump(),
+                vision_models=[
+                    model.name
+                    for model in provider.model_configurations
+                    if model.supports_image_input
+                ],
             )
+        )
 
-            logger.info(
-                f"Vision provider: {provider.provider} with models: {vision_models}"
-            )
+        logger.info(
+            f"Vision provider: {provider.provider} with models: {response[-1].vision_models}"
+        )
 
     logger.info(f"Found {len(vision_providers)} vision-capable providers")
-    return vision_providers
+    return response
 
 
 """Endpoints for all"""
@@ -490,7 +528,7 @@ def get_vision_capable_providers(
 def list_llm_provider_basics(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderDescriptor]:
+) -> LLMProviderResponse[LLMProviderDescriptor]:
     """Get LLM providers accessible to the current user.
 
     Returns:
@@ -503,7 +541,10 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers_supporting_flows(
+        db_session=db_session,
+        flows=[ModelFlowType.CONVERSATION, ModelFlowType.VISION],
+    )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
 
@@ -527,7 +568,18 @@ def list_llm_provider_basics(
         f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
     )
 
-    return accessible_providers
+    default_text = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.CONVERSATION
+    )
+    default_vision = fetch_default_model(
+        db_session=db_session, flow_type=ModelFlowType.VISION
+    )
+
+    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+        providers=accessible_providers,
+        default_text=default_text,
+        default_vision=default_vision,
+    )
 
 
 def get_valid_models_for_persona(
@@ -546,7 +598,10 @@ def get_valid_models_for_persona(
         return []
 
     is_admin = user.role == UserRole.ADMIN
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers_supporting_flows(
+        db_session=db_session,
+        flows=[ModelFlowType.CONVERSATION],
+    )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     valid_models = []
@@ -598,7 +653,10 @@ def list_llm_providers_for_persona(
         )
 
     is_admin = user.role == UserRole.ADMIN
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers_supporting_flows(
+        db_session=db_session,
+        flows=[ModelFlowType.CONVERSATION],
+    )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     llm_provider_list: list[LLMProviderDescriptor] = []
@@ -636,32 +694,34 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(db_session)
+    models = fetch_existing_model_configs_for_flow(
+        db_session=db_session,
+        flows=[ModelFlowType.CONVERSATION],
+    )
     costs = []
-    for provider in providers:
-        for model_configuration in provider.model_configurations:
-            llm_provider = LLMProviderView.from_model(provider)
-            llm = get_llm(
-                provider=provider.provider,
-                model=model_configuration.name,
-                deployment_name=provider.deployment_name,
-                api_key=provider.api_key,
-                api_base=provider.api_base,
-                api_version=provider.api_version,
-                custom_config=provider.custom_config,
-                max_input_tokens=get_max_input_tokens_from_llm_provider(
-                    llm_provider=llm_provider, model_name=model_configuration.name
-                ),
-            )
-            cost = get_llm_contextual_cost(llm)
-            costs.append(
-                LLMCost(
-                    provider=provider.name,
-                    model_name=model_configuration.name,
-                    cost=cost,
-                )
-            )
 
+    for model in models:
+        llm_provider = LLMProviderView.from_model(model.llm_provider)
+        llm = get_llm(
+            provider=model.llm_provider.provider,
+            model=model.name,
+            deployment_name=model.llm_provider.deployment_name,
+            api_key=model.llm_provider.api_key,
+            api_base=model.llm_provider.api_base,
+            api_version=model.llm_provider.api_version,
+            custom_config=model.llm_provider.custom_config,
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
+                llm_provider=llm_provider, model_name=model.name
+            ),
+        )
+        cost = get_llm_contextual_cost(llm)
+        costs.append(
+            LLMCost(
+                provider=model.llm_provider.provider,
+                model_name=model.name,
+                cost=cost,
+            )
+        )
     return costs
 
 

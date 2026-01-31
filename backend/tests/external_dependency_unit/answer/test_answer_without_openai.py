@@ -10,9 +10,10 @@ from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.db.chat import create_chat_session
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.enums import ModelFlowType
+from onyx.db.llm import fetch_existing_llm_providers_supporting_flows
 from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_text_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -36,7 +37,10 @@ def test_answer_with_only_anthropic_provider(
     assert anthropic_api_key, "ANTHROPIC_API_KEY environment variable must be set"
 
     # Drop any existing providers so that only Anthropic is available.
-    for provider in fetch_existing_llm_providers(db_session):
+    for provider in fetch_existing_llm_providers_supporting_flows(
+        db_session=db_session,
+        flows=[ModelFlowType.CONVERSATION],
+    ):
         remove_llm_provider(db_session, provider.id)
 
     anthropic_model = "claude-haiku-4-5-20251001"
@@ -47,7 +51,6 @@ def test_answer_with_only_anthropic_provider(
             name=provider_name,
             provider=LlmProviderNames.ANTHROPIC,
             api_key=anthropic_api_key,
-            default_model_name=anthropic_model,
             is_public=True,
             groups=[],
             model_configurations=[
@@ -59,7 +62,11 @@ def test_answer_with_only_anthropic_provider(
     )
 
     try:
-        update_default_provider(anthropic_provider.id, db_session)
+        update_default_text_provider(
+            provider_id=anthropic_provider.id,
+            model=anthropic_model,
+            db_session=db_session,
+        )
 
         test_user = create_test_user(db_session, email_prefix="anthropic_only")
         chat_session = create_chat_session(

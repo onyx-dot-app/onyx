@@ -11,7 +11,7 @@ from onyx.db.image_generation import get_all_image_generation_configs
 from onyx.db.image_generation import get_image_generation_config
 from onyx.db.image_generation import set_default_image_generation_config
 from onyx.db.image_generation import unset_default_image_generation_config
-from onyx.db.llm import remove_llm_provider__no_commit
+from onyx.db.llm import remove_llm_provider
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
@@ -93,7 +93,6 @@ def _build_llm_provider_request(
             api_key=source_provider.api_key,  # Only this from source
             api_base=api_base,  # From request
             api_version=api_version,  # From request
-            default_model_name=model_name,
             deployment_name=deployment_name,  # From request
             is_public=True,
             groups=[],
@@ -132,7 +131,6 @@ def _build_llm_provider_request(
         api_key=api_key,
         api_base=api_base,
         api_version=api_version,
-        default_model_name=model_name,
         deployment_name=deployment_name,
         is_public=True,
         groups=[],
@@ -164,7 +162,6 @@ def _create_image_gen_llm_provider__no_commit(
         api_key=provider_request.api_key,
         api_base=provider_request.api_base,
         api_version=provider_request.api_version,
-        default_model_name=provider_request.default_model_name,
         deployment_name=provider_request.deployment_name,
         is_public=provider_request.is_public,
         custom_config=provider_request.custom_config,
@@ -457,7 +454,9 @@ def update_config(
         existing_config.model_configuration_id = new_model_config_id
 
         # 5. Delete old LLM provider (safe now - nothing references it)
-        remove_llm_provider__no_commit(db_session, old_llm_provider_id)
+        remove_llm_provider(
+            db_session=db_session, provider_id=old_llm_provider_id, commit=False
+        )
 
         db_session.commit()
         db_session.refresh(existing_config)
@@ -491,7 +490,9 @@ def delete_config(
         delete_image_generation_config__no_commit(db_session, image_provider_id)
 
         # Clean up the orphaned LLM provider (it was exclusively for image gen)
-        remove_llm_provider__no_commit(db_session, llm_provider_id)
+        remove_llm_provider(
+            db_session=db_session, provider_id=llm_provider_id, commit=False
+        )
 
         db_session.commit()
     except HTTPException:

@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_default_provider
-from onyx.db.llm import fetch_default_vision_provider
+from onyx.db.llm import fetch_default_model
 from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_model_configs_for_flow
 from onyx.db.llm import fetch_llm_provider_view
+from onyx.db.llm import fetch_llm_provider_view_from_id
 from onyx.db.llm import fetch_llm_provider_view_from_model_id
 from onyx.db.llm import fetch_model_configuration_view
 from onyx.db.llm import fetch_user_group_ids
@@ -22,7 +23,6 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
-from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView
@@ -125,10 +125,6 @@ def get_llm_for_persona(
             )
             model = model_config.name if model_config else None
 
-        # Fall back to provider's default model if no model was resolved
-        if not model:
-            model = llm_provider.default_model_name
-
     if not model:
         raise ValueError("No model name found")
 
@@ -202,48 +198,40 @@ def get_default_llm_with_vision(
 
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
-        default_provider = fetch_default_vision_provider(db_session)
-        if default_provider and default_provider.default_vision_model:
-            if model_supports_image_input(
-                default_provider.default_vision_model, default_provider.provider
-            ):
-                return create_vision_llm(
-                    default_provider, default_provider.default_vision_model
-                )
+        default_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.VISION
+        )
+        if default_model:
+            provider_view = fetch_llm_provider_view_from_id(
+                db_session, default_model.provider_id
+            )
+            if provider_view:
+                return create_vision_llm(provider_view, default_model.model_name)
+        # Fall back to searching all vision models
+        models = fetch_existing_model_configs_for_flow(
+            db_session=db_session,
+            flows=[ModelFlowType.VISION],
+        )
 
-        # Fall back to searching all providers
-        providers = fetch_existing_llm_providers(db_session)
-
-    if not providers:
+    if not models:
         return None
 
-    # Check all providers for viable vision models
-    for provider in providers:
-        provider_view = LLMProviderView.from_model(provider)
+    # Check for viable vision models
+    non_public_vision_llm: LLM | None = None
 
-        # First priority: Check if provider has a default_vision_model
-        if provider.default_vision_model and model_supports_image_input(
-            provider.default_vision_model, provider.provider
-        ):
-            return create_vision_llm(provider_view, provider.default_vision_model)
+    for model in models:
+        if model.is_visible:
+            return create_vision_llm(
+                provider=LLMProviderView.from_model(model.llm_provider),
+                model=model.name,
+            )
+        elif not non_public_vision_llm:
+            non_public_vision_llm = create_vision_llm(
+                provider=LLMProviderView.from_model(model.llm_provider),
+                model=model.name,
+            )
 
-        # If no model-configurations are specified, try default model
-        if not provider.model_configurations:
-            # Try default_model_name
-            if provider.default_model_name and model_supports_image_input(
-                provider.default_model_name, provider.provider
-            ):
-                return create_vision_llm(provider_view, provider.default_model_name)
-
-        # Otherwise, if model-configurations are specified, check each model
-        else:
-            for model_configuration in provider.model_configurations:
-                if model_supports_image_input(
-                    model_configuration.name, provider.provider
-                ):
-                    return create_vision_llm(provider_view, model_configuration.name)
-
-    return None
+    return non_public_vision_llm
 
 
 def llm_from_provider(
@@ -290,18 +278,25 @@ def get_default_llm(
     long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        llm_provider = fetch_default_provider(db_session)
+        default_model = fetch_default_model(
+            db_session=db_session, flow_type=ModelFlowType.CONVERSATION
+        )
 
-    if not llm_provider:
-        raise ValueError("No default LLM provider found")
+        if not default_model:
+            raise ValueError("No default LLM provider found")
 
-    model_name = llm_provider.default_model_name
-    if not model_name:
-        raise ValueError("No default model name found")
+        llm_provider_view = fetch_llm_provider_view_from_id(
+            db_session, default_model.provider_id
+        )
+
+        if not llm_provider_view:
+            raise ValueError(
+                "No LLM provider found with id {}".format(default_model.provider_id)
+            )
 
     return llm_from_provider(
-        model_name=model_name,
-        llm_provider=llm_provider,
+        model_name=default_model.model_name,
+        llm_provider=llm_provider_view,
         timeout=timeout,
         temperature=temperature,
         additional_headers=additional_headers,
