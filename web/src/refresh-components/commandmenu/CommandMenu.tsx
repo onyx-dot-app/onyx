@@ -90,11 +90,22 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     null
   );
   const [isKeyboardNav, setIsKeyboardNav] = React.useState(false);
+  const [itemsRevision, setItemsRevision] = React.useState(0);
 
-  // Centralized callback registry - items register their onSelect callback and type
+  // Centralized callback registry - items register their onSelect callback, type, and defaultHighlight
   const itemCallbacks = useRef<
-    Map<string, { callback: () => void; type: "filter" | "item" | "action" }>
+    Map<
+      string,
+      {
+        callback: () => void;
+        type: "filter" | "item" | "action";
+        defaultHighlight: boolean;
+      }
+    >
   >(new Map());
+
+  // Track previous itemsRevision to detect when items actually change
+  const prevItemsRevisionRef = useRef(itemsRevision);
 
   // Reset state when menu closes
   useEffect(() => {
@@ -105,26 +116,49 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     }
   }, [open]);
 
-  // Auto-highlight first item when menu opens
+  // Ensure valid highlight when menu is open and items change
   useEffect(() => {
     if (open) {
-      // Wait for items to render before highlighting
       const frame = requestAnimationFrame(() => {
         const items = getOrderedItems();
-        if (items.length > 0 && items[0]) {
-          setHighlightedValue(items[0]);
+        const currentEntry = highlightedValue
+          ? itemCallbacks.current.get(highlightedValue)
+          : null;
+
+        const itemsChanged = prevItemsRevisionRef.current !== itemsRevision;
+        prevItemsRevisionRef.current = itemsRevision;
+
+        // Re-evaluate if:
+        // 1. No highlight set
+        // 2. Current highlight is not in DOM
+        // 3. Items changed AND current highlight has defaultHighlight=false
+        const shouldReselect =
+          !highlightedValue ||
+          !items.includes(highlightedValue) ||
+          (itemsChanged && currentEntry?.defaultHighlight === false);
+
+        if (shouldReselect) {
+          // Find first item eligible for default highlight
+          const defaultItem = items.find((value) => {
+            const entry = itemCallbacks.current.get(value);
+            return entry?.defaultHighlight !== false;
+          });
+          // Use default item if found, otherwise fall back to first item
+          const targetItem = defaultItem || items[0];
+          setHighlightedValue(targetItem || null);
         }
       });
       return () => cancelAnimationFrame(frame);
     }
-  }, [open]);
+  }, [open, highlightedValue, itemsRevision]);
 
   // Registration functions (items call on mount)
   const registerItem = useCallback(
     (
       value: string,
       onSelect: () => void,
-      type: "filter" | "item" | "action" = "item"
+      type: "filter" | "item" | "action" = "item",
+      defaultHighlight: boolean = true
     ) => {
       if (
         process.env.NODE_ENV === "development" &&
@@ -135,13 +169,19 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
             `Values must be unique across all Filter, Item, and Action components.`
         );
       }
-      itemCallbacks.current.set(value, { callback: onSelect, type });
+      itemCallbacks.current.set(value, {
+        callback: onSelect,
+        type,
+        defaultHighlight,
+      });
+      setItemsRevision((r) => r + 1);
     },
     []
   );
 
   const unregisterItem = useCallback((value: string) => {
     itemCallbacks.current.delete(value);
+    setItemsRevision((r) => r + 1);
   }, []);
 
   // Shared mouse handlers (items call on events)
@@ -652,6 +692,7 @@ function CommandMenuAction({
   shortcut,
   onSelect,
   children,
+  defaultHighlight = true,
 }: CommandMenuActionProps) {
   const {
     highlightedValue,
@@ -664,9 +705,9 @@ function CommandMenuAction({
 
   // Register callback on mount - NO keyboard listener needed
   useEffect(() => {
-    registerItem(value, () => onSelect?.(value), "action");
+    registerItem(value, () => onSelect?.(value), "action", defaultHighlight);
     return () => unregisterItem(value);
-  }, [value, onSelect, registerItem, unregisterItem]);
+  }, [value, onSelect, defaultHighlight, registerItem, unregisterItem]);
 
   const isHighlighted = value === highlightedValue;
 

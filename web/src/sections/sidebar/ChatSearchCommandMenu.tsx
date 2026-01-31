@@ -206,12 +206,13 @@ export default function ChatSearchCommandMenu({
               hasSearchValue ? "No results found" : "No chats or projects yet"
             }
           >
-            {/* New Session action - always shown when no search and no filter */}
-            {!hasSearchValue && activeFilter === "all" && (
+            {/* New Session action - always visible in "all" filter, even during search */}
+            {activeFilter === "all" && (
               <CommandMenu.Action
                 value="new-session"
                 icon={SvgEditBig}
                 onSelect={handleNewSession}
+                defaultHighlight={!hasSearchValue}
               >
                 New Session
               </CommandMenu.Action>

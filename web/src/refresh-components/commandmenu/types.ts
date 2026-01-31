@@ -97,6 +97,12 @@ export interface CommandMenuActionProps {
   shortcut?: string; // Keyboard shortcut like "⌘N", "⌘P"
   onSelect?: (value: string) => void;
   children: string;
+  /**
+   * Whether this action should be considered for initial highlight.
+   * Default: true. Set false to skip this item when determining initial highlight.
+   * Arrow key navigation still includes all items regardless of this setting.
+   */
+  defaultHighlight?: boolean;
 }
 
 /**
@@ -128,7 +134,8 @@ export interface CommandMenuContextValue {
   registerItem: (
     value: string,
     onSelect: () => void,
-    type?: "filter" | "item" | "action"
+    type?: "filter" | "item" | "action",
+    defaultHighlight?: boolean
   ) => void;
   unregisterItem: (value: string) => void;
 
