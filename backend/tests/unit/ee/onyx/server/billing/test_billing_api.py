@@ -309,3 +309,253 @@ class TestUpdateSeats:
 
         assert exc_info.value.status_code == 400
         assert "Cannot reduce below 10 seats" in exc_info.value.detail
+
+
+class TestCircuitBreaker:
+    """Tests for the billing circuit breaker functionality."""
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.billing.api._is_billing_circuit_open")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_returns_503_when_circuit_open(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_circuit_open: MagicMock,
+    ) -> None:
+        """Should return 503 when circuit breaker is open."""
+        from fastapi import HTTPException
+
+        from ee.onyx.server.billing.api import get_billing_information
+
+        mock_get_license.return_value = "license_blob"
+        mock_get_tenant.return_value = None
+        mock_circuit_open.return_value = True
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_billing_information(_=MagicMock(), db_session=MagicMock())
+
+        assert exc_info.value.status_code == 503
+        assert "Connect to Stripe" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.billing.api._open_billing_circuit")
+    @patch("ee.onyx.server.billing.api._is_billing_circuit_open")
+    @patch("ee.onyx.server.billing.api.get_billing_service")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_opens_circuit_on_502_error(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_service: AsyncMock,
+        mock_circuit_open_check: MagicMock,
+        mock_open_circuit: MagicMock,
+    ) -> None:
+        """Should open circuit breaker on 502 error."""
+        from fastapi import HTTPException
+
+        from ee.onyx.server.billing.api import get_billing_information
+
+        mock_get_license.return_value = "license_blob"
+        mock_get_tenant.return_value = None
+        mock_circuit_open_check.return_value = False
+        mock_service.side_effect = BillingServiceError("Connection failed", 502)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_billing_information(_=MagicMock(), db_session=MagicMock())
+
+        assert exc_info.value.status_code == 502
+        mock_open_circuit.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.billing.api._open_billing_circuit")
+    @patch("ee.onyx.server.billing.api._is_billing_circuit_open")
+    @patch("ee.onyx.server.billing.api.get_billing_service")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_opens_circuit_on_503_error(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_service: AsyncMock,
+        mock_circuit_open_check: MagicMock,
+        mock_open_circuit: MagicMock,
+    ) -> None:
+        """Should open circuit breaker on 503 error."""
+        from fastapi import HTTPException
+
+        from ee.onyx.server.billing.api import get_billing_information
+
+        mock_get_license.return_value = "license_blob"
+        mock_get_tenant.return_value = None
+        mock_circuit_open_check.return_value = False
+        mock_service.side_effect = BillingServiceError("Service unavailable", 503)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_billing_information(_=MagicMock(), db_session=MagicMock())
+
+        assert exc_info.value.status_code == 503
+        mock_open_circuit.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.billing.api._open_billing_circuit")
+    @patch("ee.onyx.server.billing.api._is_billing_circuit_open")
+    @patch("ee.onyx.server.billing.api.get_billing_service")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_opens_circuit_on_504_error(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_service: AsyncMock,
+        mock_circuit_open_check: MagicMock,
+        mock_open_circuit: MagicMock,
+    ) -> None:
+        """Should open circuit breaker on 504 error."""
+        from fastapi import HTTPException
+
+        from ee.onyx.server.billing.api import get_billing_information
+
+        mock_get_license.return_value = "license_blob"
+        mock_get_tenant.return_value = None
+        mock_circuit_open_check.return_value = False
+        mock_service.side_effect = BillingServiceError("Gateway timeout", 504)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_billing_information(_=MagicMock(), db_session=MagicMock())
+
+        assert exc_info.value.status_code == 504
+        mock_open_circuit.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.billing.api._open_billing_circuit")
+    @patch("ee.onyx.server.billing.api._is_billing_circuit_open")
+    @patch("ee.onyx.server.billing.api.get_billing_service")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_does_not_open_circuit_on_400_error(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_service: AsyncMock,
+        mock_circuit_open_check: MagicMock,
+        mock_open_circuit: MagicMock,
+    ) -> None:
+        """Should NOT open circuit breaker on 400 error (client error)."""
+        from fastapi import HTTPException
+
+        from ee.onyx.server.billing.api import get_billing_information
+
+        mock_get_license.return_value = "license_blob"
+        mock_get_tenant.return_value = None
+        mock_circuit_open_check.return_value = False
+        mock_service.side_effect = BillingServiceError("Bad request", 400)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_billing_information(_=MagicMock(), db_session=MagicMock())
+
+        assert exc_info.value.status_code == 400
+        mock_open_circuit.assert_not_called()
+
+
+class TestResetConnection:
+    """Tests for reset_stripe_connection endpoint."""
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.billing.api._close_billing_circuit")
+    async def test_closes_circuit_for_self_hosted(
+        self,
+        mock_close_circuit: MagicMock,
+    ) -> None:
+        """Should close circuit breaker for self-hosted deployment."""
+        from ee.onyx.server.billing.api import reset_stripe_connection
+
+        result = await reset_stripe_connection(_=MagicMock())
+
+        assert result.success is True
+        assert "re-enabled" in result.message.lower()
+        mock_close_circuit.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", True)
+    @patch("ee.onyx.server.billing.api._close_billing_circuit")
+    async def test_noop_for_cloud(
+        self,
+        mock_close_circuit: MagicMock,
+    ) -> None:
+        """Should be no-op for cloud deployment."""
+        from ee.onyx.server.billing.api import reset_stripe_connection
+
+        result = await reset_stripe_connection(_=MagicMock())
+
+        assert result.success is True
+        assert "not applicable" in result.message.lower()
+        mock_close_circuit.assert_not_called()
+
+
+class TestCheckoutSessionWithSeats:
+    """Tests for checkout session with seats parameter."""
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.create_checkout_service")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_passes_seats_parameter(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_service: AsyncMock,
+    ) -> None:
+        """Should pass seats parameter to service."""
+        from ee.onyx.server.billing.api import create_checkout_session
+        from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
+
+        mock_get_license.return_value = None
+        mock_get_tenant.return_value = "tenant_123"
+        mock_service.return_value = CreateCheckoutSessionResponse(
+            stripe_checkout_url="https://checkout.stripe.com/session"
+        )
+
+        request = CreateCheckoutSessionRequest(billing_period="monthly", seats=25)
+        await create_checkout_session(
+            request=request, _=MagicMock(), db_session=MagicMock()
+        )
+
+        call_kwargs = mock_service.call_args[1]
+        assert call_kwargs["seats"] == 25
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.create_checkout_service")
+    @patch("ee.onyx.server.billing.api._get_tenant_id")
+    @patch("ee.onyx.server.billing.api._get_license_data")
+    async def test_seats_none_when_not_provided(
+        self,
+        mock_get_license: MagicMock,
+        mock_get_tenant: MagicMock,
+        mock_service: AsyncMock,
+    ) -> None:
+        """Should pass None for seats when not provided."""
+        from ee.onyx.server.billing.api import create_checkout_session
+        from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
+
+        mock_get_license.return_value = None
+        mock_get_tenant.return_value = "tenant_123"
+        mock_service.return_value = CreateCheckoutSessionResponse(
+            stripe_checkout_url="https://checkout.stripe.com/session"
+        )
+
+        request = CreateCheckoutSessionRequest(billing_period="annual")
+        await create_checkout_session(
+            request=request, _=MagicMock(), db_session=MagicMock()
+        )
+
+        call_kwargs = mock_service.call_args[1]
+        assert call_kwargs["seats"] is None
