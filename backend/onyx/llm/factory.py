@@ -9,7 +9,6 @@ from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_model
 from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_model_configs_for_flow
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_llm_provider_view_from_id
@@ -286,16 +285,14 @@ def get_default_llm(
         if not default_model:
             raise ValueError("No default LLM provider found")
 
-        llm_provider = fetch_existing_llm_provider_by_id(
-            default_model.provider_id, db_session
+        llm_provider_view = fetch_llm_provider_view_from_id(
+            db_session, default_model.provider_id
         )
 
-        if not llm_provider:
+        if not llm_provider_view:
             raise ValueError(
                 "No LLM provider found with id {}".format(default_model.provider_id)
             )
-
-    llm_provider_view = LLMProviderView.from_model(llm_provider)
 
     return llm_from_provider(
         model_name=default_model.model_name,

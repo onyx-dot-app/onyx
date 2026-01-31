@@ -341,7 +341,7 @@ class SessionManager:
 
         # Fallback to system default
         default_model = fetch_default_model(
-            db_session=self._db_session, flow_type=ModelFlowType.TEXT
+            db_session=self._db_session, flow_type=ModelFlowType.CONVERSATION
         )
         if not default_model:
             raise ValueError("No LLM provider configured")
