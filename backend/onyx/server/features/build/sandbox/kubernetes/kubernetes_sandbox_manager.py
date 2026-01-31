@@ -1474,6 +1474,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
+        logger.info(
+            f"[K8S SANDBOX] Starting send_message for session {session_id}, "
+            f"sandbox {sandbox_id}, pod {pod_name}"
+        )
+
         # Log ACP client creation
         packet_logger.log_acp_client_start(
             sandbox_id, session_id, session_path, context="k8s"
@@ -1489,23 +1494,49 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         packet_logger.log_session_start(session_id, sandbox_id, message)
 
         events_count = 0
+        last_event_log_time = time.time()
         try:
+            logger.info(f"[K8S SANDBOX] Starting ACP client for session {session_id}")
             exec_client.start(cwd=session_path)
+            logger.info(
+                f"[K8S SANDBOX] ACP client started, streaming events for session {session_id}"
+            )
+
             for event in exec_client.send_message(message):
                 events_count += 1
+
+                # Log every 10 events or every 5 seconds
+                now = time.time()
+                if events_count % 10 == 1 or (now - last_event_log_time) > 5:
+                    logger.info(
+                        f"[K8S SANDBOX] Received event #{events_count} for session {session_id}: "
+                        f"{type(event).__name__}"
+                    )
+                    last_event_log_time = now
+
                 yield event
 
             # Log successful completion
+            logger.info(
+                f"[K8S SANDBOX] Completed send_message for session {session_id}. "
+                f"Total events: {events_count}"
+            )
             packet_logger.log_session_end(
                 session_id, success=True, events_count=events_count
             )
         except Exception as e:
             # Log failure
+            logger.error(
+                f"[K8S SANDBOX] Error in send_message for session {session_id}: {e}. "
+                f"Events received: {events_count}",
+                exc_info=True,
+            )
             packet_logger.log_session_end(
                 session_id, success=False, error=str(e), events_count=events_count
             )
             raise
         finally:
+            logger.info(f"[K8S SANDBOX] Stopping ACP client for session {session_id}")
             exec_client.stop()
             # Log client stop
             packet_logger.log_acp_client_stop(sandbox_id, session_id, context="k8s")
