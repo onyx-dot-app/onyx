@@ -277,7 +277,7 @@ def get_default_llm(
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
         default_model = fetch_default_model(
-            db_session=db_session, flow_type=ModelFlowType.TEXT
+            db_session=db_session, flow_type=ModelFlowType.CONVERSATION
         )
 
         if not default_model:

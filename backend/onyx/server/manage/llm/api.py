@@ -274,7 +274,7 @@ def list_llm_providers(
     logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
 
     default_text = fetch_default_model(
-        db_session=db_session, flow_type=ModelFlowType.TEXT
+        db_session=db_session, flow_type=ModelFlowType.CONVERSATION
     )
     default_vision = fetch_default_model(
         db_session=db_session, flow_type=ModelFlowType.VISION
@@ -417,7 +417,7 @@ def delete_llm_provider(
 ) -> None:
     try:
         default_model = fetch_default_model(
-            db_session=db_session, flow_type=ModelFlowType.TEXT
+            db_session=db_session, flow_type=ModelFlowType.CONVERSATION
         )
         if default_model and default_model.provider_id == provider_id:
             raise HTTPException(
@@ -570,7 +570,7 @@ def list_llm_provider_basics(
     )
 
     default_text = fetch_default_model(
-        db_session=db_session, flow_type=ModelFlowType.TEXT
+        db_session=db_session, flow_type=ModelFlowType.CONVERSATION
     )
     default_vision = fetch_default_model(
         db_session=db_session, flow_type=ModelFlowType.VISION

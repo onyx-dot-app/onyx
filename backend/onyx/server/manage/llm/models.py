@@ -173,7 +173,7 @@ class ModelConfigurationUpsertRequest(ModelConfiguration):
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=ModelFlowType.VISION
-            in (flow.flow_type for flow in model_configuration_model.flows),
+            in (flow for flow in model_configuration_model.model_flow_types),
             display_name=model_configuration_model.display_name,
         )
 
@@ -206,7 +206,7 @@ class ModelConfigurationView(ModelConfiguration):
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 supports_image_input=ModelFlowType.VISION
-                in (flow.flow_type for flow in model_configuration_model.flows),
+                in (flow for flow in model_configuration_model.model_flow_types),
                 # Infer reasoning support from model name/display name
                 supports_reasoning=is_reasoning_model(
                     model_configuration_model.name,
@@ -251,7 +251,7 @@ class ModelConfigurationView(ModelConfiguration):
                 val
                 if (
                     val := ModelFlowType.VISION
-                    in (flow.flow_type for flow in model_configuration_model.flows)
+                    in (flow for flow in model_configuration_model.model_flow_types)
                 )
                 is not None
                 else litellm_thinks_model_supports_image_input(

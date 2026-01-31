@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from sqlalchemy.orm import validates
+
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 from pydantic import ValidationError
@@ -70,6 +71,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
+    ModelFlowType,
     ThemePreference,
     SwitchoverType,
 )
@@ -81,7 +83,6 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import ModelFlowType
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -2675,8 +2676,8 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
-    flows: Mapped[list["FlowMapping"]] = relationship(
-        "FlowMapping",
+    model_flows: Mapped[list["ModelFlow"]] = relationship(
+        "ModelFlow",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -2684,15 +2685,15 @@ class ModelConfiguration(Base):
 
     @property
     def model_flow_types(self) -> list[ModelFlowType]:
-        return [flow.flow_type for flow in self.flows]
+        return [flow.model_flow_type for flow in self.model_flows]
 
 
-class FlowMapping(Base):
-    __tablename__ = "flow_mapping"
+class ModelFlow(Base):
+    __tablename__ = "model_flow"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    flow_type: Mapped[ModelFlowType] = mapped_column(
+    model_flow_type: Mapped[ModelFlowType] = mapped_column(
         Enum(ModelFlowType), nullable=False
     )
     model_configuration_id: Mapped[int] = mapped_column(
@@ -2703,20 +2704,20 @@ class FlowMapping(Base):
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration",
-        back_populates="flows",
+        back_populates="model_flows",
     )
 
     __table_args__ = (
         UniqueConstraint(
-            "flow_type",
+            "model_flow_type",
             "model_configuration_id",
-            name="uq_flow_mapping_flow_type_model_configuration",
+            name="uq_model_config_per_flow_type",
         ),
         Index(
-            "ix_one_default_per_flow",
-            "flow_type",
+            "ix_one_default_per_model_flow",
+            "model_flow_type",
             unique=True,
-            postgresql_where=text("is_default = true"),
+            postgresql_where=(is_default == True),  # noqa: E712
         ),
     )
 

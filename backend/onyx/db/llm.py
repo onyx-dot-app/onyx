@@ -10,12 +10,12 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
-from onyx.db.models import FlowMapping
 from onyx.db.models import ImageGenerationConfig
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
 from onyx.db.models import ModelConfiguration
+from onyx.db.models import ModelFlow
 from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
@@ -437,9 +437,9 @@ def fetch_default_model(
     db_session: Session, flow_type: ModelFlowType
 ) -> DefaultModel | None:
     flow_mapping = db_session.scalar(
-        select(FlowMapping).where(
-            FlowMapping.flow_type == flow_type,
-            FlowMapping.is_default == True,  # noqa: E712
+        select(ModelFlow).where(
+            ModelFlow.model_flow_type == flow_type,
+            ModelFlow.is_default == True,  # noqa: E712
         )
     )
 
@@ -561,12 +561,12 @@ def _update_default_provider(
 ) -> None:
     # Single query with join to get both model_config and its flow mapping
     result = db_session.execute(
-        select(ModelConfiguration, FlowMapping)
-        .join(FlowMapping, FlowMapping.model_configuration_id == ModelConfiguration.id)
+        select(ModelConfiguration, ModelFlow)
+        .join(ModelFlow, ModelFlow.model_configuration_id == ModelConfiguration.id)
         .where(
             ModelConfiguration.llm_provider_id == provider_id,
             ModelConfiguration.name == model,
-            FlowMapping.flow_type == flow_type,
+            ModelFlow.model_flow_type == flow_type,
         )
     ).first()
 
@@ -582,10 +582,10 @@ def _update_default_provider(
 
     # Clear existing default and set now in a single atomic operation
     db_session.execute(
-        update(FlowMapping)
+        update(ModelFlow)
         .where(
-            FlowMapping.flow_type == flow_type,
-            FlowMapping.is_default == True,  # noqa: E712
+            ModelFlow.model_flow_type == flow_type,
+            ModelFlow.is_default == True,  # noqa: E712
         )
         .values(is_default=False)
     )
@@ -603,7 +603,7 @@ def update_default_text_provider(
         provider_id=provider_id,
         model=model,
         db_session=db_session,
-        flow_type=ModelFlowType.TEXT,
+        flow_type=ModelFlowType.CONVERSATION,
     )
 
 
@@ -715,7 +715,7 @@ def sync_auto_mode_models(
 
     # In Auto mode, default model is always set from GitHub config
     # Check if this provider is the set default provider
-    default_model = fetch_default_model(db_session, ModelFlowType.TEXT)
+    default_model = fetch_default_model(db_session, ModelFlowType.CONVERSATION)
     recommended = llm_recommendations.get_default_model(provider.provider)
     if (
         default_model
@@ -734,13 +734,13 @@ def create_new_flow_mapping__no_commit(
     model_configuration_id: int,
     flow_type: ModelFlowType,
     is_default: bool = False,
-) -> FlowMapping:
+) -> ModelFlow:
     """Create a new flow mapping without committing.
 
     Uses flush() to get the ID while keeping the transaction open,
     allowing callers like upsert_llm_provider to maintain atomicity.
     """
-    flow_mapping = FlowMapping(
+    flow_mapping = ModelFlow(
         model_configuration_id=model_configuration_id,
         flow_type=flow_type,
         is_default=is_default,
@@ -782,7 +782,7 @@ def insert_new_model_configuration__no_commit(
     create_new_flow_mapping__no_commit(
         db_session=db_session,
         model_configuration_id=model_config_id,
-        flow_type=ModelFlowType.TEXT,
+        flow_type=ModelFlowType.CONVERSATION,
         is_default=False,
     )
 

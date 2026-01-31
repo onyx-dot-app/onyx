@@ -203,12 +203,6 @@ class SwitchoverType(str, PyEnum):
     INSTANT = "instant"
 
 
-class ModelFlowType(str, PyEnum):
-    TEXT = "text"
-    VISION = "vision"
-    EMBEDDING = "embedding"
-
-
 # Onyx Build Mode Enums
 class BuildSessionStatus(str, PyEnum):
     ACTIVE = "active"
@@ -275,3 +269,9 @@ class HierarchyNodeType(str, PyEnum):
 
     # Slack
     CHANNEL = "channel"
+
+
+class ModelFlowType(str, PyEnum):
+    CONVERSATION = "conversation"
+    VISION = "vision"
+    EMBEDDINGS = "embeddings"
