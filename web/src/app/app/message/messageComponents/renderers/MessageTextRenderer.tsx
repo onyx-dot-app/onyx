@@ -41,6 +41,9 @@ function getPacketText(packet: unknown): string {
 function getFirstMessageStartId(packets: unknown[]): string | null {
   for (const packet of packets) {
     const maybe = packet as { obj?: { type?: string; id?: string } };
+    if (!maybe?.obj || !maybe.obj.type) {
+      throw new Error("Malformed chat packet: missing obj.type");
+    }
     if (maybe?.obj?.type === PacketType.MESSAGE_START) {
       return maybe.obj?.id ?? null;
     }
