@@ -26,9 +26,9 @@ from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -652,9 +652,14 @@ def get_current_token_creation(user: User, db_session: Session) -> datetime | No
 @router.get("/me", tags=PUBLIC_API_TAGS)
 def verify_user_logged_in(
     request: Request,
-    user: User = Depends(current_chat_accessible_user),
+    user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
+    # User should no longer be None (unless not auth-ed).
+    # However, we need to use optional_user dependency
+    # to allow unverified users to access this endpoint
+    if user is None:
+        raise BasicAuthenticationError(detail="Unauthorized")
     # If anonymous user, return the fake UserInfo (maintains backward compatibility)
     if user.is_anonymous:
         store = get_kv_store()

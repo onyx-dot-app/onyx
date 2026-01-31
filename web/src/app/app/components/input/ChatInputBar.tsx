@@ -21,8 +21,8 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString, cn } from "@/lib/utils";
-import { useUser } from "@/components/user/UserProvider";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { useUser } from "@/providers/UserProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import {

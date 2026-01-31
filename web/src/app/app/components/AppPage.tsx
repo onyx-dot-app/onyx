@@ -13,7 +13,7 @@ import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import Dropzone from "react-dropzone";
 import ChatInputBar, {
   ChatInputBarHandle,
@@ -25,7 +25,7 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextView from "@/components/chat/TextView";
 import Modal from "@/refresh-components/Modal";
@@ -73,10 +73,8 @@ import AppHeader from "@/app/app/components/AppHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
+import { useTheme } from "next-themes";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -134,6 +132,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useSettingsContext();
+  const { resolvedTheme } = useTheme();
+  const isLightMode = resolvedTheme === "light";
 
   const isInitialLoad = useRef(true);
 
@@ -576,11 +576,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     );
   }
 
-  // Chat background logic
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+  // Chat background from context
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
 
   if (!isReady) return <OnyxInitializingLoader />;
 
@@ -638,7 +635,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root disableFooter>
+      <AppLayouts.Root disableHeader disableFooter>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -653,14 +650,48 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               )}
               style={
                 hasBackground
-                  ? { backgroundImage: `url(${chatBackground.url})` }
+                  ? { backgroundImage: `url(${appBackgroundUrl})` }
                   : undefined
               }
               {...getRootProps({ tabIndex: -1 })}
             >
+              {/* Vignette overlay for custom backgrounds (disabled in light mode) */}
+              {hasBackground && !isLightMode && (
+                <div
+                  className="absolute z-0 inset-0 pointer-events-none"
+                  style={{
+                    background: `
+                      linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
+                      linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
+                    `,
+                  }}
+                />
+              )}
+
               {/* Semi-transparent overlay for readability when background is set */}
-              {hasBackground && (
-                <div className="absolute inset-0 bg-background/80 pointer-events-none" />
+              {!!currentChatSessionId && liveAssistant && hasBackground && (
+                <>
+                  <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
+                  <div
+                    className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                    style={{
+                      maskImage: `linear-gradient(
+                        to right,
+                        transparent 0%,
+                        black max(0%, calc(50% - 25rem)),
+                        black min(100%, calc(50% + 25rem)),
+                        transparent 100%
+                      )`,
+                      WebkitMaskImage: `linear-gradient(
+                        to right,
+                        transparent 0%,
+                        black max(0%, calc(50% - 25rem)),
+                        black min(100%, calc(50% + 25rem)),
+                        transparent 100%
+                      )`,
+                    }}
+                  />
+                </>
               )}
 
               {/* ProjectUI */}
@@ -674,42 +705,48 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
               {/* ChatUI */}
               {!!currentChatSessionId && liveAssistant && (
-                <ChatScrollContainer
-                  ref={scrollContainerRef}
-                  sessionId={currentChatSessionId}
-                  anchorSelector={anchorSelector}
-                  autoScroll={autoScrollEnabled}
-                  isStreaming={isStreaming}
-                  onScrollButtonVisibilityChange={setShowScrollButton}
-                  disableFadeOverlay={hasBackground}
-                >
-                  <AppLayouts.StickyHeader>
+                <>
+                  {/* Header positioned outside scroll container to avoid mask effect */}
+                  <div className="absolute top-0 left-0 right-0 z-sticky">
                     <AppHeader />
-                  </AppLayouts.StickyHeader>
-                  <MessageList
-                    liveAssistant={liveAssistant}
-                    llmManager={llmManager}
-                    deepResearchEnabled={deepResearchEnabled}
-                    currentMessageFiles={currentMessageFiles}
-                    setPresentingDocument={setPresentingDocument}
-                    onSubmit={onSubmit}
-                    onMessageSelection={onMessageSelection}
-                    stopGenerating={stopGenerating}
-                    onResubmit={handleResubmitLastMessage}
-                    anchorNodeId={anchorNodeId}
-                    disableBlur={!hasBackground}
-                  />
-                </ChatScrollContainer>
+                  </div>
+                  <ChatScrollContainer
+                    ref={scrollContainerRef}
+                    sessionId={currentChatSessionId}
+                    anchorSelector={anchorSelector}
+                    autoScroll={autoScrollEnabled}
+                    isStreaming={isStreaming}
+                    onScrollButtonVisibilityChange={setShowScrollButton}
+                  >
+                    {/* Spacer for the header height */}
+                    <div className="h-16 shrink-0" />
+                    <MessageList
+                      liveAssistant={liveAssistant}
+                      llmManager={llmManager}
+                      deepResearchEnabled={deepResearchEnabled}
+                      currentMessageFiles={currentMessageFiles}
+                      setPresentingDocument={setPresentingDocument}
+                      onSubmit={onSubmit}
+                      onMessageSelection={onMessageSelection}
+                      stopGenerating={stopGenerating}
+                      onResubmit={handleResubmitLastMessage}
+                      anchorNodeId={anchorNodeId}
+                    />
+                  </ChatScrollContainer>
+                </>
               )}
 
               {!currentChatSessionId && !currentProjectId && (
-                <div className="w-full flex-1 flex flex-col items-center justify-end">
-                  <WelcomeMessage
-                    agent={liveAssistant}
-                    isDefaultAgent={isDefaultAgent}
-                  />
-                  <Spacer rem={1.5} />
-                </div>
+                <>
+                  <AppLayouts.Header />
+                  <div className="relative w-full flex-1 flex flex-col items-center justify-end">
+                    <WelcomeMessage
+                      agent={liveAssistant}
+                      isDefaultAgent={isDefaultAgent}
+                    />
+                    <Spacer rem={1.5} />
+                  </div>
+                </>
               )}
 
               {/* ChatInputBar container - absolutely positioned when in chat, centered when no session */}

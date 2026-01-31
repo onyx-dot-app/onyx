@@ -6,7 +6,7 @@ import { useOnboardingModal } from "@/app/craft/onboarding/hooks/useOnboardingMo
 import BuildOnboardingModal from "@/app/craft/onboarding/components/BuildOnboardingModal";
 import NoLlmProvidersModal from "@/app/craft/onboarding/components/NoLlmProvidersModal";
 import { OnboardingModalController } from "@/app/craft/onboarding/types";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 
 // Context for accessing onboarding modal controls
 const OnboardingContext = createContext<OnboardingModalController | null>(null);

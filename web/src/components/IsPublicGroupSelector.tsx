@@ -4,7 +4,7 @@ import { FormikProps } from "formik";
 import { UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
-import { useUser } from "./user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { GroupsMultiSelect } from "./GroupsMultiSelect";
 
 export type IsPublicGroupSelectorFormType = {
