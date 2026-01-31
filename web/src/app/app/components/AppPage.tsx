@@ -738,7 +738,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
               {!currentChatSessionId && !currentProjectId && (
                 <>
-                  <AppLayouts.Header />
+                  <AppHeader />
                   <div className="relative w-full flex-1 flex flex-col items-center justify-end">
                     <WelcomeMessage
                       agent={liveAssistant}
