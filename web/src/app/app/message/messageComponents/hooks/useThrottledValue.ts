@@ -67,4 +67,3 @@ export function useThrottledValue<T>(value: T, intervalMs: number): T {
 
   return throttledValue;
 }
-

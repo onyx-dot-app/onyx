@@ -219,4 +219,3 @@ export function useSteadyReveal(
     isCaughtUp: safeLength >= targetText.length,
   };
 }
-

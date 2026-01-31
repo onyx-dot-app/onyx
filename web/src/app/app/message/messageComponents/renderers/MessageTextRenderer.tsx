@@ -70,37 +70,38 @@ export const MessageTextRenderer: MessageRenderer<
 
   const { fullContent, nextProcessedCount, nextMessageStartId, shouldReset } =
     useMemo(() => {
-    const packetsAny = packets as unknown[];
-    const currentMessageStartId = getFirstMessageStartId(packetsAny);
+      const packetsAny = packets as unknown[];
+      const currentMessageStartId = getFirstMessageStartId(packetsAny);
 
-    const prevProcessed = processedPacketsRef.current;
-    const prevMessageStartId = messageStartIdRef.current;
+      const prevProcessed = processedPacketsRef.current;
+      const prevMessageStartId = messageStartIdRef.current;
 
-    const packetsShrank = packetsAny.length < prevProcessed;
-    const messageStartIdChanged =
-      prevMessageStartId != null &&
-      currentMessageStartId != null &&
-      prevMessageStartId !== currentMessageStartId;
-    const lostMessageStart =
-      prevMessageStartId != null && currentMessageStartId == null;
+      const packetsShrank = packetsAny.length < prevProcessed;
+      const messageStartIdChanged =
+        prevMessageStartId != null &&
+        currentMessageStartId != null &&
+        prevMessageStartId !== currentMessageStartId;
+      const lostMessageStart =
+        prevMessageStartId != null && currentMessageStartId == null;
 
-    const shouldReset = packetsShrank || messageStartIdChanged || lostMessageStart;
+      const shouldReset =
+        packetsShrank || messageStartIdChanged || lostMessageStart;
 
-    const baseText = shouldReset ? "" : accumulatedTextRef.current;
-    const startIdx = shouldReset ? 0 : prevProcessed;
+      const baseText = shouldReset ? "" : accumulatedTextRef.current;
+      const startIdx = shouldReset ? 0 : prevProcessed;
 
-    let appended = "";
-    for (let i = startIdx; i < packetsAny.length; i++) {
-      appended += getPacketText(packetsAny[i]);
-    }
+      let appended = "";
+      for (let i = startIdx; i < packetsAny.length; i++) {
+        appended += getPacketText(packetsAny[i]);
+      }
 
-    return {
-      fullContent: baseText + appended,
-      nextProcessedCount: packetsAny.length,
-      nextMessageStartId: currentMessageStartId,
-      shouldReset,
-    };
-  }, [packets]);
+      return {
+        fullContent: baseText + appended,
+        nextProcessedCount: packetsAny.length,
+        nextMessageStartId: currentMessageStartId,
+        shouldReset,
+      };
+    }, [packets]);
 
   // Commit refs after render (safe under StrictMode double-invocation).
   useEffect(() => {
@@ -140,7 +141,10 @@ export const MessageTextRenderer: MessageRenderer<
     return 50;
   }, [isDone, fullContent.length, revealedText.length]);
 
-  const throttledRevealedText = useThrottledValue(revealedText, markdownThrottleMs);
+  const throttledRevealedText = useThrottledValue(
+    revealedText,
+    markdownThrottleMs
+  );
 
   const { renderedContent } = useMarkdownRenderer(
     throttledRevealedText,

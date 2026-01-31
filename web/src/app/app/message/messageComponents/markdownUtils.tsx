@@ -230,10 +230,7 @@ export const useMarkdownRenderer = (
   state: FullChatState | undefined,
   textSize: string
 ) => {
-  const processedContent = useMemo(
-    () => processContent(content),
-    [content]
-  );
+  const processedContent = useMemo(() => processContent(content), [content]);
   const markdownComponents = useMarkdownComponents(
     state,
     processedContent,
