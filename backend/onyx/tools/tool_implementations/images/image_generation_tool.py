@@ -23,6 +23,7 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
+from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
@@ -188,7 +189,9 @@ class ImageGenerationTool(Tool[None]):
 
         except requests.RequestException as e:
             logger.error(f"Error fetching or converting image: {e}")
-            raise ValueError("Failed to fetch or convert the generated image")
+            raise ToolExecutionException(
+                "Failed to fetch or convert the generated image", emit_error_packet=True
+            )
         except Exception as e:
             logger.debug(f"Error occurred during image generation: {e}")
 
@@ -198,18 +201,27 @@ class ImageGenerationTool(Tool[None]):
                     "Your request was rejected as a result of our safety system"
                     in error_message
                 ):
-                    raise ValueError(
-                        "The image generation request was rejected due to OpenAI's content policy. Please try a different prompt."
+                    raise ToolExecutionException(
+                        (
+                            "The image generation request was rejected due to OpenAI's content policy. "
+                            "Please try a different prompt."
+                        ),
+                        emit_error_packet=True,
                     )
                 elif "Invalid image URL" in error_message:
-                    raise ValueError("Invalid image URL provided for image generation.")
+                    raise ToolExecutionException(
+                        "Invalid image URL provided for image generation.",
+                        emit_error_packet=True,
+                    )
                 elif "invalid_request_error" in error_message:
-                    raise ValueError(
-                        "Invalid request for image generation. Please check your input."
+                    raise ToolExecutionException(
+                        "Invalid request for image generation. Please check your input.",
+                        emit_error_packet=True,
                     )
 
-            raise ValueError(
-                "An error occurred during image generation. Please try again later."
+            raise ToolExecutionException(
+                f"An error occurred during image generation. error={error_message}",
+                emit_error_packet=True,
             )
 
     def run(
