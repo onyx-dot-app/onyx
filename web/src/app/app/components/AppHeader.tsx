@@ -277,6 +277,7 @@ export default function AppHeader() {
           />
         </div>
 
+        {/* Center - contains the custom-header-content */}
         <div className="flex-1 flex flex-col items-center overflow-hidden relative z-sticky">
           <Text
             as="p"
