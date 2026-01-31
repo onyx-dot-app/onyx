@@ -283,7 +283,7 @@ export default function AppHeader() {
           - custom-header-content
         */}
         <div className="flex-1 flex flex-col items-center overflow-hidden">
-          <Text text03 className="text-center line-clamp-1 break-all w-full">
+          <Text text03 className="text-center w-full">
             {customHeaderContent}
           </Text>
         </div>
