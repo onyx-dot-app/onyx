@@ -7,12 +7,12 @@
 #
 # Directory structure (created by init container + session setup):
 #   /workspace/
-#   ├── demo-data/       # Demo data (baked into image, for demo sessions)
+#   ├── demo_data/       # Demo data (baked into image, for demo sessions)
 #   ├── files/           # User's knowledge files (synced from S3)
 #   ├── templates/       # Output templates (baked into image)
 #   └── sessions/        # Per-session workspaces (created via exec)
 #       └── $session_id/
-#           ├── files/   # Symlink to /workspace/demo-data or /workspace/files
+#           ├── files/   # Symlink to /workspace/demo_data or /workspace/files
 #           ├── outputs/
 #           ├── AGENTS.md
 #           └── opencode.json
@@ -48,7 +48,7 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     fi
 
 # Create workspace directories
-RUN mkdir -p workspace/sessions /workspace/files /workspace/templates /workspace/demo-data && \
+RUN mkdir -p workspace/sessions /workspace/files /workspace/templates /workspace/demo_data && \
     chown -R sandbox:sandbox /workspace
 
 # Copy outputs template (web app scaffold, without node_modules)
@@ -56,10 +56,11 @@ COPY --exclude=.next --exclude=node_modules templates/outputs /workspace/templat
 RUN chown -R sandbox:sandbox /workspace/templates
 
 # Copy and extract demo data from zip file
+# Zip contains demo_data/ as root folder
 COPY demo_data.zip /tmp/demo_data.zip
-RUN unzip -q /tmp/demo_data.zip -d /workspace/demo-data && \
+RUN unzip -q /tmp/demo_data.zip -d /workspace && \
     rm /tmp/demo_data.zip && \
-    chown -R sandbox:sandbox /workspace/demo-data
+    chown -R sandbox:sandbox /workspace/demo_data
 
 # Copy and install Python requirements into a venv
 COPY initial-requirements.txt /tmp/initial-requirements.txt
