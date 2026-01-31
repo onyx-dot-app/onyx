@@ -105,4 +105,4 @@ Join our open source community on **[Discord](https://discord.gg/TDJ59cGV2X)**!
 
 
 ## 💡 Contributing
-Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md) for more details.
+Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md) for more details!
