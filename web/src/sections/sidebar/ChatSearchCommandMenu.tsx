@@ -9,7 +9,10 @@ import CommandMenu, {
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
-import { formatDisplayTime } from "@/sections/sidebar/chatSearchUtils";
+import {
+  formatDisplayTime,
+  highlightMatch,
+} from "@/sections/sidebar/chatSearchUtils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
@@ -271,7 +274,7 @@ export default function ChatSearchCommandMenu({
                       }
                       onSelect={() => handleChatSelect(chat.id)}
                     >
-                      {chat.label}
+                      {highlightMatch(chat.label, searchValue)}
                     </CommandMenu.Item>
                   ))}
                   {/* Infinite scroll sentinel and loading indicator for chats */}
@@ -328,7 +331,7 @@ export default function ChatSearchCommandMenu({
                     }
                     onSelect={() => handleProjectSelect(project.id)}
                   >
-                    {project.label}
+                    {highlightMatch(project.label, searchValue)}
                   </CommandMenu.Item>
                 ))}
               </>
@@ -342,7 +345,10 @@ export default function ChatSearchCommandMenu({
                   icon={SvgFolderPlus}
                   onSelect={() => handleNewProject(searchValue.trim())}
                 >
-                  {`Create New Project "${searchValue.trim()}"`}
+                  <>
+                    Create New Project "
+                    <span className="text-text-05">{searchValue.trim()}</span>"
+                  </>
                 </CommandMenu.Action>
               )}
 

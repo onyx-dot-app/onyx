@@ -81,7 +81,7 @@ export interface CommandMenuItemProps {
     | React.ReactNode
     | ((params: { isHighlighted: boolean }) => React.ReactNode); // For timestamps, badges, etc.
   onSelect?: (value: string) => void;
-  children: string;
+  children: React.ReactNode;
 }
 
 /**
@@ -97,7 +97,7 @@ export interface CommandMenuActionProps {
   icon?: React.FunctionComponent<IconProps>;
   shortcut?: string; // Keyboard shortcut like "⌘N", "⌘P"
   onSelect?: (value: string) => void;
-  children: string;
+  children: React.ReactNode;
   /**
    * Whether this action should be considered for initial highlight.
    * Default: true. Set false to skip this item when determining initial highlight.
