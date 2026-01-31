@@ -219,7 +219,7 @@ def run_deep_research_llm_loop(
             if include_internal_search_tunings
             else ""
         )
-        if not skip_clarification and not SKIP_DEEP_RESEARCH_CLARIFICATION:
+        if not SKIP_DEEP_RESEARCH_CLARIFICATION and not skip_clarification:
             with function_span("clarification_step") as span:
                 clarification_prompt = CLARIFICATION_PROMPT.format(
                     current_datetime=get_current_llm_day_time(full_sentence=False),
