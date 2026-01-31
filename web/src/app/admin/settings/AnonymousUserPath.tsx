@@ -5,7 +5,7 @@ import { useContext, useState } from "react";
 
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import Button from "@/refresh-components/buttons/Button";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import { Card } from "@/refresh-components/cards";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

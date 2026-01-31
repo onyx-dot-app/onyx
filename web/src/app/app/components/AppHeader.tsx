@@ -24,7 +24,7 @@ import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgFolderIn,
@@ -33,7 +33,7 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 /**
  * Chat Header Component

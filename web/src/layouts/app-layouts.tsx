@@ -33,11 +33,11 @@ import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 const footerMarkdownComponents = {
   p: ({ children }) => (

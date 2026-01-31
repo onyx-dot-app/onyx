@@ -10,7 +10,7 @@ import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import { formatDisplayTime } from "@/sections/sidebar/chatSearchUtils";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
 import {
