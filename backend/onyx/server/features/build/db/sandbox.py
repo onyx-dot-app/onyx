@@ -3,6 +3,7 @@
 import datetime
 from uuid import UUID
 
+from sqlalchemy import and_
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
@@ -116,10 +117,9 @@ def get_idle_sandboxes(
 ) -> list[Sandbox]:
     """Get sandboxes that have been idle longer than threshold.
 
-    Also includes sandboxes with NULL heartbeat (never used after provisioning).
-    In SQL, NULL < timestamp evaluates to NULL (unknown), not TRUE, so we need
-    an explicit OR condition to catch sandboxes that were provisioned but never
-    had any user activity.
+    Also includes sandboxes with NULL heartbeat, but only if they were created
+    before the threshold (to avoid sweeping up brand-new sandboxes that may have
+    NULL heartbeat due to edge cases like older rows or manual inserts).
     """
     threshold_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
         seconds=idle_threshold_seconds
@@ -129,7 +129,10 @@ def get_idle_sandboxes(
         Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE]),
         or_(
             Sandbox.last_heartbeat < threshold_time,
-            Sandbox.last_heartbeat.is_(None),
+            and_(
+                Sandbox.last_heartbeat.is_(None),
+                Sandbox.created_at < threshold_time,
+            ),
         ),
     )
     return list(db_session.execute(stmt).scalars().all())
