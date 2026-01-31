@@ -1,7 +1,7 @@
 """add_chat_compression_fields
 
 Revision ID: 90b409d06e50
-Revises: c7bf5721733e
+Revises: be87a654d5af
 Create Date: 2026-01-26 09:13:09.635427
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "90b409d06e50"
-down_revision = "41fa44bef321"
+down_revision = "be87a654d5af"
 branch_labels = None
 depends_on = None
 

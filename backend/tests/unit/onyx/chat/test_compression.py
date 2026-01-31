@@ -58,7 +58,7 @@ def test_get_messages_returns_summary_content() -> None:
         create_mock_message(2, "msg2", 100),
     ]
     result = get_messages_to_summarize(
-        chat_history=messages,
+        chat_history=messages,  # type: ignore[arg-type]
         existing_summary=None,
         tokens_for_recent=50,
     )
@@ -79,7 +79,7 @@ def test_messages_after_summary_cutoff_only() -> None:
     existing_summary.last_summarized_message_id = 2
 
     result = get_messages_to_summarize(
-        chat_history=messages,
+        chat_history=messages,  # type: ignore[arg-type]
         existing_summary=existing_summary,
         tokens_for_recent=50,
     )
@@ -99,7 +99,7 @@ def test_no_summary_considers_all_messages() -> None:
     ]
 
     result = get_messages_to_summarize(
-        chat_history=messages,
+        chat_history=messages,  # type: ignore[arg-type]
         existing_summary=None,
         tokens_for_recent=50,
     )
@@ -117,7 +117,7 @@ def test_empty_messages_filtered_out() -> None:
     ]
 
     result = get_messages_to_summarize(
-        chat_history=messages,
+        chat_history=messages,  # type: ignore[arg-type]
         existing_summary=None,
         tokens_for_recent=50,
     )
@@ -158,7 +158,7 @@ def test_find_summary_for_branch_returns_matching_branch() -> None:
         matching_summary
     ]
 
-    result = find_summary_for_branch(mock_db, branch_history)
+    result = find_summary_for_branch(mock_db, branch_history)  # type: ignore[arg-type]
 
     assert result == matching_summary
 
@@ -187,6 +187,6 @@ def test_find_summary_for_branch_ignores_other_branch() -> None:
         other_branch_summary
     ]
 
-    result = find_summary_for_branch(mock_db, branch_b_history)
+    result = find_summary_for_branch(mock_db, branch_b_history)  # type: ignore[arg-type]
 
     assert result is None
