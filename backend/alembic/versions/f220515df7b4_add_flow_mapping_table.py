@@ -1,7 +1,7 @@
 """Add flow mapping table
 
 Revision ID: f220515df7b4
-Revises: f220515df7b4
+Revises: be87a654d5af
 Create Date: 2026-01-30 12:21:24.955922
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "f220515df7b4"
-down_revision = "f220515df7b4"
+down_revision = "be87a654d5af"
 branch_labels = None
 depends_on = None
 
@@ -27,7 +27,9 @@ def upgrade() -> None:
             sa.Enum(ModelFlowType, name="modelflowtype", native_enum=False),
             nullable=False,
         ),
-        sa.Column("is_default", sa.Boolean(), nullable=False, default=False),
+        sa.Column(
+            "is_default", sa.Boolean(), nullable=False, server_default=sa.text("false")
+        ),
         sa.Column("model_configuration_id", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
@@ -36,7 +38,7 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "model_flow_type",
             "model_configuration_id",
-            name="uq_model_flow_model_flow_type_model_configuration",
+            name="uq_model_config_per_flow_type",
         ),
     )
 
@@ -53,7 +55,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Drop the model_flow table (index is dropped automatically with table)
     op.drop_table("model_flow")
-
-    # Drop the enum type if it was created by this migration
-    # (only if no other tables reference it)
-    op.execute("DROP TYPE IF EXISTS modelflowtype;")

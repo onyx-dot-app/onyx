@@ -2719,7 +2719,7 @@ class ModelFlow(Base):
         UniqueConstraint(
             "model_flow_type",
             "model_configuration_id",
-            name="uq_model_flow_model_flow_type_model_configuration",
+            name="uq_model_config_per_flow_type",
         ),
         Index(
             "ix_one_default_per_model_flow",
