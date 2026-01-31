@@ -28,7 +28,7 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
 
 # Demo Data Path
 # Local: Source tree path (relative to this file)
-# Kubernetes: Baked into container image at /workspace/demo-data
+# Kubernetes: Baked into container image at /workspace/demo_data
 _THIS_FILE = Path(__file__)
 DEMO_DATA_PATH = str(
     _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "demo_data"

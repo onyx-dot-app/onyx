@@ -1,7 +1,6 @@
 import { User } from "@/lib/types";
-import { FiPlus, FiX } from "react-icons/fi";
-import { SearchMultiSelectDropdown } from "@/components/Dropdown";
-import { UsersIcon } from "@/components/icons/icons";
+import { FiX } from "react-icons/fi";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import Button from "@/refresh-components/buttons/Button";
 
 interface UserEditorProps {
@@ -51,35 +50,27 @@ export const UserEditor = ({
       </div>
 
       <div className="flex">
-        <SearchMultiSelectDropdown
+        <InputComboBox
+          placeholder="Search..."
+          value=""
+          onChange={() => {}}
+          onValueChange={(selectedValue) => {
+            setSelectedUserIds([
+              ...Array.from(new Set([...selectedUserIds, selectedValue])),
+            ]);
+          }}
           options={allUsers
             .filter(
               (user) =>
                 !selectedUserIds.includes(user.id) &&
                 !existingUsers.map((user) => user.id).includes(user.id)
             )
-            .map((user) => {
-              return {
-                name: user.email,
-                value: user.id,
-              };
-            })}
-          onSelect={(option) => {
-            setSelectedUserIds([
-              ...Array.from(
-                new Set([...selectedUserIds, option.value as string])
-              ),
-            ]);
-          }}
-          itemComponent={({ option }) => (
-            <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
-              <UsersIcon className="mr-2 my-auto" />
-              {option.name}
-              <div className="ml-auto my-auto">
-                <FiPlus />
-              </div>
-            </div>
-          )}
+            .map((user) => ({
+              label: user.email,
+              value: user.id,
+            }))}
+          strict
+          leftSearchIcon
         />
         {onSubmit && (
           <Button

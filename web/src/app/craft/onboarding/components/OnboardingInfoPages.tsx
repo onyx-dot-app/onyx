@@ -75,61 +75,11 @@ export default function OnboardingInfoPages({
       <Text headingH2 text05>
         Let's get started!
       </Text>
-      <Text mainContentBody text04 className="text-center">
-        While we sync your data, try our demo dataset
-        <br />
-        of 1,000+ simulated documents!
-      </Text>
       <img
         src="/craft_demo_image_2.png"
         alt="Onyx Craft"
         className="max-w-full h-auto rounded-12"
       />
-      <Text mainContentBody text04 className="text-center">
-        In the simulated dataset, you are {article}{" "}
-        <span className="font-semibold">{positionText}</span> named{" "}
-        <span className="font-semibold">
-          {personaInfo?.name || "Temp temp"}
-        </span>{" "}
-        working at <span className="font-semibold">{DEMO_COMPANY_NAME}</span>
-      </Text>
-      <div className="flex items-center justify-center gap-4">
-        <SimpleTooltip tooltip="Google Drive">
-          <span className="inline-flex items-center cursor-help">
-            <GoogleDriveIcon size={25} />
-          </span>
-        </SimpleTooltip>
-        <SimpleTooltip tooltip="GitHub">
-          <span className="inline-flex items-center cursor-help">
-            <GithubIcon size={25} />
-          </span>
-        </SimpleTooltip>
-        <SimpleTooltip tooltip="HubSpot">
-          <span className="inline-flex items-center cursor-help">
-            <HubSpotIcon size={25} />
-          </span>
-        </SimpleTooltip>
-        <SimpleTooltip tooltip="Linear">
-          <span className="inline-flex items-center cursor-help">
-            <LinearIcon size={25} />
-          </span>
-        </SimpleTooltip>
-        <SimpleTooltip tooltip="Fireflies">
-          <span className="inline-flex items-center cursor-help">
-            <FirefliesIcon size={25} />
-          </span>
-        </SimpleTooltip>
-        <SimpleTooltip tooltip="Gmail">
-          <span className="inline-flex items-center cursor-help">
-            <GmailIcon size={25} />
-          </span>
-        </SimpleTooltip>
-        <SimpleTooltip tooltip="Slack">
-          <span className="inline-flex items-center cursor-help">
-            <ColorSlackIcon size={25} />
-          </span>
-        </SimpleTooltip>
-      </div>
     </div>
   );
 }
