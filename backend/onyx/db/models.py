@@ -71,7 +71,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
-    ModalFlowType,
+    ModelFlowType,
     ThemePreference,
     SwitchoverType,
 )
@@ -2684,25 +2684,25 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
-    modal_flows: Mapped[list["ModalFlow"]] = relationship(
-        "ModalFlow",
+    model_flows: Mapped[list["ModelFlow"]] = relationship(
+        "ModelFlow",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
     @property
-    def model_modal_flows(self) -> list[ModalFlowType]:
-        return [modal_flow.modal_flow_type for modal_flow in self.modal_flows]
+    def model_flow_types(self) -> list[ModelFlowType]:
+        return [flow.model_flow_type for flow in self.model_flows]
 
 
-class ModalFlow(Base):
-    __tablename__ = "modal_flow"
+class ModelFlow(Base):
+    __tablename__ = "model_flow"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    modal_flow_type: Mapped[ModalFlowType] = mapped_column(
-        Enum(ModalFlowType), nullable=False
+    model_flow_type: Mapped[ModelFlowType] = mapped_column(
+        Enum(ModelFlowType), nullable=False
     )
     model_configuration_id: Mapped[int] = mapped_column(
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
@@ -2712,18 +2712,18 @@ class ModalFlow(Base):
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration",
-        back_populates="modal_flows",
+        back_populates="model_flows",
     )
 
     __table_args__ = (
         UniqueConstraint(
-            "modal_flow_type",
+            "model_flow_type",
             "model_configuration_id",
-            name="uq_modal_flow_modal_flow_type_model_configuration",
+            name="uq_model_flow_model_flow_type_model_configuration",
         ),
         Index(
-            "ix_one_default_per_modal_flow",
-            "modal_flow_type",
+            "ix_one_default_per_model_flow",
+            "model_flow_type",
             unique=True,
             postgresql_where=(is_default == True),  # noqa: E712
         ),
