@@ -655,6 +655,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               }
               {...getRootProps({ tabIndex: -1 })}
             >
+              <div className="absolute top-0 left-0 right-0 z-sticky">
+                <AppHeader />
+              </div>
+
               {/* Vignette overlay for custom backgrounds (disabled in light mode) */}
               {hasBackground && !isLightMode && (
                 <div
@@ -707,9 +711,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {!!currentChatSessionId && liveAssistant && (
                 <>
                   {/* Header positioned outside scroll container to avoid mask effect */}
-                  <div className="absolute top-0 left-0 right-0 z-sticky">
-                    <AppHeader />
-                  </div>
                   <ChatScrollContainer
                     ref={scrollContainerRef}
                     sessionId={currentChatSessionId}
@@ -738,7 +739,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
               {!currentChatSessionId && !currentProjectId && (
                 <>
-                  <AppLayouts.Header />
                   <div className="relative w-full flex-1 flex flex-col items-center justify-end">
                     <WelcomeMessage
                       agent={liveAssistant}
