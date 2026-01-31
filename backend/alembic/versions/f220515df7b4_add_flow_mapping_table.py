@@ -1,7 +1,7 @@
 """Add flow mapping table
 
 Revision ID: f220515df7b4
-Revises: e7f8a9b0c1d2
+Revises: f220515df7b4
 Create Date: 2026-01-30 12:21:24.955922
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "f220515df7b4"
-down_revision = "e7f8a9b0c1d2"
+down_revision = "f220515df7b4"
 branch_labels = None
 depends_on = None
 
