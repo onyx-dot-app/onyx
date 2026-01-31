@@ -18,12 +18,17 @@ export default function Verify({ user }: VerifyProps) {
   const router = useRouter();
 
   const [error, setError] = useState("");
+  const hasSession = Boolean(user);
 
   const verify = useCallback(async () => {
     const token = searchParams?.get("token");
     const firstUser =
       searchParams?.get("first_user") && NEXT_PUBLIC_CLOUD_ENABLED;
     if (!token) {
+      if (!hasSession) {
+        window.location.href = "/auth/login";
+        return;
+      }
       setError(
         "Missing verification token. Try requesting a new verification email."
       );
@@ -42,14 +47,18 @@ export default function Verify({ user }: VerifyProps) {
       // Use window.location.href to force a full page reload,
       // ensuring app re-initializes with the new state (including
       // server-side provider values)
-      window.location.href = firstUser ? "/app?new_team=true" : "/app";
+      if (hasSession) {
+        window.location.href = firstUser ? "/app?new_team=true" : "/app";
+      } else {
+        window.location.href = "/auth/login";
+      }
     } else {
       const errorDetail = (await response.json()).detail;
       setError(
         `Failed to verify your email - ${errorDetail}. Please try requesting a new verification email.`
       );
     }
-  }, [searchParams, router]);
+  }, [hasSession, searchParams, router]);
 
   useEffect(() => {
     verify();

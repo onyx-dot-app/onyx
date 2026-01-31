@@ -15,6 +15,7 @@ from typing import Literal
 from typing import Optional
 from typing import Protocol
 from typing import Tuple
+from typing import Type
 from typing import TypeVar
 
 import jwt
@@ -22,6 +23,7 @@ from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
 from fastapi import APIRouter
+from fastapi import Body
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
@@ -133,6 +135,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+VERIFY_TOKEN_AUDIENCE = "fastapi-users:verify"
 
 
 def is_user_admin(user: User) -> bool:
@@ -1070,6 +1074,67 @@ else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
 
+def _resolve_tenant_id_for_verify_token(token: str) -> str | None:
+    if not MULTI_TENANT:
+        return POSTGRES_DEFAULT_SCHEMA
+
+    try:
+        payload = decode_jwt(
+            token,
+            USER_AUTH_SECRET,
+            audience=VERIFY_TOKEN_AUDIENCE,
+        )
+    except jwt.PyJWTError as exc:
+        logger.warning(
+            "Failed to decode verification token for tenant lookup: %s", str(exc)
+        )
+        return None
+
+    email = payload.get("email")
+    if not isinstance(email, str) or not email:
+        return None
+
+    try:
+        return fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+        )(email)
+    except Exception as exc:
+        logger.warning(
+            "Failed to resolve tenant for verification token email %s: %s",
+            email,
+            str(exc),
+        )
+        return None
+
+
+async def _verify_tenant_context(
+    token: str = Body(..., embed=True),
+) -> AsyncGenerator[str, None]:
+    tenant_id = _resolve_tenant_id_for_verify_token(token)
+    if MULTI_TENANT and not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ErrorCode.VERIFY_USER_BAD_TOKEN,
+        )
+
+    context_token = None
+    if tenant_id:
+        context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+    try:
+        yield token
+    finally:
+        if context_token is not None:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
+
+
+async def get_user_manager_for_verify(
+    token: str = Depends(_verify_tenant_context),
+    user_db: SQLAlchemyUserDatabase = Depends(get_user_db),
+) -> AsyncGenerator[UserManager, None]:
+    yield UserManager(user_db)
+
+
 class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
     def get_logout_router(
         self,
@@ -1186,6 +1251,52 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Token refresh failed: {str(e)}",
                 )
+
+        return router
+
+    def get_verify_router(
+        self,
+        user_schema: Type[schemas.U],
+    ) -> APIRouter:
+        router = APIRouter()
+
+        verify_responses: OpenAPIResponseType = {
+            status.HTTP_400_BAD_REQUEST: {
+                "model": ErrorModel,
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            ErrorCode.VERIFY_USER_BAD_TOKEN: {
+                                "summary": "Invalid verification token.",
+                                "value": {"detail": ErrorCode.VERIFY_USER_BAD_TOKEN},
+                            }
+                        }
+                    }
+                },
+            }
+        }
+
+        @router.post(
+            "/verify",
+            name="auth:verify",
+            response_model=user_schema,
+            responses=verify_responses,
+        )
+        async def verify(
+            token: str = Depends(_verify_tenant_context),
+            user_manager: BaseUserManager[models.UP, models.ID] = Depends(
+                get_user_manager_for_verify
+            ),
+            request: Request | None = None,
+        ) -> models.UP:
+            try:
+                user = await user_manager.verify(token, request)
+            except exceptions.InvalidVerifyToken:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=ErrorCode.VERIFY_USER_BAD_TOKEN,
+                )
+            return user
 
         return router
 
