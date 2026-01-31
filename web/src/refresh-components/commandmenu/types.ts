@@ -39,6 +39,7 @@ export interface CommandMenuHeaderProps {
   onValueChange?: (value: string) => void;
   onFilterRemove?: (filterId: string) => void;
   onClose?: () => void;
+  onEmptyBackspace?: () => void;
 }
 
 /**

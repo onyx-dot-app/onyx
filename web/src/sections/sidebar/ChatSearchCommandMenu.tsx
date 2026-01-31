@@ -192,6 +192,16 @@ export default function ChatSearchCommandMenu({
     }
   }, []);
 
+  const handleEmptyBackspace = useCallback(() => {
+    if (activeFilter !== "all") {
+      // Remove active filter, return to root menu
+      setActiveFilter("all");
+    } else {
+      // No filter active, close the menu
+      setOpen(false);
+    }
+  }, [activeFilter]);
+
   const hasSearchValue = searchValue.trim().length > 0;
 
   return (
@@ -207,6 +217,7 @@ export default function ChatSearchCommandMenu({
             filters={headerFilters}
             onFilterRemove={handleFilterRemove}
             onClose={() => setOpen(false)}
+            onEmptyBackspace={handleEmptyBackspace}
           />
 
           <CommandMenu.List

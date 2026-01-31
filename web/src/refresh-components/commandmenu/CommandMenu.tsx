@@ -445,6 +445,7 @@ function CommandMenuHeader({
   onValueChange,
   onFilterRemove,
   onClose,
+  onEmptyBackspace,
 }: CommandMenuHeaderProps) {
   // Prevent default for arrow/enter keys so they don't move cursor or submit forms
   // The actual handling happens in Root's centralized handler via event bubbling
@@ -453,8 +454,12 @@ function CommandMenuHeader({
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
         e.preventDefault();
       }
+      // Handle backspace on empty input for navigation
+      if (e.key === "Backspace" && !value) {
+        onEmptyBackspace?.();
+      }
     },
-    []
+    [value, onEmptyBackspace]
   );
 
   return (
