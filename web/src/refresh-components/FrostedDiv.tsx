@@ -71,8 +71,6 @@ export default function FrostedDiv({
       <div
         className={cn("absolute pointer-events-none", overlayClassName)}
         style={{
-          // Extend beyond bounds to allow blur to bloom outward
-          inset: `-${blur}`,
           borderRadius,
           background: backgroundColor,
           filter: `blur(${blur})`,
