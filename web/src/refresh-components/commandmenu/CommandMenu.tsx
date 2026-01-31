@@ -235,24 +235,13 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
       switch (e.key) {
         case "ArrowDown": {
           e.preventDefault();
-          const wasKeyboardNav = isKeyboardNav;
           setIsKeyboardNav(true);
           const items = getOrderedItems();
           if (items.length === 0) return;
 
-          // If transitioning from mouse to keyboard mode, start from first item
-          if (!wasKeyboardNav) {
-            const firstItem = items[0];
-            if (firstItem !== undefined) {
-              setHighlightedValue(firstItem);
-            }
-            break;
-          }
-
-          // Continue normal keyboard navigation
           const currentIndex = highlightedValue
             ? items.indexOf(highlightedValue)
-            : 0;
+            : -1;
           const nextIndex =
             currentIndex < items.length - 1 ? currentIndex + 1 : 0;
           const nextItem = items[nextIndex];
@@ -263,21 +252,10 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
         case "ArrowUp": {
           e.preventDefault();
-          const wasKeyboardNav = isKeyboardNav;
           setIsKeyboardNav(true);
           const items = getOrderedItems();
           if (items.length === 0) return;
 
-          // If transitioning from mouse to keyboard mode, start from first item
-          if (!wasKeyboardNav) {
-            const firstItem = items[0];
-            if (firstItem !== undefined) {
-              setHighlightedValue(firstItem);
-            }
-            break;
-          }
-
-          // Continue normal keyboard navigation
           const currentIndex = highlightedValue
             ? items.indexOf(highlightedValue)
             : 0;
@@ -307,7 +285,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
       }
     },
-    [highlightedValue, isKeyboardNav, onOpenChange]
+    [highlightedValue, onOpenChange]
   );
 
   // Scroll highlighted item into view on keyboard nav
