@@ -71,7 +71,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
-    ModelInputModalityType,
+    ModalFlowType,
     ThemePreference,
     SwitchoverType,
 )
@@ -2684,28 +2684,25 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
-    input_modalities: Mapped[list["InputModality"]] = relationship(
-        "InputModality",
+    modal_flows: Mapped[list["ModalFlow"]] = relationship(
+        "ModalFlow",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
     @property
-    def model_input_modalities(self) -> list[ModelInputModalityType]:
-        return [
-            input_modality.input_modality_type
-            for input_modality in self.input_modalities
-        ]
+    def model_modal_flows(self) -> list[ModalFlowType]:
+        return [modal_flow.modal_flow_type for modal_flow in self.modal_flows]
 
 
-class InputModality(Base):
-    __tablename__ = "input_modality"
+class ModalFlow(Base):
+    __tablename__ = "modal_flow"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    input_modality_type: Mapped[ModelInputModalityType] = mapped_column(
-        Enum(ModelInputModalityType), nullable=False
+    modal_flow_type: Mapped[ModalFlowType] = mapped_column(
+        Enum(ModalFlowType), nullable=False
     )
     model_configuration_id: Mapped[int] = mapped_column(
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
@@ -2715,18 +2712,18 @@ class InputModality(Base):
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration",
-        back_populates="input_modalities",
+        back_populates="modal_flows",
     )
 
     __table_args__ = (
         UniqueConstraint(
-            "input_modality_type",
+            "modal_flow_type",
             "model_configuration_id",
-            name="uq_input_modality_input_modality_type_model_configuration",
+            name="uq_modal_flow_modal_flow_type_model_configuration",
         ),
         Index(
-            "ix_one_default_per_input_modality",
-            "input_modality_type",
+            "ix_one_default_per_modal_flow",
+            "modal_flow_type",
             unique=True,
             postgresql_where=(is_default == True),  # noqa: E712
         ),
