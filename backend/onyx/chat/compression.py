@@ -8,6 +8,8 @@ Summaries are branch-aware: each summary's parent_message_id points to the last
 message when compression triggered, making it part of the tree structure.
 """
 
+from typing import NamedTuple
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -26,9 +28,6 @@ from onyx.prompts.compression_prompts import USER_FINAL_REMINDER
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# Tokens reserved for system prompt, tool definitions, current user message, and safety margin
-RESERVED_CONTEXT_TOKENS = 3000
 
 # Ratio of available context to allocate for recent messages after compression
 RECENT_MESSAGES_RATIO = 0.25
@@ -49,6 +48,13 @@ class CompressionParams(BaseModel):
     tokens_for_recent: int = 0
 
 
+class SummaryContent(NamedTuple):
+    """Messages split for summarization."""
+
+    older_messages: list[ChatMessage]
+    recent_messages: list[ChatMessage]
+
+
 def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
     """
     Calculate the total token count for the given chat history.
@@ -63,21 +69,22 @@ def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
 
 
 def get_compression_params(
-    llm: LLM,
+    max_input_tokens: int,
     current_history_tokens: int,
+    reserved_tokens: int,
 ) -> CompressionParams:
     """
     Calculate compression parameters based on model's context window.
 
     Args:
-        llm: The LLM instance (used to get max_input_tokens)
+        max_input_tokens: The maximum input tokens for the LLM
         current_history_tokens: Current total tokens in chat history
+        reserved_tokens: Tokens reserved for system prompt, tools, files, etc.
 
     Returns:
         CompressionParams indicating whether to compress and token budgets
     """
-    max_context = llm.config.max_input_tokens
-    available = max_context - RESERVED_CONTEXT_TOKENS
+    available = max_input_tokens - reserved_tokens
 
     # Check trigger threshold
     trigger_threshold = int(available * COMPRESSION_TRIGGER_RATIO)
@@ -140,7 +147,7 @@ def get_messages_to_summarize(
     chat_history: list[ChatMessage],
     existing_summary: ChatMessage | None,
     tokens_for_recent: int,
-) -> tuple[list[ChatMessage], list[ChatMessage]]:
+) -> SummaryContent:
     """
     Split messages into those to summarize and those to keep verbatim.
 
@@ -150,8 +157,10 @@ def get_messages_to_summarize(
         tokens_for_recent: Token budget for recent messages to keep
 
     Returns:
-        Tuple of (messages_to_summarize, messages_to_keep)
+        SummaryContent with older_messages to summarize and recent_messages to keep
     """
+    # TODO: This comparison assumes message IDs are sequential integers.
+    # If IDs are ever refactored to UUIDs, use timestamps instead.
     # Filter to messages after the existing summary's cutoff
     if existing_summary and existing_summary.last_summarized_message_id:
         cutoff_id = existing_summary.last_summarized_message_id
@@ -163,24 +172,26 @@ def get_messages_to_summarize(
     messages = [m for m in messages if m.message]
 
     if not messages:
-        return [], []
+        return SummaryContent(older_messages=[], recent_messages=[])
 
     # Work backwards from most recent, keeping messages until we exceed budget
-    to_keep: list[ChatMessage] = []
+    recent_messages: list[ChatMessage] = []
     tokens_used = 0
 
     for msg in reversed(messages):
         msg_tokens = msg.token_count or 0
-        if tokens_used + msg_tokens > tokens_for_recent and to_keep:
+        if tokens_used + msg_tokens > tokens_for_recent and recent_messages:
             break
-        to_keep.insert(0, msg)
+        recent_messages.insert(0, msg)
         tokens_used += msg_tokens
 
     # Everything else gets summarized
-    keep_ids = {m.id for m in to_keep}
-    to_summarize = [m for m in messages if m.id not in keep_ids]
+    recent_ids = {m.id for m in recent_messages}
+    older_messages = [m for m in messages if m.id not in recent_ids]
 
-    return to_summarize, to_keep
+    return SummaryContent(
+        older_messages=older_messages, recent_messages=recent_messages
+    )
 
 
 def format_messages_for_summary(
@@ -302,21 +313,21 @@ def compress_chat_history(
         existing_summary = find_summary_for_branch(db_session, chat_history)
 
         # Get messages to summarize
-        to_summarize, to_keep = get_messages_to_summarize(
+        summary_content = get_messages_to_summarize(
             chat_history,
             existing_summary,
             tokens_for_recent=compression_params.tokens_for_recent,
         )
 
-        if not to_summarize:
+        if not summary_content.older_messages:
             logger.debug("No messages to summarize, skipping compression")
             return CompressionResult(summary_created=False, messages_summarized=0)
 
         # Generate summary (incorporate existing summary if present)
         existing_summary_text = existing_summary.message if existing_summary else None
         summary_text = generate_summary(
-            older_messages=to_summarize,
-            recent_messages=to_keep,
+            older_messages=summary_content.older_messages,
+            recent_messages=summary_content.recent_messages,
             llm=llm,
             tool_id_to_name=tool_id_to_name,
             existing_summary=existing_summary_text,
@@ -337,20 +348,20 @@ def compress_chat_history(
             message=summary_text,
             token_count=summary_token_count,
             parent_message_id=chat_history[-1].id,
-            last_summarized_message_id=to_summarize[-1].id,
+            last_summarized_message_id=summary_content.older_messages[-1].id,
         )
         db_session.add(summary_message)
         db_session.commit()
 
         logger.info(
-            f"Compressed {len(to_summarize)} messages into summary "
+            f"Compressed {len(summary_content.older_messages)} messages into summary "
             f"(session_id={chat_history[0].chat_session_id}, "
             f"summary_tokens={summary_token_count})"
         )
 
         return CompressionResult(
             summary_created=True,
-            messages_summarized=len(to_summarize),
+            messages_summarized=len(summary_content.older_messages),
         )
 
     except Exception as e:

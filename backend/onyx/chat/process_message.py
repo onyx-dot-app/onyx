@@ -620,30 +620,13 @@ def handle_stream_message_objects(
             llm_loop_completion_handle(
                 state_container=state_container,
                 db_session=db_session,
-                chat_session_id=str(chat_session.id),
+                chat_session_id=chat_session.id,
                 is_connected=check_is_connected,
                 assistant_message=assistant_response,
-            )
-
-            # Check if compression is needed after saving the message
-            # Rebuild chat_history to include the newly saved messages
-            updated_chat_history = create_chat_history_chain(
-                chat_session_id=chat_session.id,
-                db_session=db_session,
-            )
-            total_tokens = calculate_total_history_tokens(updated_chat_history)
-            compression_params = get_compression_params(
                 llm=llm,
-                current_history_tokens=total_tokens,
+                tool_id_to_name=tool_id_to_name_map,
+                reserved_tokens=reserved_token_count,
             )
-            if compression_params.should_compress:
-                compress_chat_history(
-                    db_session=db_session,
-                    chat_history=updated_chat_history,
-                    llm=llm,
-                    compression_params=compression_params,
-                    tool_id_to_name=tool_id_to_name_map,
-                )
 
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
@@ -761,8 +744,11 @@ def llm_loop_completion_handle(
     state_container: ChatStateContainer,
     is_connected: Callable[[], bool],
     db_session: Session,
-    chat_session_id: str,
+    chat_session_id: UUID,
     assistant_message: ChatMessage,
+    llm: LLM,
+    tool_id_to_name: dict[int, str],
+    reserved_tokens: int,
 ) -> None:
     # Determine if stopped by user
     completed_normally = is_connected()
@@ -795,6 +781,26 @@ def llm_loop_completion_handle(
         is_clarification=state_container.is_clarification,
         emitted_citations=state_container.get_emitted_citations(),
     )
+
+    # Check if compression is needed after saving the message
+    updated_chat_history = create_chat_history_chain(
+        chat_session_id=chat_session_id,
+        db_session=db_session,
+    )
+    total_tokens = calculate_total_history_tokens(updated_chat_history)
+    compression_params = get_compression_params(
+        max_input_tokens=llm.config.max_input_tokens,
+        current_history_tokens=total_tokens,
+        reserved_tokens=reserved_tokens,
+    )
+    if compression_params.should_compress:
+        compress_chat_history(
+            db_session=db_session,
+            chat_history=updated_chat_history,
+            llm=llm,
+            compression_params=compression_params,
+            tool_id_to_name=tool_id_to_name,
+        )
 
 
 def stream_chat_message_objects(
