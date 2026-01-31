@@ -329,7 +329,7 @@ const ChatScrollContainer = React.memo(
       const contentMask = buildContentMask();
 
       return (
-        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-[7.5rem]">
+        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-[6.5rem]">
           <div
             key={sessionId}
             ref={scrollContainerRef}
