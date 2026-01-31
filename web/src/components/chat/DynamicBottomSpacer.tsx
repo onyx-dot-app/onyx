@@ -50,7 +50,9 @@ const DynamicBottomSpacer = React.memo(
     const prevAnchorNodeIdRef = useRef<number | undefined>(undefined);
     const wasStreamingRef = useRef(false);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
-    const settledTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const settledTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
 
     /**
      * Set spacer height directly on DOM (no re-renders)
@@ -164,14 +166,19 @@ const DynamicBottomSpacer = React.memo(
       if (contentWrapperRef.current) {
         resizeObserverRef.current.observe(contentWrapperRef.current);
       }
-    }, [getScrollContainer, updateSpacerHeight, stopObserving, contentWrapperRef]);
+    }, [
+      getScrollContainer,
+      updateSpacerHeight,
+      stopObserving,
+      contentWrapperRef,
+    ]);
 
     /**
      * Activate the spacer - calculate initial height and scroll to bottom
      */
     const activate = useCallback(() => {
       if (!anchorNodeId) return;
-      
+
       // If already active, stop the current observation to restart fresh
       if (isActiveRef.current) {
         stopObserving();
@@ -187,26 +194,27 @@ const DynamicBottomSpacer = React.memo(
       // Get measurements first (before modifying spacer)
       const viewportHeight = scrollContainer.clientHeight;
       const currentSpacerHeight = currentSpacerHeightRef.current;
-      
+
       // Calculate content height (scrollHeight minus current spacer)
       const contentHeight = scrollContainer.scrollHeight - currentSpacerHeight;
-      
+
       // Calculate anchor's position using getBoundingClientRect for accuracy
       const containerRect = scrollContainer.getBoundingClientRect();
       const anchorRect = anchor.getBoundingClientRect();
-      
+
       // Anchor's visual offset from the scroll container's top edge
       const anchorVisualOffset = anchorRect.top - containerRect.top;
-      
+
       // Anchor's absolute position in the scrollable content
-      const anchorOffsetInContent = anchorVisualOffset + scrollContainer.scrollTop;
+      const anchorOffsetInContent =
+        anchorVisualOffset + scrollContainer.scrollTop;
 
       // Measure the sticky header height dynamically
       const stickyHeaderHeight = getStickyHeaderHeight();
 
       // Calculate spacer height needed to position anchor just below the sticky header
       // when scrolled to the absolute bottom.
-      // 
+      //
       // At bottom: scrollTop = scrollHeight - clientHeight = (content + spacer) - viewport
       // Anchor visual position = anchorOffset - scrollTop
       // We want: anchorOffset - scrollTop = stickyHeaderHeight
@@ -251,7 +259,14 @@ const DynamicBottomSpacer = React.memo(
           }, SMOOTH_SCROLL_DURATION_MS);
         });
       });
-    }, [anchorNodeId, setHeight, getScrollContainer, getStickyHeaderHeight, startObserving, stopObserving]);
+    }, [
+      anchorNodeId,
+      setHeight,
+      getScrollContainer,
+      getStickyHeaderHeight,
+      startObserving,
+      stopObserving,
+    ]);
 
     /**
      * Main effect: detect streaming start/stop and anchor changes
