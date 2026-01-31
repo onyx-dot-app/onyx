@@ -446,6 +446,7 @@ function CommandMenuHeader({
           onKeyDown={handleInputKeyDown}
           autoFocus
           className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
+          showClearButton={false}
         />
       </div>
     </div>
