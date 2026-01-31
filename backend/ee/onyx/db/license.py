@@ -227,10 +227,10 @@ def update_license_cache(
         stripe_subscription_id=payload.stripe_subscription_id,
     )
 
-    redis_client.setex(
+    redis_client.set(
         LICENSE_METADATA_KEY,
-        LICENSE_CACHE_TTL_SECONDS,
         metadata.model_dump_json(),
+        ex=LICENSE_CACHE_TTL_SECONDS,
     )
 
     logger.info(f"License cache updated: {metadata.seats} seats, status={status.value}")
