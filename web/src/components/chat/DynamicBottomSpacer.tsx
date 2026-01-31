@@ -23,14 +23,6 @@ export interface DynamicBottomSpacerProps {
 /**
  * DynamicBottomSpacer creates a "fresh chat" effect by filling the space
  * below messages to push content up when a new round starts.
- *
- * How it works (Claude.ai approach):
- * 1. When a new message round starts, calculate spacer height to fill viewport
- * 2. Scroll to the absolute bottom (spacer is at bottom)
- * 3. As AI response streams, reduce spacer by exactly the amount content grows
- * 4. Since spacer shrinks = content grows, total scrollHeight stays constant
- * 5. The view stays perfectly stable with no jittering
- *
  * Uses ResizeObserver to efficiently detect content changes instead of polling.
  */
 const DynamicBottomSpacer = React.memo(
@@ -218,12 +210,6 @@ const DynamicBottomSpacer = React.memo(
 
       // Calculate spacer height needed to position anchor just below the top offset
       // when scrolled to the absolute bottom.
-      //
-      // At bottom: scrollTop = scrollHeight - clientHeight = (content + spacer) - viewport
-      // Anchor visual position = anchorOffset - scrollTop
-      // We want: anchorOffset - scrollTop = anchorTopOffsetPx
-      // So: anchorOffset - (content + spacer - viewport) = stickyHeaderHeight
-      // Solving: spacer = anchorOffset - content + viewport - anchorTopOffsetPx
       const spacerHeight =
         anchorOffsetInContent -
         contentHeight +
