@@ -950,7 +950,7 @@ done
             user_role: User's role/title for personalization in AGENTS.md
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, symlink files/ to /workspace/demo-data;
+            use_demo_data: If True, symlink files/ to /workspace/demo_data;
                           else to /workspace/files (S3-synced user files)
 
         Raises:
@@ -1018,7 +1018,7 @@ printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_str
         # Choose between demo data (baked in image) or user's S3-synced files
         if use_demo_data:
             # Demo mode: symlink to demo data baked into the container image
-            symlink_target = "/workspace/demo-data"
+            symlink_target = "/workspace/demo_data"
             files_symlink_setup = f"""
 # Create files symlink to demo data (baked into image)
 echo "Creating files symlink to demo data: {symlink_target}"
@@ -1542,10 +1542,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         logger.info(f"Listing directory {target_path} in pod {pod_name}")
 
         # Use exec to list directory
+        # -L follows symlinks (important for files/ -> /workspace/demo_data)
         exec_command = [
             "/bin/sh",
             "-c",
-            f"ls -la --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
+            f"ls -laL --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
         ]
 
         try:
@@ -1618,7 +1619,7 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
 
             # Directories start with 'd', symlinks start with 'l'
             # Treat symlinks as directories (they typically point to directories
-            # in our sandbox setup, like files/ -> /workspace/demo-data)
+            # in our sandbox setup, like files/ -> /workspace/demo_data)
             is_directory = line.startswith("d") or is_symlink
             size_str = parts[4]
 

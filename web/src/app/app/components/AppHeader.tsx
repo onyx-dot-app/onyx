@@ -20,6 +20,7 @@ import { deleteChatSession } from "@/app/app/services/lib";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
@@ -266,17 +267,6 @@ export default function AppHeader() {
       )}
 
       <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 relative">
-        {/* Fading blur overlay for mobile/tablet - hidden on xl+ */}
-        <div
-          className="absolute inset-0 backdrop-blur-md xl:hidden pointer-events-none"
-          style={{
-            maskImage:
-              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(to bottom, black 0%, black 60%, transparent 100%)",
-          }}
-        />
-
         {/* Left - contains the icon-button to fold the AppSidebar on mobile */}
         <div className="flex-1 relative z-sticky">
           <IconButton
@@ -300,33 +290,35 @@ export default function AppHeader() {
         </div>
 
         {/* Right - contains the share and more-options buttons */}
-        <div className="flex-1 flex flex-row items-center justify-end px-1 relative z-sticky">
-          <Button
-            leftIcon={SvgShare}
-            transient={showShareModal}
-            tertiary
-            onClick={() => setShowShareModal(true)}
-          >
-            Share Chat
-          </Button>
-          <SimplePopover
-            trigger={
-              <IconButton
-                icon={SvgMoreHorizontal}
-                className="ml-2"
-                transient={popoverOpen}
-                tertiary
-              />
-            }
-            onOpenChange={(state) => {
-              setPopoverOpen(state);
-              if (!state) setShowMoveOptions(false);
-            }}
-            side="bottom"
-            align="end"
-          >
-            <PopoverMenu>{popoverItems}</PopoverMenu>
-          </SimplePopover>
+        <div className="flex flex-1 z-sticky justify-end">
+          <FrostedDiv className="flex shrink flex-row items-center">
+            <Button
+              leftIcon={SvgShare}
+              transient={showShareModal}
+              tertiary
+              onClick={() => setShowShareModal(true)}
+            >
+              Share Chat
+            </Button>
+            <SimplePopover
+              trigger={
+                <IconButton
+                  icon={SvgMoreHorizontal}
+                  className="ml-2"
+                  transient={popoverOpen}
+                  tertiary
+                />
+              }
+              onOpenChange={(state) => {
+                setPopoverOpen(state);
+                if (!state) setShowMoveOptions(false);
+              }}
+              side="bottom"
+              align="end"
+            >
+              <PopoverMenu>{popoverItems}</PopoverMenu>
+            </SimplePopover>
+          </FrostedDiv>
         </div>
       </div>
     </>
