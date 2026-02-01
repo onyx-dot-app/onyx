@@ -1,8 +1,8 @@
-"""External dependency unit tests for OpenSearch migration celery tasks.
+"""External dependency tests for OpenSearch migration celery tasks.
 
 These tests require Postgres, Redis, Vespa, and OpenSearch to be running.
 
-WARNING: As will all external dependency tests, do not run them against a
+WARNING: As with all external dependency tests, do not run them against a
 database with data you care about. Your data will be destroyed.
 """
 
