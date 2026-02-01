@@ -61,6 +61,8 @@ from onyx.db.enums import (
     EmbeddingPrecision,
     HierarchyNodeType,
     IndexingMode,
+    OpenSearchDocumentMigrationStatus,
+    OpenSearchTenantMigrationStatus,
     ProcessingMode,
     SandboxStatus,
     SyncType,
@@ -890,6 +892,91 @@ class Document(Base):
             last_modified,
             last_synced,
         ),
+    )
+
+
+class OpenSearchDocumentMigrationRecord(Base):
+    """Tracks the migration status of documents from Vespa to OpenSearch.
+
+    This table can be dropped when the migration is complete for all Onyx
+    instances.
+    """
+
+    __tablename__ = "opensearch_document_migration_record"
+
+    document_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("document.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[OpenSearchDocumentMigrationStatus] = mapped_column(
+        Enum(OpenSearchDocumentMigrationStatus, native_enum=False),
+        default=OpenSearchDocumentMigrationStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, index=True
+    )
+    last_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+
+    document: Mapped["Document"] = relationship("Document")
+
+
+class OpenSearchTenantMigrationRecord(Base):
+    """Tracks the state of the OpenSearch migration for a tenant.
+
+    Should only contain one row.
+
+    This table can be dropped when the migration is complete for all Onyx
+    instances.
+    """
+
+    __tablename__ = "opensearch_tenant_migration_record"
+    __table_args__ = (
+        # Singleton pattern - unique index on constant ensures only one row.
+        Index("idx_opensearch_tenant_migration_singleton", text("(true)"), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
+    document_migration_record_table_population_status: Mapped[
+        OpenSearchTenantMigrationStatus
+    ] = mapped_column(
+        Enum(OpenSearchTenantMigrationStatus, native_enum=False),
+        default=OpenSearchTenantMigrationStatus.PENDING,
+        nullable=False,
+    )
+    num_times_observed_no_additional_docs_to_populate_migration_table: Mapped[int] = (
+        mapped_column(Integer, default=0, nullable=False)
+    )
+    overall_document_migration_status: Mapped[OpenSearchTenantMigrationStatus] = (
+        mapped_column(
+            Enum(OpenSearchTenantMigrationStatus, native_enum=False),
+            default=OpenSearchTenantMigrationStatus.PENDING,
+            nullable=False,
+        )
+    )
+    num_times_observed_no_additional_docs_to_migrate: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    last_updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
 
