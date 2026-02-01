@@ -364,7 +364,6 @@ export default function Page({ params }: Props) {
                   )
                 }
                 disabled={isUpdating || !guild?.enabled || personasLoading}
-                className="w-[200px]"
               >
                 <InputSelect.Trigger placeholder="Select agent" />
                 <InputSelect.Content>

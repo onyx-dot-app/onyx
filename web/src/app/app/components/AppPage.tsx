@@ -69,7 +69,6 @@ import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import AppHeader from "@/app/app/components/AppHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
@@ -650,7 +649,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {...getRootProps({ tabIndex: -1 })}
             >
               <div className="absolute top-0 left-0 right-0 z-app-header">
-                <AppHeader />
+                <AppLayouts.Header />
               </div>
 
               {/* Vignette overlay for custom backgrounds (disabled in light mode) */}
