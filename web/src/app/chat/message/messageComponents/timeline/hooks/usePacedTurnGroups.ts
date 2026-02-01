@@ -75,7 +75,7 @@ function createInitialPacingState(): PacingState {
  * Architecture:
  * - Pacing state in ref: no re-renders for internal tracking
  * - useState only for revealTrigger: forces re-render when content should update
- * - Timer-based delays: 250ms between different packet types
+ * - Timer-based delays: 200ms between different packet types
  *
  * @param toolTurnGroups - Turn groups from packet processor
  * @param displayGroups - Display content groups (MESSAGE_START/DELTA)
@@ -120,17 +120,10 @@ export function usePacedTurnGroups(
 
   // Bypass pacing for completed messages (old messages loaded from history)
   // If stopPacketSeen is true on first render, return everything immediately
-  if (
+  const shouldBypassPacing =
     stopPacketSeen &&
     state.revealedStepKeys.size === 0 &&
-    toolTurnGroups.length > 0
-  ) {
-    return {
-      pacedTurnGroups: toolTurnGroups,
-      pacedDisplayGroups: displayGroups,
-      pacedFinalAnswerComing: finalAnswerComing,
-    };
-  }
+    toolTurnGroups.length > 0;
 
   // Handle revealing the next pending step
   // Uses a while loop to reveal all consecutive steps of the same type in a single pass
@@ -166,6 +159,9 @@ export function usePacedTurnGroups(
 
   // Process incoming turn groups
   useEffect(() => {
+    // Skip processing when bypassing pacing
+    if (shouldBypassPacing) return;
+
     const state = stateRef.current;
 
     // Detect tool-after-message transition: message was showing, now tools are starting
@@ -289,6 +285,7 @@ export function usePacedTurnGroups(
     stopPacketSeen,
     finalAnswerComing,
     revealNextPendingStep,
+    shouldBypassPacing,
   ]);
 
   // Cleanup timer on unmount
@@ -304,6 +301,9 @@ export function usePacedTurnGroups(
   // Memoized to prevent unnecessary re-renders in downstream components
   // revealTrigger is included because state.revealedStepKeys is stored in a ref
   const pacedTurnGroups = useMemo(() => {
+    // Bypass: return all turn groups immediately
+    if (shouldBypassPacing) return toolTurnGroups;
+
     const result: TurnGroup[] = [];
     for (const turnGroup of toolTurnGroups) {
       const revealedSteps = turnGroup.steps.filter((step) =>
@@ -319,21 +319,26 @@ export function usePacedTurnGroups(
     }
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toolTurnGroups, revealTrigger]);
+  }, [toolTurnGroups, revealTrigger, shouldBypassPacing]);
 
-  // Only return display groups when tool pacing is complete
+  // Only return display groups when tool pacing is complete (or bypassing)
   const pacedDisplayGroups = useMemo(
-    () => (state.toolPacingComplete ? displayGroups : []),
+    () => (shouldBypassPacing || state.toolPacingComplete ? displayGroups : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.toolPacingComplete, displayGroups, revealTrigger]
+    [state.toolPacingComplete, displayGroups, revealTrigger, shouldBypassPacing]
   );
 
   // Paced signals for header state consistency
-  // Only signal finalAnswerComing when tool pacing is complete
+  // Only signal finalAnswerComing when tool pacing is complete (or bypassing)
   const pacedFinalAnswerComing = useMemo(
-    () => state.toolPacingComplete && finalAnswerComing,
+    () => (shouldBypassPacing || state.toolPacingComplete) && finalAnswerComing,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.toolPacingComplete, finalAnswerComing, revealTrigger]
+    [
+      state.toolPacingComplete,
+      finalAnswerComing,
+      revealTrigger,
+      shouldBypassPacing,
+    ]
   );
 
   return {
