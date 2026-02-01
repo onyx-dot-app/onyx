@@ -498,20 +498,28 @@ class JiraConnector(
             return ""
         return f'"{self.jira_project}"'
 
-    def _get_project_permissions(self, project_key: str) -> Any:
+    def _get_project_permissions(
+        self, project_key: str, add_prefix: bool = False
+    ) -> Any:
         """Get project permissions with caching.
 
         Args:
             project_key: The Jira project key
+            add_prefix: When True, prefix group IDs with source type (for indexing path).
+                       When False (default), leave unprefixed (for permission sync path).
 
         Returns:
             The external access permissions for the project
         """
-        if project_key not in self._project_permissions_cache:
-            self._project_permissions_cache[project_key] = get_project_permissions(
-                jira_client=self.jira_client, jira_project=project_key
+        # Use different cache keys for prefixed vs unprefixed to avoid mixing
+        cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
+        if cache_key not in self._project_permissions_cache:
+            self._project_permissions_cache[cache_key] = get_project_permissions(
+                jira_client=self.jira_client,
+                jira_project=project_key,
+                add_prefix=add_prefix,
             )
-        return self._project_permissions_cache[project_key]
+        return self._project_permissions_cache[cache_key]
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
@@ -619,7 +627,8 @@ class JiraConnector(
                         project_key = get_jira_project_key_from_issue(issue=issue)
                         if project_key:
                             document.external_access = self._get_project_permissions(
-                                project_key
+                                project_key,
+                                add_prefix=True,  # Indexing path - prefix here
                             )
                     yield document
 
@@ -700,7 +709,10 @@ class JiraConnector(
                 slim_doc_batch.append(
                     SlimDocument(
                         id=id,
-                        external_access=self._get_project_permissions(project_key),
+                        # Permission sync path - don't prefix, upsert_document_external_perms handles it
+                        external_access=self._get_project_permissions(
+                            project_key, add_prefix=False
+                        ),
                     )
                 )
                 current_offset += 1

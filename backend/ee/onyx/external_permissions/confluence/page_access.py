@@ -1,6 +1,8 @@
 from typing import Any
 
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.onyx_confluence import (
     get_user_email_from_username__server,
 )
@@ -72,6 +74,7 @@ def get_page_restrictions(
     page_id: str,
     page_restrictions: dict[str, Any],
     ancestors: list[dict[str, Any]],
+    add_prefix: bool = False,
 ) -> ExternalAccess | None:
     """
     This function gets the restrictions for a page. In Confluence, a child can have
@@ -79,6 +82,9 @@ def get_page_restrictions(
 
     If no restrictions are found anywhere, then return None, indicating that the page
     should inherit the space's restrictions.
+
+    add_prefix: When True, prefix group IDs with source type (for indexing path).
+               When False (default), leave unprefixed (for permission sync path).
     """
     found_user_emails: set[str] = set()
     found_group_names: set[str] = set()
@@ -92,13 +98,22 @@ def get_page_restrictions(
             restrictions=page_restrictions,
         )
     )
+
+    def _maybe_prefix_groups(group_names: set[str]) -> set[str]:
+        if add_prefix:
+            return {
+                build_ext_group_name_for_onyx(g, DocumentSource.CONFLUENCE)
+                for g in group_names
+            }
+        return group_names
+
     # if there are individual page-level restrictions, then this is the accurate
     # restriction for the page. You cannot both have page-level restrictions AND
     # inherit restrictions from the parent.
     if found_any_page_level_restriction:
         return ExternalAccess(
             external_user_emails=found_user_emails,
-            external_user_group_ids=found_group_names,
+            external_user_group_ids=_maybe_prefix_groups(found_group_names),
             is_public=False,
         )
 
@@ -125,7 +140,7 @@ def get_page_restrictions(
             )
             return ExternalAccess(
                 external_user_emails=ancestor_user_emails,
-                external_user_group_ids=ancestor_group_names,
+                external_user_group_ids=_maybe_prefix_groups(ancestor_group_names),
                 is_public=False,
             )
 

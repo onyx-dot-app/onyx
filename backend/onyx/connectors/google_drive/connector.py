@@ -503,6 +503,7 @@ class GoogleDriveConnector(
         seen_hierarchy_node_raw_ids: ThreadSafeSet[str],
         fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str],
         permission_sync_context: PermissionSyncContext | None = None,
+        add_prefix: bool = False,
     ) -> list[HierarchyNode]:
         """
         Get all NEW ancestor hierarchy nodes for a batch of files.
@@ -526,6 +527,8 @@ class GoogleDriveConnector(
                 succeeded (modified in place)
             permission_sync_context: If provided, permissions will be fetched for hierarchy nodes.
                 Contains google_domain and primary_admin_email needed for permission syncing.
+            add_prefix: When True, prefix group IDs with source type (for indexing path).
+                       When False (default), leave unprefixed (for permission sync path).
 
         Returns:
             List of HierarchyNode objects for new ancestors (ordered parent-first)
@@ -586,7 +589,10 @@ class GoogleDriveConnector(
                 # only one will add to ancestors_to_add (the one that wins check_and_add).
                 if permission_sync_context:
                     external_access = get_external_access_for_folder(
-                        folder, permission_sync_context.google_domain, service
+                        folder,
+                        permission_sync_context.google_domain,
+                        service,
+                        add_prefix,
                     )
                 else:
                     external_access = _public_access()
@@ -1488,6 +1494,7 @@ class GoogleDriveConnector(
                     seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
                     fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
                     permission_sync_context=permission_sync_context,
+                    add_prefix=True,  # Indexing path - prefix here
                 )
                 if new_ancestors:
                     logger.debug(
