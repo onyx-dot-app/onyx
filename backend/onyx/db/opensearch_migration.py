@@ -5,6 +5,7 @@ from Vespa to OpenSearch.
 """
 
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -160,7 +161,7 @@ def increment_num_times_observed_no_additional_docs_to_migrate_with_commit(
         insert(OpenSearchTenantMigrationRecord)
         .values(num_times_observed_no_additional_docs_to_migrate=1)
         .on_conflict_do_update(
-            constraint="idx_opensearch_tenant_migration_singleton",
+            index_elements=[text("(true)")],
             set_={
                 "num_times_observed_no_additional_docs_to_migrate": (
                     OpenSearchTenantMigrationRecord.num_times_observed_no_additional_docs_to_migrate
@@ -189,7 +190,7 @@ def increment_num_times_observed_no_additional_docs_to_populate_migration_table_
         insert(OpenSearchTenantMigrationRecord)
         .values(num_times_observed_no_additional_docs_to_populate_migration_table=1)
         .on_conflict_do_update(
-            constraint="idx_opensearch_tenant_migration_singleton",
+            index_elements=[text("(true)")],
             set_={
                 "num_times_observed_no_additional_docs_to_populate_migration_table": (
                     OpenSearchTenantMigrationRecord.num_times_observed_no_additional_docs_to_populate_migration_table
