@@ -241,10 +241,12 @@ export default function useQueryController(
   // Sync classification state with navigation context
   // When in an existing chat session, classification should be "chat"
   // When switching agents or projects (no session), reset to allow new classification
+  const appFocusType = appFocus.getType();
+  const appFocusId = appFocus.getId();
   useEffect(() => {
-    if (appFocus.isChat()) setClassification("chat");
+    if (appFocusType === "chat") setClassification("chat");
     else reset();
-  }, [appFocus]);
+  }, [appFocusType, appFocusId, reset]);
 
   return {
     query,
