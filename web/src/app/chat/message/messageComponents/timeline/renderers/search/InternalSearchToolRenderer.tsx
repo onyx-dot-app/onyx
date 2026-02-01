@@ -71,7 +71,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
 
   const hasResults = results.length > 0;
 
-  const queriesHeader = "Searching internal documents for:";
+  const queriesHeader = "Searching internal documents";
 
   if (queries.length === 0) {
     return children([
@@ -142,11 +142,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
       ]);
     }
 
-    // Reading results phase: show results
+    // Reading phase: show results
     return children([
       {
         icon: null,
-        status: "Reading results",
+        status: "Reading",
         supportsCollapsible: true,
         content: (
           <SearchChipList
@@ -194,7 +194,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
             <>
               {!isCompact && (
                 <Text as="p" mainUiMuted text03>
-                  Reading results:
+                  Reading:
                 </Text>
               )}
               <SearchChipList
