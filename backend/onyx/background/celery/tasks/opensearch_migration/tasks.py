@@ -190,7 +190,7 @@ def check_for_documents_for_opensearch_migration_task(
             lock_beat.release()
         else:
             task_logger.warning(
-                "The OpenSearch migration lock was not owned on completion of the check tast."
+                "The OpenSearch migration lock was not owned on completion of the check task."
             )
 
     return True
