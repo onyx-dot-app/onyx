@@ -328,7 +328,7 @@ function Header() {
                 <Hoverable
                   asChild
                   variant="secondary"
-                  transient={effectiveMode === "chat"}
+                  transient={appFocus.isChat()}
                 >
                   <ChevronHoverableContainer>
                     <LineItemLayout
