@@ -32,8 +32,8 @@ import {
   constructCurrentSearchState,
 } from "./renderers/SearchToolRenderer";
 import { SvgChevronDown, SvgChevronDownSmall, SvgXCircle } from "@opal/icons";
-import { LoadingSpinner } from "../../chat_search/LoadingSpinner";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 enum DisplayType {
   REGULAR = "regular",
@@ -269,7 +269,7 @@ function ParallelToolTabs({
                       >
                         {tab.name}
                       </span>
-                      {isLoading && <LoadingSpinner size="small" />}
+                      {isLoading && <SimpleLoader />}
                       {tab.isComplete && !isLoading && tab.hasError && (
                         <FiXCircle
                           className={cn(
