@@ -88,18 +88,6 @@ export const parseLlmDescriptor = (value: string): LlmDescriptor => {
   };
 };
 
-export const findProviderForModel = (
-  llmProviders: LLMProviderDescriptor[],
-  modelName: string
-): string => {
-  const provider = llmProviders.find((p) =>
-    p.model_configurations
-      .map((modelConfiguration) => modelConfiguration.name)
-      .includes(modelName)
-  );
-  return provider ? provider.provider : "";
-};
-
 export const findModelInModelConfigurations = (
   modelConfigurations: ModelConfiguration[],
   modelName: string
@@ -144,3 +132,20 @@ export const modelSupportsImageInput = (
   );
   return modelConfiguration?.supports_image_input || false;
 };
+
+export function getDisplayName(
+  agent: MinimalPersonaSnapshot,
+  llmProviders: LLMProviderDescriptor[]
+): string | undefined {
+  const llmDescriptor = getLLMProviderOverrideForPersona(
+    agent,
+    llmProviders ?? []
+  );
+  const llmProvider = llmProviders?.find(
+    (llmProvider) => llmProvider.name === agent.llm_model_provider_override
+  );
+  const modelConfig = llmProvider?.model_configurations.find(
+    (modelConfig) => modelConfig.name === llmDescriptor?.modelName
+  );
+  return modelConfig?.display_name;
+}
