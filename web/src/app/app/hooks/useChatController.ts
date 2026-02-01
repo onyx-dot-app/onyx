@@ -5,12 +5,9 @@ import {
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "../services/lib";
-
 import { StreamStopInfo } from "@/lib/search/interfaces";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { stopChatSession } from "../chat_search/utils";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -68,7 +65,7 @@ import {
   useCurrentChatState,
   useCurrentMessageHistory,
 } from "../stores/useChatSessionStore";
-import { Packet, MessageStart, PacketType } from "../services/streamingModels";
+import { Packet, MessageStart } from "../services/streamingModels";
 import { useAssistantPreferences } from "@/app/app/hooks/useAssistantPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
@@ -111,6 +108,19 @@ interface UseChatControllerProps {
   setPopup: (popup: PopupSpec) => void;
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
+}
+
+async function stopChatSession(chatSessionId: string): Promise<void> {
+  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to stop chat session: ${response.statusText}`);
+  }
 }
 
 export function useChatController({
