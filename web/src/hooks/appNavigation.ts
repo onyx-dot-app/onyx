@@ -1,6 +1,6 @@
 "use client";
 
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useCallback } from "react";

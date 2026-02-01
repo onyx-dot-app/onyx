@@ -10,7 +10,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { pinAgents } from "@/lib/agents";
 import { useUser } from "@/components/user/UserProvider";
 import { useSearchParams } from "next/navigation";
-import { SEARCH_PARAM_NAMES } from "@/app/chat/services/searchParams";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import useChatSessions from "./useChatSessions";
 
 /**

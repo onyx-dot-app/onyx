@@ -1,6 +1,6 @@
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { SubQuestionDetail } from "@/app/chat/interfaces";
-import { StreamingCitation } from "@/app/chat/services/streamingModels";
+import { SubQuestionDetail } from "@/app/app/interfaces";
+import { StreamingCitation } from "@/app/app/services/streamingModels";
 import { ValidSources } from "@/lib/types";
 import { getSourceDisplayName } from "@/lib/sources";
 import { SourceInfo } from "./SourceTagDetailsCard";

@@ -14,7 +14,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { ValidSources } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import { IconProps } from "@/components/icons/icons";
-import { SubQuestionDetail } from "@/app/chat/interfaces";
+import { SubQuestionDetail } from "@/app/app/interfaces";
 
 export interface SourceInfo {
   id: string;

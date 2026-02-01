@@ -22,7 +22,7 @@ import {
   OPEN_URL_TOOL_NAME,
   WEB_SEARCH_TOOL_ID,
   SYSTEM_TOOL_ICONS,
-} from "@/app/chat/components/tools/constants";
+} from "@/app/app/components/tools/constants";
 import {
   SvgActions,
   SvgCheck,
