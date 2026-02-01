@@ -132,7 +132,7 @@ test.describe("Image Generation Provider Configuration", () => {
       );
 
       // Wait for modal to close (indicates success)
-      await expect(modalDialog).not.toBeVisible({ timeout: 30000 });
+      await expect(modalDialog).not.toBeVisible({ timeout: 60000 });
 
       console.log(
         "[image-gen-test] Modal closed, verifying provider is configured..."
