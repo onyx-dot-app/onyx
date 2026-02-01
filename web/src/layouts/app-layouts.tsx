@@ -57,6 +57,7 @@ import {
   SvgFolderIn,
   SvgMoreHorizontal,
   SvgSearch,
+  SvgSearchMenu,
   SvgShare,
   SvgSidebar,
   SvgSparkle,
@@ -65,6 +66,14 @@ import {
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { AppMode, useAppMode } from "@/providers/AppModeProvider";
+import useAppFocus from "@/hooks/useAppFocus";
+import { IconProps } from "@opal/types";
+
+function modeToIcon(appMode: AppMode): React.FunctionComponent<IconProps> {
+  if (appMode === "auto") return SvgSparkle;
+  else if (appMode === "chat") return SvgBubbleText;
+  else return SvgSearchMenu;
+}
 
 /**
  * App Header Component
@@ -106,11 +115,12 @@ function Header() {
   const { currentChatSession, refreshChatSessions } = useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
+  const appFocus = useAppFocus();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
 
-  const effectiveMode: AppMode = currentChatSession ? "chat" : appMode;
+  const effectiveMode: AppMode = appFocus.isChat() ? "chat" : appMode;
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -312,75 +322,83 @@ function Header() {
               internal
             />
           )}
-          <Popover
-            open={modePopoverOpen}
-            onOpenChange={(open) => {
-              if (currentChatSession) return;
-              setModePopoverOpen(open);
-            }}
-          >
-            <Popover.Trigger asChild>
-              <Hoverable asChild variant="secondary">
-                <ChevronHoverableContainer>
-                  <LineItemLayout
-                    icon={
-                      effectiveMode === "auto"
-                        ? SvgSparkle
-                        : effectiveMode === "search"
-                          ? SvgSearch
-                          : SvgBubbleText
-                    }
-                    title={
-                      effectiveMode === "auto"
-                        ? "Auto"
-                        : effectiveMode === "search"
-                          ? "Search"
-                          : "Chat"
-                    }
-                    variant="secondary"
-                    center
-                  />
-                </ChevronHoverableContainer>
-              </Hoverable>
-            </Popover.Trigger>
-            <Popover.Content align="start" width="lg">
-              <Popover.Menu>
-                <LineItem
-                  icon={SvgSparkle}
-                  selected={effectiveMode === "auto"}
-                  description="Automatic Search/Chat mode"
-                  onClick={noProp(() => {
-                    setAppMode("auto");
-                    setModePopoverOpen(false);
-                  })}
+          {(appFocus.isNewSession() ||
+            appFocus.isAgent() ||
+            appFocus.isChat()) && (
+            <Popover
+              open={modePopoverOpen}
+              onOpenChange={(open) => {
+                if (currentChatSession) return;
+                setModePopoverOpen(open);
+              }}
+            >
+              <Popover.Trigger asChild>
+                <Hoverable
+                  asChild
+                  variant="secondary"
+                  transient={effectiveMode === "chat"}
                 >
-                  Auto
-                </LineItem>
-                <LineItem
-                  icon={SvgSearch}
-                  selected={effectiveMode === "search"}
-                  description="Quick search for documents"
-                  onClick={noProp(() => {
-                    setAppMode("search");
-                    setModePopoverOpen(false);
-                  })}
-                >
-                  Search
-                </LineItem>
-                <LineItem
-                  icon={SvgBubbleText}
-                  selected={effectiveMode === "chat"}
-                  description="Conversation and research"
-                  onClick={noProp(() => {
-                    setAppMode("chat");
-                    setModePopoverOpen(false);
-                  })}
-                >
-                  Chat
-                </LineItem>
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>
+                  <ChevronHoverableContainer>
+                    <LineItemLayout
+                      icon={
+                        effectiveMode === "auto"
+                          ? SvgSparkle
+                          : effectiveMode === "search"
+                            ? SvgSearch
+                            : SvgBubbleText
+                      }
+                      title={
+                        effectiveMode === "auto"
+                          ? "Auto"
+                          : effectiveMode === "search"
+                            ? "Search"
+                            : "Chat"
+                      }
+                      variant="secondary"
+                      center
+                    />
+                  </ChevronHoverableContainer>
+                </Hoverable>
+              </Popover.Trigger>
+              <Popover.Content align="start" width="lg">
+                <Popover.Menu>
+                  <LineItem
+                    icon={SvgSparkle}
+                    selected={effectiveMode === "auto"}
+                    description="Automatic Search/Chat mode"
+                    onClick={noProp(() => {
+                      setAppMode("auto");
+                      setModePopoverOpen(false);
+                    })}
+                  >
+                    Auto
+                  </LineItem>
+                  <LineItem
+                    icon={SvgSearch}
+                    selected={effectiveMode === "search"}
+                    description="Quick search for documents"
+                    onClick={noProp(() => {
+                      setAppMode("search");
+                      setModePopoverOpen(false);
+                    })}
+                  >
+                    Search
+                  </LineItem>
+                  <LineItem
+                    icon={SvgBubbleText}
+                    selected={effectiveMode === "chat"}
+                    description="Conversation and research"
+                    onClick={noProp(() => {
+                      setAppMode("chat");
+                      setModePopoverOpen(false);
+                    })}
+                  >
+                    Chat
+                  </LineItem>
+                </Popover.Menu>
+              </Popover.Content>
+            </Popover>
+          )}
         </div>
 
         {/*
