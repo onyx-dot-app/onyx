@@ -58,7 +58,7 @@ import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 
 /**
- * Chat Header Component
+ * App Header Component
  *
  * Renders the header for chat sessions with share, move, and delete actions.
  * Designed to be rendered inside ChatScrollContainer with sticky positioning.
@@ -69,8 +69,9 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
  * - Delete chat with confirmation
  * - Mobile-responsive sidebar toggle
  * - Custom header content from enterprise settings
+ * - App-Mode toggle (EE gated)
  */
-function AppHeader() {
+function Header() {
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -91,8 +92,7 @@ function AppHeader() {
     refreshCurrentProjectDetails,
     currentProjectId,
   } = useProjectsContext();
-  const { currentChatSession, refreshChatSessions, currentChatSessionId } =
-    useChatSessions();
+  const { currentChatSession, refreshChatSessions } = useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
 
@@ -434,17 +434,17 @@ export interface AppRootProps {
   children?: React.ReactNode;
 }
 
-function AppRoot({ children, disableHeader, disableFooter }: AppRootProps) {
+function Root({ children, disableHeader, disableFooter }: AppRootProps) {
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
       breakout of their immediate containers using cqw units.
     */
     <div className="@container flex flex-col h-full w-full relative overflow-hidden">
-      {!disableHeader && <AppHeader />}
+      {!disableHeader && <Header />}
       <div className="flex-1 overflow-auto h-full w-full">{children}</div>
       {!disableFooter && <Footer />}
     </div>
   );
 }
 
-export { AppRoot as Root, AppHeader as Header, Footer };
+export { Root, Header, Footer };
