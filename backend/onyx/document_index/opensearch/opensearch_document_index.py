@@ -748,7 +748,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
             "[ANDREI]: Random retrieval is not implemented for OpenSearch."
         )
 
-    def raw_index_chunks(self, chunks: list[DocumentChunk]) -> None:
+    def index_raw_chunks(self, chunks: list[DocumentChunk]) -> None:
+        """Indexes raw document chunks into OpenSearch.
+
+        Used in the Vespa migration task. Can be deleted after migrations are
+        complete.
+        """
         logger.debug(
             f"[OpenSearchDocumentIndex] Indexing {len(chunks)} raw chunks for index {self._index_name}."
         )
