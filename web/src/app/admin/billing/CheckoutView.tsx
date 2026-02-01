@@ -12,7 +12,11 @@ import { createCheckoutSession } from "@/lib/billing/svc";
 import { useUser } from "@/providers/UserProvider";
 import { formatDateShort } from "@/lib/dateUtils";
 import type { PlanType } from "@/lib/billing/interfaces";
+<<<<<<< HEAD
 import InputNumber from "@/refresh-components/inputs/InputNumber";
+=======
+import InputNumber from "../../../refresh-components/inputs/InputNumber";
+>>>>>>> 95f271f76 (feat(ee): fe - add CheckoutView component for billing)
 import useUsers from "@/hooks/useUsers";
 
 // ----------------------------------------------------------------------------
@@ -35,11 +39,19 @@ function BillingOption({
   badge,
 }: BillingOptionProps) {
   return (
+<<<<<<< HEAD
     <Card
       onClick={onClick}
       className="billing-option"
       data-selected={selected}
       padding={0}
+=======
+    <button
+      type="button"
+      onClick={onClick}
+      className="billing-option"
+      data-selected={selected}
+>>>>>>> 95f271f76 (feat(ee): fe - add CheckoutView component for billing)
     >
       <Section
         flexDirection="row"
@@ -83,7 +95,11 @@ function BillingOption({
           </Section>
         )}
       </Section>
+<<<<<<< HEAD
     </Card>
+=======
+    </button>
+>>>>>>> 95f271f76 (feat(ee): fe - add CheckoutView component for billing)
   );
 }
 
@@ -153,7 +169,11 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   };
 
   return (
+<<<<<<< HEAD
     <Card padding={0} gap={0} alignItems="stretch">
+=======
+    <Card padding={0} alignItems="stretch">
+>>>>>>> 95f271f76 (feat(ee): fe - add CheckoutView component for billing)
       {/* Header */}
       <Section
         flexDirection="row"
@@ -257,7 +277,10 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
             After your 1-month free trial ends.
           </Text>
         ) : (
+<<<<<<< HEAD
           // Empty div to maintain space-between alignment
+=======
+>>>>>>> 95f271f76 (feat(ee): fe - add CheckoutView component for billing)
           <div></div>
         )}
         <Button main primary onClick={handleSubmit} disabled={isSubmitting}>
