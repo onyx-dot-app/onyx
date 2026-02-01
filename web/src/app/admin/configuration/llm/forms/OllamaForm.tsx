@@ -39,6 +39,8 @@ interface OllamaFormValues extends BaseLLMFormValues {
 interface OllamaFormContentProps {
   formikProps: FormikProps<OllamaFormValues>;
   existingLlmProvider?: LLMProviderView;
+  fetchedModels: ModelConfiguration[];
+  setFetchedModels: (models: ModelConfiguration[]) => void;
   isTesting: boolean;
   testError: string;
   mutate: () => void;
@@ -49,15 +51,14 @@ interface OllamaFormContentProps {
 function OllamaFormContent({
   formikProps,
   existingLlmProvider,
+  fetchedModels,
+  setFetchedModels,
   isTesting,
   testError,
   mutate,
   onClose,
   isFormValid,
 }: OllamaFormContentProps) {
-  const [availableModels, setAvailableModels] = useState<ModelConfiguration[]>(
-    existingLlmProvider?.model_configurations || []
-  );
   const [isLoadingModels, setIsLoadingModels] = useState(true);
 
   useEffect(() => {
@@ -70,16 +71,25 @@ function OllamaFormContent({
         .then((data) => {
           if (data.error) {
             console.error("Error fetching models:", data.error);
-            setAvailableModels([]);
+            setFetchedModels([]);
             return;
           }
-          setAvailableModels(data.models);
+          setFetchedModels(data.models);
         })
         .finally(() => {
           setIsLoadingModels(false);
         });
     }
-  }, [formikProps.values.api_base]);
+  }, [
+    formikProps.values.api_base,
+    existingLlmProvider?.name,
+    setFetchedModels,
+  ]);
+
+  const currentModels =
+    fetchedModels.length > 0
+      ? fetchedModels
+      : existingLlmProvider?.model_configurations || [];
 
   return (
     <Form className={LLM_FORM_CLASS_NAME}>
@@ -99,7 +109,7 @@ function OllamaFormContent({
       />
 
       <DisplayModels
-        modelConfigurations={availableModels}
+        modelConfigurations={currentModels}
         formikProps={formikProps}
         noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
         isLoading={isLoadingModels}
@@ -125,6 +135,8 @@ export function OllamaForm({
   existingLlmProvider,
   shouldMarkAsDefault,
 }: LLMProviderFormProps) {
+  const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
+
   return (
     <ProviderFormEntrypointWrapper
       providerName="Ollama"
@@ -189,7 +201,10 @@ export function OllamaForm({
                   providerName: OLLAMA_PROVIDER_NAME,
                   values: submitValues,
                   initialValues,
-                  modelConfigurations,
+                  modelConfigurations:
+                    fetchedModels.length > 0
+                      ? fetchedModels
+                      : modelConfigurations,
                   existingLlmProvider,
                   shouldMarkAsDefault,
                   setIsTesting,
@@ -205,6 +220,8 @@ export function OllamaForm({
                 <OllamaFormContent
                   formikProps={formikProps}
                   existingLlmProvider={existingLlmProvider}
+                  fetchedModels={fetchedModels}
+                  setFetchedModels={setFetchedModels}
                   isTesting={isTesting}
                   testError={testError}
                   mutate={mutate}
