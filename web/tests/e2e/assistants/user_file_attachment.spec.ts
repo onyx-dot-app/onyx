@@ -102,10 +102,6 @@ async function uploadTestFile(
         }`
       );
       if (attempt === maxRetries) {
-        // Take a screenshot for debugging
-        await page.screenshot({
-          path: `upload-failure-${fileName}-${Date.now()}.png`,
-        });
         throw error;
       }
       await page.waitForTimeout(1000);
@@ -162,7 +158,7 @@ test.describe("User File Attachment to Assistant", () => {
   // Run serially to avoid session conflicts between parallel workers
   test.describe.configure({ mode: "serial", retries: 1 });
 
-  test("should persist user file attachment after creating assistant @exclusive", async ({
+  test("should persist user file attachment after creating assistant", async ({
     page,
   }: {
     page: Page;
@@ -227,27 +223,6 @@ test.describe("User File Attachment to Assistant", () => {
     await page.waitForURL(`**/app/agents/edit/${assistantId}`);
     await page.waitForLoadState("networkidle");
 
-    // Debug: Check what persona data was loaded by inspecting the API response
-    const personaResponse = await page.evaluate(async (id) => {
-      try {
-        const res = await fetch(`/api/persona/${id}`, {
-          credentials: "include",
-        });
-        return await res.json();
-      } catch (e) {
-        return { error: String(e) };
-      }
-    }, assistantId);
-    console.log(
-      `[test] Persona data for ID ${assistantId}:`,
-      JSON.stringify({
-        user_file_ids: personaResponse.user_file_ids,
-        user_files: personaResponse.user_files?.map(
-          (f: { id: string; name: string }) => ({ id: f.id, name: f.name })
-        ),
-      })
-    );
-
     // Verify knowledge toggle is still enabled
     await expect(getKnowledgeToggle(page)).toHaveAttribute(
       "aria-checked",
@@ -269,10 +244,6 @@ test.describe("User File Attachment to Assistant", () => {
 
     // Wait for UI to fully render the selection state
     await page.waitForTimeout(500);
-
-    // Debug: Log all selected elements
-    const selectedCount = await page.locator("[data-selected='true']").count();
-    console.log(`[test] Number of selected items: ${selectedCount}`);
 
     // Verify the file row has data-selected="true" (indicating it's attached to the assistant)
     // This confirms: user_file_ids were saved when creating the assistant,
@@ -342,38 +313,11 @@ test.describe("User File Attachment to Assistant", () => {
     await page.goto(`/app/agents/edit/${assistantId}`);
     await page.waitForLoadState("networkidle");
 
-    // Debug: Check what persona data was loaded
-    const personaResponse = await page.evaluate(async (id) => {
-      try {
-        const res = await fetch(`/api/persona/${id}`, {
-          credentials: "include",
-        });
-        return await res.json();
-      } catch (e) {
-        return { error: String(e) };
-      }
-    }, assistantId);
-    console.log(
-      `[test] Multi-file persona data for ID ${assistantId}:`,
-      JSON.stringify({
-        user_file_ids: personaResponse.user_file_ids,
-        user_files: personaResponse.user_files?.map(
-          (f: { id: string; name: string }) => ({ id: f.id, name: f.name })
-        ),
-      })
-    );
-
     // Navigate to files view
     await navigateToFilesView(page);
 
     // Wait for files to load
     await page.waitForTimeout(1000);
-
-    // Debug: Log all selected elements
-    const selectedCount = await page.locator("[data-selected='true']").count();
-    console.log(
-      `[test] Number of selected items in multi-file test: ${selectedCount}`
-    );
 
     // Verify both files are visible and selected
     // This confirms: user_file_ids were saved when creating the assistant,
