@@ -14,7 +14,13 @@ export interface SteadyRevealOptions {
   backlogCatchUpThresholdChars?: number;
   /** Hard cap for chars revealed per animation frame (prevents big jumps on tab wake). */
   maxCharsPerFrame?: number;
-  /** Reveal at least this many chars per frame when enabled (prevents stalling on tiny dt). */
+  /**
+   * Minimum chars to advance per animation frame.
+   *
+   * Set to 0 to allow true time-based pacing using fractional carry (recommended for
+   * slow/steady streaming). Values > 0 effectively impose a minimum speed tied to
+   * frame rate (e.g. 1 char/frame ≈ 60 chars/sec at 60fps).
+   */
   minCharsPerFrame?: number;
 }
 
@@ -32,7 +38,7 @@ const DEFAULTS: Required<SteadyRevealOptions> = {
   catchUpCharsPerSecond: 140,
   backlogCatchUpThresholdChars: 1800,
   maxCharsPerFrame: 50,
-  minCharsPerFrame: 1,
+  minCharsPerFrame: 0,
 };
 
 // Maximum delta time (ms) per frame to prevent large jumps when tab was inactive.
@@ -41,7 +47,7 @@ const MAX_FRAME_DT_MS = 250;
 // Commit throttling: advance "internally" every frame, but only commit to React state
 // periodically and in reasonably sized chunks. This reduces jitter from per-frame updates.
 const COMMIT_INTERVAL_MS = 40;
-const COMMIT_MIN_CHARS = 6;
+const COMMIT_MIN_CHARS = 4;
 
 // When true, avoid splitting words (smoother but less "token-ish").
 // When false, allow partial words like "Eac" -> "Each of i".

@@ -24,11 +24,13 @@ const STREAMING_MARKDOWN_THROTTLE_SLOW_MS = 80;
 const STEADY_REVEAL_STREAMING_OPTIONS: SteadyRevealOptions = {
   // Intentionally conservative: avoid an initial "dump" of a big paragraph and keep
   // the flow closer to word/line-like streaming.
-  baseCharsPerSecond: 45,
-  catchUpCharsPerSecond: 220,
-  backlogCatchUpThresholdChars: 1200,
-  maxCharsPerFrame: 80,
-  minCharsPerFrame: 1,
+  baseCharsPerSecond: 18,
+  catchUpCharsPerSecond: 90,
+  backlogCatchUpThresholdChars: 5000,
+  maxCharsPerFrame: 20,
+  // Important: allow fractional carry to control pacing. If this is 1, the UI can
+  // effectively render at ~1 char/frame ≈ 60 chars/sec regardless of baseCharsPerSecond.
+  minCharsPerFrame: 0,
 };
 
 function getPacketText(packet: unknown): string {
