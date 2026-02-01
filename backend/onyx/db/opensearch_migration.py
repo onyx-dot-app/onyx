@@ -147,24 +147,25 @@ def increment_num_times_observed_no_additional_docs_to_migrate_with_commit(
 ) -> None:
     """Increments the number of times observed no additional docs to migrate.
 
-    Gets what should be the only row in the OpenSearchTenantMigrationRecord
-    table and increments the number of times observed no additional docs to
-    migrate. Creates a new row if no row is found.
+    Tries to insert the singleton row on OpenSearchTenantMigrationRecord with a
+    starting count, and if the row already exists, increments the count.
 
     Used to track when to stop the migration task.
     """
-    opensearch_tenant_migration_record = db_session.query(
-        OpenSearchTenantMigrationRecord
-    ).first()
-    if opensearch_tenant_migration_record:
-        opensearch_tenant_migration_record.num_times_observed_no_additional_docs_to_migrate += (
-            1
+    stmt = (
+        insert(OpenSearchTenantMigrationRecord)
+        .values(num_times_observed_no_additional_docs_to_migrate=1)
+        .on_conflict_do_update(
+            constraint="idx_opensearch_tenant_migration_singleton",
+            set_={
+                "num_times_observed_no_additional_docs_to_migrate": (
+                    OpenSearchTenantMigrationRecord.num_times_observed_no_additional_docs_to_migrate
+                    + 1
+                )
+            },
         )
-    else:
-        opensearch_tenant_migration_record = OpenSearchTenantMigrationRecord(
-            num_times_observed_no_additional_docs_to_migrate=1
-        )
-        db_session.add(opensearch_tenant_migration_record)
+    )
+    db_session.execute(stmt)
     db_session.commit()
 
 
@@ -175,24 +176,25 @@ def increment_num_times_observed_no_additional_docs_to_populate_migration_table_
     Increments the number of times observed no additional docs to populate the
     migration table.
 
-    Gets what should be the only row in the OpenSearchTenantMigrationRecord
-    table and increments the number of times observed no additional docs to
-    populate the migration table. Creates a new row if no row is found.
+    Tries to insert the singleton row on OpenSearchTenantMigrationRecord with a
+    starting count, and if the row already exists, increments the count.
 
     Used to track when to stop the migration check task.
     """
-    opensearch_tenant_migration_record = db_session.query(
-        OpenSearchTenantMigrationRecord
-    ).first()
-    if opensearch_tenant_migration_record:
-        opensearch_tenant_migration_record.num_times_observed_no_additional_docs_to_populate_migration_table += (
-            1
+    stmt = (
+        insert(OpenSearchTenantMigrationRecord)
+        .values(num_times_observed_no_additional_docs_to_populate_migration_table=1)
+        .on_conflict_do_update(
+            constraint="idx_opensearch_tenant_migration_singleton",
+            set_={
+                "num_times_observed_no_additional_docs_to_populate_migration_table": (
+                    OpenSearchTenantMigrationRecord.num_times_observed_no_additional_docs_to_populate_migration_table
+                    + 1
+                )
+            },
         )
-    else:
-        opensearch_tenant_migration_record = OpenSearchTenantMigrationRecord(
-            num_times_observed_no_additional_docs_to_populate_migration_table=1
-        )
-        db_session.add(opensearch_tenant_migration_record)
+    )
+    db_session.execute(stmt)
     db_session.commit()
 
 
