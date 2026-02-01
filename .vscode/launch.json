@@ -25,6 +25,7 @@
         "Celery heavy",
         "Celery docfetching",
         "Celery docprocessing",
+        "Celery user_file_processing",
         "Celery beat"
       ],
       "presentation": {

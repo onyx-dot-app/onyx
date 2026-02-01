@@ -561,10 +561,6 @@ export default function AgentEditorPage({
     // Knowledge - enabled if num_chunks is greater than 0
     // (num_chunks of 0 or null means knowledge is disabled)
     enable_knowledge: (existingAgent?.num_chunks ?? 0) > 0,
-    knowledge_source:
-      existingAgent?.user_file_ids && existingAgent.user_file_ids.length > 0
-        ? "user_knowledge"
-        : ("team_knowledge" as "team_knowledge" | "user_knowledge"),
     document_set_ids: existingAgent?.document_sets?.map((ds) => ds.id) ?? [],
     // Individual document IDs from hierarchy browsing
     document_ids: existingAgent?.attached_documents?.map((doc) => doc.id) ?? [],
@@ -680,7 +676,6 @@ export default function AgentEditorPage({
 
     // Knowledge
     enable_knowledge: Yup.boolean(),
-    knowledge_source: Yup.string().oneOf(["team_knowledge", "user_knowledge"]),
     document_set_ids: Yup.array().of(Yup.number()),
     document_ids: Yup.array().of(Yup.string()),
     hierarchy_node_ids: Yup.array().of(Yup.number()),
@@ -739,7 +734,6 @@ export default function AgentEditorPage({
         starterMessages.length > 0 ? starterMessages : null;
 
       // Determine knowledge settings
-      const teamKnowledge = values.knowledge_source === "team_knowledge";
       const numChunks = values.enable_knowledge ? MAX_CHUNKS_FED_TO_CHAT : 0;
 
       // Always look up tools in availableTools to ensure we can find all tools
@@ -796,10 +790,9 @@ export default function AgentEditorPage({
       const submissionData: PersonaUpsertParameters = {
         name: values.name,
         description: values.description,
-        document_set_ids:
-          values.enable_knowledge && teamKnowledge
-            ? values.document_set_ids
-            : [],
+        document_set_ids: values.enable_knowledge
+          ? values.document_set_ids
+          : [],
         num_chunks: numChunks,
         is_public: values.is_public,
         // recency_bias: ...,
@@ -820,14 +813,11 @@ export default function AgentEditorPage({
         is_default_persona: false,
         // display_priority: ...,
 
-        user_file_ids:
-          values.enable_knowledge && !teamKnowledge ? values.user_file_ids : [],
-        hierarchy_node_ids:
-          values.enable_knowledge && teamKnowledge
-            ? values.hierarchy_node_ids
-            : [],
-        document_ids:
-          values.enable_knowledge && teamKnowledge ? values.document_ids : [],
+        user_file_ids: values.enable_knowledge ? values.user_file_ids : [],
+        hierarchy_node_ids: values.enable_knowledge
+          ? values.hierarchy_node_ids
+          : [],
+        document_ids: values.enable_knowledge ? values.document_ids : [],
 
         system_prompt: values.instructions,
         replace_base_system_prompt: values.replace_base_system_prompt,
