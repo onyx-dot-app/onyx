@@ -22,6 +22,8 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
@@ -55,6 +57,7 @@ from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
+from onyx.server.manage.llm.models import LLMProviderResponse
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
@@ -213,7 +216,7 @@ def test_llm_configuration(
 
     llm = get_llm(
         provider=test_llm_request.provider,
-        model=test_llm_request.default_model_name,
+        model=test_llm_request.model,
         api_key=test_api_key,
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
@@ -248,7 +251,7 @@ def list_llm_providers(
     include_image_gen: bool = Query(False),
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderView]:
+) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers")
 
@@ -273,7 +276,17 @@ def list_llm_providers(
     duration = (end_time - start_time).total_seconds()
     logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
 
-    return llm_provider_list
+    default_model = None
+    if model_config := fetch_default_llm_model(db_session):
+        default_model = DefaultModel(
+            provider_id=model_config.llm_provider.id,
+            model_name=model_config.name,
+        )
+
+    return LLMProviderResponse[LLMProviderView].from_models(
+        providers=llm_provider_list,
+        default_text=default_model,
+    )
 
 
 @admin_router.put("/provider")
@@ -401,19 +414,16 @@ def set_provider_as_default(
     )
 
 
-@admin_router.post("/provider/{provider_id}/default-vision")
+@admin_router.post("/default-vision")
 def set_provider_as_default_vision(
-    provider_id: int,
-    vision_model: str | None = Query(
-        None, description="The default vision model to use"
-    ),
+    default_model_request: DefaultModel,
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if vision_model is None:
-        raise HTTPException(status_code=404, detail="Vision model not provided")
     update_default_vision_provider(
-        provider_id=provider_id, vision_model=vision_model, db_session=db_session
+        provider_id=default_model_request.provider_id,
+        vision_model=default_model_request.model_name,
+        db_session=db_session,
     )
 
 
@@ -439,7 +449,7 @@ def get_auto_config(
 def get_vision_capable_providers(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[VisionProviderResponse]:
+) -> LLMProviderResponse[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
     vision_models = fetch_existing_models(
         db_session=db_session, flow_types=[ModelFlowType.VISION]
@@ -468,7 +478,18 @@ def get_vision_capable_providers(
     ]
 
     logger.debug(f"Found {len(vision_provider_response)} vision-capable providers")
-    return vision_provider_response
+
+    default_vision_model = None
+    if model_config := fetch_default_vision_model(db_session):
+        default_vision_model = DefaultModel(
+            provider_id=model_config.llm_provider.id,
+            model_name=model_config.name,
+        )
+
+    return LLMProviderResponse[VisionProviderResponse].from_models(
+        providers=vision_provider_response,
+        default_vision=default_vision_model,
+    )
 
 
 """Endpoints for all"""

@@ -1,4 +1,5 @@
 from typing import Any
+from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
 
@@ -36,7 +37,6 @@ class TestLLMRequest(BaseModel):
     custom_config: dict[str, str] | None = None
 
     # model level
-    default_model_name: str
     deployment_name: str | None = None
 
     # if try and use the existing API/custom config key
@@ -364,3 +364,22 @@ class OpenRouterFinalModelResponse(BaseModel):
 class DefaultModel(BaseModel):
     provider_id: int
     model_name: str
+
+
+class LLMProviderResponse(BaseModel, Generic[T]):
+    providers: list[T]
+    default_text: DefaultModel | None = None
+    default_vision: DefaultModel | None = None
+
+    @classmethod
+    def from_models(
+        cls,
+        providers: list[T],
+        default_text: DefaultModel | None = None,
+        default_vision: DefaultModel | None = None,
+    ) -> "LLMProviderResponse[T]":
+        return cls(
+            providers=providers,
+            default_text=default_text,
+            default_vision=default_vision,
+        )
