@@ -105,6 +105,7 @@ class AgentResponseStart(BaseObj):
     type: Literal["message_start"] = StreamingType.MESSAGE_START.value
 
     final_documents: list[SearchDoc] | None = None
+    tool_processing_duration_seconds: float | None = None
 
 
 # The stream of tokens for the final response

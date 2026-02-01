@@ -2443,6 +2443,10 @@ class ChatMessage(Base):
     )
     # True if this assistant message is a clarification question (deep research flow)
     is_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Duration in seconds for processing this message (assistant messages only)
+    processing_duration_seconds: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
 
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
