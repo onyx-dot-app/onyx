@@ -82,7 +82,6 @@ from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
-from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import (
@@ -348,11 +347,6 @@ def handle_stream_message_objects(
             user_id=llm_user_identifier, session_id=str(chat_session.id)
         )
 
-        # permanent "log" store, used primarily for debugging
-        long_term_logger = LongTermLogger(
-            metadata={"user_id": str(user_id), "chat_session_id": str(chat_session.id)}
-        )
-
         # Milestone tracking, most devs using the API don't need to understand this
         mt_cloud_telemetry(
             tenant_id=tenant_id,
@@ -383,7 +377,6 @@ def handle_stream_message_objects(
             user=user,
             llm_override=new_msg_req.llm_override or chat_session.llm_override,
             additional_headers=litellm_additional_headers,
-            long_term_logger=long_term_logger,
         )
         token_counter = get_llm_token_counter(llm)
 
