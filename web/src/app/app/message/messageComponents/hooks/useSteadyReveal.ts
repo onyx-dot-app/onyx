@@ -197,7 +197,10 @@ export function useSteadyReveal(
         const idealAdvance =
           (clampedDtMs / 1000) * cps + fractionalCarryRef.current;
         const boundedAdvance = Math.min(cfg.maxCharsPerFrame, idealAdvance);
-        const advance = Math.max(cfg.minCharsPerFrame, Math.floor(boundedAdvance));
+        const advance = Math.max(
+          cfg.minCharsPerFrame,
+          Math.floor(boundedAdvance)
+        );
         // Keep fractional remainder so timing feels smoother across frames.
         fractionalCarryRef.current = Math.max(0, boundedAdvance - advance);
 
