@@ -404,7 +404,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             >
               <div
                 className={cn(
-                  "w-[min(50rem,100%)] flex flex-col px-4",
+                  "w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4",
                   hasMessages && "pointer-events-auto"
                 )}
               >

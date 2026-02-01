@@ -80,7 +80,7 @@ export default function SharedChatDisplay({
         </div>
 
         {isMounted ? (
-          <div className="w-[min(50rem,100%)]">
+          <div className="w-full max-w-[var(--app-page-main-content-width)]">
             {messages.map((message, i) => {
               if (message.type === "user") {
                 return (

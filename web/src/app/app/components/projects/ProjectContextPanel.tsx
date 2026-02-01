@@ -135,7 +135,7 @@ export default function ProjectContextPanel({
           }}
         />
       </projectFilesModal.Provider>
-      <div className="flex flex-col gap-6 w-full max-w-[min(50rem,100%)] mx-auto p-4 pt-14 pb-6">
+      <div className="flex flex-col gap-6 w-full max-w-[var(--app-page-main-content-width)] mx-auto p-4 pt-14 pb-6">
         <div className="flex flex-col gap-1 text-text-04">
           <SvgFolderOpen className="h-8 w-8 text-text-04" />
           <div className="group flex items-center gap-2">
