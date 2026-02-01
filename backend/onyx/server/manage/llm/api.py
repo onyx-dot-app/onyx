@@ -457,28 +457,29 @@ def get_vision_capable_providers(
         db_session=db_session, flow_types=[ModelFlowType.VISION]
     )
 
-    logger.info("Fetching vision-capable providers")
-    vision_providers: dict[LLMProviderView, list[str]] = defaultdict(list)
+    # Group vision models by provider ID (using ID as key since it's hashable)
+    provider_models: dict[int, list[str]] = defaultdict(list)
+    providers_by_id: dict[int, LLMProviderView] = {}
+
     for vision_model in vision_models:
-        provider_view = LLMProviderView.from_model(vision_model.llm_provider)
-        vision_providers[provider_view].append(vision_model.name)
+        provider_id = vision_model.llm_provider.id
+        provider_models[provider_id].append(vision_model.name)
+        # Only create the view once per provider
+        if provider_id not in providers_by_id:
+            provider_view = LLMProviderView.from_model(vision_model.llm_provider)
+            _mask_provider_credentials(provider_view)
+            providers_by_id[provider_id] = provider_view
 
-    vision_provider_response = []
-
-    for provider_view, vision_model_names in vision_providers.items():
-        _mask_provider_credentials(provider_view)
-        vision_provider_response.append(
-            VisionProviderResponse(
-                **provider_view.model_dump(),
-                vision_models=vision_model_names,
-            )
+    # Build response list
+    vision_provider_response = [
+        VisionProviderResponse(
+            **providers_by_id[provider_id].model_dump(),
+            vision_models=model_names,
         )
+        for provider_id, model_names in provider_models.items()
+    ]
 
-        logger.info(
-            f"Vision provider: {provider_view.provider} with models: {vision_models}"
-        )
-
-    logger.info(f"Found {len(vision_providers)} vision-capable providers")
+    logger.debug(f"Found {len(vision_provider_response)} vision-capable providers")
     return vision_provider_response
 
 

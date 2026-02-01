@@ -238,6 +238,7 @@ def get_default_llm_with_vision(
             ModelFlowType.VISION in x.model_flow_types,
             ModelFlowType.CONVERSATION in x.model_flow_types,
         ),
+        reverse=True,
     )
 
     for model in sorted_models:

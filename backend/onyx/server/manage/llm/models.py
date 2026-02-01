@@ -143,6 +143,10 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
+        # TODO: Clear this up on api refactor
+        # There is still logic that requires sending each providers default model name
+        # There is no logic that requires sending the providers default vision model name
+        # We only send for the one that is actually the default
         default_model_name = ""
         default_vision_model: str | None = None
 

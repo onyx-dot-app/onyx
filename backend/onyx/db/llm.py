@@ -499,7 +499,9 @@ def fetch_default_model(
     flow_type: ModelFlowType,
 ) -> ModelConfiguration | None:
     model_config = db_session.scalar(
-        select(ModelConfiguration).where(
+        select(ModelConfiguration)
+        .join(ModelFlow)
+        .where(
             ModelConfiguration.is_visible == True,  # noqa: E712
             ModelFlow.model_flow_type == flow_type,
             ModelFlow.is_default == True,  # noqa: E712
@@ -596,12 +598,10 @@ def update_default_provider(provider_id: int, db_session: Session) -> None:
     if provider is None:
         raise ValueError(f"LLM Provider with id={provider_id} does not exist")
 
-    default_model_name = provider.default_model_name
-
     _update_default_model(
         db_session,
         provider_id,
-        default_model_name,
+        provider.default_model_name,
         ModelFlowType.CONVERSATION,
     )
 
@@ -735,7 +735,7 @@ def create_new_flow_mapping__no_commit(
 ) -> ModelFlow:
     flow = ModelFlow(
         model_configuration_id=model_configuration_id,
-        flow_type=flow_type,
+        model_flow_type=flow_type,
         is_default=False,
     )
 
