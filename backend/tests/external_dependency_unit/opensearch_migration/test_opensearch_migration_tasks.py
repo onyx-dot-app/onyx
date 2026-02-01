@@ -224,25 +224,7 @@ def _assert_chunk_matches_vespa_chunk(
 
 
 @pytest.fixture(scope="module")
-def opensearch_available() -> Generator[None, None, None]:
-    """Verifies OpenSearch is running, fails the test if not."""
-    if not wait_for_opensearch_with_timeout():
-        pytest.fail("OpenSearch is not available.")
-    yield  # Test runs here.
-
-
-@pytest.fixture(scope="module")
-def vespa_available() -> Generator[None, None, None]:
-    """Verifies Vespa is running, fails the test if not."""
-    if not wait_for_vespa_with_timeout():
-        pytest.fail("Vespa is not available.")
-    yield  # Test runs here.
-
-
-@pytest.fixture(scope="module")
-def full_deployment_setup(
-    opensearch_available: None, vespa_available: None
-) -> Generator[None, None, None]:
+def full_deployment_setup() -> Generator[None, None, None]:
     """Optional fixture to perform full deployment-like setup on demand.
 
     Imports and call
@@ -294,6 +276,26 @@ def opensearch_client(
     """Creates an OpenSearch client for the test tenant."""
     active = get_active_search_settings(db_session)
     yield OpenSearchClient(index_name=active.primary.index_name)  # Test runs here.
+
+
+@pytest.fixture(scope="module")
+def opensearch_available(
+    opensearch_client: OpenSearchClient,
+) -> Generator[None, None, None]:
+    """Verifies OpenSearch is running, fails the test if not."""
+    if not wait_for_opensearch_with_timeout(client=opensearch_client):
+        pytest.fail("OpenSearch is not available.")
+    yield  # Test runs here.
+
+
+@pytest.fixture(scope="module")
+def vespa_available(
+    full_deployment_setup: None,
+) -> Generator[None, None, None]:
+    """Verifies Vespa is running, fails the test if not."""
+    if not wait_for_vespa_with_timeout():
+        pytest.fail("Vespa is not available.")
+    yield  # Test runs here.
 
 
 @pytest.fixture(scope="module")
