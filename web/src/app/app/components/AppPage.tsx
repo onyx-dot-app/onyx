@@ -815,16 +815,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {/* SearchUI - coming soon */}
 
               {/* SuggestionsUI */}
-              {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                hasStarterMessages && <Suggestions onSubmit={onSubmit} />}
-
-              {/* Fallback
-                - In the case that we're not rendering the SearchUI nor the SuggestionsUI, we still require spacing to make the chat-input-bar centered.
-              */}
               {(appFocus.isNewSession() || appFocus.isAgent()) && (
-                <div className="flex-1" />
+                <div className="flex-1 self-stretch flex flex-col items-center">
+                  {hasStarterMessages && (
+                    <>
+                      <Spacer rem={0.5} />
+                      <Suggestions onSubmit={onSubmit} />
+                    </>
+                  )}
+                </div>
               )}
-
               <AppLayouts.Footer />
             </div>
           )}
