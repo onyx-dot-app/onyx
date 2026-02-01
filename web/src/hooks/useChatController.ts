@@ -4,13 +4,12 @@ import {
   buildChatUrl,
   nameChatSession,
   updateLlmOverrideForChatSession,
-} from "../services/lib";
-
+} from "@/app/app/services/lib";
 import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { stopChatSession } from "../chat_search/utils";
+import { stopChatSession } from "@/app/app/chat_search/utils";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -19,10 +18,10 @@ import {
   SYSTEM_NODE_ID,
   buildImmediateMessages,
   buildEmptyMessage,
-} from "../services/messageTree";
+} from "@/app/app/services/messageTree";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { SEARCH_PARAM_NAMES } from "../services/searchParams";
-import { SEARCH_TOOL_ID } from "../components/tools/constants";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
@@ -38,9 +37,9 @@ import {
   StreamingError,
   ToolCallMetadata,
   UserKnowledgeFilePacket,
-} from "../interfaces";
+} from "@/app/app/interfaces";
 import { StreamStopReason } from "@/lib/search/interfaces";
-import { createChatSession } from "../services/lib";
+import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
   modelSupportsImageInput,
@@ -49,7 +48,7 @@ import {
 import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
-} from "../services/currentMessageFIFO";
+} from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -67,13 +66,13 @@ import {
   useCurrentMessageTree,
   useCurrentChatState,
   useCurrentMessageHistory,
-} from "../stores/useChatSessionStore";
-import { Packet, MessageStart, PacketType } from "../services/streamingModels";
-import { useAssistantPreferences } from "@/app/app/hooks/useAssistantPreferences";
+} from "@/app/app/stores/useChatSessionStore";
+import { Packet, MessageStart } from "@/app/app/services/streamingModels";
+import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { ProjectFile, useProjectsContext } from "../projects/ProjectsContext";
+import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "../services/fileUtils";
+import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -113,7 +112,7 @@ interface UseChatControllerProps {
   setSelectedAssistantFromId: (assistantId: number | null) => void;
 }
 
-export function useChatController({
+export default function useChatController({
   filterManager,
   llmManager,
   availableAssistants,
@@ -130,7 +129,7 @@ export function useChatController({
   const params = useAppParams();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const { assistantPreferences } = useAssistantPreferences();
+  const { assistantPreferences } = useAgentPreferences();
   const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();

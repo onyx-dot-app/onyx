@@ -1,11 +1,8 @@
-import traceback
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
-
-from langchain_core.messages import BaseMessage
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.chat_configs import QA_TIMEOUT
@@ -48,7 +45,6 @@ from onyx.llm.well_known_providers.constants import (
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
@@ -109,7 +105,6 @@ class LitellmLLM(LLM):
         extra_headers: dict[str, str] | None = None,
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
-        long_term_logger: LongTermLogger | None = None,
     ):
         self._timeout = timeout
         if timeout is None:
@@ -127,7 +122,6 @@ class LitellmLLM(LLM):
         self._api_base = api_base
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
-        self._long_term_logger = long_term_logger
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
@@ -192,61 +186,6 @@ class LitellmLLM(LLM):
             dump["custom_config"] = masked_config
         return dump
 
-    def _record_call(
-        self,
-        prompt: LanguageModelInput,
-    ) -> None:
-        if self._long_term_logger:
-            prompt_json = _prompt_as_json(prompt)
-            self._long_term_logger.record(
-                {
-                    "prompt": prompt_json,
-                    "model": cast(JSON_ro, self._safe_model_config()),
-                },
-                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
-            )
-
-    def _record_result(
-        self,
-        prompt: LanguageModelInput,
-        model_output: BaseMessage,
-    ) -> None:
-        if self._long_term_logger:
-            prompt_json = _prompt_as_json(prompt)
-            tool_calls = (
-                model_output.tool_calls if hasattr(model_output, "tool_calls") else []
-            )
-            self._long_term_logger.record(
-                {
-                    "prompt": prompt_json,
-                    "content": model_output.content,
-                    "tool_calls": cast(JSON_ro, tool_calls),
-                    "model": cast(JSON_ro, self._safe_model_config()),
-                },
-                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
-            )
-
-    def _record_error(
-        self,
-        prompt: LanguageModelInput,
-        error: Exception,
-    ) -> None:
-        if self._long_term_logger:
-            prompt_json = _prompt_as_json(prompt)
-            self._long_term_logger.record(
-                {
-                    "prompt": prompt_json,
-                    "error": str(error),
-                    "traceback": "".join(
-                        traceback.format_exception(
-                            type(error), error, error.__traceback__
-                        )
-                    ),
-                    "model": cast(JSON_ro, self._safe_model_config()),
-                },
-                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
-            )
-
     def _track_llm_cost(self, usage: Usage) -> None:
         """
         Track LLM usage cost for Onyx-managed API keys.
@@ -302,7 +241,6 @@ class LitellmLLM(LLM):
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
-        self._record_call(prompt)
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
@@ -427,7 +365,6 @@ class LitellmLLM(LLM):
             )
             return response
         except Exception as e:
-            self._record_error(prompt, e)
             # for break pointing
             if isinstance(e, Timeout):
                 raise LLMTimeoutError(e)

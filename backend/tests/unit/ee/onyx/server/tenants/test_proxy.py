@@ -444,3 +444,132 @@ class TestForwardToControlPlane:
 
             with pytest.raises(ValueError, match="Unsupported HTTP method"):
                 await forward_to_control_plane("DELETE", "/test")
+
+
+class TestProxyCheckoutSessionWithSeats:
+    """Tests for proxy checkout session with seats parameter."""
+
+    @pytest.mark.asyncio
+    async def test_includes_seats_in_body_when_provided(self) -> None:
+        """Should include seats in request body when provided."""
+        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
+        from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}
+        mock_response.raise_for_status = MagicMock()
+
+        license_payload = make_license_payload()
+
+        with (
+            LICENSE_ENABLED_PATCH,
+            patch(
+                "ee.onyx.server.tenants.proxy.generate_data_plane_token"
+            ) as mock_token,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
+            patch(
+                "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
+                "https://control.example.com",
+            ),
+        ):
+            mock_token.return_value = "cp_token"
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            request = CreateCheckoutSessionRequest(
+                billing_period="monthly",
+                seats=25,
+                email="test@example.com",
+            )
+            await proxy_create_checkout_session(
+                request_body=request,
+                license_payload=license_payload,
+            )
+
+            # Verify seats was included in the body
+            call_kwargs = mock_post.call_args[1]
+            body = call_kwargs["json"]
+            assert body["seats"] == 25
+            assert body["billing_period"] == "monthly"
+            assert body["email"] == "test@example.com"
+            assert body["tenant_id"] == "tenant_123"
+
+    @pytest.mark.asyncio
+    async def test_excludes_seats_when_not_provided(self) -> None:
+        """Should not include seats in request body when not provided."""
+        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
+        from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}
+        mock_response.raise_for_status = MagicMock()
+
+        license_payload = make_license_payload()
+
+        with (
+            LICENSE_ENABLED_PATCH,
+            patch(
+                "ee.onyx.server.tenants.proxy.generate_data_plane_token"
+            ) as mock_token,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
+            patch(
+                "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
+                "https://control.example.com",
+            ),
+        ):
+            mock_token.return_value = "cp_token"
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            request = CreateCheckoutSessionRequest(billing_period="annual")
+            await proxy_create_checkout_session(
+                request_body=request,
+                license_payload=license_payload,
+            )
+
+            # Verify seats was NOT included in the body
+            call_kwargs = mock_post.call_args[1]
+            body = call_kwargs["json"]
+            assert "seats" not in body
+            assert body["billing_period"] == "annual"
+
+    @pytest.mark.asyncio
+    async def test_includes_seats_for_new_customer(self) -> None:
+        """Should include seats for new customer without license."""
+        from ee.onyx.server.tenants.proxy import proxy_create_checkout_session
+        from ee.onyx.server.tenants.proxy import CreateCheckoutSessionRequest
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"url": "https://checkout.stripe.com/session"}
+        mock_response.raise_for_status = MagicMock()
+
+        with (
+            LICENSE_ENABLED_PATCH,
+            patch(
+                "ee.onyx.server.tenants.proxy.generate_data_plane_token"
+            ) as mock_token,
+            patch("ee.onyx.server.tenants.proxy.httpx.AsyncClient") as mock_client,
+            patch(
+                "ee.onyx.server.tenants.proxy.CONTROL_PLANE_API_BASE_URL",
+                "https://control.example.com",
+            ),
+        ):
+            mock_token.return_value = "cp_token"
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+
+            request = CreateCheckoutSessionRequest(
+                billing_period="monthly",
+                seats=10,
+            )
+            # New customer has no license
+            await proxy_create_checkout_session(
+                request_body=request,
+                license_payload=None,
+            )
+
+            # Verify seats was included but no tenant_id
+            call_kwargs = mock_post.call_args[1]
+            body = call_kwargs["json"]
+            assert body["seats"] == 10
+            assert "tenant_id" not in body

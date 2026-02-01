@@ -35,9 +35,9 @@ WEB_SEARCH_GUIDANCE = """
 
 ## web_search
 Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use `web_search` include:
-- Freshness: if up-to-date information on a topic could change or enhance the answer. Very important for topics that are changing or evolving.
-- Niche Information: detailed info not widely known or understood (but that is likely found on the internet).
-- Accuracy: if the cost of outdated information is high, use web sources directly.{site_colon_disabled}
+- Freshness: when the answer might be enhanced by up-to-date information on a topic. Very important for topics that are changing or evolving.
+- Accuracy: if the cost of outdated/inaccurate information is high.
+- Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).{site_colon_disabled}
 """
 
 WEB_SEARCH_SITE_DISABLED_GUIDANCE = """
@@ -48,8 +48,9 @@ Do not use the "site:" operator in your web search queries.
 OPEN_URLS_GUIDANCE = """
 
 ## open_url
-Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs.
-You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources.
+Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs. \
+You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
+Do not open URLs that are image files like .png, .jpg, etc.
 You should almost always use open_url after a web_search call. Use this tool when a user asks about a specific provided URL.
 """
 

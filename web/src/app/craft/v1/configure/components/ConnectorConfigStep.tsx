@@ -15,7 +15,7 @@ import {
 import CardSection from "@/components/admin/CardSection";
 import { RenderField } from "@/app/admin/connectors/[connector]/pages/FieldRendering";
 import { createBuildConnector } from "@/app/craft/v1/configure/utils/createBuildConnector";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 
 interface ConnectorConfigStepProps {
   connectorType: ValidSources;
