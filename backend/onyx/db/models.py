@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from sqlalchemy.orm import validates
+
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 from pydantic import ValidationError
@@ -70,6 +71,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
+    ModelFlowType,
     ThemePreference,
     SwitchoverType,
 )
@@ -2680,6 +2682,51 @@ class ModelConfiguration(Base):
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
+    )
+
+    model_flows: Mapped[list["ModelFlow"]] = relationship(
+        "ModelFlow",
+        back_populates="model_configuration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    @property
+    def model_flow_types(self) -> list[ModelFlowType]:
+        return [flow.model_flow_type for flow in self.model_flows]
+
+
+class ModelFlow(Base):
+    __tablename__ = "model_flow"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    model_flow_type: Mapped[ModelFlowType] = mapped_column(
+        Enum(ModelFlowType), nullable=False
+    )
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration",
+        back_populates="model_flows",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "model_flow_type",
+            "model_configuration_id",
+            name="uq_model_config_per_flow_type",
+        ),
+        Index(
+            "ix_one_default_per_model_flow",
+            "model_flow_type",
+            unique=True,
+            postgresql_where=(is_default == True),  # noqa: E712
+        ),
     )
 
 
