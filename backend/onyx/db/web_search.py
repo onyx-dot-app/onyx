@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import InternetContentProvider
 from onyx.db.models import InternetSearchProvider
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
@@ -221,7 +222,7 @@ def _apply_content_provider_updates(
     provider_type: WebContentProviderType,
     api_key: str | None,
     api_key_changed: bool,
-    config: dict[str, str] | None,
+    config: WebContentProviderConfig | None,
 ) -> None:
     provider.name = name
     provider.provider_type = provider_type.value
@@ -237,7 +238,7 @@ def upsert_web_content_provider(
     provider_type: WebContentProviderType,
     api_key: str | None,
     api_key_changed: bool,
-    config: dict[str, str] | None,
+    config: WebContentProviderConfig | None,
     activate: bool,
     db_session: Session,
 ) -> InternetContentProvider:
