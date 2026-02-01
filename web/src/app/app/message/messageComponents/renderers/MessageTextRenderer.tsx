@@ -22,11 +22,13 @@ const STREAMING_MARKDOWN_THROTTLE_FAST_MS = 16;
 const STREAMING_MARKDOWN_THROTTLE_SLOW_MS = 80;
 
 const STEADY_REVEAL_STREAMING_OPTIONS: SteadyRevealOptions = {
-  baseCharsPerSecond: 650,
-  catchUpCharsPerSecond: 6000,
-  backlogCatchUpThresholdChars: 80,
-  maxCharsPerFrame: 4000,
-  minCharsPerFrame: 12,
+  // Intentionally conservative: avoid an initial "dump" of a big paragraph and keep
+  // the flow closer to word/line-like streaming.
+  baseCharsPerSecond: 45,
+  catchUpCharsPerSecond: 220,
+  backlogCatchUpThresholdChars: 1200,
+  maxCharsPerFrame: 80,
+  minCharsPerFrame: 1,
 };
 
 function getPacketText(packet: unknown): string {

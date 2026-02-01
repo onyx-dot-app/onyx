@@ -28,10 +28,10 @@ export interface SteadyRevealResult {
 }
 
 const DEFAULTS: Required<SteadyRevealOptions> = {
-  baseCharsPerSecond: 45,
-  catchUpCharsPerSecond: 220,
-  backlogCatchUpThresholdChars: 1200,
-  maxCharsPerFrame: 80,
+  baseCharsPerSecond: 25,
+  catchUpCharsPerSecond: 140,
+  backlogCatchUpThresholdChars: 1800,
+  maxCharsPerFrame: 50,
   minCharsPerFrame: 1,
 };
 
@@ -40,7 +40,7 @@ const MAX_FRAME_DT_MS = 250;
 
 // Commit throttling: advance "internally" every frame, but only commit to React state
 // periodically and in reasonably sized chunks. This reduces jitter from per-frame updates.
-const COMMIT_INTERVAL_MS = 80;
+const COMMIT_INTERVAL_MS = 100;
 const COMMIT_MIN_CHARS = 60;
 
 function snapToWordBoundary(
