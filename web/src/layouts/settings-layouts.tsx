@@ -43,7 +43,7 @@ import { IconProps } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 
 const widthClasses = {
-  md: "w-full max-w-[var(--app-page-main-content-width)]",
+  md: "w-[min(50rem,100%)]",
   lg: "w-[min(60rem,100%)]",
 };
 
@@ -57,11 +57,11 @@ const widthClasses = {
  * - Full height container with centered content
  * - Automatic overflow-y scrolling
  * - Contains the scroll container ID that Settings.Header uses for shadow detection
- * - Configurable width: "md" (app-page-main-content-width max) or "full" (full width with 4rem padding)
+ * - Configurable width: "md" (50rem max) or "full" (full width with 4rem padding)
  *
  * @example
  * ```tsx
- * // Default medium width (app-page-main-content-width max)
+ * // Default medium width (50rem max)
  * <SettingsLayouts.Root>
  *   <SettingsLayouts.Header {...} />
  *   <SettingsLayouts.Body>...</SettingsLayouts.Body>
