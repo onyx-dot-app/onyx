@@ -95,8 +95,10 @@ def get_opensearch_migration_records_needing_migration(
     """Gets records of documents that need to be migrated.
 
     Priority order:
-     1. Documents with status PENDING.
-     2. Documents with status FAILED.
+     1. Documents with status PENDING, prioritizing those which were created
+        first.
+     2. Documents with status FAILED, prioritizing those with the fewest
+        attempts first.
     """
     result: list[OpenSearchDocumentMigrationRecord] = []
     stmt = (
@@ -105,6 +107,7 @@ def get_opensearch_migration_records_needing_migration(
             OpenSearchDocumentMigrationRecord.status
             == OpenSearchDocumentMigrationStatus.PENDING
         )
+        .order_by(OpenSearchDocumentMigrationRecord.created_at.asc())
         .limit(limit)
     )
     result.extend(list(db_session.scalars(stmt).all()))
@@ -117,6 +120,7 @@ def get_opensearch_migration_records_needing_migration(
                 OpenSearchDocumentMigrationRecord.status
                 == OpenSearchDocumentMigrationStatus.FAILED
             )
+            .order_by(OpenSearchDocumentMigrationRecord.attempts_count.asc())
             .limit(remaining)
         )
         result.extend(list(db_session.scalars(stmt).all()))

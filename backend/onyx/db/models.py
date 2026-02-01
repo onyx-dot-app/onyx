@@ -918,7 +918,9 @@ class OpenSearchDocumentMigrationRecord(Base):
         nullable=False,
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    attempts_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    attempts_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, index=True
+    )
     last_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -926,6 +928,7 @@ class OpenSearchDocumentMigrationRecord(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+        index=True,
     )
 
     document: Mapped["Document"] = relationship("Document")
