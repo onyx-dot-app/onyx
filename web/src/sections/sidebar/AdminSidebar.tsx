@@ -17,11 +17,6 @@ import {
   hasActiveSubscription,
 } from "@/lib/billing";
 import {
-  useBillingInformation,
-  useLicense,
-  hasActiveSubscription,
-} from "@/lib/billing";
-import {
   ClipboardIcon,
   NotebookIconSkeleton,
   SlackIconSkeleton,
@@ -146,8 +141,6 @@ const collections = (
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
   kgExposed: boolean,
-  customAnalyticsEnabled: boolean,
-  hasSubscription: boolean
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean
 ) => [
@@ -342,18 +335,9 @@ export default function AdminSidebar({
   const settings = useSettingsContext();
   const { data: billingData } = useBillingInformation();
   const { data: licenseData } = useLicense();
-  const { data: billingData } = useBillingInformation();
-  const { data: licenseData } = useLicense();
 
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
-
-  // Check if user has an active subscription or license for billing link text
-  // Show "Plans & Billing" if they have either (even if Stripe connection fails)
-  const hasSubscription = Boolean(
-    (billingData && hasActiveSubscription(billingData)) ||
-      licenseData?.has_license
-  );
 
   // Check if user has an active subscription or license for billing link text
   // Show "Plans & Billing" if they have either (even if Stripe connection fails)
@@ -368,8 +352,6 @@ export default function AdminSidebar({
     enableEnterpriseSS,
     settings,
     kgExposed,
-    customAnalyticsEnabled,
-    hasSubscription
     customAnalyticsEnabled,
     hasSubscription
   );

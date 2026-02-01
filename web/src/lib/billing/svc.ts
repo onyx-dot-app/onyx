@@ -67,13 +67,6 @@ export const updateSeatCount = (request: SeatUpdateRequest) =>
 export const resetStripeConnection = () =>
   billingPost<{ success: boolean; message: string }>("/reset-connection");
 
-/**
- * Reset the Stripe connection circuit breaker (self-hosted only).
- * Called when user clicks "Connect to Stripe" to retry after a previous failure.
- */
-export const resetStripeConnection = () =>
-  billingPost<{ success: boolean; message: string }>("/reset-connection");
-
 // Self-hosted only actions
 async function selfHostedPost<T>(endpoint: string): Promise<T> {
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
