@@ -120,12 +120,12 @@ export function ParallelTimelineTabs({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <div
-        className="flex flex-col w-full"
-        onMouseEnter={() => setIsHover(true)}
-        onMouseLeave={() => setIsHover(false)}
-      >
-        <div className="flex w-full">
+      <div className="flex flex-col w-full">
+        <div
+          className="flex w-full"
+          onMouseEnter={() => setIsHover(true)}
+          onMouseLeave={() => setIsHover(false)}
+        >
           {/* Left column: Icon + connector line */}
           <div className="flex flex-col items-center w-9 pt-2">
             <div
@@ -147,9 +147,19 @@ export function ParallelTimelineTabs({
           </div>
 
           {/* Right column: Tabs + collapse button */}
-          <div className="flex-1 min-w-0">
+          <div
+            className={cn(
+              "w-full pl-1 bg-background-tint-00",
+              isHover && "bg-background-tint-02"
+            )}
+          >
             <Tabs.List
               variant="pill"
+              enableScrollArrows
+              className={cn(
+                isHover && "bg-background-tint-02",
+                "transition-colors duration-200"
+              )}
               rightContent={
                 <IconButton
                   tertiary

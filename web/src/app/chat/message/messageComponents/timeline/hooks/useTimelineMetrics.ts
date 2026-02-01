@@ -5,7 +5,7 @@ import {
 } from "@/app/chat/message/messageComponents/timeline/transformers";
 import {
   isResearchAgentPackets,
-  stepSupportsCompact,
+  stepSupportsCollapsedStreaming,
 } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
 
 export interface TimelineMetrics {
@@ -14,7 +14,7 @@ export interface TimelineMetrics {
   lastTurnGroup: TurnGroup | undefined;
   lastStep: TransformedStep | undefined;
   lastStepIsResearchAgent: boolean;
-  lastStepSupportsCompact: boolean;
+  lastStepSupportsCollapsedStreaming: boolean;
 }
 
 /**
@@ -39,8 +39,8 @@ export function useTimelineMetrics(
     const lastStepIsResearchAgent = lastStep
       ? isResearchAgentPackets(lastStep.packets)
       : false;
-    const lastStepSupportsCompact = lastStep
-      ? stepSupportsCompact(lastStep.packets)
+    const lastStepSupportsCollapsedStreaming = lastStep
+      ? stepSupportsCollapsedStreaming(lastStep.packets)
       : false;
 
     return {
@@ -49,7 +49,7 @@ export function useTimelineMetrics(
       lastTurnGroup,
       lastStep,
       lastStepIsResearchAgent,
-      lastStepSupportsCompact,
+      lastStepSupportsCollapsedStreaming,
     };
   }, [turnGroups, userStopped]);
 }

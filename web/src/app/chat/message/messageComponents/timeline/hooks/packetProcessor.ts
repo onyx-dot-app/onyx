@@ -245,6 +245,15 @@ function handleStreamingStatusPacket(
   if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
   }
+
+  // Capture tool processing duration from MESSAGE_START packet
+  if (packet.obj.type === PacketType.MESSAGE_START) {
+    const messageStart = packet.obj as MessageStart;
+    if (messageStart.tool_processing_duration_seconds !== undefined) {
+      state.toolProcessingDuration =
+        messageStart.tool_processing_duration_seconds;
+    }
+  }
 }
 
 function handleStopPacket(state: ProcessorState, packet: Packet): void {
