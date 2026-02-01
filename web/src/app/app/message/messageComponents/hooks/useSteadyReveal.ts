@@ -40,8 +40,12 @@ const MAX_FRAME_DT_MS = 250;
 
 // Commit throttling: advance "internally" every frame, but only commit to React state
 // periodically and in reasonably sized chunks. This reduces jitter from per-frame updates.
-const COMMIT_INTERVAL_MS = 100;
-const COMMIT_MIN_CHARS = 60;
+const COMMIT_INTERVAL_MS = 40;
+const COMMIT_MIN_CHARS = 6;
+
+// When true, avoid splitting words (smoother but less "token-ish").
+// When false, allow partial words like "Eac" -> "Each of i".
+const SNAP_COMMITS_TO_WORD_BOUNDARIES = false;
 
 function snapToWordBoundary(
   text: string,
@@ -223,12 +227,9 @@ export function useSteadyReveal(
         nextLen - displayedLen >= COMMIT_MIN_CHARS;
 
       if (shouldCommit && nextLen !== displayedLen) {
-        // Snap commits to word boundaries for a more natural streaming feel.
-        const snapped = snapToWordBoundary(
-          targetTextRef.current,
-          displayedLen,
-          nextLen
-        );
+        const snapped = SNAP_COMMITS_TO_WORD_BOUNDARIES
+          ? snapToWordBoundary(targetTextRef.current, displayedLen, nextLen)
+          : nextLen;
         revealedLengthRef.current = snapped;
         lastCommitTimeRef.current = now;
         setRevealedLength(snapped);
