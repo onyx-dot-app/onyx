@@ -56,7 +56,6 @@ import {
   SvgBubbleText,
   SvgFolderIn,
   SvgMoreHorizontal,
-  SvgSearch,
   SvgSearchMenu,
   SvgShare,
   SvgSidebar,
@@ -67,7 +66,6 @@ import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
-import { IconProps } from "@opal/types";
 
 /**
  * App Header Component
@@ -338,7 +336,7 @@ function Header() {
                         effectiveMode === "auto"
                           ? SvgSparkle
                           : effectiveMode === "search"
-                            ? SvgSearch
+                            ? SvgSearchMenu
                             : SvgBubbleText
                       }
                       title={
@@ -368,7 +366,7 @@ function Header() {
                     Auto
                   </LineItem>
                   <LineItem
-                    icon={SvgSearch}
+                    icon={SvgSearchMenu}
                     selected={effectiveMode === "search"}
                     description="Quick search for documents"
                     onClick={noProp(() => {

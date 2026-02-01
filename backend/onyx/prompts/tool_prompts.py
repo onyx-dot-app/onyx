@@ -35,9 +35,9 @@ WEB_SEARCH_GUIDANCE = """
 
 ## web_search
 Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use `web_search` include:
-- Freshness: if up-to-date information on a topic could change or enhance the answer. Very important for topics that are changing or evolving.
-- Niche Information: detailed info not widely known or understood (but that is likely found on the internet).
-- Accuracy: if the cost of outdated information is high, use web sources directly.{site_colon_disabled}
+- Freshness: when the answer might be enhanced by up-to-date information on a topic. Very important for topics that are changing or evolving.
+- Accuracy: if the cost of outdated/inaccurate information is high.
+- Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).{site_colon_disabled}
 """
 
 WEB_SEARCH_SITE_DISABLED_GUIDANCE = """

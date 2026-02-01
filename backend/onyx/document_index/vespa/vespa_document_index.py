@@ -1,6 +1,7 @@
 import concurrent.futures
 import logging
 import random
+from typing import Any
 from uuid import UUID
 
 import httpx
@@ -28,6 +29,7 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
+from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
 )
@@ -618,3 +620,25 @@ class VespaDocumentIndex(DocumentIndex):
         }
 
         return cleanup_content_for_chunks(query_vespa(params))
+
+    def get_raw_document_chunks(self, document_id: str) -> list[dict[str, Any]]:
+        """Gets all raw document chunks for a document as returned by Vespa.
+
+        Args:
+            document_id: The ID of the document to get chunks for.
+
+        Returns:
+            List of raw document chunks.
+        """
+        chunk_request = VespaChunkRequest(document_id=document_id)
+        raw_chunks = get_chunks_via_visit_api(
+            chunk_request=chunk_request,
+            index_name=self._index_name,
+            filters=IndexFilters(access_control_list=None, tenant_id=self._tenant_id),
+            get_large_chunks=False,
+            short_tensor_format=True,
+        )
+        # Vespa returns other metadata around the actual document chunk. The raw
+        # chunk we're interested in is in the "fields" field.
+        raw_document_chunks = [chunk["fields"] for chunk in raw_chunks]
+        return raw_document_chunks
