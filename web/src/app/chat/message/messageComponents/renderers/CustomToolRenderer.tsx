@@ -69,67 +69,71 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const icon = FiTool;
 
   if (renderType === RenderType.COMPACT) {
-    return children({
-      icon,
-      status: status,
-      supportsCompact: true,
-      content: (
-        <div className="text-sm text-muted-foreground">
-          {isRunning && `${toolName} running...`}
-          {isComplete && `${toolName} completed`}
-        </div>
-      ),
-    });
+    return children([
+      {
+        icon,
+        status: status,
+        supportsCollapsible: true,
+        content: (
+          <div className="text-sm text-muted-foreground">
+            {isRunning && `${toolName} running...`}
+            {isComplete && `${toolName} completed`}
+          </div>
+        ),
+      },
+    ]);
   }
 
-  return children({
-    icon,
-    status,
-    supportsCompact: true,
-    content: (
-      <div className="flex flex-col gap-3">
-        {/* File responses */}
-        {fileIds && fileIds.length > 0 && (
-          <div className="text-sm text-muted-foreground flex flex-col gap-2">
-            {fileIds.map((fid, idx) => (
-              <div key={fid} className="flex items-center gap-2 flex-wrap">
-                <span className="whitespace-nowrap">File {idx + 1}</span>
-                <a
-                  href={buildImgUrl(fid)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
-                >
-                  <FiExternalLink className="w-3 h-3" /> Open
-                </a>
-                <a
-                  href={buildImgUrl(fid)}
-                  download
-                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
-                >
-                  <FiDownload className="w-3 h-3" /> Download
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
+  return children([
+    {
+      icon,
+      status,
+      supportsCollapsible: true,
+      content: (
+        <div className="flex flex-col gap-3">
+          {/* File responses */}
+          {fileIds && fileIds.length > 0 && (
+            <div className="text-sm text-muted-foreground flex flex-col gap-2">
+              {fileIds.map((fid, idx) => (
+                <div key={fid} className="flex items-center gap-2 flex-wrap">
+                  <span className="whitespace-nowrap">File {idx + 1}</span>
+                  <a
+                    href={buildImgUrl(fid)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
+                  >
+                    <FiExternalLink className="w-3 h-3" /> Open
+                  </a>
+                  <a
+                    href={buildImgUrl(fid)}
+                    download
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap"
+                  >
+                    <FiDownload className="w-3 h-3" /> Download
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
 
-        {/* JSON/Text responses */}
-        {data !== undefined && data !== null && (
-          <div className="text-xs bg-gray-50 dark:bg-gray-800 p-3 rounded border max-h-96 overflow-y-auto font-mono whitespace-pre-wrap break-all">
-            {typeof data === "string" ? data : JSON.stringify(data, null, 2)}
-          </div>
-        )}
+          {/* JSON/Text responses */}
+          {data !== undefined && data !== null && (
+            <div className="text-xs bg-gray-50 dark:bg-gray-800 p-3 rounded border max-h-96 overflow-y-auto font-mono whitespace-pre-wrap break-all">
+              {typeof data === "string" ? data : JSON.stringify(data, null, 2)}
+            </div>
+          )}
 
-        {/* Show placeholder if no response data yet */}
-        {!fileIds && (data === undefined || data === null) && isRunning && (
-          <div className="text-xs text-gray-500 italic">
-            Waiting for response...
-          </div>
-        )}
-      </div>
-    ),
-  });
+          {/* Show placeholder if no response data yet */}
+          {!fileIds && (data === undefined || data === null) && isRunning && (
+            <div className="text-xs text-gray-500 italic">
+              Waiting for response...
+            </div>
+          )}
+        </div>
+      ),
+    },
+  ]);
 };
 
 export default CustomToolRenderer;

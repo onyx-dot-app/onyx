@@ -139,8 +139,6 @@ export interface Message {
 
   // new gen
   packets: Packet[];
-  // Version counter for efficient memo comparison (increments with each packet)
-  packetsVersion?: number;
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
   // cached values for easy access

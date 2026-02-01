@@ -12,6 +12,7 @@ export enum RenderType {
   HIGHLIGHT = "highlight",
   FULL = "full",
   COMPACT = "compact",
+  INLINE = "inline",
 }
 
 export interface FullChatState {
@@ -37,9 +38,12 @@ export interface RendererResult {
   // e.g. ReasoningRenderer
   expandedText?: JSX.Element;
 
-  // Whether this renderer supports compact mode (collapse button shown only when true)
-  supportsCompact?: boolean;
+  // Whether this renderer supports collapsible mode (collapse button shown only when true)
+  supportsCollapsible?: boolean;
 }
+
+// All renderers return an array of results (even single-step renderers return a 1-element array)
+export type RendererOutput = RendererResult[];
 
 export type MessageRenderer<
   T extends Packet,
@@ -54,5 +58,7 @@ export type MessageRenderer<
   stopReason?: StopReason;
   /** Whether this is the last step in the timeline (for connector line decisions) */
   isLastStep?: boolean;
-  children: (result: RendererResult) => JSX.Element;
+  /** Hover state from parent */
+  isHover?: boolean;
+  children: (result: RendererOutput) => JSX.Element;
 }>;
