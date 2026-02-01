@@ -42,7 +42,7 @@ PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
-# Enable the full set of Danswer Enterprise Edition features.
+# Enable the full set of Onyx Enterprise Edition features.
 # NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you
 # are using this for local testing/development).
 ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
