@@ -1,7 +1,8 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
@@ -37,7 +38,7 @@ import * as AppLayouts from "@/layouts/app-layouts";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
 import Spacer from "@/refresh-components/Spacer";
-import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import {
   SvgUser,
@@ -45,10 +46,7 @@ import {
   SvgExternalLink,
   SvgAlertTriangle,
 } from "@opal/icons";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import TextView from "@/components/chat/TextView";
@@ -158,11 +156,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     }
   }, []);
 
-  // Chat background - shared with ChatPage
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+  // Chat background from context
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
@@ -316,7 +311,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
       style={
         !isSidePanel && hasBackground
-          ? { backgroundImage: `url(${chatBackground.url})` }
+          ? { backgroundImage: `url(${appBackgroundUrl})` }
           : undefined
       }
     >
@@ -372,7 +367,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
-                  disableFadeOverlay={!isSidePanel}
                 >
                   <MessageList
                     liveAssistant={resolvedAssistant}
@@ -385,7 +379,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
-                    disableBlur={!hasBackground}
                   />
                 </ChatScrollContainer>
               </>
@@ -393,7 +386,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Welcome message - centered when no messages */}
             {!hasMessages && (
-              <div className="w-full flex-1 flex flex-col items-center justify-end">
+              <div className="relative w-full flex-1 flex flex-col items-center justify-end">
                 <WelcomeMessage isDefaultAgent />
                 <Spacer rem={1.5} />
               </div>

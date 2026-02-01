@@ -4,7 +4,7 @@ import { ChatSession } from "../interfaces";
 import { useAgents, usePinnedAgents } from "@/hooks/useAgents";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "../services/searchParams";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export function useAssistantController({
   selectedChatSession,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export function usePaidEnterpriseFeaturesEnabled() {
   const combinedSettings = useSettingsContext();
