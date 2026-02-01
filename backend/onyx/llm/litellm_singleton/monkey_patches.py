@@ -145,19 +145,12 @@ def _patch_ollama_chunk_parser() -> None:
             # PROCESS REASONING CONTENT
             reasoning_content: Optional[str] = None
             content: Optional[str] = None
-            if chunk["message"].get("thinking") is not None:
-                # Always process thinking content when present
-                reasoning_content = chunk["message"].get("thinking")
+            thinking_content = chunk["message"].get("thinking")
+            if thinking_content:  # Truthy check: skips None and empty string ""
+                reasoning_content = thinking_content
                 if self.started_reasoning_content is False:
                     self.started_reasoning_content = True
             if chunk["message"].get("content") is not None:
-                # Mark thinking as finished when we start getting regular content
-                if (
-                    self.started_reasoning_content
-                    and not self.finished_reasoning_content
-                ):
-                    self.finished_reasoning_content = True
-
                 message_content = chunk["message"].get("content")
                 if "<think>" in message_content:
                     message_content = message_content.replace("<think>", "")
