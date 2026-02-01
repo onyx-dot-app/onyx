@@ -69,9 +69,6 @@ from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
 
 
-# Test vector dimension - must match the actual search settings dimension (384
-# for default model).
-TEST_VECTOR_DIM = 384
 CHUNK_COUNT = 5
 
 
@@ -107,7 +104,7 @@ def _delete_document_chunks_from_opensearch(
     opensearch_client.delete_by_query(query_body)
 
 
-def _generate_test_vector(dim: int = TEST_VECTOR_DIM) -> list[float]:
+def _generate_test_vector(dim: int) -> list[float]:
     """Generate a deterministic test embedding vector."""
     return [0.1 + (i * 0.001) for i in range(dim)]
 
@@ -227,7 +224,25 @@ def _assert_chunk_matches_vespa_chunk(
 
 
 @pytest.fixture(scope="module")
-def full_deployment_setup() -> Generator[None, None, None]:
+def opensearch_available() -> Generator[None, None, None]:
+    """Verifies OpenSearch is running, fails the test if not."""
+    if not wait_for_opensearch_with_timeout():
+        pytest.fail("OpenSearch is not available.")
+    yield  # Test runs here.
+
+
+@pytest.fixture(scope="module")
+def vespa_available() -> Generator[None, None, None]:
+    """Verifies Vespa is running, fails the test if not."""
+    if not wait_for_vespa_with_timeout():
+        pytest.fail("Vespa is not available.")
+    yield  # Test runs here.
+
+
+@pytest.fixture(scope="module")
+def full_deployment_setup(
+    opensearch_available: None, vespa_available: None
+) -> Generator[None, None, None]:
     """Optional fixture to perform full deployment-like setup on demand.
 
     Imports and call
@@ -239,21 +254,7 @@ def full_deployment_setup() -> Generator[None, None, None]:
     opensearch_available just for this module, not the entire test session.
     """
     ensure_full_deployment_setup(opensearch_available=True)
-    yield
-
-
-@pytest.fixture(scope="module")
-def opensearch_available(full_deployment_setup: None) -> None:
-    """Verifies OpenSearch is running, fails the test if not."""
-    if not wait_for_opensearch_with_timeout():
-        pytest.fail("OpenSearch is not available.")
-
-
-@pytest.fixture(scope="module")
-def vespa_available(full_deployment_setup: None) -> None:
-    """Verifies Vespa is running, fails the test if not."""
-    if not wait_for_vespa_with_timeout():
-        pytest.fail("Vespa is not available.")
+    yield  # Test runs here.
 
 
 @pytest.fixture(scope="module")
@@ -268,31 +269,37 @@ def db_session(
     things.
     """
     with get_session_with_current_tenant() as session:
-        yield session
+        yield session  # Test runs here.
 
 
 @pytest.fixture(scope="module")
 def vespa_document_index(
     db_session: Session,
-    vespa_available: None,
-) -> VespaDocumentIndex:
+    full_deployment_setup: None,
+) -> Generator[VespaDocumentIndex, None, None]:
     """Creates a Vespa document index for the test tenant."""
     active = get_active_search_settings(db_session)
-    return VespaDocumentIndex(
+    yield VespaDocumentIndex(
         index_name=active.primary.index_name,
         tenant_state=TenantState(tenant_id=get_current_tenant_id(), multitenant=False),
         large_chunks_enabled=False,
-    )
+    )  # Test runs here.
 
 
 @pytest.fixture(scope="module")
 def opensearch_client(
     db_session: Session,
-    opensearch_available: None,
-) -> OpenSearchClient:
+    full_deployment_setup: None,
+) -> Generator[OpenSearchClient, None, None]:
     """Creates an OpenSearch client for the test tenant."""
     active = get_active_search_settings(db_session)
-    return OpenSearchClient(index_name=active.primary.index_name)
+    yield OpenSearchClient(index_name=active.primary.index_name)  # Test runs here.
+
+
+@pytest.fixture(scope="module")
+def test_embedding_dimension(db_session: Session) -> Generator[int, None, None]:
+    active = get_active_search_settings(db_session)
+    yield active.primary.model_dim  # Test runs here.
 
 
 @pytest.fixture(scope="function")
@@ -515,6 +522,7 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         test_documents: list[Document],
         vespa_document_index: VespaDocumentIndex,
         opensearch_client: OpenSearchClient,
+        test_embedding_dimension: int,
         clean_migration_tables: None,
         clean_vespa: None,
         clean_opensearch: None,
@@ -531,10 +539,10 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
                     document_id=document.id,
                     chunk_index=i,
                     content=f"Test content {i}",
-                    embedding=_generate_test_vector(),
+                    embedding=_generate_test_vector(test_embedding_dimension),
                     now=datetime.now(),
                     title=f"Test title {document.id}",
-                    title_embedding=_generate_test_vector(),
+                    title_embedding=_generate_test_vector(test_embedding_dimension),
                 )
                 for i in range(CHUNK_COUNT)
             ]
@@ -583,6 +591,7 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         test_documents: list[Document],
         vespa_document_index: VespaDocumentIndex,
         opensearch_client: OpenSearchClient,
+        test_embedding_dimension: int,
         clean_migration_tables: None,
         clean_vespa: None,
         clean_opensearch: None,
@@ -601,10 +610,10 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
                     document_id=document_id,
                     chunk_index=i,
                     content=f"Test content {i}",
-                    embedding=_generate_test_vector(),
+                    embedding=_generate_test_vector(test_embedding_dimension),
                     now=datetime.now(),
                     title=f"Test title {document_id}",
-                    title_embedding=_generate_test_vector(),
+                    title_embedding=_generate_test_vector(test_embedding_dimension),
                 )
                 for i in range(CHUNK_COUNT)
             ]

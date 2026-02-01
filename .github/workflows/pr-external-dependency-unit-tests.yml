@@ -52,6 +52,7 @@ env:
   # See deployment/docker_compose/docker-compose.dev.yml.
   VESPA_HOST: "localhost"
   VESPA_PORT: "8081"
+  VESPA_TENANT_PORT: "19071"
 
 jobs:
   discover-test-dirs:
