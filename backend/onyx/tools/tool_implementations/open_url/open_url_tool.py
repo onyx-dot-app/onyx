@@ -329,7 +329,7 @@ def _convert_sections_to_llm_string_with_citations(
             result["document_identifier"] = document_id
 
         if chunk.metadata:
-            result["metadata"] = json.dumps(chunk.metadata)
+            result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
 
         # Calculate chars used by metadata fields (everything except content)
         metadata_chars = _estimate_result_chars(result)
@@ -354,7 +354,7 @@ def _convert_sections_to_llm_string_with_citations(
         total_chars += result_chars
 
     output = {"results": results}
-    return json.dumps(output, indent=2), citation_mapping
+    return json.dumps(output, indent=2, ensure_ascii=False), citation_mapping
 
 
 class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
