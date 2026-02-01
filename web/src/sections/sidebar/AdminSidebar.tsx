@@ -300,11 +300,18 @@ const collections = (
                 ]
               : []),
             // Always show billing/upgrade - community users need access to upgrade
+<<<<<<< HEAD
             // TODO: PR 6 will change this to /admin/billing to enable new UI
             {
               name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
               icon: hasSubscription ? MdOutlineCreditCard : SvgArrowUpCircle,
               link: "/ee/admin/billing",
+=======
+            {
+              name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
+              icon: MdOutlineCreditCard,
+              link: "/admin/billing",
+>>>>>>> dedb71fec (add main billing page + plans view)
             },
           ],
         },
