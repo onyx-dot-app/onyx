@@ -20,10 +20,10 @@ import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
 import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
-import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useChatController } from "@/app/app/hooks/useChatController";
-import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
-import { useAssistantController } from "@/app/app/hooks/useAssistantController";
+import { useDeepResearchToggle } from "@/hooks/useDeepResearchToggle";
+import { useChatController } from "@/hooks/useChatController";
+import { useChatSessionController } from "@/hooks/useChatSessionController";
+import { useAssistantController } from "@/hooks/useAssistantController";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,

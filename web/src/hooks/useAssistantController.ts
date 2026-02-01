@@ -1,9 +1,9 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useCallback, useMemo, useState } from "react";
-import { ChatSession } from "../interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import { useAgents, usePinnedAgents } from "@/hooks/useAgents";
 import { useSearchParams } from "next/navigation";
-import { SEARCH_PARAM_NAMES } from "../services/searchParams";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export function useAssistantController({
