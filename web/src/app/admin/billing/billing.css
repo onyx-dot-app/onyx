@@ -9,6 +9,24 @@
  * Plan Card
  * -------------------------------------------------------------------------- */
 
+<<<<<<< HEAD
+=======
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Let parent's align-items: stretch handle the height */
+  align-self: stretch;
+}
+
+/* Override Card's inner Section to grow and fill the card */
+.plan-card > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+>>>>>>> dedb71fec (add main billing page + plans view)
 .plan-card-button button,
 .plan-card-button a {
   width: 100%;

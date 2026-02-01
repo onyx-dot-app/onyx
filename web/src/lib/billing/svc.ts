@@ -96,6 +96,16 @@ export const claimLicense = (sessionId?: string) =>
   selfHostedPost<{ success: boolean; license?: unknown }>(
     sessionId ? `/claim?session_id=${encodeURIComponent(sessionId)}` : "/claim"
   );
+<<<<<<< HEAD
+=======
+
+/**
+ * Fetch license from control plane (self-hosted only).
+ * Used to retrieve/refresh license data.
+ */
+export const fetchLicense = () =>
+  selfHostedPost<{ success: boolean; message?: string }>("/fetch");
+>>>>>>> dedb71fec (add main billing page + plans view)
 
 /**
  * Refresh the cached license data (self-hosted only).
