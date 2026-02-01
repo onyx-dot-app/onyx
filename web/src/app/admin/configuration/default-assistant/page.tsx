@@ -14,7 +14,7 @@ import { useAgents } from "@/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
@@ -300,13 +300,7 @@ export default function Page() {
     <>
       <AdminPageTitle
         title="Default Assistant"
-        icon={
-          <SvgOnyxLogo
-            width={32}
-            height={32}
-            className="my-auto stroke-text-04"
-          />
-        }
+        icon={<SvgOnyxLogo size={32} className="my-auto stroke-text-04" />}
       />
       <DefaultAssistantConfig />
     </>

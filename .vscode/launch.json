@@ -86,7 +86,7 @@
       "request": "launch",
       "cwd": "${workspaceRoot}/web",
       "runtimeExecutable": "npm",
-      "envFile": "${workspaceFolder}/.vscode/.env",
+      "envFile": "${workspaceFolder}/.vscode/.env.web",
       "runtimeArgs": ["run", "dev"],
       "presentation": {
         "group": "2"

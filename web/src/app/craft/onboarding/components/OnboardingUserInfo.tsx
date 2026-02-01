@@ -1,15 +1,16 @@
 "use client";
 
-import { FiInfo } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   WorkArea,
   Level,
   WORK_AREA_OPTIONS,
   LEVEL_OPTIONS,
   WORK_AREAS_REQUIRING_LEVEL,
+  PERSONA_MAPPING,
+  DEMO_COMPANY_NAME,
+  getPositionText,
 } from "@/app/craft/onboarding/constants";
 
 interface SelectableButtonProps {
@@ -18,7 +19,6 @@ interface SelectableButtonProps {
   children: React.ReactNode;
   subtext?: string;
   disabled?: boolean;
-  tooltip?: string;
 }
 
 function SelectableButton({
@@ -27,9 +27,8 @@ function SelectableButton({
   children,
   subtext,
   disabled,
-  tooltip,
 }: SelectableButtonProps) {
-  const button = (
+  return (
     <div className="flex flex-col items-center gap-1">
       <button
         type="button"
@@ -52,12 +51,6 @@ function SelectableButton({
       )}
     </div>
   );
-
-  if (tooltip) {
-    return <SimpleTooltip tooltip={tooltip}>{button}</SimpleTooltip>;
-  }
-
-  return button;
 }
 
 interface OnboardingUserInfoProps {
@@ -72,40 +65,36 @@ interface OnboardingUserInfoProps {
 }
 
 export default function OnboardingUserInfo({
-  firstName,
-  lastName,
+  firstName: _firstName,
+  lastName: _lastName,
   workArea,
   level,
-  onFirstNameChange,
-  onLastNameChange,
+  onFirstNameChange: _onFirstNameChange,
+  onLastNameChange: _onLastNameChange,
   onWorkAreaChange,
   onLevelChange,
 }: OnboardingUserInfoProps) {
   const requiresLevel =
     workArea !== undefined && WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
 
+  // Get persona info for preview
+  const selectedLevel = level ?? Level.IC;
+  const personaInfo =
+    workArea !== undefined ? PERSONA_MAPPING[workArea]?.[selectedLevel] : null;
+  const positionText =
+    workArea !== undefined ? getPositionText(workArea, level) : null;
+
   return (
     <div className="flex-1 flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-center gap-2">
-        <SimpleTooltip
-          tooltip="We use this information to personalize your demo data and examples."
-          side="bottom"
-        >
-          <button
-            type="button"
-            className="text-text-02 hover:text-text-03 transition-colors"
-          >
-            <FiInfo size={16} className="text-text-03" />
-          </button>
-        </SimpleTooltip>
+      <div className="flex flex-col items-center gap-3">
         <Text headingH2 text05>
-          Tell us about yourself
+          Demo Data Configuration
         </Text>
       </div>
 
       <div className="flex-1 flex flex-col gap-8 justify-center">
-        {/* Name inputs */}
+        {/* Name inputs - commented out for now, can be re-enabled later
         <div className="flex justify-center">
           <div className="grid grid-cols-2 gap-4 w-full max-w-md">
             <div className="flex flex-col gap-1.5">
@@ -134,11 +123,18 @@ export default function OnboardingUserInfo({
             </div>
           </div>
         </div>
+        */}
+
+        <Text mainUiBody text04 className="text-center">
+          While you wait for your data to sync, try out our simulated demo
+          dataset! <br />
+          The simulated data will adapt to your role and level choices below.
+        </Text>
 
         {/* Work area */}
         <div className="flex flex-col gap-3 items-center">
           <Text mainUiBody text04>
-            What do you do?
+            Select your role:
           </Text>
           <div className="grid grid-cols-3 gap-3 w-full">
             {WORK_AREA_OPTIONS.map((option) => (
@@ -176,6 +172,17 @@ export default function OnboardingUserInfo({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Persona preview - always reserve space to prevent layout shift */}
+        <div className="flex justify-center min-h-[1.5rem]">
+          {personaInfo && positionText && (
+            <Text mainContentBody text03 className="text-center">
+              You will play the role of {positionText} named {personaInfo.name}{" "}
+              working at <br />
+              {DEMO_COMPANY_NAME}
+            </Text>
+          )}
         </div>
       </div>
     </div>

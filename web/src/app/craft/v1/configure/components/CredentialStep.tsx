@@ -34,7 +34,7 @@ import {
 import Cookies from "js-cookie";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { createBuildConnector } from "@/app/craft/v1/configure/utils/createBuildConnector";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 
 interface CredentialStepProps {
   connectorType: ValidSources;

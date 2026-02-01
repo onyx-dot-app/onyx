@@ -1,6 +1,8 @@
-import type { SVGProps } from "react";
-const SvgArrowLeftDot = (props: SVGProps<SVGSVGElement>) => (
+import type { IconProps } from "@opal/types";
+const SvgArrowLeftDot = ({ size, ...props }: IconProps) => (
   <svg
+    width={size}
+    height={size}
     viewBox="0 0 14 9"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"

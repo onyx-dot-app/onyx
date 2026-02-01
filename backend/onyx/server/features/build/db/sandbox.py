@@ -3,7 +3,9 @@
 import datetime
 from uuid import UUID
 
+from sqlalchemy import and_
 from sqlalchemy import func
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,12 +23,18 @@ def create_sandbox__no_commit(
 ) -> Sandbox:
     """Create a new sandbox record for a user.
 
+    Sets last_heartbeat to now so that:
+    1. The sandbox has a proper idle timeout baseline from creation
+    2. Long-running provisioning doesn't cause the sandbox to appear "old"
+       when it transitions to RUNNING
+
     NOTE: This function uses flush() instead of commit(). The caller is
     responsible for committing the transaction when ready.
     """
     sandbox = Sandbox(
         user_id=user_id,
         status=SandboxStatus.PROVISIONING,
+        last_heartbeat=datetime.datetime.now(datetime.timezone.utc),
     )
     db_session.add(sandbox)
     db_session.flush()
@@ -72,6 +80,10 @@ def update_sandbox_status__no_commit(
 ) -> Sandbox:
     """Update sandbox status.
 
+    When transitioning to RUNNING, also sets last_heartbeat to now. This ensures
+    newly provisioned sandboxes have a proper idle timeout baseline (rather than
+    being immediately considered idle due to NULL heartbeat).
+
     NOTE: This function uses flush() instead of commit(). The caller is
     responsible for committing the transaction when ready.
     """
@@ -80,6 +92,11 @@ def update_sandbox_status__no_commit(
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.status = status
+
+    # Set heartbeat when sandbox becomes active to establish idle timeout baseline
+    if status == SandboxStatus.RUNNING:
+        sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
+
     db_session.flush()
     return sandbox
 
@@ -98,14 +115,25 @@ def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
 def get_idle_sandboxes(
     db_session: Session, idle_threshold_seconds: int
 ) -> list[Sandbox]:
-    """Get sandboxes that have been idle longer than threshold."""
+    """Get sandboxes that have been idle longer than threshold.
+
+    Also includes sandboxes with NULL heartbeat, but only if they were created
+    before the threshold (to avoid sweeping up brand-new sandboxes that may have
+    NULL heartbeat due to edge cases like older rows or manual inserts).
+    """
     threshold_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
         seconds=idle_threshold_seconds
     )
 
     stmt = select(Sandbox).where(
         Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE]),
-        Sandbox.last_heartbeat < threshold_time,
+        or_(
+            Sandbox.last_heartbeat < threshold_time,
+            and_(
+                Sandbox.last_heartbeat.is_(None),
+                Sandbox.created_at < threshold_time,
+            ),
+        ),
     )
     return list(db_session.execute(stmt).scalars().all())
 

@@ -13,6 +13,18 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
+# Sources where hierarchy nodes can also be documents.
+# For these sources, pages/items can be both a hierarchy node (with children)
+# AND a document with indexed content. For example:
+# - Notion: Pages with child pages are hierarchy nodes, but also documents
+# - Confluence: Pages can have child pages and also contain content
+# Other sources like Google Drive have folders as hierarchy nodes, but folders
+# are not documents themselves.
+SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS: set[DocumentSource] = {
+    DocumentSource.NOTION,
+    DocumentSource.CONFLUENCE,
+}
+
 
 def _get_source_display_name(source: DocumentSource) -> str:
     """Get a human-readable display name for a source type."""
@@ -241,7 +253,6 @@ def upsert_hierarchy_node(
         existing_node.display_name = node.display_name
         existing_node.link = node.link
         existing_node.node_type = node.node_type
-        existing_node.document_id = node.document_id
         existing_node.parent_id = parent_id
         # Update permission fields
         existing_node.is_public = is_public
@@ -256,7 +267,6 @@ def upsert_hierarchy_node(
             link=node.link,
             source=source,
             node_type=node.node_type,
-            document_id=node.document_id,
             parent_id=parent_id,
             is_public=is_public,
             external_user_emails=external_user_emails,
@@ -328,6 +338,61 @@ def upsert_hierarchy_nodes_batch(
         db_session.commit()
 
     return results
+
+
+def link_hierarchy_nodes_to_documents(
+    db_session: Session,
+    document_ids: list[str],
+    source: DocumentSource,
+    commit: bool = True,
+) -> int:
+    """
+    Link hierarchy nodes to their corresponding documents.
+
+    For connectors like Notion and Confluence where pages can be both hierarchy nodes
+    AND documents, we need to set the document_id field on hierarchy nodes after the
+    documents are created. This is because hierarchy nodes are processed before documents,
+    and the FK constraint on document_id requires the document to exist first.
+
+    Args:
+        db_session: SQLAlchemy session
+        document_ids: List of document IDs that were just created/updated
+        source: The document source (e.g., NOTION, CONFLUENCE)
+        commit: Whether to commit the transaction
+
+    Returns:
+        Number of hierarchy nodes that were linked to documents
+    """
+    # Skip for sources where hierarchy nodes cannot also be documents
+    if source not in SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS:
+        return 0
+
+    if not document_ids:
+        return 0
+
+    # Find hierarchy nodes where raw_node_id matches a document_id
+    # These are pages that are both hierarchy nodes and documents
+    stmt = select(HierarchyNode).where(
+        HierarchyNode.source == source,
+        HierarchyNode.raw_node_id.in_(document_ids),
+        HierarchyNode.document_id.is_(None),  # Only update if not already linked
+    )
+    nodes_to_update = list(db_session.execute(stmt).scalars().all())
+
+    # Update document_id for each matching node
+    for node in nodes_to_update:
+        node.document_id = node.raw_node_id
+
+    if commit:
+        db_session.commit()
+
+    if nodes_to_update:
+        logger.debug(
+            f"Linked {len(nodes_to_update)} hierarchy nodes to documents "
+            f"for source {source.value}"
+        )
+
+    return len(nodes_to_update)
 
 
 def get_hierarchy_node_children(

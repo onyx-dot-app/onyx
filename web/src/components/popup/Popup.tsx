@@ -7,7 +7,7 @@ import React, {
   useContext,
   JSX,
 } from "react";
-import { SettingsContext } from "../settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 
 interface PopupProps {
   children: JSX.Element;

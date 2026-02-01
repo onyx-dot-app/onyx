@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { checkUserOwnsAssistant, updateAgentSharedStatus } from "@/lib/agents";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,
   SvgBarChart,

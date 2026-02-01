@@ -2,7 +2,7 @@
 
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import { ApplicationStatus } from "@/app/admin/settings/interfaces";
 import Button from "@/refresh-components/buttons/Button";
 

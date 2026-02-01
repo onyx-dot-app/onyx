@@ -9,7 +9,8 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useState, useEffect } from "react";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import FrostedDiv from "@/refresh-components/FrostedDiv";
 
 export interface WelcomeMessageProps {
   agent?: MinimalPersonaSnapshot;
@@ -71,11 +72,11 @@ export default function WelcomeMessage({
   if (!content) return null;
 
   return (
-    <div
+    <FrostedDiv
       data-testid="chat-intro"
       className="flex flex-col items-center justify-center gap-3 max-w-[50rem]"
     >
       {content}
-    </div>
+    </FrostedDiv>
   );
 }

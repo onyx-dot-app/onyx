@@ -1,14 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import Text from "@/refresh-components/texts/Text";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { MdOutlineCreditCard } from "react-icons/md";
 import {

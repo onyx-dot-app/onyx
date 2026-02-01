@@ -1,4 +1,3 @@
-import json
 import os
 from enum import Enum
 from pathlib import Path
@@ -28,7 +27,7 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
 
 # Demo Data Path
 # Local: Source tree path (relative to this file)
-# Kubernetes: Baked into container image at /workspace/demo-data
+# Kubernetes: Baked into container image at /workspace/demo_data
 _THIS_FILE = Path(__file__)
 DEMO_DATA_PATH = str(
     _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "demo_data"
@@ -87,9 +86,9 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 # Container image for sandbox pods
-# Should include Next.js template and opencode CLI
+# Should include Next.js template, opencode CLI, and demo_data zip
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.0"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.1"
 )
 
 # S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)
@@ -116,15 +115,5 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
 # Base rate limit for paid/subscribed users (messages per week)
 # Free users always get 5 messages total (not configurable)
+# Per-user overrides are managed via PostHog feature flag "craft-has-usage-limits"
 CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
-
-# Per-user rate limit overrides (JSON map of email -> limit)
-# Example: {"admin@example.com": 100, "power-user@example.com": 50}
-# Users in this map get their specified limit instead of the default
-_user_limit_overrides_str = os.environ.get("CRAFT_USER_RATE_LIMIT_OVERRIDES", "{}")
-try:
-    CRAFT_USER_RATE_LIMIT_OVERRIDES: dict[str, int] = json.loads(
-        _user_limit_overrides_str
-    )
-except json.JSONDecodeError:
-    CRAFT_USER_RATE_LIMIT_OVERRIDES = {}
