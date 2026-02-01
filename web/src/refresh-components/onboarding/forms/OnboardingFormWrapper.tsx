@@ -226,8 +226,14 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
         const newLlmProvider = await response.json();
         if (newLlmProvider?.id != null) {
           const setDefaultResponse = await fetch(
-            `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
-            { method: "POST" }
+            `${LLM_PROVIDERS_ADMIN_URL}/default`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                provider_id: newLlmProvider.id,
+                model_name: newLlmProvider.model_configurations[0].name,
+              }),
+            }
           );
           if (!setDefaultResponse.ok) {
             const err = await setDefaultResponse.json().catch(() => ({}));

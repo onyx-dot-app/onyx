@@ -46,9 +46,14 @@ export function FormActionButtons({
 
         if (remainingProviders.length > 0) {
           const setDefaultResponse = await fetch(
-            `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
+            `${LLM_PROVIDERS_ADMIN_URL}/default`,
             {
               method: "POST",
+              body: JSON.stringify({
+                provider_id: remainingProviders[0].id,
+                model_name:
+                  remainingProviders[0].model_configurations[0]?.name ?? "",
+              }),
             }
           );
           if (!setDefaultResponse.ok) {

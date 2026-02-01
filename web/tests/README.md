@@ -401,8 +401,14 @@ test("test, create, and set as default", async () => {
       expect.objectContaining({ method: "PUT" })
     );
     expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/llm/provider/5/default",
-      expect.objectContaining({ method: "POST" })
+      "/api/llm/provider/default",
+      expect.objectContaining({ 
+        method: "POST",
+        body: JSON.stringify({
+          provider_id: 5,
+          model_name: "gpt-4"
+        })
+      })
     );
   });
 });

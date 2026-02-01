@@ -1,5 +1,6 @@
 from typing import Any
 from typing import TYPE_CHECKING
+from typing import TypeVar
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -21,39 +22,14 @@ if TYPE_CHECKING:
         ModelConfiguration as ModelConfigurationModel,
     )
 
-
-# TODO: Clear this up on api refactor
-# There is still logic that requires sending each providers default model name
-# There is no logic that requires sending the providers default vision model name
-# We only send for the one that is actually the default
-def get_default_llm_model_name(llm_provider_model: "LLMProviderModel") -> str:
-    """Find the default conversation model name for a provider.
-
-    Returns the model name if found, otherwise returns empty string.
-    """
-    for model_config in llm_provider_model.model_configurations:
-        for flow in model_config.model_flows:
-            if flow.is_default and flow.model_flow_type == ModelFlowType.CONVERSATION:
-                return model_config.name
-    return ""
-
-
-def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str | None:
-    """Find the default vision model name for a provider.
-
-    Returns the model name if found, otherwise returns None.
-    """
-    for model_config in llm_provider_model.model_configurations:
-        for flow in model_config.model_flows:
-            if flow.is_default and flow.model_flow_type == ModelFlowType.VISION:
-                return model_config.name
-    return None
+T = TypeVar("T", bound="LLMProviderDescriptor | LLMProviderView")
 
 
 class TestLLMRequest(BaseModel):
     # provider level
     name: str | None = None
     provider: str
+    model: str
     api_key: str | None = None
     api_base: str | None = None
     api_version: str | None = None
@@ -62,8 +38,6 @@ class TestLLMRequest(BaseModel):
     # model level
     default_model_name: str
     deployment_name: str | None = None
-
-    model_configurations: list["ModelConfigurationUpsertRequest"]
 
     # if try and use the existing API/custom config key
     api_key_changed: bool
@@ -83,10 +57,6 @@ class LLMProviderDescriptor(BaseModel):
     name: str
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
-    default_model_name: str
-    is_default_provider: bool | None
-    is_default_vision_provider: bool | None
-    default_vision_model: str | None
     model_configurations: list["ModelConfigurationView"]
 
     @classmethod
@@ -99,22 +69,11 @@ class LLMProviderDescriptor(BaseModel):
         )
 
         provider = llm_provider_model.provider
-        default_model_name = get_default_llm_model_name(llm_provider_model)
-        default_vision_model = get_default_vision_model_name(llm_provider_model)
-
-        is_default_provider = bool(default_model_name)
-        is_default_vision_provider = default_vision_model is not None
-
-        default_model_name = default_model_name or llm_provider_model.default_model_name
 
         return cls(
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            default_model_name=default_model_name,
-            is_default_provider=is_default_provider,
-            is_default_vision_provider=is_default_vision_provider,
-            default_vision_model=default_vision_model,
             model_configurations=filter_model_configurations(
                 llm_provider_model.model_configurations, provider
             ),
@@ -128,13 +87,11 @@ class LLMProvider(BaseModel):
     api_base: str | None = None
     api_version: str | None = None
     custom_config: dict[str, str] | None = None
-    default_model_name: str
     is_public: bool = True
     is_auto_mode: bool = False
     groups: list[int] = Field(default_factory=list)
     personas: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
-    default_vision_model: str | None = None
 
 
 class LLMProviderUpsertRequest(LLMProvider):
@@ -155,8 +112,6 @@ class LLMProviderView(LLMProvider):
     """Stripped down representation of LLMProvider for display / limited access info only"""
 
     id: int
-    is_default_provider: bool | None = None
-    is_default_vision_provider: bool | None = None
     model_configurations: list["ModelConfigurationView"]
 
     @classmethod
@@ -178,14 +133,6 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
-        default_model_name = get_default_llm_model_name(llm_provider_model)
-        default_vision_model = get_default_vision_model_name(llm_provider_model)
-
-        is_default_provider = bool(default_model_name)
-        is_default_vision_provider = default_vision_model is not None
-
-        default_model_name = default_model_name or llm_provider_model.default_model_name
-
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -194,10 +141,6 @@ class LLMProviderView(LLMProvider):
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
-            default_model_name=default_model_name,
-            is_default_provider=is_default_provider,
-            is_default_vision_provider=is_default_vision_provider,
-            default_vision_model=default_vision_model,
             is_public=llm_provider_model.is_public,
             is_auto_mode=llm_provider_model.is_auto_mode,
             groups=groups,
@@ -224,7 +167,8 @@ class ModelConfigurationUpsertRequest(BaseModel):
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
-            supports_image_input=model_configuration_model.supports_image_input,
+            supports_image_input=ModelFlowType.VISION
+            in model_configuration_model.model_flow_types,
             display_name=model_configuration_model.display_name,
         )
 
@@ -415,3 +359,8 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+
+
+class DefaultModel(BaseModel):
+    provider_id: int
+    model_name: str

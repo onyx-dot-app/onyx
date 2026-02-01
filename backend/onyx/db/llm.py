@@ -236,11 +236,6 @@ def upsert_llm_provider(
     existing_llm_provider.api_base = llm_provider_upsert_request.api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config
-    # TODO: Remove default model name on api change
-    # Needed due to /provider/{id}/default endpoint not disclosing the default model name
-    existing_llm_provider.default_model_name = (
-        llm_provider_upsert_request.default_model_name
-    )
     existing_llm_provider.is_public = llm_provider_upsert_request.is_public
     existing_llm_provider.is_auto_mode = llm_provider_upsert_request.is_auto_mode
     existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
@@ -564,22 +559,13 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
     db_session.flush()
 
 
-def update_default_provider(provider_id: int, db_session: Session) -> None:
-    # Attempt to get the default_model_name from the provider first
-    # TODO: Remove default_model_name check
-    provider = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.id == provider_id,
-        )
-    )
-
-    if provider is None:
-        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
-
+def update_default_provider(
+    provider_id: int, model_name: str, db_session: Session
+) -> None:
     _update_default_model(
         db_session,
         provider_id,
-        provider.default_model_name,
+        model_name,
         ModelFlowType.CONVERSATION,
     )
 
@@ -695,12 +681,6 @@ def sync_auto_mode_models(
             )
             db_session.add(new_model)
             changes += 1
-
-    # In Auto mode, default model is always set from GitHub config
-    default_model = llm_recommendations.get_default_model(provider.provider)
-    if default_model and provider.default_model_name != default_model.name:
-        provider.default_model_name = default_model.name
-        changes += 1
 
     db_session.commit()
     return changes

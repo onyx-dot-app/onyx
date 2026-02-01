@@ -2615,14 +2615,9 @@ class LLMProvider(Base):
     custom_config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-    default_model_name: Mapped[str] = mapped_column(String)
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # should only be set for a single provider
-    is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
-    is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
-    default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Auto mode: models, visibility, and defaults are managed by GitHub config
@@ -2671,8 +2666,6 @@ class ModelConfiguration(Base):
     # - The end-user configures models through a "Well Known LLM Provider".
     # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    supports_image_input: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Human-readable display name for the model.
     # For dynamic providers (OpenRouter, Bedrock, Ollama), this comes from the source API.
