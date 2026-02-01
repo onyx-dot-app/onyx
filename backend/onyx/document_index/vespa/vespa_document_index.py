@@ -641,6 +641,7 @@ class VespaDocumentIndex(DocumentIndex):
             index_name=self._index_name,
             filters=IndexFilters(access_control_list=None, tenant_id=self._tenant_id),
             get_large_chunks=False,
+            short_tensor_format=True,
         )
         # Vespa returns other metadata around the actual document chunk. The raw
         # chunk we're interested in is in the "fields" field.
