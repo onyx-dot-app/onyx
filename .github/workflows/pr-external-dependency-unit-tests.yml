@@ -50,7 +50,7 @@ env:
 
   # Vespa
   # See deployment/docker_compose/docker-compose.dev.yml.
-  VESPA_HOST: "index"
+  VESPA_HOST: "localhost"
   VESPA_PORT: "8081"
 
 jobs:
