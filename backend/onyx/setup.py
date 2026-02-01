@@ -23,7 +23,7 @@ from onyx.db.document import check_docs_exist
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.index_attempt import cancel_indexing_attempts_past_model
 from onyx.db.index_attempt import expire_index_attempts
-from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.search_settings import get_active_search_settings
@@ -286,7 +286,7 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
+    if GEN_AI_API_KEY and fetch_default_llm_model(db_session) is None:
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 

@@ -22,6 +22,34 @@ if TYPE_CHECKING:
     )
 
 
+# TODO: Clear this up on api refactor
+# There is still logic that requires sending each providers default model name
+# There is no logic that requires sending the providers default vision model name
+# We only send for the one that is actually the default
+def get_default_llm_model_name(llm_provider_model: "LLMProviderModel") -> str:
+    """Find the default conversation model name for a provider.
+
+    Returns the model name if found, otherwise returns empty string.
+    """
+    for model_config in llm_provider_model.model_configurations:
+        for flow in model_config.model_flows:
+            if flow.is_default and flow.model_flow_type == ModelFlowType.CONVERSATION:
+                return model_config.name
+    return ""
+
+
+def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str | None:
+    """Find the default vision model name for a provider.
+
+    Returns the model name if found, otherwise returns None.
+    """
+    for model_config in llm_provider_model.model_configurations:
+        for flow in model_config.model_flows:
+            if flow.is_default and flow.model_flow_type == ModelFlowType.VISION:
+                return model_config.name
+    return None
+
+
 class TestLLMRequest(BaseModel):
     # provider level
     name: str | None = None
@@ -71,15 +99,22 @@ class LLMProviderDescriptor(BaseModel):
         )
 
         provider = llm_provider_model.provider
+        default_model_name = get_default_llm_model_name(llm_provider_model)
+        default_vision_model = get_default_vision_model_name(llm_provider_model)
+
+        is_default_provider = bool(default_model_name)
+        is_default_vision_provider = default_vision_model is not None
+
+        default_model_name = default_model_name or llm_provider_model.default_model_name
 
         return cls(
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            default_model_name=llm_provider_model.default_model_name,
-            is_default_provider=llm_provider_model.is_default_provider,
-            is_default_vision_provider=llm_provider_model.is_default_vision_provider,
-            default_vision_model=llm_provider_model.default_vision_model,
+            default_model_name=default_model_name,
+            is_default_provider=is_default_provider,
+            is_default_vision_provider=is_default_vision_provider,
+            default_vision_model=default_vision_model,
             model_configurations=filter_model_configurations(
                 llm_provider_model.model_configurations, provider
             ),
@@ -143,22 +178,8 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
-        # TODO: Clear this up on api refactor
-        # There is still logic that requires sending each providers default model name
-        # There is no logic that requires sending the providers default vision model name
-        # We only send for the one that is actually the default
-        default_model_name = ""
-        default_vision_model: str | None = None
-
-        for model_config in llm_provider_model.model_configurations:
-            for flow in model_config.model_flows:
-                if (
-                    flow.is_default
-                    and flow.model_flow_type == ModelFlowType.CONVERSATION
-                ):
-                    default_model_name = model_config.name
-                elif flow.is_default and flow.model_flow_type == ModelFlowType.VISION:
-                    default_vision_model = model_config.name
+        default_model_name = get_default_llm_model_name(llm_provider_model)
+        default_vision_model = get_default_vision_model_name(llm_provider_model)
 
         is_default_provider = bool(default_model_name)
         is_default_vision_provider = default_vision_model is not None
@@ -242,7 +263,7 @@ class ModelConfigurationView(BaseModel):
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 supports_image_input=(
-                    model_configuration_model.supports_image_input or False
+                    ModelFlowType.VISION in model_configuration_model.model_flow_types
                 ),
                 # Infer reasoning support from model name/display name
                 supports_reasoning=is_reasoning_model(
@@ -284,8 +305,8 @@ class ModelConfigurationView(BaseModel):
                 )
             ),
             supports_image_input=(
-                val
-                if (val := model_configuration_model.supports_image_input) is not None
+                True
+                if ModelFlowType.VISION in model_configuration_model.model_flow_types
                 else litellm_thinks_model_supports_image_input(
                     model_configuration_model.name, provider_name
                 )

@@ -1,14 +1,11 @@
 from collections.abc import Callable
 
-from sqlalchemy.orm import Session
-
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_models
@@ -18,7 +15,6 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
@@ -53,54 +49,6 @@ def _build_provider_extra_headers(
         }
 
     return {}
-
-
-def get_llm_config_for_persona(
-    persona: Persona,
-    db_session: Session,
-    llm_override: LLMOverride | None = None,
-) -> LLMConfig:
-    """Get LLM config from persona without access checks.
-
-    This function assumes access to the persona has already been verified.
-    Use this when you need the LLM config but don't need to create the full LLM object.
-    """
-    provider_name_override = llm_override.model_provider if llm_override else None
-    model_version_override = llm_override.model_version if llm_override else None
-    temperature_override = llm_override.temperature if llm_override else None
-
-    provider_name = provider_name_override or persona.llm_model_provider_override
-    if not provider_name:
-        llm_provider = fetch_default_provider(db_session)
-        if not llm_provider:
-            raise ValueError("No default LLM provider found")
-        model_name: str | None = llm_provider.default_model_name
-    else:
-        llm_provider = fetch_llm_provider_view(db_session, provider_name)
-        if not llm_provider:
-            raise ValueError(f"No LLM provider found with name: {provider_name}")
-        model_name = model_version_override or persona.llm_model_version_override
-        if not model_name:
-            model_name = llm_provider.default_model_name
-
-    if not model_name:
-        raise ValueError("No model name found")
-
-    max_input_tokens = get_max_input_tokens_from_llm_provider(
-        llm_provider=llm_provider, model_name=model_name
-    )
-
-    return LLMConfig(
-        model_provider=llm_provider.provider,
-        model_name=model_name,
-        temperature=temperature_override or GEN_AI_TEMPERATURE,
-        api_key=llm_provider.api_key,
-        api_base=llm_provider.api_base,
-        api_version=llm_provider.api_version,
-        deployment_name=llm_provider.deployment_name,
-        custom_config=llm_provider.custom_config,
-        max_input_tokens=max_input_tokens,
-    )
 
 
 def get_llm_for_persona(

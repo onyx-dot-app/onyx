@@ -464,28 +464,6 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
-    provider_model = db_session.scalar(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.is_default_provider == True)  # noqa: E712
-        .options(selectinload(LLMProviderModel.model_configurations))
-    )
-    if not provider_model:
-        return None
-    return LLMProviderView.from_model(provider_model)
-
-
-def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
-    provider_model = db_session.scalar(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.is_default_vision_provider == True)  # noqa: E712
-        .options(selectinload(LLMProviderModel.model_configurations))
-    )
-    if not provider_model:
-        return None
-    return LLMProviderView.from_model(provider_model)
-
-
 def fetch_default_llm_model(db_session: Session) -> ModelConfiguration | None:
     return fetch_default_model(db_session, ModelFlowType.CONVERSATION)
 
