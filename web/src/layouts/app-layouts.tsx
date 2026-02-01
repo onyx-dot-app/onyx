@@ -42,20 +42,29 @@ import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import { PopoverMenu } from "@/refresh-components/Popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
+import {
+  Hoverable,
+  ChevronHoverableContainer,
+} from "@/refresh-components/Hoverable";
+import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
+  SvgBubbleText,
   SvgFolderIn,
   SvgMoreHorizontal,
+  SvgSearch,
   SvgShare,
   SvgSidebar,
+  SvgSparkle,
   SvgTrash,
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 
 /**
  * App Header Component
@@ -72,6 +81,7 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
  * - App-Mode toggle (EE gated)
  */
 function Header() {
+  const { appMode, setAppMode } = useAppMode();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -86,6 +96,7 @@ function Header() {
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const [modePopoverOpen, setModePopoverOpen] = useState(false);
   const {
     projects,
     fetchProjects,
@@ -98,6 +109,8 @@ function Header() {
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
+
+  const effectiveMode: AppMode = currentChatSession ? "chat" : appMode;
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -291,13 +304,83 @@ function Header() {
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-        <div className="flex-1">
-          <IconButton
-            icon={SvgSidebar}
-            onClick={() => setFolded(false)}
-            className={cn(!isMobile && "invisible")}
-            internal
-          />
+        <div className="flex-1 flex flex-row items-center gap-2">
+          {isMobile && (
+            <IconButton
+              icon={SvgSidebar}
+              onClick={() => setFolded(false)}
+              internal
+            />
+          )}
+          <Popover
+            open={modePopoverOpen}
+            onOpenChange={(open) => {
+              if (currentChatSession) return;
+              setModePopoverOpen(open);
+            }}
+          >
+            <Popover.Trigger asChild>
+              <Hoverable asChild variant="secondary">
+                <ChevronHoverableContainer>
+                  <LineItemLayout
+                    icon={
+                      effectiveMode === "auto"
+                        ? SvgSparkle
+                        : effectiveMode === "search"
+                          ? SvgSearch
+                          : SvgBubbleText
+                    }
+                    title={
+                      effectiveMode === "auto"
+                        ? "Auto"
+                        : effectiveMode === "search"
+                          ? "Search"
+                          : "Chat"
+                    }
+                    variant="secondary"
+                    center
+                  />
+                </ChevronHoverableContainer>
+              </Hoverable>
+            </Popover.Trigger>
+            <Popover.Content align="start" width="lg">
+              <Popover.Menu>
+                <LineItem
+                  icon={SvgSparkle}
+                  selected={effectiveMode === "auto"}
+                  description="Automatic Search/Chat mode"
+                  onClick={noProp(() => {
+                    setAppMode("auto");
+                    setModePopoverOpen(false);
+                  })}
+                >
+                  Auto
+                </LineItem>
+                <LineItem
+                  icon={SvgSearch}
+                  selected={effectiveMode === "search"}
+                  description="Quick search for documents"
+                  onClick={noProp(() => {
+                    setAppMode("search");
+                    setModePopoverOpen(false);
+                  })}
+                >
+                  Search
+                </LineItem>
+                <LineItem
+                  icon={SvgBubbleText}
+                  selected={effectiveMode === "chat"}
+                  description="Conversation and research"
+                  onClick={noProp(() => {
+                    setAppMode("chat");
+                    setModePopoverOpen(false);
+                  })}
+                >
+                  Chat
+                </LineItem>
+              </Popover.Menu>
+            </Popover.Content>
+          </Popover>
         </div>
 
         {/*
