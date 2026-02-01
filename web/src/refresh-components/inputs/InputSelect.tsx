@@ -161,7 +161,9 @@ function InputSelectRoot({
           disabled={disabled}
           {...props}
         >
-          <div ref={ref}>{children}</div>
+          <div ref={ref} className="w-full">
+            {children}
+          </div>
         </SelectPrimitive.Root>
       </InputSelectContext.Provider>
     </div>
@@ -289,7 +291,7 @@ function InputSelectContent({
       <SelectPrimitive.Content
         ref={ref}
         className={cn(
-          "z-[4000] w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
+          "z-popover w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
           "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"

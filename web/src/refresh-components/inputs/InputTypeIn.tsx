@@ -127,7 +127,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
     return (
       <div
         className={cn(
-          "flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative",
+          "flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full",
           wrapperClasses[variant],
           className
         )}
