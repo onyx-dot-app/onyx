@@ -328,7 +328,7 @@ function Header() {
             <Popover
               open={modePopoverOpen}
               onOpenChange={(open) => {
-                if (currentChatSession) return;
+                if (appFocus.isChat()) return;
                 setModePopoverOpen(open);
               }}
             >
@@ -417,7 +417,7 @@ function Header() {
           - more-options buttons
         */}
         <div className="flex flex-1 justify-end">
-          {currentChatSession && (
+          {appFocus.isChat() && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
                 leftIcon={SvgShare}
