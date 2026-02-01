@@ -5,11 +5,13 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_provider
-from onyx.db.llm import fetch_default_vision_provider
+from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
@@ -210,46 +212,40 @@ def get_default_llm_with_vision(
 
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
-        default_provider = fetch_default_vision_provider(db_session)
-        if default_provider and default_provider.default_vision_model:
+        default_model = fetch_default_vision_model(db_session)
+        if default_model:
             if model_supports_image_input(
-                default_provider.default_vision_model, default_provider.provider
+                default_model.name, default_model.llm_provider.provider
             ):
                 return create_vision_llm(
-                    default_provider, default_provider.default_vision_model
+                    LLMProviderView.from_model(default_model.llm_provider),
+                    default_model.name,
                 )
-
         # Fall back to searching all providers
-        providers = fetch_existing_llm_providers(db_session)
+        models = fetch_existing_models(
+            db_session=db_session,
+            flow_types=[ModelFlowType.VISION, ModelFlowType.CONVERSATION],
+        )
 
-    if not providers:
+    if not models:
         return None
 
-    # Check all providers for viable vision models
-    for provider in providers:
-        provider_view = LLMProviderView.from_model(provider)
+    # Search for viable vision model followed by conversation models
+    # Sort models from VISION to CONVERSATION priority
+    sorted_models = sorted(
+        models,
+        key=lambda x: (
+            ModelFlowType.VISION in x.model_flow_types,
+            ModelFlowType.CONVERSATION in x.model_flow_types,
+        ),
+    )
 
-        # First priority: Check if provider has a default_vision_model
-        if provider.default_vision_model and model_supports_image_input(
-            provider.default_vision_model, provider.provider
-        ):
-            return create_vision_llm(provider_view, provider.default_vision_model)
-
-        # If no model-configurations are specified, try default model
-        if not provider.model_configurations:
-            # Try default_model_name
-            if provider.default_model_name and model_supports_image_input(
-                provider.default_model_name, provider.provider
-            ):
-                return create_vision_llm(provider_view, provider.default_model_name)
-
-        # Otherwise, if model-configurations are specified, check each model
-        else:
-            for model_configuration in provider.model_configurations:
-                if model_supports_image_input(
-                    model_configuration.name, provider.provider
-                ):
-                    return create_vision_llm(provider_view, model_configuration.name)
+    for model in sorted_models:
+        if model_supports_image_input(model.name, model.llm_provider.provider):
+            return create_vision_llm(
+                LLMProviderView.from_model(model.llm_provider),
+                model.name,
+            )
 
     return None
 
@@ -298,18 +294,14 @@ def get_default_llm(
     long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        llm_provider = fetch_default_provider(db_session)
+        model = fetch_default_llm_model(db_session)
 
-    if not llm_provider:
-        raise ValueError("No default LLM provider found")
-
-    model_name = llm_provider.default_model_name
-    if not model_name:
-        raise ValueError("No default model name found")
+    if not model:
+        raise ValueError("No default LLM model found")
 
     return llm_from_provider(
-        model_name=model_name,
-        llm_provider=llm_provider,
+        model_name=model.name,
+        llm_provider=LLMProviderView.from_model(model.llm_provider),
         timeout=timeout,
         temperature=temperature,
         additional_headers=additional_headers,

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
+from onyx.db.enums import ModelFlowType
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
@@ -142,6 +143,24 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
+        default_model_name = ""
+        default_vision_model: str | None = None
+
+        for model_config in llm_provider_model.model_configurations:
+            for flow in model_config.model_flows:
+                if (
+                    flow.is_default
+                    and flow.model_flow_type == ModelFlowType.CONVERSATION
+                ):
+                    default_model_name = model_config.name
+                elif flow.is_default and flow.model_flow_type == ModelFlowType.VISION:
+                    default_vision_model = model_config.name
+
+        is_default_provider = bool(default_model_name)
+        is_default_vision_provider = default_vision_model is not None
+
+        default_model_name = default_model_name or llm_provider_model.default_model_name
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -150,10 +169,10 @@ class LLMProviderView(LLMProvider):
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
-            default_model_name=llm_provider_model.default_model_name,
-            is_default_provider=llm_provider_model.is_default_provider,
-            is_default_vision_provider=llm_provider_model.is_default_vision_provider,
-            default_vision_model=llm_provider_model.default_vision_model,
+            default_model_name=default_model_name,
+            is_default_provider=is_default_provider,
+            is_default_vision_provider=is_default_vision_provider,
+            default_vision_model=default_vision_model,
             is_public=llm_provider_model.is_public,
             is_auto_mode=llm_provider_model.is_auto_mode,
             groups=groups,

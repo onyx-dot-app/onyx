@@ -1,9 +1,11 @@
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
 from onyx.db.models import ImageGenerationConfig
@@ -11,6 +13,7 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
 from onyx.db.models import ModelConfiguration
+from onyx.db.models import ModelFlow
 from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
@@ -233,6 +236,8 @@ def upsert_llm_provider(
     existing_llm_provider.api_base = llm_provider_upsert_request.api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config
+    # TODO: Remove default model name on api change
+    # Needed due to /provider/{id}/default endpoint not disclosing the default model name
     existing_llm_provider.default_model_name = (
         llm_provider_upsert_request.default_model_name
     )
@@ -263,17 +268,18 @@ def upsert_llm_provider(
                 model_provider=llm_provider_upsert_request.provider,
             )
 
-        db_session.execute(
-            insert(ModelConfiguration)
-            .values(
-                llm_provider_id=existing_llm_provider.id,
-                name=model_configuration.name,
-                is_visible=model_configuration.is_visible,
-                max_input_tokens=max_input_tokens,
-                supports_image_input=model_configuration.supports_image_input,
-                display_name=model_configuration.display_name,
-            )
-            .on_conflict_do_nothing()
+        supported_flows = [ModelFlowType.CONVERSATION]
+        if model_configuration.supports_image_input:
+            supported_flows.append(ModelFlowType.VISION)
+
+        insert_new_model_configuration__no_commit(
+            db_session=db_session,
+            llm_provider_id=existing_llm_provider.id,
+            model_name=model_configuration.name,
+            supported_flows=supported_flows,
+            is_visible=model_configuration.is_visible,
+            max_input_tokens=max_input_tokens,
+            display_name=model_configuration.display_name,
         )
 
     # Make sure the relationship table stays up to date
@@ -371,8 +377,23 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
     )
 
 
+def fetch_existing_models(
+    db_session: Session,
+    flow_types: list[ModelFlowType],
+) -> list[ModelConfiguration]:
+    models = (
+        select(ModelConfiguration)
+        .join(ModelFlow)
+        .where(ModelFlow.model_flow_type.in_(flow_types))
+        .options(selectinload(ModelConfiguration.llm_provider))
+    )
+
+    return list(db_session.scalars(models).all())
+
+
 def fetch_existing_llm_providers(
     db_session: Session,
+    flow_types: list[ModelFlowType],
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
@@ -380,22 +401,36 @@ def fetch_existing_llm_providers(
 
     Args:
         db_session: Database session
+        flow_types: List of flow types to filter by
         only_public: If True, only return public providers
         exclude_image_generation_providers: If True, exclude providers that are
             used for image generation configs
     """
-    stmt = select(LLMProviderModel).options(
+    providers_with_flows = (
+        select(ModelConfiguration.llm_provider_id)
+        .join(ModelFlow)
+        .where(ModelFlow.model_flow_type.in_(flow_types))
+        .distinct()
+    )
+
+    if exclude_image_generation_providers:
+        stmt = select(LLMProviderModel).where(
+            LLMProviderModel.id.in_(providers_with_flows)
+        )
+    else:
+        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
+            ImageGenerationConfig
+        )
+        stmt = select(LLMProviderModel).where(
+            LLMProviderModel.id.in_(providers_with_flows)
+            | LLMProviderModel.id.in_(image_gen_provider_ids)
+        )
+
+    stmt = stmt.options(
         selectinload(LLMProviderModel.model_configurations),
         selectinload(LLMProviderModel.groups),
         selectinload(LLMProviderModel.personas),
     )
-
-    if exclude_image_generation_providers:
-        # Get LLM provider IDs used by ImageGenerationConfig
-        image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
-            ImageGenerationConfig
-        )
-        stmt = stmt.where(LLMProviderModel.id.not_in(image_gen_provider_ids))
 
     providers = list(db_session.scalars(stmt).all())
     if only_public:
@@ -449,6 +484,29 @@ def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None
     if not provider_model:
         return None
     return LLMProviderView.from_model(provider_model)
+
+
+def fetch_default_llm_model(db_session: Session) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, ModelFlowType.CONVERSATION)
+
+
+def fetch_default_vision_model(db_session: Session) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, ModelFlowType.VISION)
+
+
+def fetch_default_model(
+    db_session: Session,
+    flow_type: ModelFlowType,
+) -> ModelConfiguration | None:
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.is_visible == True,  # noqa: E712
+            ModelFlow.model_flow_type == flow_type,
+            ModelFlow.is_default == True,  # noqa: E712
+        )
+    )
+
+    return model_config
 
 
 def fetch_llm_provider_view(
@@ -527,60 +585,50 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
 
 
 def update_default_provider(provider_id: int, db_session: Session) -> None:
-    new_default = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.id == provider_id)
-    )
-    if not new_default:
-        raise ValueError(f"LLM Provider with id {provider_id} does not exist")
-
-    existing_default = db_session.scalar(
+    # Attempt to get the default_model_name from the provider first
+    # TODO: Remove default_model_name check
+    provider = db_session.scalar(
         select(LLMProviderModel).where(
-            LLMProviderModel.is_default_provider == True  # noqa: E712
+            LLMProviderModel.id == provider_id,
         )
     )
-    if existing_default:
-        existing_default.is_default_provider = None
-        # required to ensure that the below does not cause a unique constraint violation
-        db_session.flush()
 
-    new_default.is_default_provider = True
-    db_session.commit()
+    if provider is None:
+        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
+
+    default_model_name = provider.default_model_name
+
+    _update_default_model(
+        db_session,
+        provider_id,
+        default_model_name,
+        ModelFlowType.CONVERSATION,
+    )
 
 
 def update_default_vision_provider(
-    provider_id: int, vision_model: str | None, db_session: Session
+    provider_id: int, vision_model: str, db_session: Session
 ) -> None:
-    new_default = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.id == provider_id)
-    )
-    if not new_default:
-        raise ValueError(f"LLM Provider with id {provider_id} does not exist")
-
-    # Validate that the specified vision model supports image input
-    model_to_validate = vision_model or new_default.default_model_name
-    if model_to_validate:
-        if not model_supports_image_input(model_to_validate, new_default.provider):
-            raise ValueError(
-                f"Model '{model_to_validate}' for provider '{new_default.provider}' does not support image input"
-            )
-    else:
-        raise ValueError(
-            f"Model '{vision_model}' is not a valid model for provider '{new_default.provider}'"
-        )
-
-    existing_default = db_session.scalar(
+    provider = db_session.scalar(
         select(LLMProviderModel).where(
-            LLMProviderModel.is_default_vision_provider == True  # noqa: E712
+            LLMProviderModel.id == provider_id,
         )
     )
-    if existing_default:
-        existing_default.is_default_vision_provider = None
-        # required to ensure that the below does not cause a unique constraint violation
-        db_session.flush()
 
-    new_default.is_default_vision_provider = True
-    new_default.default_vision_model = vision_model
-    db_session.commit()
+    if provider is None:
+        raise ValueError(f"LLM Provider with id={provider_id} does not exist")
+
+    if not model_supports_image_input(vision_model, provider.provider):
+        raise ValueError(
+            f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
+        )
+
+    _update_default_model(
+        db_session=db_session,
+        provider_id=provider_id,
+        model=vision_model,
+        flow_type=ModelFlowType.VISION,
+    )
 
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
@@ -678,3 +726,97 @@ def sync_auto_mode_models(
 
     db_session.commit()
     return changes
+
+
+def create_new_flow_mapping__no_commit(
+    db_session: Session,
+    model_configuration_id: int,
+    flow_type: ModelFlowType,
+) -> ModelFlow:
+    flow = ModelFlow(
+        model_configuration_id=model_configuration_id,
+        flow_type=flow_type,
+        is_default=False,
+    )
+
+    db_session.add(flow)
+    db_session.flush()
+    db_session.refresh(flow)
+    return flow
+
+
+def insert_new_model_configuration__no_commit(
+    db_session: Session,
+    llm_provider_id: int,
+    model_name: str,
+    supported_flows: list[ModelFlowType],
+    is_visible: bool,
+    max_input_tokens: int | None,
+    display_name: str | None,
+) -> int | None:
+    result = db_session.execute(
+        insert(ModelConfiguration)
+        .values(
+            llm_provider_id=llm_provider_id,
+            name=model_name,
+            is_visible=is_visible,
+            max_input_tokens=max_input_tokens,
+            display_name=display_name,
+            supports_image_input=ModelFlowType.VISION in supported_flows,
+        )
+        .on_conflict_do_nothing()
+        .returning(ModelConfiguration.id)
+    )
+
+    model_config_id = result.scalar()
+
+    if not model_config_id:
+        return None
+
+    for flow_type in supported_flows:
+        create_new_flow_mapping__no_commit(
+            db_session=db_session,
+            model_configuration_id=model_config_id,
+            flow_type=flow_type,
+        )
+
+    return model_config_id
+
+
+def _update_default_model(
+    db_session: Session,
+    provider_id: int,
+    model: str,
+    flow_type: ModelFlowType,
+) -> None:
+    result = db_session.execute(
+        select(ModelConfiguration, ModelFlow)
+        .join(ModelFlow, ModelFlow.model_configuration_id == ModelConfiguration.id)
+        .where(
+            ModelConfiguration.llm_provider_id == provider_id,
+            ModelConfiguration.name == model,
+            ModelFlow.model_flow_type == flow_type,
+        )
+    ).first()
+
+    if not result:
+        raise ValueError(
+            f"Model '{model}' is not a valid model for provider_id={provider_id}"
+        )
+
+    model_config, new_default = result
+
+    # Clear existing default and set in an atomic operation
+    db_session.execute(
+        update(ModelFlow)
+        .where(
+            ModelFlow.model_flow_type == flow_type,
+            ModelFlow.is_default == True,  # noqa: E712
+        )
+        .values(is_default=False)
+    )
+
+    new_default.is_default = True
+    model_config.is_visible = True
+
+    db_session.commit()
