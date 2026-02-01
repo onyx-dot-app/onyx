@@ -13,6 +13,7 @@ logger = setup_logger()
 _LOG_FILE_NAME_TIMESTAMP_FORMAT = "%Y-%m-%d_%H-%M-%S-%f"
 
 
+# NOTE: This is no longer used but keeping it around in case it's reintroduced
 class LongTermLogger:
     """NOTE: should support a LOT of data AND should be extremely fast,
     ideally done in a background thread."""

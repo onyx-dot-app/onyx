@@ -437,6 +437,7 @@ function RecentFilesTableContent({
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         searchPlaceholder="Search files..."
+        ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
             internal

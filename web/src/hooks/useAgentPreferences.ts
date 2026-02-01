@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR from "swr";
 import {
   UserSpecificAssistantPreference,
@@ -15,7 +17,7 @@ const buildUpdateAssistantPreferenceUrl = (assistantId: number) =>
  * Hook for managing user-specific assistant preferences using SWR.
  * Provides automatic caching, deduplication, and revalidation.
  */
-export function useAssistantPreferences() {
+export default function useAgentPreferences() {
   const { data, mutate } = useSWR<UserSpecificAssistantPreferences>(
     ASSISTANT_PREFERENCES_URL,
     errorHandlingFetcher,

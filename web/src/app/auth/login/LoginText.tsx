@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useContext } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import Text from "@/refresh-components/texts/Text";
 
 export default function LoginText() {

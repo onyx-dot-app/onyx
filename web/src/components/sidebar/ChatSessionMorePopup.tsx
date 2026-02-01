@@ -2,7 +2,7 @@
 
 import { ChatSession } from "@/app/app/interfaces";
 import { deleteChatSession } from "@/app/app/services/lib";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,

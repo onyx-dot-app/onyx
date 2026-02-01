@@ -13,7 +13,7 @@ import {
 import { GmailAuthSection, GmailJsonUploadSection } from "./Credential";
 import { usePublicCredentials, useBasicConnectorStatus } from "@/lib/hooks";
 import Title from "@/components/ui/title";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import {
   useGoogleAppCredential,
   useGoogleServiceAccountKey,

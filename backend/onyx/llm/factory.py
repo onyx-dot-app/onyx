@@ -24,7 +24,6 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
-from onyx.utils.long_term_log import LongTermLogger
 
 logger = setup_logger()
 
@@ -56,7 +55,6 @@ def get_llm_for_persona(
     user: User,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
-    long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     if persona is None:
         logger.warning("No persona provided, using default LLM")
@@ -71,7 +69,6 @@ def get_llm_for_persona(
         return get_default_llm(
             temperature=temperature_override or GEN_AI_TEMPERATURE,
             additional_headers=additional_headers,
-            long_term_logger=long_term_logger,
         )
 
     with get_session_with_current_tenant() as db_session:
@@ -100,7 +97,6 @@ def get_llm_for_persona(
             return get_default_llm(
                 temperature=temperature_override or GEN_AI_TEMPERATURE,
                 additional_headers=additional_headers,
-                long_term_logger=long_term_logger,
             )
 
         llm_provider = LLMProviderView.from_model(provider_model)
@@ -119,7 +115,6 @@ def get_llm_for_persona(
         custom_config=llm_provider.custom_config,
         temperature=temperature_override,
         additional_headers=additional_headers,
-        long_term_logger=long_term_logger,
         max_input_tokens=get_max_input_tokens_from_llm_provider(
             llm_provider=llm_provider, model_name=model
         ),
@@ -130,7 +125,6 @@ def get_default_llm_with_vision(
     timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
-    long_term_logger: LongTermLogger | None = None,
 ) -> LLM | None:
     """Get an LLM that supports image input, with the following priority:
     1. Use the designated default vision provider if it exists and supports image input
@@ -152,7 +146,6 @@ def get_default_llm_with_vision(
             timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,
-            long_term_logger=long_term_logger,
             max_input_tokens=get_max_input_tokens_from_llm_provider(
                 llm_provider=provider, model_name=model
             ),
@@ -205,7 +198,6 @@ def llm_from_provider(
     timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
-    long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     return get_llm(
         provider=llm_provider.provider,
@@ -218,7 +210,6 @@ def llm_from_provider(
         timeout=timeout,
         temperature=temperature,
         additional_headers=additional_headers,
-        long_term_logger=long_term_logger,
         max_input_tokens=get_max_input_tokens_from_llm_provider(
             llm_provider=llm_provider, model_name=model_name
         ),
@@ -240,7 +231,6 @@ def get_default_llm(
     timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
-    long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_llm_model(db_session)
@@ -254,7 +244,6 @@ def get_default_llm(
         timeout=timeout,
         temperature=temperature,
         additional_headers=additional_headers,
-        long_term_logger=long_term_logger,
     )
 
 
@@ -270,7 +259,6 @@ def get_llm(
     temperature: float | None = None,
     timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
-    long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -296,7 +284,6 @@ def get_llm(
         custom_config=custom_config,
         extra_headers=extra_headers,
         model_kwargs={},
-        long_term_logger=long_term_logger,
         max_input_tokens=max_input_tokens,
     )
 

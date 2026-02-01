@@ -42,11 +42,7 @@ export default function ReferralSourceSelector({
       <Label className="text-text-950" small={false}>
         How did you hear about us?
       </Label>
-      <InputSelect
-        value={referralSource}
-        onValueChange={handleChange}
-        className="w-full border-background-300 !rounded-08 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-      >
+      <InputSelect value={referralSource} onValueChange={handleChange}>
         <InputSelect.Trigger placeholder="Select an option" />
 
         <InputSelect.Content>

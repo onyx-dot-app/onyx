@@ -551,16 +551,20 @@ const AIMessage = React.memo(function AIMessage({
           >
             {groupedPackets.length === 0 ? (
               // Show blinking dot when no content yet, or stopped message if user cancelled
-              <div className="flex items-center gap-2">
-                <AgentAvatar agent={chatState.assistant} size={24} />
-                {stopReason === StopReason.USER_CANCELLED ? (
-                  <Text as="p" secondaryBody text04>
-                    User has stopped generation
-                  </Text>
-                ) : (
-                  <BlinkingDot addMargin />
-                )}
-              </div>
+              <>
+                <div className="flex flex-wrap pb-4">
+                  <AgentAvatar agent={chatState.assistant} size={24} />
+                </div>
+                <div>
+                  {stopReason === StopReason.USER_CANCELLED ? (
+                    <Text as="p" secondaryBody text04>
+                      User has stopped generation
+                    </Text>
+                  ) : (
+                    <BlinkingDot addMargin />
+                  )}
+                </div>
+              </>
             ) : (
               <>
                 <div className="flex flex-wrap pb-4">

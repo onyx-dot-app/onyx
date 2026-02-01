@@ -49,8 +49,25 @@ def test_confluence_connector_permissions(
 ) -> None:
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
-    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
+    result = load_all_from_connector(confluence_connector, 0, time.time())
+    doc_batch = result.documents
+    hierarchy_nodes = result.hierarchy_nodes
     all_full_doc_ids.update([doc.id for doc in doc_batch])
+
+    # Verify hierarchy nodes are returned and have valid structure
+    # Note: The exact count depends on the current state of the Confluence instance
+    assert len(hierarchy_nodes) > 0, "Expected at least some hierarchy nodes"
+
+    # Verify all space nodes have no parent and all page nodes have a parent
+    for node in hierarchy_nodes:
+        if node.node_type.value == "space":
+            assert (
+                node.raw_parent_id is None
+            ), f"Space node {node.raw_node_id} should have no parent"
+        elif node.node_type.value == "page":
+            assert (
+                node.raw_parent_id is not None
+            ), f"Page node {node.raw_node_id} should have a parent"
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
