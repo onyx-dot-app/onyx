@@ -113,7 +113,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                         QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "One or more queries to look up on the web.",
+                            "description": "One or more queries to look up on the web. "
+                            "Do not include special whitespace characters like newlines, tabs, etc.",
                         },
                     },
                     "required": [QUERIES_FIELD],

@@ -301,8 +301,6 @@ class DefaultTraceProvider(TraceProvider):
             # This should never happen, but mypy needs it
             raise ValueError(f"Invalid parent type: {type(parent)}")
 
-        logger.debug(f"Creating span {span_data} with id {span_id}")
-
         return SpanImpl(
             trace_id=trace_id,
             span_id=span_id or self.gen_span_id(),
