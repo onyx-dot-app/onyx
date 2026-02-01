@@ -45,6 +45,12 @@ function extractFirstParagraph(content: string): {
     return { title: null, remainingContent: content };
   }
 
+  // Only treat as title if it's an actual markdown heading (starts with #)
+  const isMarkdownHeading = /^#+\s/.test(firstLine);
+  if (!isMarkdownHeading) {
+    return { title: null, remainingContent: content };
+  }
+
   // Remove markdown heading markers (# ## ### etc.)
   const cleanTitle = firstLine.replace(/^#+\s*/, "").trim();
 
