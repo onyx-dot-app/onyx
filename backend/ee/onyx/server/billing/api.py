@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.auth.users import current_admin_user
 from ee.onyx.db.license import get_license
+from ee.onyx.db.license import get_used_seats
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
@@ -164,6 +165,16 @@ async def create_checkout_session(
     seats = request.seats if request else None
     email = request.email if request else None
 
+    # Validate that requested seats is not less than current used seats
+    if seats is not None:
+        used_seats = get_used_seats(tenant_id)
+        if seats < used_seats:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot subscribe with fewer seats than current usage. "
+                f"You have {used_seats} active users/integrations but requested {seats} seats.",
+            )
+
     # Build redirect URL for after checkout completion
     redirect_url = f"{WEB_DOMAIN}/admin/billing?checkout=success"
 
@@ -264,6 +275,15 @@ async def update_seats(
     # Self-hosted requires license
     if not MULTI_TENANT and not license_data:
         raise HTTPException(status_code=400, detail="No license found")
+
+    # Validate that new seat count is not less than current used seats
+    used_seats = get_used_seats(tenant_id)
+    if request.new_seat_count < used_seats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot reduce seats below current usage. "
+            f"You have {used_seats} active users/integrations but requested {request.new_seat_count} seats.",
+        )
 
     try:
         result = await update_seat_service(
