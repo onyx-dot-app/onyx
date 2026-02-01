@@ -56,8 +56,12 @@ function getLastLines(
     return { lines: text, hasTruncation: false };
   }
   // Reserve one line for ellipsis, show last (maxLines - 1) content lines
+  const linesToShow = maxLines - 1;
+  if (linesToShow <= 0) {
+    return { lines: "", hasTruncation: true };
+  }
   return {
-    lines: allLines.slice(-(maxLines - 1)).join("\n"),
+    lines: allLines.slice(-linesToShow).join("\n"),
     hasTruncation: true,
   };
 }
