@@ -211,6 +211,14 @@ export function usePacedTurnGroups(
     }
 
     if (newSteps.length === 0) {
+      // If there are no tool steps at all, mark pacing complete immediately
+      // This allows tool-less responses to render their displayGroups
+      if (allSteps.length === 0 && !state.toolPacingComplete) {
+        state.toolPacingComplete = true;
+        setRevealTrigger((t) => t + 1);
+        return;
+      }
+
       // Check if all steps are revealed (no pending, no new)
       if (
         state.pendingSteps.length === 0 &&
