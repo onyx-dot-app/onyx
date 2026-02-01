@@ -148,6 +148,12 @@ def test_load_from_checkpoint_happy_path(
     # Mock paginated_cql_retrieval to return our mock pages
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
+
+    # Mock space retrieval for hierarchy nodes (called at start of first batch)
+    confluence_client.retrieve_confluence_spaces = MagicMock(  # type: ignore
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
+    )
+
     get_mock = MagicMock()
     confluence_client.get = get_mock  # type: ignore
     get_mock.side_effect = [
@@ -178,7 +184,7 @@ def test_load_from_checkpoint_happy_path(
         confluence_connector, 0, end_time
     )
 
-    # Check that the documents were returned
+    # Check that the documents were returned (hierarchy nodes are filtered out by the test utility)
     assert len(outputs) == 2
 
     checkpoint_output1 = outputs[0]
@@ -213,6 +219,12 @@ def test_load_from_checkpoint_with_page_processing_error(
     # Mock paginated_cql_retrieval to return our mock pages
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
+
+    # Mock space retrieval for hierarchy nodes (called at start of first batch)
+    confluence_client.retrieve_confluence_spaces = MagicMock(  # type: ignore
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
+    )
+
     get_mock = MagicMock()
     confluence_client.get = get_mock  # type: ignore
     get_mock.side_effect = [
@@ -270,6 +282,7 @@ def test_load_from_checkpoint_with_page_processing_error(
             confluence_connector, 0, end_time
         )
 
+        # Hierarchy nodes are filtered out by test utility
         assert len(outputs) == 1
         checkpoint_output = outputs[0]
         assert len(checkpoint_output.items) == 2
@@ -412,6 +425,12 @@ def test_checkpoint_progress(
     # Mock paginated_cql_retrieval to return our mock pages
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
+
+    # Mock space retrieval for hierarchy nodes (called at start of first batch)
+    confluence_client.retrieve_confluence_spaces = MagicMock(  # type: ignore
+        return_value=iter([{"key": "TEST", "name": "Test Space"}])
+    )
+
     get_mock = MagicMock()
     confluence_client.get = get_mock  # type: ignore
     get_mock.side_effect = [
@@ -435,6 +454,7 @@ def test_checkpoint_progress(
         confluence_connector, 0, end_time
     )
 
+    # Hierarchy nodes are filtered out by test utility
     first_checkpoint = outputs[0].next_checkpoint
 
     assert (
