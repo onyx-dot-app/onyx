@@ -56,7 +56,7 @@ class DisposableEmailValidator:
             "guerrillamail.com",
             "mailinator.com",
             "tempmail.com",
-            "throwaway.email",
+            "chat-tempmail.com" "throwaway.email",
             "yopmail.com",
             "temp-mail.org",
             "getnada.com",
