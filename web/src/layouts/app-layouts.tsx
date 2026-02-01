@@ -69,12 +69,6 @@ import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { IconProps } from "@opal/types";
 
-function modeToIcon(appMode: AppMode): React.FunctionComponent<IconProps> {
-  if (appMode === "auto") return SvgSparkle;
-  else if (appMode === "chat") return SvgBubbleText;
-  else return SvgSearchMenu;
-}
-
 /**
  * App Header Component
  *
