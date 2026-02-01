@@ -263,7 +263,7 @@ export default function AppHeader() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16 z-app-header">
+      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
         {/*
           Left:
           - (mobile) sidebar toggle

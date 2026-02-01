@@ -62,7 +62,7 @@ function Footer() {
     }](https://www.onyx.app/) - Open Source AI Platform`;
 
   return (
-    <footer className="relative w-full flex flex-row justify-center items-center gap-2 pb-2 mt-auto">
+    <footer className="relative w-full flex flex-row justify-center items-center gap-2 p-2 mt-auto">
       <MinimalMarkdown
         content={customFooterContent}
         className={cn("max-w-full text-center")}
