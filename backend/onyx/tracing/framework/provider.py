@@ -115,6 +115,20 @@ class SynchronousMultiTracingProcessor(TracingProcessor):
             except Exception as e:
                 logger.error(f"Error flushing trace processor {processor}: {e}")
 
+    def score_trace(
+        self, trace_id: str, score: float, comment: str | None = None
+    ) -> None:
+        """
+        Score a trace across all processors that support scoring.
+        """
+        for processor in self._processors:
+            try:
+                processor.score_trace(trace_id, score, comment)
+            except Exception as e:
+                logger.error(
+                    f"Error in trace processor {processor} during score_trace: {e}"
+                )
+
 
 class TraceProvider(ABC):
     """Interface for creating traces and spans."""
@@ -175,6 +189,12 @@ class TraceProvider(ABC):
     @abstractmethod
     def shutdown(self) -> None:
         """Clean up any resources used by the provider."""
+
+    @abstractmethod
+    def score_trace(
+        self, trace_id: str, score: float, comment: str | None = None
+    ) -> None:
+        """Score a trace across all registered processors that support scoring."""
 
 
 class DefaultTraceProvider(TraceProvider):
@@ -317,3 +337,11 @@ class DefaultTraceProvider(TraceProvider):
             self._multi_processor.shutdown()
         except Exception as e:
             logger.error(f"Error shutting down trace provider: {e}")
+
+    def score_trace(
+        self, trace_id: str, score: float, comment: str | None = None
+    ) -> None:
+        """
+        Score a trace across all registered processors that support scoring.
+        """
+        self._multi_processor.score_trace(trace_id, score, comment)
