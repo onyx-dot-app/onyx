@@ -2,11 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-<<<<<<< HEAD
 import { Section, LineItemLayout } from "@/layouts/general-layouts";
-=======
-import { Section } from "@/layouts/general-layouts";
->>>>>>> 8c318818c (feat(ee): fe - add BillingDetailsView component for billing)
 import * as InputLayouts from "@/layouts/input-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
@@ -19,10 +15,6 @@ import {
   SvgExternalLink,
   SvgArrowRight,
   SvgPlus,
-<<<<<<< HEAD
-=======
-  SvgXOctagon,
->>>>>>> 8c318818c (feat(ee): fe - add BillingDetailsView component for billing)
   SvgWallet,
   SvgFileText,
 } from "@opal/icons";
@@ -347,16 +339,12 @@ function SeatsCard({
 
   if (isEditing) {
     return (
-<<<<<<< HEAD
       <Card
         padding={0}
         gap={0}
         alignItems="stretch"
         className="billing-card-enter"
       >
-=======
-      <Card padding={0} alignItems="stretch" className="billing-card-enter">
->>>>>>> 8c318818c (feat(ee): fe - add BillingDetailsView component for billing)
         <Section
           flexDirection="row"
           justifyContent="between"
@@ -364,21 +352,10 @@ function SeatsCard({
           padding={1}
           height="auto"
         >
-<<<<<<< HEAD
           <LineItemLayout
             title="Update Seats"
             description="Add or remove seats to reflect your team size."
           />
-=======
-          <Section gap={0.25} alignItems="start" height="auto" width="fit">
-            <Text headingH3Muted text04>
-              Update Seats
-            </Text>
-            <Text secondaryBody text03>
-              Add or remove seats to reflect your team size.
-            </Text>
-          </Section>
->>>>>>> 8c318818c (feat(ee): fe - add BillingDetailsView component for billing)
           <Button main secondary onClick={handleCancel} disabled={isSubmitting}>
             Cancel
           </Button>
@@ -404,7 +381,6 @@ function SeatsCard({
             </InputLayouts.Vertical>
 
             {isBelowMinimum ? (
-<<<<<<< HEAD
               <InputLayouts.ErrorTextLayout type="error">
                 You cannot set seats below current{" "}
                 <span className="font-semibold">{minRequiredSeats}</span> seats
@@ -417,37 +393,6 @@ function SeatsCard({
                 </Link>{" "}
                 first before adjusting seats.
               </InputLayouts.ErrorTextLayout>
-=======
-              <Section
-                flexDirection="row"
-                gap={0.25}
-                justifyContent="start"
-                alignItems="start"
-                height="auto"
-              >
-                <SvgXOctagon
-                  size={12}
-                  className="stroke-status-error-05 mt-0.5 flex-shrink-0"
-                />
-                <Text secondaryBody className="text-status-error-05">
-                  You cannot set seats below current{" "}
-                  <Text
-                    secondaryBody
-                    className="text-status-error-05 font-semibold"
-                  >
-                    {minRequiredSeats}
-                  </Text>{" "}
-                  seats in use/pending.{" "}
-                  <Link
-                    href="/admin/users"
-                    className="underline hover:no-underline"
-                  >
-                    Remove users
-                  </Link>{" "}
-                  first before adjusting seats.
-                </Text>
-              </Section>
->>>>>>> 8c318818c (feat(ee): fe - add BillingDetailsView component for billing)
             ) : seatDifference !== 0 ? (
               <Text secondaryBody text03>
                 {Math.abs(seatDifference)} seat
