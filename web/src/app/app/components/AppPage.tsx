@@ -35,11 +35,11 @@ import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import { useChatController } from "@/hooks/useChatController";
+import useChatController from "@/hooks/useChatController";
 import { useAssistantController } from "@/hooks/useAssistantController";
-import { useChatSessionController } from "@/hooks/useChatSessionController";
-import { useDeepResearchToggle } from "@/hooks/useDeepResearchToggle";
-import { useIsDefaultAgent } from "@/hooks/useIsDefaultAgent";
+import useChatSessionController from "@/hooks/useChatSessionController";
+import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import useIsDefaultAgent from "@/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
@@ -75,7 +75,6 @@ import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useAppFocus from "@/hooks/useAppFocus";
-import useQueryController from "@/hooks/useQueryController";
 
 export interface ChatPageProps {
   firstMessage?: string;

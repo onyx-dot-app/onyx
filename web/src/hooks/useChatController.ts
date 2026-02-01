@@ -115,7 +115,7 @@ interface UseChatControllerProps {
   setSelectedAssistantFromId: (assistantId: number | null) => void;
 }
 
-export function useChatController({
+export default function useChatController({
   filterManager,
   llmManager,
   availableAssistants,
