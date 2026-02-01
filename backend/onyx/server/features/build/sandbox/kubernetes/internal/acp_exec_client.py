@@ -171,6 +171,7 @@ class ACPExecClient:
                 stderr=True,
                 tty=False,
                 _preload_content=False,
+                _request_timeout=900,  # 15 minute timeout for long-running sessions
             )
 
             # Start reader thread
@@ -199,8 +200,6 @@ class ACPExecClient:
         """Background thread to read responses from the exec stream."""
         buffer = ""
         packet_logger = get_packet_logger()
-        last_ping = time.time()
-        ping_interval = 30  # Send keepalive every 30 seconds
 
         while not self._stop_reader.is_set():
             if self._ws_client is None:
@@ -208,16 +207,6 @@ class ACPExecClient:
 
             try:
                 if self._ws_client.is_open():
-                    # Send periodic keepalive ping to prevent idle timeout
-                    # (EKS NLB has ~350s idle timeout)
-                    if time.time() - last_ping > ping_interval:
-                        try:
-                            # Send empty line - ignored by opencode JSON parser
-                            self._ws_client.write_stdin("\n")
-                            last_ping = time.time()
-                        except Exception:
-                            pass  # Ignore ping failures
-
                     # Read available data
                     self._ws_client.update(timeout=0.1)
 
