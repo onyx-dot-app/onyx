@@ -124,6 +124,7 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.monitoring",
         "onyx.background.celery.tasks.user_file_processing",
         "onyx.background.celery.tasks.llm_model_update",
+        "onyx.background.celery.tasks.opensearch_migration",
         # Light worker tasks
         "onyx.background.celery.tasks.shared",
         "onyx.background.celery.tasks.vespa",
