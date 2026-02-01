@@ -914,8 +914,8 @@ class OpenSearchDocumentMigrationRecord(Base):
     status: Mapped[OpenSearchDocumentMigrationStatus] = mapped_column(
         Enum(OpenSearchDocumentMigrationStatus, native_enum=False),
         default=OpenSearchDocumentMigrationStatus.PENDING,
-        index=True,
         nullable=False,
+        index=True,
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempts_count: Mapped[int] = mapped_column(
