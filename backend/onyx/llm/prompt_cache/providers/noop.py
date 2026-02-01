@@ -1,5 +1,7 @@
 """No-op provider adapter for providers without caching support."""
 
+from collections.abc import Callable
+
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
@@ -11,6 +13,14 @@ class NoOpPromptCacheProvider(PromptCacheProvider):
 
     def supports_caching(self) -> bool:
         """No-op providers don't support caching."""
+        return False
+
+    def is_cacheable(
+        self,
+        input: LanguageModelInput,
+        token_counter: Callable[[str], int],
+    ) -> bool:
+        """No-op providers never cache."""
         return False
 
     def prepare_messages_for_caching(

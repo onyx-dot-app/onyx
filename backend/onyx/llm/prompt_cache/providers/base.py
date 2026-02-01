@@ -2,6 +2,7 @@
 
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Callable
 
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
@@ -16,6 +17,25 @@ class PromptCacheProvider(ABC):
 
         Returns:
             True if caching is supported, False otherwise
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def is_cacheable(
+        self,
+        input: LanguageModelInput,
+        token_counter: Callable[[str], int],
+    ) -> bool:
+        """Whether the specific input is cacheable for this provider.
+
+        Some providers have minimum token requirements (e.g. Vertex AI requires 1024 tokens).
+
+        Args:
+            input: The input messages or text
+            token_counter: Function to count tokens of a string
+
+        Returns:
+            True if input meets requirements for caching, False otherwise
         """
         raise NotImplementedError
 

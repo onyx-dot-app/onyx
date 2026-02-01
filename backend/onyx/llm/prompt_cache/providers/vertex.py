@@ -1,5 +1,6 @@
 """Vertex AI provider adapter for prompt caching."""
 
+from collections.abc import Callable
 from collections.abc import Sequence
 
 from onyx.llm.interfaces import LanguageModelInput
@@ -16,6 +17,20 @@ class VertexAIPromptCacheProvider(PromptCacheProvider):
     def supports_caching(self) -> bool:
         """Vertex AI supports prompt caching (implicit and explicit)."""
         return True
+
+    def is_cacheable(
+        self,
+        input: LanguageModelInput,
+        token_counter: Callable[[str], int],
+    ) -> bool:
+        """Vertex AI strictly requires at least 1024 tokens for caching."""
+        from onyx.llm.prompt_cache.utils import normalize_language_model_input
+
+        msgs = normalize_language_model_input(input)
+        # Note: This is an estimate based on textual content.
+        # Vertex AI exact count may differ slightly, but 1024 is the hard limit.
+        total_tokens = sum(token_counter(str(m.content)) for m in msgs)
+        return total_tokens >= 1024
 
     def prepare_messages_for_caching(
         self,
