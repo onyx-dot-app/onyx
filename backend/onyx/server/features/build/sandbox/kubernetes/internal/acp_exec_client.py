@@ -50,6 +50,12 @@ logger = setup_logger()
 # ACP Protocol version
 ACP_PROTOCOL_VERSION = 1
 
+# Connection health settings
+# If no data received for this long, assume connection is dead
+CONNECTION_IDLE_TIMEOUT_SECONDS = 120
+# How often to send keepalive pings to prevent connection drops
+KEEPALIVE_INTERVAL_SECONDS = 30
+
 # Default client info
 DEFAULT_CLIENT_INFO = {
     "name": "onyx-sandbox-k8s-exec",
@@ -127,6 +133,9 @@ class ACPExecClient:
         self._reader_thread: threading.Thread | None = None
         self._stop_reader = threading.Event()
         self._k8s_client: client.CoreV1Api | None = None
+        # Track last data received time for connection health monitoring
+        self._last_data_time: float = 0.0
+        self._last_data_time_lock = threading.Lock()
 
     def _get_k8s_client(self) -> client.CoreV1Api:
         """Get or create kubernetes client."""
@@ -195,13 +204,30 @@ class ACPExecClient:
             self.stop()
             raise RuntimeError(f"Failed to start ACP exec client: {e}") from e
 
+    def _update_last_data_time(self) -> None:
+        """Update the last data received timestamp (thread-safe)."""
+        with self._last_data_time_lock:
+            self._last_data_time = time.time()
+
+    def _get_last_data_time(self) -> float:
+        """Get the last data received timestamp (thread-safe)."""
+        with self._last_data_time_lock:
+            return self._last_data_time
+
     def _read_responses(self) -> None:
         """Background thread to read responses from the exec stream."""
         buffer = ""
+        stderr_buffer = ""
         packet_logger = get_packet_logger()
+
+        logger.info(f"[ACP] Reader thread started for pod {self._pod_name}")
+
+        # Initialize last data time
+        self._update_last_data_time()
 
         while not self._stop_reader.is_set():
             if self._ws_client is None:
+                logger.warning("[ACP] WS client is None, reader thread exiting")
                 break
 
             try:
@@ -209,9 +235,27 @@ class ACPExecClient:
                     # Read available data
                     self._ws_client.update(timeout=0.1)
 
+                    # Read stderr (channel 2) - CRITICAL: Monitor opencode errors
+                    stderr_data = self._ws_client.read_stderr(timeout=0.1)
+                    if stderr_data:
+                        stderr_buffer += stderr_data
+                        self._update_last_data_time()  # stderr counts as activity
+                        # Log stderr immediately
+                        logger.error(
+                            f"[ACP] OpenCode stderr from pod {self._pod_name}: {stderr_data}"
+                        )
+                        packet_logger.log_raw(
+                            "OPENCODE-STDERR-K8S",
+                            {
+                                "pod": self._pod_name,
+                                "stderr": stderr_data,
+                            },
+                        )
+
                     # Read stdout (channel 1)
                     data = self._ws_client.read_stdout(timeout=0.1)
                     if data:
+                        self._update_last_data_time()  # Got data, connection is alive
                         buffer += data
 
                         # Process complete lines
@@ -235,24 +279,91 @@ class ACPExecClient:
                                         },
                                     )
                                     logger.warning(
-                                        f"Invalid JSON from agent: {line[:100]}"
+                                        f"[ACP] Invalid JSON from agent: {line[:100]}"
                                     )
 
+                    # Check for idle timeout
+                    idle_time = time.time() - self._get_last_data_time()
+                    if idle_time > CONNECTION_IDLE_TIMEOUT_SECONDS:
+                        logger.error(
+                            f"[ACP] Connection idle timeout for pod {self._pod_name}! "
+                            f"No data for {idle_time:.1f}s (threshold: {CONNECTION_IDLE_TIMEOUT_SECONDS}s). "
+                            f"Last stderr: {stderr_buffer[-500:]}"
+                        )
+                        packet_logger.log_raw(
+                            "K8S-CONNECTION-IDLE-TIMEOUT",
+                            {
+                                "pod": self._pod_name,
+                                "namespace": self._namespace,
+                                "idle_seconds": idle_time,
+                                "threshold_seconds": CONNECTION_IDLE_TIMEOUT_SECONDS,
+                                "last_stderr": stderr_buffer[-500:],
+                            },
+                        )
+                        self._response_queue.put(
+                            {
+                                "jsonrpc": "2.0",
+                                "error": {
+                                    "code": -32004,
+                                    "message": f"Connection idle timeout: no data for {idle_time:.0f}s. Connection may be dead.",
+                                },
+                            }
+                        )
+                        break
+
                 else:
+                    logger.error(
+                        f"[ACP] WebSocket CLOSED unexpectedly for pod {self._pod_name}! "
+                        f"Last stderr: {stderr_buffer[-500:]}"
+                    )
                     packet_logger.log_raw(
                         "K8S-WEBSOCKET-CLOSED",
-                        {"pod": self._pod_name, "namespace": self._namespace},
+                        {
+                            "pod": self._pod_name,
+                            "namespace": self._namespace,
+                            "last_stderr": stderr_buffer[-500:],
+                        },
+                    )
+                    # Signal error to send_message by putting error in queue
+                    self._response_queue.put(
+                        {
+                            "jsonrpc": "2.0",
+                            "error": {
+                                "code": -32000,
+                                "message": f"WebSocket closed unexpectedly. Last stderr: {stderr_buffer[-200:]}",
+                            },
+                        }
                     )
                     break
 
             except Exception as e:
                 if not self._stop_reader.is_set():
+                    logger.error(
+                        f"[ACP] Reader thread exception for pod {self._pod_name}: {e}. "
+                        f"Last stderr: {stderr_buffer[-500:]}",
+                        exc_info=True,
+                    )
                     packet_logger.log_raw(
                         "K8S-READER-ERROR",
-                        {"error": str(e), "pod": self._pod_name},
+                        {
+                            "error": str(e),
+                            "pod": self._pod_name,
+                            "last_stderr": stderr_buffer[-500:],
+                        },
                     )
-                    logger.debug(f"Reader error: {e}")
+                    # Signal error to send_message
+                    self._response_queue.put(
+                        {
+                            "jsonrpc": "2.0",
+                            "error": {
+                                "code": -32001,
+                                "message": f"Reader error: {str(e)}. Last stderr: {stderr_buffer[-200:]}",
+                            },
+                        }
+                    )
                 break
+
+        logger.info(f"[ACP] Reader thread exited for pod {self._pod_name}")
 
     def stop(self) -> None:
         """Stop the exec session and clean up."""
@@ -429,24 +540,107 @@ class ACPExecClient:
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
         events_yielded = 0
+        last_event_time = start_time
+        last_keepalive_time = start_time
+
+        # Reset idle timeout timer since we just sent a request
+        self._update_last_data_time()
+
+        logger.info(f"[ACP] Sent prompt request {request_id} to pod {self._pod_name}")
 
         while True:
             remaining = timeout - (time.time() - start_time)
             if remaining <= 0:
+                logger.error(
+                    f"[ACP] TIMEOUT after {timeout}s for pod {self._pod_name}. "
+                    f"Events yielded: {events_yielded}, "
+                    f"Reader running: {self._reader_thread and self._reader_thread.is_alive()}, "
+                    f"WS open: {self._ws_client and self._ws_client.is_open()}"
+                )
                 packet_logger.log_raw(
                     "ACP-TIMEOUT-K8S",
                     {
                         "session_id": session_id,
                         "elapsed_ms": (time.time() - start_time) * 1000,
+                        "events_yielded": events_yielded,
+                        "reader_alive": self._reader_thread
+                        and self._reader_thread.is_alive(),
+                        "ws_open": self._ws_client and self._ws_client.is_open(),
                     },
                 )
                 yield Error(code=-1, message="Timeout waiting for response")
                 break
 
+            # Check if reader thread died
+            if self._reader_thread and not self._reader_thread.is_alive():
+                logger.error(
+                    f"[ACP] Reader thread DIED for pod {self._pod_name}! "
+                    f"Events yielded so far: {events_yielded}"
+                )
+                yield Error(code=-32002, message="Reader thread died unexpectedly")
+                break
+
+            # Send keepalive ping to prevent connection drops
+            # This helps keep the connection alive through NAT/load balancers
+            # that may drop idle connections
+            time_since_keepalive = time.time() - last_keepalive_time
+            if time_since_keepalive > KEEPALIVE_INTERVAL_SECONDS:
+                try:
+                    if self._ws_client and self._ws_client.is_open():
+                        # Trigger WebSocket update which handles ping/pong frames
+                        # This keeps the underlying connection alive
+                        self._ws_client.update(timeout=0.1)
+                        last_keepalive_time = time.time()
+                        logger.debug(
+                            f"[ACP] Sent keepalive for pod {self._pod_name} "
+                            f"(idle {time_since_keepalive:.1f}s)"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"[ACP] Keepalive failed for pod {self._pod_name}: {e}. "
+                        f"Connection may be dead."
+                    )
+                    packet_logger.log_raw(
+                        "K8S-KEEPALIVE-FAILED",
+                        {
+                            "pod": self._pod_name,
+                            "error": str(e),
+                            "events_yielded": events_yielded,
+                        },
+                    )
+                    yield Error(
+                        code=-32005,
+                        message=f"Keepalive failed: {e}. Connection may be dead.",
+                    )
+                    break
+
+            # Log if no events for 10 seconds
+            time_since_last_event = time.time() - last_event_time
+            if time_since_last_event > 10:
+                logger.warning(
+                    f"[ACP] No events for {time_since_last_event:.1f}s from pod {self._pod_name}. "
+                    f"Queue size: {self._response_queue.qsize()}, "
+                    f"Reader alive: {self._reader_thread and self._reader_thread.is_alive()}, "
+                    f"WS open: {self._ws_client and self._ws_client.is_open()}"
+                )
+                last_event_time = time.time()
+
             try:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
             except Empty:
                 continue
+
+            # Check for error messages from reader thread (no id field)
+            if "error" in message_data and "id" not in message_data:
+                error_data = message_data["error"]
+                logger.error(
+                    f"[ACP] Error from reader thread: {error_data.get('message')}"
+                )
+                yield Error(
+                    code=error_data.get("code", -1),
+                    message=error_data.get("message", "Unknown error from reader"),
+                )
+                break
 
             # Check for response to our prompt request
             if message_data.get("id") == request_id:

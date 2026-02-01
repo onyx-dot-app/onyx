@@ -7,6 +7,7 @@ It orchestrates session CRUD, message handling, artifact management, and file sy
 import io
 import json
 import mimetypes
+import time
 import zipfile
 from collections.abc import Generator
 from datetime import datetime
@@ -1234,7 +1235,13 @@ class SessionManager:
                 },
             )
 
+            logger.info(
+                f"[SESSION MANAGER] Starting to stream ACP events from sandbox {sandbox_id} "
+                f"to frontend for session {session_id}"
+            )
+
             # Stream ACP events directly to frontend
+            last_event_time = time.time()
             for acp_event in self._sandbox_manager.send_message(
                 sandbox_id, session_id, user_message_content
             ):
@@ -1244,6 +1251,16 @@ class SessionManager:
                     _save_pending_chunks(state)
 
                 events_emitted += 1
+
+                # Log every 10 events or if more than 5s since last event
+                now = time.time()
+                time_since_last = now - last_event_time
+                if events_emitted % 10 == 1 or time_since_last > 5:
+                    logger.info(
+                        f"[SESSION MANAGER] Event #{events_emitted} ({event_type}) "
+                        f"for session {session_id}. Time since last: {time_since_last:.1f}s"
+                    )
+                last_event_time = now
 
                 # Pass through ACP events with snake_case type names
                 if isinstance(acp_event, AgentMessageChunk):
@@ -1382,6 +1399,11 @@ class SessionManager:
                     yield _serialize_acp_event(acp_event, "prompt_response")
 
                 elif isinstance(acp_event, ACPError):
+                    # ACP Error from the agent (critical errors like crashes, timeouts)
+                    logger.error(
+                        f"[SESSION MANAGER] ACP Error received for session {session_id}: "
+                        f"code={acp_event.code}, message={acp_event.message}"
+                    )
                     event_data = acp_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
@@ -1389,6 +1411,15 @@ class SessionManager:
                     packet_logger.log("error", event_data)
                     packet_logger.log_sse_emit("error", session_id)
                     yield _serialize_acp_event(acp_event, "error")
+
+                    # If this is a critical error (reader died, websocket closed), break the loop
+                    # Error codes: -32000 = WS closed, -32001 = reader error, -32002 = reader died
+                    if acp_event.code in (-32000, -32001, -32002):
+                        logger.error(
+                            f"[SESSION MANAGER] Critical ACP error (code {acp_event.code}), "
+                            f"stopping event stream for session {session_id}"
+                        )
+                        break
 
                 else:
                     # Unrecognized packet type - log it but don't stream to frontend
@@ -1421,6 +1452,10 @@ class SessionManager:
             update_sandbox_heartbeat(self._db_session, sandbox_id)
 
         except ValueError as e:
+            logger.error(
+                f"[SESSION MANAGER] ValueError in stream for session {session_id}: {e}",
+                exc_info=True,
+            )
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
             packet_logger.log_raw(
@@ -1431,9 +1466,12 @@ class SessionManager:
                     "error": str(e),
                 },
             )
-            logger.exception("ValueError in build message streaming")
             yield _format_packet_event(error_packet)
         except RuntimeError as e:
+            logger.error(
+                f"[SESSION MANAGER] RuntimeError in stream for session {session_id}: {e}",
+                exc_info=True,
+            )
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
             packet_logger.log_raw(
@@ -1444,9 +1482,12 @@ class SessionManager:
                     "error": str(e),
                 },
             )
-            logger.exception(f"RuntimeError in build message streaming: {e}")
             yield _format_packet_event(error_packet)
         except Exception as e:
+            logger.error(
+                f"[SESSION MANAGER] Unexpected {type(e).__name__} in stream for session {session_id}: {e}",
+                exc_info=True,
+            )
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
             packet_logger.log_raw(
@@ -1457,7 +1498,6 @@ class SessionManager:
                     "error": str(e),
                 },
             )
-            logger.exception("Unexpected error in build message streaming")
             yield _format_packet_event(error_packet)
 
     def _get_event_type(self, acp_event: Any) -> str:
