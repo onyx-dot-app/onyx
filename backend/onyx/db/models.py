@@ -2702,7 +2702,7 @@ class ModelFlow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     model_flow_type: Mapped[ModelFlowType] = mapped_column(
-        Enum(ModelFlowType), nullable=False
+        Enum(ModelFlowType, native_enum=False), nullable=False
     )
     model_configuration_id: Mapped[int] = mapped_column(
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
