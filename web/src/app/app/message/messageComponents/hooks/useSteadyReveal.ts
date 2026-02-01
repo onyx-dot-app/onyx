@@ -28,15 +28,38 @@ export interface SteadyRevealResult {
 }
 
 const DEFAULTS: Required<SteadyRevealOptions> = {
-  baseCharsPerSecond: 90,
-  catchUpCharsPerSecond: 650,
-  backlogCatchUpThresholdChars: 600,
-  maxCharsPerFrame: 250,
+  baseCharsPerSecond: 45,
+  catchUpCharsPerSecond: 220,
+  backlogCatchUpThresholdChars: 1200,
+  maxCharsPerFrame: 80,
   minCharsPerFrame: 1,
 };
 
 // Maximum delta time (ms) per frame to prevent large jumps when tab was inactive.
 const MAX_FRAME_DT_MS = 250;
+
+// Commit throttling: advance "internally" every frame, but only commit to React state
+// periodically and in reasonably sized chunks. This reduces jitter from per-frame updates.
+const COMMIT_INTERVAL_MS = 80;
+const COMMIT_MIN_CHARS = 60;
+
+function snapToWordBoundary(
+  text: string,
+  fromExclusive: number,
+  toInclusive: number
+): number {
+  if (toInclusive <= fromExclusive) return toInclusive;
+  if (toInclusive >= text.length) return text.length;
+
+  // Prefer snapping to whitespace/newline boundaries so we don't split words.
+  for (let i = toInclusive - 1; i > fromExclusive; i--) {
+    const ch = text[i];
+    if (ch === " " || ch === "\n" || ch === "\t") {
+      return i + 1;
+    }
+  }
+  return toInclusive;
+}
 
 /**
  * Reveal a growing string at a steady, time-based pace.
@@ -81,11 +104,16 @@ export function useSteadyReveal(
   const [revealedLength, setRevealedLength] = useState(() =>
     enabled ? 0 : targetText.length
   );
-  // Keep a ref in sync so the RAF tick can compute nextLen synchronously.
+  // Keep a ref in sync so commit decisions can be made synchronously.
   const revealedLengthRef = useRef<number>(revealedLength);
   useEffect(() => {
     revealedLengthRef.current = revealedLength;
   }, [revealedLength]);
+
+  // Internal length advances every frame; React state commits happen in chunks.
+  const internalLengthRef = useRef<number>(revealedLength);
+  const fractionalCarryRef = useRef<number>(0);
+  const lastCommitTimeRef = useRef<number | null>(null);
 
   const rafIdRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number | null>(null);
@@ -103,7 +131,10 @@ export function useSteadyReveal(
 
     // If text shrinks, clamp revealed length.
     if (targetText.length < prev.length) {
-      const next = Math.min(revealedLengthRef.current, targetText.length);
+      const next = Math.min(internalLengthRef.current, targetText.length);
+      internalLengthRef.current = next;
+      fractionalCarryRef.current = 0;
+      lastCommitTimeRef.current = null;
       revealedLengthRef.current = next;
       setRevealedLength(next);
       return;
@@ -112,6 +143,9 @@ export function useSteadyReveal(
     // If the new text doesn't start with the old text, it's a new message—reset to 0.
     if (!targetText.startsWith(prev)) {
       const next = enabled ? 0 : targetText.length;
+      internalLengthRef.current = next;
+      fractionalCarryRef.current = 0;
+      lastCommitTimeRef.current = null;
       revealedLengthRef.current = next;
       setRevealedLength(next);
     }
@@ -121,6 +155,9 @@ export function useSteadyReveal(
   useEffect(() => {
     if (!enabled) {
       const next = targetText.length;
+      internalLengthRef.current = next;
+      fractionalCarryRef.current = 0;
+      lastCommitTimeRef.current = null;
       revealedLengthRef.current = next;
       setRevealedLength(next);
     }
@@ -145,7 +182,7 @@ export function useSteadyReveal(
       lastTimeRef.current = now;
 
       const targetLen = targetTextRef.current.length;
-      const prevLen = revealedLengthRef.current;
+      const prevLen = internalLengthRef.current;
 
       let nextLen = prevLen;
       if (prevLen < targetLen) {
@@ -157,18 +194,41 @@ export function useSteadyReveal(
 
         // Clamp dt to avoid giant jumps when tab was inactive.
         const clampedDtMs = Math.min(dtMs, MAX_FRAME_DT_MS);
-        const idealAdvance = (clampedDtMs / 1000) * cps;
-        const advance = Math.max(
-          cfg.minCharsPerFrame,
-          Math.min(cfg.maxCharsPerFrame, Math.floor(idealAdvance))
-        );
+        const idealAdvance =
+          (clampedDtMs / 1000) * cps + fractionalCarryRef.current;
+        const boundedAdvance = Math.min(cfg.maxCharsPerFrame, idealAdvance);
+        const advance = Math.max(cfg.minCharsPerFrame, Math.floor(boundedAdvance));
+        // Keep fractional remainder so timing feels smoother across frames.
+        fractionalCarryRef.current = Math.max(0, boundedAdvance - advance);
 
         nextLen = Math.min(targetLen, prevLen + advance);
       }
 
       if (nextLen !== prevLen) {
-        revealedLengthRef.current = nextLen;
-        setRevealedLength(nextLen);
+        internalLengthRef.current = nextLen;
+      }
+
+      const displayedLen = revealedLengthRef.current;
+      const timeSinceCommit =
+        lastCommitTimeRef.current == null
+          ? Infinity
+          : now - lastCommitTimeRef.current;
+
+      const shouldCommit =
+        nextLen >= targetLen ||
+        timeSinceCommit >= COMMIT_INTERVAL_MS ||
+        nextLen - displayedLen >= COMMIT_MIN_CHARS;
+
+      if (shouldCommit && nextLen !== displayedLen) {
+        // Snap commits to word boundaries for a more natural streaming feel.
+        const snapped = snapToWordBoundary(
+          targetTextRef.current,
+          displayedLen,
+          nextLen
+        );
+        revealedLengthRef.current = snapped;
+        lastCommitTimeRef.current = now;
+        setRevealedLength(snapped);
       }
 
       // If caught up, stop scheduling frames.
