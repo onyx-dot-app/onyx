@@ -196,11 +196,10 @@ export function useSteadyReveal(
 
       let nextLen = prevLen;
       if (prevLen < targetLen) {
-        const backlog = targetLen - prevLen;
-        const cps =
-          isDone || backlog >= cfg.backlogCatchUpThresholdChars
-            ? cfg.catchUpCharsPerSecond
-            : cfg.baseCharsPerSecond;
+        // Always reveal at a steady base pace.
+        // Intentionally no "catch up" mode: if content arrives in a large burst
+        // (e.g. after tool use), we still want consistent streaming speed.
+        const cps = cfg.baseCharsPerSecond;
 
         // Clamp dt to avoid giant jumps when tab was inactive.
         const clampedDtMs = Math.min(dtMs, MAX_FRAME_DT_MS);
