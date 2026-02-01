@@ -125,7 +125,9 @@ class ACPExecClient:
         self._ws_client: WSClient | None = None
         self._response_queue: Queue[dict[str, Any]] = Queue()
         self._reader_thread: threading.Thread | None = None
+        self._keepalive_thread: threading.Thread | None = None
         self._stop_reader = threading.Event()
+        self._write_lock = threading.Lock()  # Protects write_stdin calls
         self._k8s_client: client.CoreV1Api | None = None
 
     def _get_k8s_client(self) -> client.CoreV1Api:
@@ -180,6 +182,12 @@ class ACPExecClient:
                 target=self._read_responses, daemon=True
             )
             self._reader_thread.start()
+
+            # Start keepalive thread to prevent idle timeout
+            self._keepalive_thread = threading.Thread(
+                target=self._keepalive_loop, daemon=True
+            )
+            self._keepalive_thread.start()
 
             # Give process a moment to start
             time.sleep(0.5)
@@ -255,6 +263,30 @@ class ACPExecClient:
                     logger.debug(f"Reader error: {e}")
                 break
 
+    def _keepalive_loop(self) -> None:
+        """Send periodic keepalive to prevent idle timeout on the k8s websocket."""
+        packet_logger = get_packet_logger()
+        while not self._stop_reader.is_set():
+            # Wait 30 seconds between keepalives
+            if self._stop_reader.wait(timeout=30.0):
+                break  # Stop event was set
+
+            if self._ws_client is not None and self._ws_client.is_open():
+                try:
+                    # Send empty line as keepalive - opencode ignores empty lines
+                    with self._write_lock:
+                        self._ws_client.write_stdin("\n")
+                    packet_logger.log_raw(
+                        "K8S-KEEPALIVE-SENT",
+                        {"pod": self._pod_name, "namespace": self._namespace},
+                    )
+                except Exception as e:
+                    packet_logger.log_raw(
+                        "K8S-KEEPALIVE-ERROR",
+                        {"error": str(e), "pod": self._pod_name},
+                    )
+                    break
+
     def stop(self) -> None:
         """Stop the exec session and clean up."""
         self._stop_reader.set()
@@ -269,6 +301,10 @@ class ACPExecClient:
         if self._reader_thread is not None:
             self._reader_thread.join(timeout=2.0)
             self._reader_thread = None
+
+        if self._keepalive_thread is not None:
+            self._keepalive_thread.join(timeout=2.0)
+            self._keepalive_thread = None
 
         self._state = ACPClientState()
 
@@ -297,7 +333,8 @@ class ACPExecClient:
         packet_logger.log_jsonrpc_request(method, request_id, params, context="k8s")
 
         message = json.dumps(request) + "\n"
-        self._ws_client.write_stdin(message)
+        with self._write_lock:
+            self._ws_client.write_stdin(message)
 
         return request_id
 
@@ -320,7 +357,8 @@ class ACPExecClient:
         packet_logger.log_jsonrpc_request(method, None, params, context="k8s")
 
         message = json.dumps(notification) + "\n"
-        self._ws_client.write_stdin(message)
+        with self._write_lock:
+            self._ws_client.write_stdin(message)
 
     def _wait_for_response(
         self, request_id: int, timeout: float = 30.0
@@ -638,7 +676,8 @@ class ACPExecClient:
             "error": {"code": code, "message": message},
         }
 
-        self._ws_client.write_stdin(json.dumps(response) + "\n")
+        with self._write_lock:
+            self._ws_client.write_stdin(json.dumps(response) + "\n")
 
     def cancel(self) -> None:
         """Cancel the current operation."""
