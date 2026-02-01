@@ -49,6 +49,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 const LINE_HEIGHT = 24;
 const MIN_INPUT_HEIGHT = 44;
@@ -120,6 +121,7 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
+  isClassifying?: boolean;
   ref?: React.Ref<ChatInputBarHandle>;
 }
 
@@ -145,6 +147,7 @@ const ChatInputBar = React.memo(
     toggleDeepResearch,
     setPresentingDocument,
     disabled,
+    isClassifying,
     ref,
   }: ChatInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
@@ -690,7 +693,13 @@ const ChatInputBar = React.memo(
             {/* Submit button - always visible */}
             <IconButton
               id="onyx-chat-input-send-button"
-              icon={chatState === "input" ? SvgArrowUp : SvgStop}
+              icon={
+                isClassifying
+                  ? SimpleLoader
+                  : chatState === "input"
+                    ? SvgArrowUp
+                    : SvgStop
+              }
               disabled={
                 (chatState === "input" && !message) || hasUploadingFiles
               }

@@ -475,6 +475,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     classification,
     selectedSources,
     setSelectedSources,
+    isClassifying,
   } = useQueryController(onChat);
 
   const handleSearchDocumentClick = useCallback(
@@ -885,6 +886,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           onboardingState.currentStep !==
                             OnboardingStep.Complete)
                       }
+                      isClassifying={isClassifying}
                     />
 
                     {/* ProjectChatSessionsUI */}
