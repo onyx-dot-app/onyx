@@ -443,11 +443,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     redirect("/auth/login");
   }
 
-  const handleChatInputSubmit = useCallback(
+  // Unified query controller - handles classification and search routing
+  const onChat = useCallback(
     (message: string) => {
       onSubmit({
         message,
-        currentMessageFiles: currentMessageFiles,
+        currentMessageFiles,
         deepResearch: deepResearchEnabled,
       });
       if (showOnboarding) {
@@ -455,6 +456,38 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
     },
     [
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      showOnboarding,
+      finishOnboarding,
+    ]
+  );
+  const queryController = useQueryController(onChat);
+
+  const handleChatInputSubmit = useCallback(
+    async (message: string) => {
+      // If we're in an existing chat session, always use chat mode
+      // (appMode only applies to new sessions)
+      if (currentChatSessionId) {
+        queryController.reset();
+        onSubmit({
+          message,
+          currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+        });
+        if (showOnboarding) {
+          finishOnboarding();
+        }
+        return;
+      }
+
+      // For new sessions, let the query controller handle routing
+      await queryController.submit(message);
+    },
+    [
+      currentChatSessionId,
+      queryController,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
