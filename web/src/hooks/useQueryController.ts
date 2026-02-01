@@ -156,7 +156,6 @@ export default function useQueryController(
         );
 
         const result = response.is_search_flow ? "search" : "chat";
-        setClassification(result);
         return result;
       } catch (error) {
         // Re-throw abort errors so caller can handle
@@ -166,7 +165,6 @@ export default function useQueryController(
 
         console.error("Query classification failed:", error);
         // Default to chat flow on error (matches backend behavior)
-        setClassification("chat");
         return "chat";
       } finally {
         setIsClassifying(false);
@@ -193,8 +191,8 @@ export default function useQueryController(
 
       // Search mode: skip classification, go directly to search
       if (appMode === "search") {
-        setClassification("search");
         await performSearch(submitQuery, filters);
+        setClassification("search");
         return;
       }
 
@@ -204,7 +202,9 @@ export default function useQueryController(
 
         if (result === "search") {
           await performSearch(submitQuery, filters);
+          setClassification("search");
         } else {
+          setClassification("chat");
           // Clear any previous search results when going to chat
           setSearchResults([]);
           setLlmSelectedDocIds(null);
@@ -217,6 +217,7 @@ export default function useQueryController(
         }
 
         // On other errors, default to chat
+        setClassification("chat");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);

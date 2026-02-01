@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchDocWithContent } from "@/lib/search/searchApi";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import SearchCard from "@/sections/cards/SearchCard";
@@ -79,6 +79,12 @@ export default function SearchResults({
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all-time");
   const [ownerFilter, setOwnerFilter] = useState<string>("everyone");
   const [tagFilter, setTagFilter] = useState<string>("all-tags");
+
+  // Fade in on mount
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    requestAnimationFrame(() => setMounted(true));
+  }, []);
 
   // Create a set for fast lookup of LLM-selected docs
   const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
@@ -169,11 +175,15 @@ export default function SearchResults({
   ]);
 
   return (
-    <div className="flex flex-col h-full w-[var(--main-app-width)]">
+    <div
+      className={`flex flex-col h-full w-full max-w-[var(--main-app-width)] transition-opacity duration-300 ease-in-out ${
+        mounted ? "opacity-100" : "opacity-0"
+      }`}
+    >
       <Spacer rem={1.5} />
 
       {/* Filters - fixed at top */}
-      <div className="flex flex-col flex-shrink-0 gap-4">
+      {/*<div className="flex flex-col flex-shrink-0 gap-4">
         <div className="flex flex-row items-center justify-start">
           <InputSelect
             value={timeFilter}
@@ -223,7 +233,7 @@ export default function SearchResults({
         </div>
 
         <Separator noPadding />
-      </div>
+      </div>*/}
 
       {/* Results list */}
       <div className="flex-1 min-h-0 overflow-y-auto py-4">

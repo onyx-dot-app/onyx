@@ -30,8 +30,8 @@ import {
   useChatSessionStore,
   useDocumentSidebarVisible,
 } from "@/app/app/stores/useChatSessionStore";
-import MessageList from "@/components/chat/MessageList";
-import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
+import MessageList from "@/sections/chat/ChatUI";
+import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import * as AppLayouts from "@/layouts/app-layouts";

@@ -52,9 +52,7 @@ import {
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
-} from "@/components/chat/ChatScrollContainer";
-import MessageList from "@/components/chat/MessageList";
-import WelcomeMessage from "@/app/app/components/WelcomeMessage";
+} from "@/sections/chat/ChatScrollContainer";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import {
@@ -76,8 +74,10 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useAppFocus from "@/hooks/useAppFocus";
 import useQueryController from "@/hooks/useQueryController";
-import SearchResults from "@/sections/SearchUI";
-import SourceFilter from "@/sections/SourceFilter";
+import WelcomeMessage from "@/app/app/components/WelcomeMessage";
+import ChatUI from "@/sections/chat/ChatUI";
+import SearchUI from "@/sections/search/SearchUI";
+import SourceFilter from "@/sections/search/SourceFilter";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -629,6 +629,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const hasStarterMessages = (liveAssistant?.starter_messages?.length ?? 0) > 0;
 
+  const isSearch = classification === "search";
+  const gridStyle = {
+    gridTemplateColumns: "15rem 1fr 15rem",
+    gridTemplateRows: isSearch
+      ? "0fr auto 1fr"
+      : classification === "chat"
+        ? "1fr auto 0fr"
+        : "1fr auto 1fr",
+  };
+
   if (!isReady) return <OnyxInitializingLoader />;
 
   return (
@@ -748,18 +758,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </>
               )}
 
-              {/* Main content grid - sidebar column animates for search */}
+              {/* Main content grid — 3 columns × 3 rows, animated */}
               <div
-                className="flex-1 w-full grid min-h-0 transition-[grid-template-columns] duration-300 ease-in-out"
-                style={{
-                  gridTemplateColumns:
-                    classification === "search" ? "1fr 15rem" : "1fr 0rem",
-                }}
+                className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-300 ease-in-out"
+                style={gridStyle}
               >
-                {/* Column 1: Main content */}
-                <div className="flex flex-col items-center h-full min-w-0">
+                {/* ── Top-center: ChatUI / WelcomeMessage / ProjectUI ── */}
+                <div className="col-start-2 row-start-1 min-h-0 overflow-hidden flex flex-col items-center dbg-red">
                   {/* ProjectUI */}
-                  {classification !== "search" && appFocus.isProject() && (
+                  {appFocus.isProject() && (
                     <ProjectContextPanel
                       projectTokenCount={projectContextTokenCount}
                       availableContextTokens={availableContextTokens}
@@ -768,8 +775,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   )}
 
                   {/* ChatUI */}
-                  {classification !== "search" &&
-                    appFocus.isChat() &&
+                  {appFocus.isChat() &&
                     (currentChatSessionId && liveAssistant ? (
                       <ChatScrollContainer
                         ref={scrollContainerRef}
@@ -781,7 +787,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       >
                         {/* Spacer for the header height */}
                         <Spacer vertical rem={4} />
-                        <MessageList
+                        <ChatUI
                           liveAssistant={liveAssistant}
                           llmManager={llmManager}
                           deepResearchEnabled={deepResearchEnabled}
@@ -809,14 +815,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <Spacer rem={1.5} />
                       </div>
                     )}
+                </div>
 
-                  {/* Search mode header spacer */}
-                  {classification === "search" && <Spacer vertical rem={4} />}
+                {/* ── Middle-center: ChatInputBar ── */}
+                <div className="col-start-2 row-start-2 flex flex-col items-center dbg-red">
+                  {/* TODO: Replace this animated spacer with proper header offset handling */}
+                  <div
+                    className="transition-all duration-300 ease-in-out overflow-hidden"
+                    style={{ height: isSearch ? "4rem" : "0rem" }}
+                  />
 
-                  {/* ChatInputBar container */}
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
-                    {showScrollButton && classification !== "search" && (
+                    {showScrollButton && !isSearch && (
                       <div className="absolute top-[-3.5rem] self-center">
                         <IconButton
                           icon={SvgChevronDown}
@@ -828,7 +839,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
 
                     {/* OnboardingUI */}
-                    {classification !== "search" &&
+                    {!isSearch &&
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
                       (showOnboarding ||
                         (user?.role !== UserRole.ADMIN &&
@@ -877,24 +888,25 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     />
 
                     {/* ProjectChatSessionsUI */}
-                    {classification !== "search" && appFocus.isProject() && (
+                    {!isSearch && appFocus.isProject() && (
                       <>
                         <Spacer rem={0.5} />
                         <ProjectChatSessionList />
                       </>
                     )}
                   </div>
+                </div>
 
+                {/* ── Bottom-center: SearchResults / Suggestions ── */}
+                <div className="col-start-2 row-start-3 min-h-0 overflow-hidden flex flex-col items-center dbg-red">
                   {/* SearchResults - search mode only */}
-                  {classification === "search" && (
-                    <div className="flex-1 min-h-0 self-stretch flex flex-col items-center overflow-hidden">
-                      <SearchResults
-                        results={searchResults}
-                        llmSelectedDocIds={llmSelectedDocIds}
-                        onDocumentClick={handleSearchDocumentClick}
-                        selectedSources={selectedSources}
-                      />
-                    </div>
+                  {isSearch && (
+                    <SearchUI
+                      results={searchResults}
+                      llmSelectedDocIds={llmSelectedDocIds}
+                      onDocumentClick={handleSearchDocumentClick}
+                      selectedSources={selectedSources}
+                    />
                   )}
 
                   {/* SuggestionsUI */}
@@ -909,13 +921,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         )}
                       </div>
                     )}
-
-                  <AppLayouts.Footer />
                 </div>
 
-                {/* Column 2: SourceFilter (animated via grid-template-columns) */}
-                <div className="min-h-0 overflow-hidden pt-16">
-                  {classification === "search" && (
+                {/* ── Bottom-right: SourceFilter ── */}
+                <div className="col-start-3 row-start-3 min-h-0 overflow-hidden dbg-red">
+                  {isSearch && (
                     <SourceFilter
                       results={searchResults}
                       selectedSources={selectedSources}
@@ -924,6 +934,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   )}
                 </div>
               </div>
+
+              <AppLayouts.Footer />
             </div>
           )}
         </Dropzone>

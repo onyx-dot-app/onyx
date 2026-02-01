@@ -7,7 +7,6 @@ import HumanMessage from "@/app/app/message/HumanMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { cn } from "@/lib/utils";
 import AIMessage from "@/app/app/message/messageComponents/AIMessage";
 import Spacer from "@/refresh-components/Spacer";
 import {

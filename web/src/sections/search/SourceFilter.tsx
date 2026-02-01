@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchDocWithContent } from "@/lib/search/searchApi";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { getSourceMetadata } from "@/lib/sources";
@@ -56,6 +56,12 @@ export default function SourceFilter({
       .sort((a, b) => b.count - a.count);
   }, [results]);
 
+  // Fade in on mount
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    requestAnimationFrame(() => setMounted(true));
+  }, []);
+
   const handleToggle = (source: string) => {
     if (selectedSources.includes(source)) {
       onSourceChange(selectedSources.filter((s) => s !== source));
@@ -65,7 +71,11 @@ export default function SourceFilter({
   };
 
   return (
-    <div className="h-full w-[15rem] overflow-y-auto py-4 flex flex-col gap-4 px-4">
+    <div
+      className={`h-full w-[15rem] overflow-y-auto py-4 flex flex-col gap-4 px-4 transition-opacity duration-300 ease-in-out ${
+        mounted ? "opacity-100" : "opacity-0"
+      }`}
+    >
       <div className="py-4 h-[2.75rem] px-2">
         <Text text03 mainUiMuted>
           {results.length} Results

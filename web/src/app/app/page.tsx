@@ -1,4 +1,4 @@
-import AppPage from "@/app/app/components/AppPage";
+import AppPage from "@/refresh-pages/AppPage";
 
 export interface PageProps {
   searchParams: Promise<{ [key: string]: string }>;
