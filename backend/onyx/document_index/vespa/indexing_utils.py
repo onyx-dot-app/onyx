@@ -39,6 +39,7 @@ from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import EMBEDDINGS
+from onyx.document_index.vespa_constants import FULL_CHUNK_EMBEDDING_KEY
 from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
 from onyx.document_index.vespa_constants import METADATA
@@ -152,7 +153,7 @@ def _index_vespa_chunk(
 
     embeddings = chunk.embeddings
 
-    embeddings_name_vector_map = {"full_chunk": embeddings.full_embedding}
+    embeddings_name_vector_map = {FULL_CHUNK_EMBEDDING_KEY: embeddings.full_embedding}
 
     if embeddings.mini_chunk_embeddings:
         for ind, m_c_embed in enumerate(embeddings.mini_chunk_embeddings):

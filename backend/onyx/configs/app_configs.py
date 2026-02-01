@@ -218,6 +218,7 @@ TRACK_EXTERNAL_IDP_EXPIRY = (
 #####
 DOCUMENT_INDEX_NAME = "danswer_index"
 
+# OpenSearch Configs
 OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")

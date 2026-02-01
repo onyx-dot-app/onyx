@@ -180,7 +180,7 @@ def get_chunks_via_visit_api(
 
     if MULTI_TENANT:
         tenant_id_fieldset_entry = f"{TENANT_ID}"
-        if tenant_id_fieldset_entry not in field_set_list:
+        if field_set_list and tenant_id_fieldset_entry not in field_set_list:
             field_set_list.append(tenant_id_fieldset_entry)
 
     if field_set_list:
