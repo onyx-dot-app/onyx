@@ -20,7 +20,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
   return (
     <>
       <Text as="p" mainUiAction text03>
-        Stopped Thinking
+        Interrupted Thinking
       </Text>
       {collapsible && totalSteps > 0 && (
         <Button

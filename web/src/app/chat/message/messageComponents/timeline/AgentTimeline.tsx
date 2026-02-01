@@ -7,25 +7,23 @@ import { TurnGroup } from "./transformers";
 import { cn } from "@/lib/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
+import { useTimelineExpansion } from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineExpansion";
+import { useTimelineMetrics } from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineMetrics";
+import { useTimelineHeader } from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineHeader";
 import {
-  useTimelineExpansion,
-  useTimelineMetrics,
-  useTimelineHeader,
   useTimelineUIState,
   TimelineUIState,
-} from "@/app/chat/message/messageComponents/timeline/hooks";
+} from "@/app/chat/message/messageComponents/timeline/hooks/useTimelineUIState";
 import {
   isResearchAgentPackets,
   isSearchToolPackets,
-  stepSupportsCompact,
+  stepSupportsCollapsedStreaming,
 } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
-import {
-  StreamingHeader,
-  CollapsedHeader,
-  ExpandedHeader,
-  StoppedHeader,
-  ParallelStreamingHeader,
-} from "@/app/chat/message/messageComponents/timeline/headers";
+import { StreamingHeader } from "@/app/chat/message/messageComponents/timeline/headers/StreamingHeader";
+import { CollapsedHeader } from "@/app/chat/message/messageComponents/timeline/headers/CollapsedHeader";
+import { ExpandedHeader } from "@/app/chat/message/messageComponents/timeline/headers/ExpandedHeader";
+import { StoppedHeader } from "@/app/chat/message/messageComponents/timeline/headers/StoppedHeader";
+import { ParallelStreamingHeader } from "@/app/chat/message/messageComponents/timeline/headers/ParallelStreamingHeader";
 import { useStreamingStartTime } from "@/app/chat/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
@@ -150,7 +148,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
-    lastStepSupportsCompact,
+    lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
   // Check if last step is a search tool for INLINE render type
@@ -174,9 +172,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     );
   }, [lastTurnGroup, parallelActiveTab]);
 
-  const parallelActiveStepSupportsCompact = useMemo(() => {
+  const parallelActiveStepSupportsCollapsedStreaming = useMemo(() => {
     if (!parallelActiveStep) return false;
-    return stepSupportsCompact(parallelActiveStep.packets);
+    return stepSupportsCollapsedStreaming(parallelActiveStep.packets);
   }, [parallelActiveStep]);
 
   // Derive all UI state from inputs
@@ -198,9 +196,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     isExpanded,
     lastTurnGroup,
     lastStep,
-    lastStepSupportsCompact,
+    lastStepSupportsCollapsedStreaming,
     lastStepIsResearchAgent,
-    parallelActiveStepSupportsCompact,
+    parallelActiveStepSupportsCollapsedStreaming,
     isGeneratingImage,
     finalAnswerComing,
   });
@@ -239,6 +237,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             isExpanded={isExpanded}
             onToggle={handleToggle}
             streamingStartTime={streamingStartTime}
+            toolProcessingDuration={toolProcessingDuration}
           />
         );
 
@@ -258,6 +257,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             totalSteps={totalSteps}
             collapsible={collapsible}
             onToggle={handleToggle}
+            processingDurationSeconds={
+              toolProcessingDuration ?? processingDurationSeconds
+            }
+            generatedImageCount={generatedImageCount}
           />
         );
 
@@ -329,7 +332,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       headerContent={
         <div
           className={cn(
-            "flex w-full min-w-0 h-full items-center justify-between pl-2 pr-1",
+            "flex w-full min-w-0 h-full items-center justify-between pl-2 pr-1 transition-colors duration-300",
             showTintedBackground && "bg-background-tint-00 rounded-t-12",
             showRoundedBottom && "rounded-b-12"
           )}

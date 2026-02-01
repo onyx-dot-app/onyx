@@ -8,20 +8,30 @@ import { useState, useEffect, useRef } from "react";
  *
  * @param isStreaming - Whether streaming is currently active
  * @param startTime - Timestamp when streaming started (from Date.now())
+ * @param backendDuration - Duration from backend when available (freezes timer)
  * @returns Elapsed seconds since streaming started
  */
 export function useStreamingDuration(
   isStreaming: boolean,
-  startTime: number | undefined
+  startTime: number | undefined,
+  backendDuration?: number
 ): number {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const rafRef = useRef<number | null>(null);
   const lastElapsedRef = useRef<number>(0);
 
+  // Determine if we should run the live timer
+  // Stop the timer when backend duration is available
+  const shouldRunTimer = isStreaming && backendDuration === undefined;
+
   useEffect(() => {
-    if (!isStreaming || !startTime) {
-      setElapsedSeconds(0);
-      lastElapsedRef.current = 0;
+    if (!shouldRunTimer || !startTime) {
+      // Don't reset when stopping - preserve last calculated value
+      // Only reset when explicitly given no start time
+      if (!startTime) {
+        setElapsedSeconds(0);
+        lastElapsedRef.current = 0;
+      }
       return;
     }
 
@@ -47,7 +57,8 @@ export function useStreamingDuration(
         rafRef.current = null;
       }
     };
-  }, [isStreaming, startTime]);
+  }, [shouldRunTimer, startTime]);
 
-  return elapsedSeconds;
+  // Return backend duration if provided, otherwise return live elapsed time
+  return backendDuration !== undefined ? backendDuration : elapsedSeconds;
 }

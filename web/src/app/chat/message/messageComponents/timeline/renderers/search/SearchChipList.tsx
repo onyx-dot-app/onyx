@@ -16,6 +16,7 @@ export interface SearchChipListProps<T> {
   emptyState?: React.ReactNode;
   className?: string;
   showDetailsCard?: boolean;
+  isQuery?: boolean;
 }
 
 type DisplayEntry<T> =
@@ -32,6 +33,7 @@ export function SearchChipList<T>({
   emptyState,
   className = "",
   showDetailsCard,
+  isQuery,
 }: SearchChipListProps<T>): JSX.Element {
   const [displayList, setDisplayList] = useState<DisplayEntry<T>[]>([]);
   const [batchId, setBatchId] = useState(0);
@@ -123,6 +125,8 @@ export function SearchChipList<T>({
                 sources={[toSourceInfo(entry.item, entry.index)]}
                 onSourceClick={onClick ? () => onClick(entry.item) : undefined}
                 showDetailsCard={showDetailsCard}
+                isQuery={isQuery}
+                tooltipText={isQuery ? "View Full Search Term" : undefined}
               />
             ) : (
               <SourceTag
@@ -132,6 +136,8 @@ export function SearchChipList<T>({
                 )}
                 onSourceClick={() => handleShowMore()}
                 showDetailsCard={showDetailsCard}
+                isQuery={isQuery}
+                isMore={isQuery}
               />
             )}
           </div>

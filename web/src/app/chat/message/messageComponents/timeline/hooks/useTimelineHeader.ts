@@ -60,18 +60,18 @@ export function useTimelineHeader(
         currentStep.packets as SearchToolPacket[]
       );
       let headerText: string;
-      if (searchState.hasResults) {
-        headerText = "Reading results";
+      if (searchState.hasResults && !searchState.isInternetSearch) {
+        headerText = "Reading";
       } else {
         headerText = searchState.isInternetSearch
-          ? "Searching web"
+          ? "Searching the web"
           : "Searching internal documents";
       }
       return { headerText, hasPackets, userStopped };
     }
 
     if (packetType === PacketType.FETCH_TOOL_START) {
-      return { headerText: "Opening URLs", hasPackets, userStopped };
+      return { headerText: "Reading", hasPackets, userStopped };
     }
 
     if (packetType === PacketType.PYTHON_TOOL_START) {
