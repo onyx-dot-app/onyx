@@ -33,7 +33,7 @@ class FirecrawlClient(WebContentProvider):
         api_key: str,
         *,
         base_url: str = FIRECRAWL_SCRAPE_URL,
-        timeout_seconds: int = 30,
+        timeout_seconds: int = 60,
     ) -> None:
 
         self._headers = {
