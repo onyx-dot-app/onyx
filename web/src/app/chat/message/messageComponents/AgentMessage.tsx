@@ -6,6 +6,7 @@ import { handleCopy } from "@/app/chat/message/copyingUtils";
 import { useMessageSwitching } from "@/app/chat/message/messageComponents/hooks/useMessageSwitching";
 import { RendererComponent } from "@/app/chat/message/messageComponents/renderMessageComponent";
 import { usePacketProcessor } from "@/app/chat/message/messageComponents/timeline/hooks/usePacketProcessor";
+import { usePacedTurnGroups } from "@/app/chat/message/messageComponents/timeline/hooks/usePacedTurnGroups";
 import MessageToolbar from "@/app/chat/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/chat/interfaces";
@@ -96,11 +97,23 @@ const AgentMessage = React.memo(function AgentMessage({
     hasSteps,
     stopPacketSeen,
     stopReason,
-    uniqueToolNames,
     isGeneratingImage,
+    generatedImageCount,
     isComplete,
     onRenderComplete,
+    finalAnswerComing,
+    toolProcessingDuration,
   } = usePacketProcessor(rawPackets, nodeId);
+
+  // Apply pacing delays between different tool types for smoother visual transitions
+  const { pacedTurnGroups, pacedDisplayGroups, pacedFinalAnswerComing } =
+    usePacedTurnGroups(
+      toolTurnGroups,
+      displayGroups,
+      stopPacketSeen,
+      nodeId,
+      finalAnswerComing
+    );
 
   // Memoize merged citations separately to avoid creating new object when neither source changed
   const mergedCitations = useMemo(
@@ -151,14 +164,16 @@ const AgentMessage = React.memo(function AgentMessage({
       {/* Row 1: Two-column layout for tool steps */}
 
       <AgentTimeline
-        turnGroups={toolTurnGroups}
+        turnGroups={pacedTurnGroups}
         chatState={effectiveChatState}
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}
-        hasDisplayContent={displayGroups.length > 0}
-        uniqueToolNames={uniqueToolNames}
+        hasDisplayContent={pacedDisplayGroups.length > 0}
         processingDurationSeconds={processingDurationSeconds}
         isGeneratingImage={isGeneratingImage}
+        generatedImageCount={generatedImageCount}
+        finalAnswerComing={pacedFinalAnswerComing}
+        toolProcessingDuration={toolProcessingDuration}
       />
 
       {/* Row 2: Display content + MessageToolbar */}
@@ -171,9 +186,9 @@ const AgentMessage = React.memo(function AgentMessage({
           }
         }}
       >
-        {displayGroups.length > 0 && (
+        {pacedDisplayGroups.length > 0 && (
           <div ref={finalAnswerRef}>
-            {displayGroups.map((displayGroup, index) => (
+            {pacedDisplayGroups.map((displayGroup, index) => (
               <RendererComponent
                 key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
                 packets={displayGroup.packets}
@@ -181,7 +196,7 @@ const AgentMessage = React.memo(function AgentMessage({
                 onComplete={() => {
                   // Only mark complete on the last display group
                   // Hook handles the finalAnswerComing check internally
-                  if (index === displayGroups.length - 1) {
+                  if (index === pacedDisplayGroups.length - 1) {
                     onRenderComplete();
                   }
                 }}
@@ -189,18 +204,24 @@ const AgentMessage = React.memo(function AgentMessage({
                 stopPacketSeen={stopPacketSeen}
                 stopReason={stopReason}
               >
-                {({ content }) => <div>{content}</div>}
+                {(results) => (
+                  <>
+                    {results.map((r, i) => (
+                      <div key={i}>{r.content}</div>
+                    ))}
+                  </>
+                )}
               </RendererComponent>
             ))}
-            {/* Show stopped message when user cancelled and no display content */}
-            {displayGroups.length === 0 &&
-              stopReason === StopReason.USER_CANCELLED && (
-                <Text as="p" secondaryBody text04>
-                  User has stopped generation
-                </Text>
-              )}
           </div>
         )}
+        {/* Show stopped message when user cancelled and no display content */}
+        {pacedDisplayGroups.length === 0 &&
+          stopReason === StopReason.USER_CANCELLED && (
+            <Text as="p" secondaryBody text04>
+              User has stopped generation
+            </Text>
+          )}
       </div>
 
       {/* Feedback buttons - only show when streaming and rendering complete */}

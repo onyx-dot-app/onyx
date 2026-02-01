@@ -7,7 +7,7 @@ import {
   PacketType,
   SearchToolPacket,
 } from "@/app/chat/services/streamingModels";
-import { constructCurrentSearchState } from "./renderers/SearchToolRenderer";
+import { constructCurrentSearchState } from "./timeline/renderers/search/searchStateUtils";
 import {
   SvgGlobe,
   SvgSearchMenu,
@@ -138,33 +138,5 @@ export function getToolIcon(packets: Packet[]): JSX.Element {
       return <BrainIcon className="w-3.5 h-3.5" />;
     default:
       return <SvgCircle className="w-3.5 h-3.5" />;
-  }
-}
-
-/**
- * Get tool icon by tool name string.
- * Used when we have pre-computed tool names (e.g., from packet processor).
- */
-export function getToolIconByName(name: string): JSX.Element {
-  switch (name) {
-    case "Web Search":
-      return <SvgGlobe className="w-3.5 h-3.5" />;
-    case "Internal Search":
-      return <SvgSearchMenu className="w-3.5 h-3.5" />;
-    case "Code Interpreter":
-      return <SvgTerminal className="w-3.5 h-3.5" />;
-    case "Open URLs":
-      return <SvgLink className="w-3.5 h-3.5" />;
-    case "Image Generation":
-      return <SvgImage className="w-3.5 h-3.5" />;
-    case "Generate plan":
-      return <FiList className="w-3.5 h-3.5" />;
-    case "Research agent":
-      return <SvgUser className="w-3.5 h-3.5" />;
-    case "Thinking":
-      return <BrainIcon className="w-3.5 h-3.5" />;
-    default:
-      // Custom tools or unknown
-      return <FiTool className="w-3.5 h-3.5" />;
   }
 }
