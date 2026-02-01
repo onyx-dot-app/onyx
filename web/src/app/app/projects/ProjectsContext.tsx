@@ -1,6 +1,6 @@
 "use client";
 
-import React, {
+import {
   createContext,
   useCallback,
   useContext,
@@ -129,9 +129,7 @@ interface ProjectsProviderProps {
   children: ReactNode;
 }
 
-export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
-  children,
-}) => {
+export function ProjectsProvider({ children }: ProjectsProviderProps) {
   // Use SWR hook for projects list - no more SSR initial data
   const { projects, refreshProjects } = useProjects();
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
@@ -788,9 +786,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       {children}
     </ProjectsContext.Provider>
   );
-};
+}
 
-export const useProjectsContext = (): ProjectsContextType => {
+export function useProjectsContext(): ProjectsContextType {
   const ctx = useContext(ProjectsContext);
   if (!ctx) {
     throw new Error(
@@ -798,4 +796,4 @@ export const useProjectsContext = (): ProjectsContextType => {
     );
   }
   return ctx;
-};
+}
