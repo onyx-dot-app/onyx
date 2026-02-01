@@ -198,7 +198,11 @@ def _assert_chunk_matches_vespa_chunk(
     assert opensearch_chunk.title_vector == pytest.approx(vespa_chunk[TITLE_EMBEDDING])
     assert opensearch_chunk.source_type == vespa_chunk[SOURCE_TYPE]
     assert opensearch_chunk.metadata_list == vespa_chunk[METADATA_LIST]
-    assert int(opensearch_chunk.last_updated.timestamp()) == vespa_chunk[DOC_UPDATED_AT]
+    assert (
+        opensearch_chunk.last_updated is not None
+        and int(opensearch_chunk.last_updated.timestamp())
+        == vespa_chunk[DOC_UPDATED_AT]
+    )
     assert opensearch_chunk.public == vespa_chunk[ACCESS_CONTROL_LIST][PUBLIC_DOC_PAT]
     assert opensearch_chunk.access_control_list == [
         access_control

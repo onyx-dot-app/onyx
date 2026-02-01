@@ -48,6 +48,11 @@ env:
   # OpenSearch
   OPENSEARCH_ADMIN_PASSWORD: "StrongPassword123!"
 
+  # Vespa
+  # See deployment/docker_compose/docker-compose.dev.yml.
+  VESPA_HOST: "index"
+  VESPA_PORT: "8081"
+
 jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
