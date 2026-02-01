@@ -25,6 +25,7 @@
         "Celery heavy",
         "Celery docfetching",
         "Celery docprocessing",
+        "Celery user_file_processing",
         "Celery beat"
       ],
       "presentation": {
@@ -121,7 +122,6 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_ONYX_MODEL_INTERACTIONS": "True",
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
@@ -572,7 +572,6 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_ONYX_MODEL_INTERACTIONS": "True",
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."

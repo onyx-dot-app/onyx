@@ -43,6 +43,7 @@ from onyx.tools.tool_implementations.web_search.providers import (
 from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_page_scrape,
 )
+from onyx.tools.tool_implementations.web_search.utils import MAX_CHARS_PER_URL
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.configs import MULTI_TENANT
@@ -54,6 +55,16 @@ URLS_FIELD = "urls"
 
 # 2 minute timeout for parallel URL fetching to prevent indefinite hangs
 OPEN_URL_TIMEOUT_SECONDS = 2 * 60
+
+# Sometimes the LLM will ask for a lot of URLs, so we need to limit the total number of characters
+# otherwise this alone will completely flood the context and degrade experience.
+# Note that if a lot of the URLs contain very little content, this results in no truncation.
+MAX_CHARS_ACROSS_URLS = 10 * MAX_CHARS_PER_URL
+
+# Minimum content length to include a document (avoid tiny snippets)
+# This is for truncation purposes, if a document is small (unless it goes into truncation flow),
+# it still gets included normally.
+MIN_CONTENT_CHARS = 200
 
 
 class IndexedDocumentRequest(BaseModel):
@@ -235,10 +246,20 @@ def _resolve_urls_to_document_ids(
     return matches, unresolved
 
 
+def _estimate_result_chars(result: dict[str, Any]) -> int:
+    """Estimate character count from document fields in a result dict."""
+    total = 0
+    for key, value in result.items():
+        if value is not None:
+            total += len(str(value))
+    return total
+
+
 def _convert_sections_to_llm_string_with_citations(
     sections: list[InferenceSection],
     existing_citation_mapping: dict[str, int],
     citation_start: int,
+    max_document_chars: int = MAX_CHARS_ACROSS_URLS,
 ) -> tuple[str, dict[int, str]]:
     """Convert InferenceSections to LLM string, reusing existing citations where available.
 
@@ -247,6 +268,8 @@ def _convert_sections_to_llm_string_with_citations(
         existing_citation_mapping: Mapping of document_id -> citation_num for
             documents that have already been cited.
         citation_start: Starting citation number for new citations.
+        max_document_chars: Maximum total characters from document fields.
+            Content will be truncated to fit within this budget.
 
     Returns:
         Tuple of (JSON string for LLM, citation_mapping dict).
@@ -275,8 +298,10 @@ def _convert_sections_to_llm_string_with_citations(
             citation_mapping[next_citation_id] = document_id
             next_citation_id += 1
 
-    # Second pass: build results
+    # Second pass: build results, respecting max_document_chars budget
     results = []
+    total_chars = 0
+
     for section in sections:
         chunk = section.center_chunk
         document_id = chunk.document_id
@@ -287,6 +312,7 @@ def _convert_sections_to_llm_string_with_citations(
         if chunk.updated_at:
             updated_at_str = chunk.updated_at.isoformat()
 
+        # Build result dict without content first to calculate metadata overhead
         result: dict[str, Any] = {
             "document": citation_id,
             "title": chunk.semantic_identifier,
@@ -303,13 +329,32 @@ def _convert_sections_to_llm_string_with_citations(
             result["document_identifier"] = document_id
 
         if chunk.metadata:
-            result["metadata"] = json.dumps(chunk.metadata)
-        result["content"] = section.combined_content
+            result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
 
+        # Calculate chars used by metadata fields (everything except content)
+        metadata_chars = _estimate_result_chars(result)
+
+        # Calculate remaining budget for content
+        remaining_budget = max_document_chars - total_chars - metadata_chars
+        content = section.combined_content
+
+        # Check if we have enough budget for meaningful content
+        if remaining_budget < MIN_CONTENT_CHARS:
+            # Not enough room for meaningful content, stop adding documents
+            break
+
+        # Truncate content if it exceeds remaining budget
+        if len(content) > remaining_budget:
+            content = content[:remaining_budget]
+
+        result["content"] = content
+
+        result_chars = _estimate_result_chars(result)
         results.append(result)
+        total_chars += result_chars
 
     output = {"results": results}
-    return json.dumps(output, indent=2), citation_mapping
+    return json.dumps(output, indent=2, ensure_ascii=False), citation_mapping
 
 
 class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
@@ -446,20 +491,14 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
         )
 
-        logger.info(f"OpenURL tool called with {len(urls)} URLs")
-
         with get_session_with_current_tenant() as db_session:
             # Resolve URLs to document IDs for indexed retrieval
             # Handles both raw URLs and already-normalized document IDs
             url_requests, unresolved_urls = _resolve_urls_to_document_ids(
                 urls, db_session
             )
-            logger.info(
-                f"Resolved {len(url_requests)} URLs to indexed document IDs for parallel retrieval"
-            )
 
             all_requests = _dedupe_document_requests(url_requests)
-            logger.info(f"Total unique document requests: {len(all_requests)}")
 
             # Create mapping from URL to document_id for result merging
             url_to_doc_id: dict[str, str] = {}
@@ -552,6 +591,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 if failure_descriptions
                 else "Failed to fetch content from the requested resources."
             )
+            logger.warning(f"OpenURL tool failed: {failure_msg}")
             return ToolResponse(rich_response=None, llm_facing_response=failure_msg)
 
         for section in inference_sections:
@@ -571,6 +611,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             )
         )
 
+        # Note that with this call, some contents may be truncated or dropped so what the LLM sees may not be the entire set
+        # That said, it is still the best experience to show all the docs that were fetched, even if the LLM on rare
+        # occasions only actually sees a subset.
         docs_str, citation_mapping = _convert_sections_to_llm_string_with_citations(
             sections=inference_sections,
             existing_citation_mapping=override_kwargs.citation_mapping,
@@ -616,11 +659,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         if not fallback_urls:
             return failed_web_urls
 
-        logger.info(
-            "Attempting link-based lookup for %d URLs that lacked "
-            "document IDs and failed crawling",
-            len(fallback_urls),
-        )
         fallback_requests = _lookup_document_ids_by_link(fallback_urls, db_session)
 
         if not fallback_requests:
@@ -655,10 +693,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             return IndexedRetrievalResult(sections=[], missing_document_ids=[])
 
         document_ids = [req.document_id for req in all_requests]
-        logger.info(
-            f"Retrieving {len(all_requests)} indexed documents from Vespa. "
-            f"Document IDs: {document_ids}"
-        )
         chunk_requests = [
             VespaChunkRequest(document_id=request.document_id)
             for request in all_requests
@@ -669,9 +703,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 chunk_requests=chunk_requests,
                 filters=filters,
                 batch_retrieval=True,
-            )
-            logger.info(
-                f"Retrieved {len(chunks)} chunks from Vespa for {len(all_requests)} document requests"
             )
         except Exception as exc:
             logger.warning(
@@ -693,16 +724,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         for request in all_requests:
             doc_chunks = chunk_map.get(request.document_id)
             if not doc_chunks:
-                logger.warning(
-                    f"No chunks found in Vespa for document_id: {request.document_id} "
-                    f"(original_url: {request.original_url})"
-                )
                 missing.append(request.document_id)
                 continue
-            logger.info(
-                f"Found {len(doc_chunks)} chunks for document_id: {request.document_id} "
-                f"(original_url: {request.original_url})"
-            )
             doc_chunks.sort(key=lambda chunk: chunk.chunk_id)
             section = inference_section_from_chunks(
                 center_chunk=doc_chunks[0],
@@ -711,15 +734,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             if section:
                 sections.append(section)
             else:
-                logger.warning(
-                    f"Failed to create InferenceSection from chunks for document_id: {request.document_id}"
-                )
                 missing.append(request.document_id)
 
-        logger.info(
-            f"Retrieved {len(sections)} documents successfully, {len(missing)} missing. "
-            f"Missing document IDs: {missing}"
-        )
         return IndexedRetrievalResult(sections=sections, missing_document_ids=missing)
 
     def _build_index_filters(self, db_session: Session) -> IndexFilters:
@@ -778,24 +794,16 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 merged_sections.append(indexed_section)
                 if doc_id:
                     used_doc_ids.add(doc_id)
-                logger.debug(f"Using indexed content for URL: {url} (doc_id: {doc_id})")
             elif crawled_section and crawled_section.combined_content:
                 # Fallback to crawled if indexed unavailable or empty
                 # (e.g., auth issues, document not indexed, etc.)
                 merged_sections.append(crawled_section)
-                logger.debug(f"Using crawled content for URL: {url}")
 
         # Add any indexed sections that weren't matched to URLs
         for doc_id, section in indexed_by_doc_id.items():
             # Skip if this doc_id was already used for a URL
             if doc_id not in used_doc_ids:
                 merged_sections.append(section)
-
-        logger.info(
-            f"Merged results: {len(merged_sections)} total sections "
-            f"({len([s for s in merged_sections if s.center_chunk.document_id in indexed_by_doc_id])} indexed, "
-            f"{len([s for s in merged_sections if s.center_chunk.document_id not in indexed_by_doc_id])} crawled)"
-        )
 
         return merged_sections
 

@@ -7,7 +7,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Settings } from "./interfaces";
 import { useRouter } from "next/navigation";
 import React, { useContext, useState, useEffect } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import Modal from "@/refresh-components/Modal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";

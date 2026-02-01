@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireAuth } from "@/lib/auth/requireAuth";
-import { ProjectsProvider } from "./projects/ProjectsContext";
+import { ProjectsProvider } from "@/providers/ProjectsContext";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
 
 export interface LayoutProps {

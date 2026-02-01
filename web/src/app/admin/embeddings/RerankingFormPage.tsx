@@ -23,7 +23,7 @@ import {
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { TextFormField } from "@/components/Field";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import { SvgAlertTriangle, SvgKey } from "@opal/icons";
 
 interface RerankingDetailsFormProps {

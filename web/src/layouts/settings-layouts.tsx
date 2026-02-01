@@ -213,7 +213,7 @@ function SettingsHeader({
     <div
       ref={headerRef}
       className={cn(
-        "sticky top-0 z-10 w-full bg-background-tint-01",
+        "sticky top-0 z-settings-header w-full bg-background-tint-01",
         backButton ? "pt-4" : "pt-10"
       )}
     >

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useRef, useCallback } from "react";
 
 interface UseDeepResearchToggleProps {
@@ -18,7 +20,7 @@ interface UseDeepResearchToggleProps {
  * @param assistantId - The current assistant ID
  * @returns An object containing the toggle state and toggle function
  */
-export function useDeepResearchToggle({
+export default function useDeepResearchToggle({
   chatSessionId,
   assistantId,
 }: UseDeepResearchToggleProps) {

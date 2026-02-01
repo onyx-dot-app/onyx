@@ -17,6 +17,7 @@ from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import MessageType
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
@@ -218,7 +219,7 @@ def run_deep_research_llm_loop(
             if include_internal_search_tunings
             else ""
         )
-        if not skip_clarification:
+        if not SKIP_DEEP_RESEARCH_CLARIFICATION and not skip_clarification:
             with function_span("clarification_step") as span:
                 clarification_prompt = CLARIFICATION_PROMPT.format(
                     current_datetime=get_current_llm_day_time(full_sentence=False),
