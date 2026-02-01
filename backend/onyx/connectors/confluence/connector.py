@@ -1,4 +1,5 @@
 import copy
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -50,6 +51,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -63,6 +65,7 @@ _PAGE_EXPANSION_FIELDS = [
     "space",
     "metadata.labels",
     "history.lastUpdated",
+    "ancestors",  # For hierarchy node tracking
 ]
 _ATTACHMENT_EXPANSION_FIELDS = [
     "version",
@@ -134,6 +137,9 @@ class ConfluenceConnector(
         self._fetched_titles: set[str] = set()
         self.allow_images = False
 
+        # Track hierarchy nodes we've already yielded to avoid duplicates
+        self.seen_hierarchy_node_raw_ids: set[str] = set()
+
         # Remove trailing slash from wiki_base if present
         self.wiki_base = wiki_base.rstrip("/")
         """
@@ -183,6 +189,163 @@ class ConfluenceConnector(
     def set_allow_images(self, value: bool) -> None:
         logger.info(f"Setting allow_images to {value}.")
         self.allow_images = value
+
+    def _yield_space_hierarchy_nodes(
+        self,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield hierarchy nodes for all spaces we're indexing."""
+        space_keys = [self.space] if self.space else None
+
+        for space in self.confluence_client.retrieve_confluence_spaces(
+            space_keys=space_keys,
+            limit=50,
+        ):
+            space_key = space.get("key")
+            if not space_key or space_key in self.seen_hierarchy_node_raw_ids:
+                continue
+
+            self.seen_hierarchy_node_raw_ids.add(space_key)
+
+            # Build space link
+            space_link = f"{self.wiki_base}/spaces/{space_key}"
+
+            yield HierarchyNode(
+                raw_node_id=space_key,
+                raw_parent_id=None,  # Parent is SOURCE
+                display_name=space.get("name", space_key),
+                link=space_link,
+                node_type=HierarchyNodeType.SPACE,
+            )
+
+    def _yield_ancestor_hierarchy_nodes(
+        self,
+        page: dict[str, Any],
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield hierarchy nodes for all unseen ancestors of this page.
+
+        Any page that appears as an ancestor of another page IS a hierarchy node
+        (it has at least one child - the page we're currently processing).
+
+        This ensures parent nodes are always yielded before child documents.
+
+        Note: raw_node_id for page hierarchy nodes uses the page URL (same as document.id)
+        to enable document<->hierarchy node linking in the indexing pipeline.
+        Space hierarchy nodes use the space key since they don't have documents.
+        """
+        ancestors = page.get("ancestors", [])
+        space_key = page.get("space", {}).get("key")
+
+        # Ensure space is yielded first (if not already)
+        if space_key and space_key not in self.seen_hierarchy_node_raw_ids:
+            self.seen_hierarchy_node_raw_ids.add(space_key)
+            space = page.get("space", {})
+            yield HierarchyNode(
+                raw_node_id=space_key,
+                raw_parent_id=None,  # Parent is SOURCE
+                display_name=space.get("name", space_key),
+                link=f"{self.wiki_base}/spaces/{space_key}",
+                node_type=HierarchyNodeType.SPACE,
+            )
+
+        # Walk through ancestors (root to immediate parent)
+        # Build a list of (ancestor_url, ancestor_data) pairs first
+        ancestor_urls: list[str | None] = []
+        for ancestor in ancestors:
+            if "_links" in ancestor and "webui" in ancestor["_links"]:
+                ancestor_urls.append(
+                    build_confluence_document_id(
+                        self.wiki_base, ancestor["_links"]["webui"], self.is_cloud
+                    )
+                )
+            else:
+                ancestor_urls.append(None)
+
+        for i, ancestor in enumerate(ancestors):
+            ancestor_url = ancestor_urls[i]
+            if not ancestor_url:
+                # Can't build URL for this ancestor, skip it
+                continue
+
+            if ancestor_url in self.seen_hierarchy_node_raw_ids:
+                continue
+
+            self.seen_hierarchy_node_raw_ids.add(ancestor_url)
+
+            # Determine parent of this ancestor
+            if i == 0:
+                # First ancestor - parent is the space
+                parent_raw_id = space_key
+            else:
+                # Parent is the previous ancestor (use URL)
+                parent_raw_id = ancestor_urls[i - 1]
+
+            yield HierarchyNode(
+                raw_node_id=ancestor_url,  # Use URL to match document.id
+                raw_parent_id=parent_raw_id,
+                display_name=ancestor.get("title", f"Page {ancestor.get('id')}"),
+                link=ancestor_url,
+                node_type=HierarchyNodeType.PAGE,
+            )
+
+    def _get_parent_hierarchy_raw_id(self, page: dict[str, Any]) -> str | None:
+        """Get the raw hierarchy node ID of this page's parent.
+
+        Returns:
+            - Parent page URL if page has a parent page (last item in ancestors)
+            - Space key if page is at top level of space
+            - None if we can't determine
+
+        Note: For pages, we return URLs (to match document.id and hierarchy node raw_node_id).
+        For spaces, we return the space key (spaces don't have documents).
+        """
+        ancestors = page.get("ancestors", [])
+        if ancestors:
+            # Last ancestor is the immediate parent page - use URL
+            parent = ancestors[-1]
+            if "_links" in parent and "webui" in parent["_links"]:
+                return build_confluence_document_id(
+                    self.wiki_base, parent["_links"]["webui"], self.is_cloud
+                )
+            # Fallback to page ID if URL not available (shouldn't happen normally)
+            return str(parent.get("id"))
+
+        # Top-level page - parent is the space (use space key)
+        return page.get("space", {}).get("key")
+
+    def _maybe_yield_page_hierarchy_node(
+        self, page: dict[str, Any]
+    ) -> HierarchyNode | None:
+        """Yield a hierarchy node for this page if not already yielded.
+
+        Used when a page has attachments - attachments are children of the page
+        in the hierarchy, so the page must be a hierarchy node.
+
+        Note: raw_node_id uses the page URL (same as document.id) to enable
+        document<->hierarchy node linking in the indexing pipeline.
+        """
+        # Build page URL - we use this as raw_node_id to match document.id
+        if "_links" not in page or "webui" not in page["_links"]:
+            return None  # Can't build URL, skip
+
+        page_url = build_confluence_document_id(
+            self.wiki_base, page["_links"]["webui"], self.is_cloud
+        )
+
+        if page_url in self.seen_hierarchy_node_raw_ids:
+            return None
+
+        self.seen_hierarchy_node_raw_ids.add(page_url)
+
+        # Get parent hierarchy ID
+        parent_raw_id = self._get_parent_hierarchy_raw_id(page)
+
+        return HierarchyNode(
+            raw_node_id=page_url,  # Use URL to match document.id
+            raw_parent_id=parent_raw_id,
+            display_name=page.get("title", f"Page {_get_page_id(page)}"),
+            link=page_url,
+            node_type=HierarchyNodeType.PAGE,
+        )
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -355,6 +518,9 @@ class ConfluenceConnector(
                     BasicExpertInfo(display_name=display_name, email=email)
                 )
 
+            # Determine parent hierarchy node
+            parent_hierarchy_raw_node_id = self._get_parent_hierarchy_raw_id(page)
+
             # Create the document
             return Document(
                 id=page_url,
@@ -364,6 +530,7 @@ class ConfluenceConnector(
                 metadata=metadata,
                 doc_updated_at=datetime_from_string(page["version"]["when"]),
                 primary_owners=primary_owners if primary_owners else None,
+                parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
         except Exception as e:
             logger.error(f"Error converting page {page.get('id', 'unknown')}: {e}")
@@ -388,6 +555,9 @@ class ConfluenceConnector(
         Inline attachments are added directly to the document as text or image sections by
         this function. The returned documents/connectorfailures are for non-inline attachments
         and those at the end of the page.
+
+        If there are valid attachments, the page itself is yielded as a hierarchy node
+        (since attachments are children of the page in the hierarchy).
         """
         attachment_query = self._construct_attachment_query(
             _get_page_id(page), start, end
@@ -395,6 +565,7 @@ class ConfluenceConnector(
         attachment_failures: list[ConnectorFailure] = []
         attachment_docs: list[Document | HierarchyNode] = []
         page_url = ""
+        page_hierarchy_node_yielded = False
 
         try:
             for attachment in self.confluence_client.paginated_cql_retrieval(
@@ -488,6 +659,10 @@ class ConfluenceConnector(
                             BasicExpertInfo(display_name=display_name, email=email)
                         ]
 
+                    # Attachments have their parent page as the hierarchy parent
+                    # Use page URL to match the hierarchy node's raw_node_id
+                    attachment_parent_hierarchy_raw_id = page_url
+
                     attachment_doc = Document(
                         id=attachment_id,
                         sections=sections,
@@ -501,7 +676,19 @@ class ConfluenceConnector(
                             else None
                         ),
                         primary_owners=primary_owners,
+                        parent_hierarchy_raw_node_id=attachment_parent_hierarchy_raw_id,
                     )
+
+                    # If this is the first valid attachment, yield the page as a
+                    # hierarchy node (attachments are children of the page)
+                    if not page_hierarchy_node_yielded:
+                        page_hierarchy_node = self._maybe_yield_page_hierarchy_node(
+                            page
+                        )
+                        if page_hierarchy_node:
+                            attachment_docs.append(page_hierarchy_node)
+                        page_hierarchy_node_yielded = True
+
                     attachment_docs.append(attachment_doc)
                 except Exception as e:
                     logger.error(
@@ -569,13 +756,18 @@ class ConfluenceConnector(
         end: SecondsSinceUnixEpoch | None = None,
     ) -> CheckpointOutput[ConfluenceCheckpoint]:
         """
-        Yields batches of Documents. For each page:
+        Yields batches of Documents and HierarchyNodes. For each page:
+         - Yield hierarchy nodes for spaces and ancestor pages (parent-before-child ordering)
          - Create a Document with 1 Section for the page text/comments
          - Then fetch attachments. For each attachment:
              - Attempt to convert it with convert_attachment_to_content(...)
              - If successful, create a new Section with the extracted text or summary.
         """
         checkpoint = copy.deepcopy(checkpoint)
+
+        # Yield space hierarchy nodes FIRST (only once per connector run)
+        if not checkpoint.next_page_url:
+            yield from self._yield_space_hierarchy_nodes()
 
         # use "start" when last_updated is 0 or for confluence server
         start_ts = start
@@ -593,6 +785,9 @@ class ConfluenceConnector(
             limit=self.batch_size,
             next_page_callback=store_next_page_url,
         ):
+            # Yield hierarchy nodes for all ancestors (parent-before-child ordering)
+            yield from self._yield_ancestor_hierarchy_nodes(page)
+
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
 
