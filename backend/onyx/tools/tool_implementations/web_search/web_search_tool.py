@@ -42,6 +42,18 @@ logger = setup_logger()
 QUERIES_FIELD = "queries"
 
 
+def _sanitize_query(query: str) -> str:
+    """Remove control characters and normalize whitespace in a query.
+
+    LLMs sometimes produce queries with null characters or other control
+    characters that need to be stripped before sending to search providers.
+    """
+    # Remove control characters (ASCII 0-31 and 127 DEL)
+    sanitized = "".join(c for c in query if ord(c) >= 32 and ord(c) != 127)
+    # Collapse multiple whitespace characters into single space and strip
+    return " ".join(sanitized.split())
+
+
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
     NAME = "web_search"
     DESCRIPTION = "Search the web for information."
@@ -163,9 +175,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Normalize queries:
-        # - strip leading/trailing whitespace
-        # - drop empty/whitespace-only queries (e.g. "\n", "\r\n", "   ")
-        queries = [q.strip() for q in raw_queries if q.strip()]
+        # - remove control characters (null bytes, etc.) that LLMs sometimes produce
+        # - collapse whitespace and strip
+        # - drop empty/whitespace-only queries
+        queries = [sanitized for q in raw_queries if (sanitized := _sanitize_query(q))]
         if not queries:
             raise ToolCallException(
                 message=(
