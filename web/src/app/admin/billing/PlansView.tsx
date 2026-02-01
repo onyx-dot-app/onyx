@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  SvgArrowUpCircle,
   SvgBarChart,
   SvgFileText,
   SvgGlobe,
@@ -13,6 +14,7 @@ import {
   SvgServer,
   SvgUsers,
 } from "@opal/icons";
+import "./billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
@@ -37,6 +39,7 @@ interface PlanConfig {
   description: string;
   buttonLabel: string;
   buttonVariant: "primary" | "secondary";
+  buttonIcon?: React.FunctionComponent<IconProps>;
   onClick?: () => void;
   href?: string;
   features: PlanFeature[];
@@ -75,6 +78,7 @@ function PlanCard({
   pricing,
   description,
   buttonLabel,
+  buttonIcon: ButtonIcon,
   onClick,
   href,
   features,
@@ -146,7 +150,7 @@ function PlanCard({
               {buttonLabel}
             </Button>
           ) : (
-            <Button main primary onClick={onClick}>
+            <Button main primary onClick={onClick} leftIcon={ButtonIcon}>
               {buttonLabel}
             </Button>
           )}
@@ -226,8 +230,9 @@ export default function PlansView({
       pricing: "$20",
       description:
         "per seat/month billed annually\nor $25 per seat if billed monthly",
-      buttonLabel: "Get Business Plan",
+      buttonLabel: isBusinessPlan ? "Get Business Plan" : "Upgrade Plan",
       buttonVariant: "primary",
+      buttonIcon: isBusinessPlan ? undefined : SvgArrowUpCircle,
       onClick: onCheckout,
       features: BUSINESS_FEATURES,
       featuresPrefix: "Get more work done with AI for your team.",

@@ -98,13 +98,6 @@ export const claimLicense = (sessionId?: string) =>
   );
 
 /**
- * Fetch license from control plane (self-hosted only).
- * Used to retrieve/refresh license data.
- */
-export const fetchLicense = () =>
-  selfHostedPost<{ success: boolean; message?: string }>("/fetch");
-
-/**
  * Refresh the cached license data (self-hosted only).
  * Forces a re-read of the license and updates the cache.
  */

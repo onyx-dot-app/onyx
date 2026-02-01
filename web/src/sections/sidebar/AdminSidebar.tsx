@@ -28,6 +28,7 @@ import SidebarBody from "@/sections/sidebar/SidebarBody";
 import {
   SvgActions,
   SvgActivity,
+  SvgArrowUpCircle,
   SvgBarChart,
   SvgCpu,
   SvgFileText,
@@ -302,7 +303,7 @@ const collections = (
             // TODO: PR 6 will change this to /admin/billing to enable new UI
             {
               name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
-              icon: MdOutlineCreditCard,
+              icon: hasSubscription ? MdOutlineCreditCard : SvgArrowUpCircle,
               link: "/ee/admin/billing",
             },
           ],
