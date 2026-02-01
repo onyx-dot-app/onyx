@@ -323,7 +323,7 @@ def migrate_documents_from_vespa_to_opensearch_task(
                     # completed and let's let a subsequent run take care of it.
                     if chunks_migrated != record.document.chunk_count:
                         raise RuntimeError(
-                            f"Number of chunks migrated ({chunks_migrated}) does not match number of chunks in Vespa "
+                            f"Number of chunks migrated ({chunks_migrated}) does not match number of expected chunks in Vespa "
                             f"({record.document.chunk_count}) for document {record.document_id}."
                         )
 
