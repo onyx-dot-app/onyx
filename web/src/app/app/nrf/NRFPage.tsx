@@ -19,11 +19,11 @@ import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
-import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useChatController } from "@/app/app/hooks/useChatController";
-import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
-import { useAssistantController } from "@/app/app/hooks/useAssistantController";
+import { useProjectsContext } from "@/providers/ProjectsContext";
+import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import useChatController from "@/hooks/useChatController";
+import useChatSessionController from "@/hooks/useChatSessionController";
+import useAgentController from "@/hooks/useAgentController";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -107,7 +107,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
-    useAssistantController({
+    useAgentController({
       selectedChatSession: undefined,
       onAssistantSelect: () => {},
     });

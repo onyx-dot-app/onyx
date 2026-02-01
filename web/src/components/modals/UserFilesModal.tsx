@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { ProjectFile } from "@/app/app/projects/ProjectsContext";
+import { ProjectFile } from "@/providers/ProjectsContext";
 import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";

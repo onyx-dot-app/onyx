@@ -38,7 +38,7 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import UserFilesModal from "@/components/modals/UserFilesModal";
