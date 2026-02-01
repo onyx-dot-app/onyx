@@ -37,7 +37,7 @@ import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionL
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 
 const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =

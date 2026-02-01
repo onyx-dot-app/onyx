@@ -56,7 +56,7 @@ import ChatScrollContainer, {
 import MessageList from "@/components/chat/MessageList";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import {
   getProjectTokenCount,
   getMaxSelectedDocumentTokens,

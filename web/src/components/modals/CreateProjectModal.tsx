@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useKeyPress } from "@/hooks/useKeyPress";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { useAppRouter } from "@/hooks/appNavigation";

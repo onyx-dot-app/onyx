@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useState, memo } from "react";
-import {
-  Project,
-  useProjectsContext,
-} from "@/app/app/projects/ProjectsContext";
+import { Project, useProjectsContext } from "@/providers/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
