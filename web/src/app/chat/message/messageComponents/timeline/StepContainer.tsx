@@ -35,6 +35,8 @@ export interface StepContainerProps {
   isHover?: boolean;
   /** Custom icon to show when collapsed (defaults to SvgExpand) */
   collapsedIcon?: FunctionComponent<IconProps>;
+  /** Remove right padding (for reasoning content) */
+  noPaddingRight?: boolean;
 }
 
 /** Visual wrapper for timeline steps - icon, connector line, header, and content */
@@ -53,6 +55,7 @@ export function StepContainer({
   hideHeader = false,
   isHover = false,
   collapsedIcon: CollapsedIconComponent,
+  noPaddingRight = false,
 }: StepContainerProps) {
   const showCollapseControls = collapsible && supportsCollapsible && onToggle;
 
@@ -60,8 +63,9 @@ export function StepContainer({
     <div className={cn("flex w-full", className)}>
       <div
         className={cn(
-          "flex flex-col items-center w-9 pt-1",
-          isFirstStep && "pt-2"
+          "flex flex-col items-center w-9",
+          isFirstStep && "pt-0.5",
+          !isFirstStep && "pt-1.5"
         )}
       >
         {/* Icon */}
@@ -96,7 +100,7 @@ export function StepContainer({
       >
         {!hideHeader && header && (
           <div className="flex items-center justify-between pl-2 pr-1 h-8">
-            <Text as="p" mainUiMuted text03>
+            <Text as="p" mainUiMuted text04>
               {header}
             </Text>
 
@@ -123,7 +127,9 @@ export function StepContainer({
           </div>
         )}
 
-        <div className="px-2 pb-2">{children}</div>
+        <div className={cn("px-2 pb-2", !noPaddingRight && "pr-8")}>
+          {children}
+        </div>
       </div>
     </div>
   );
