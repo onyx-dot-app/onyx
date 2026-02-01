@@ -13,6 +13,8 @@ from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 TRUNCATED_CONTENT_SUFFIX = " [...truncated]"
 TRUNCATED_CONTENT_PREFIX = "[...truncated] "
 
+MAX_CHARS_PER_URL = 15000
+
 
 def filter_web_search_results_with_no_title_or_snippet(
     results: list[WebSearchResult],
@@ -30,7 +32,9 @@ def filter_web_search_results_with_no_title_or_snippet(
     return filtered
 
 
-def truncate_search_result_content(content: str, max_chars: int = 15000) -> str:
+def truncate_search_result_content(
+    content: str, max_chars: int = MAX_CHARS_PER_URL
+) -> str:
     """Truncate search result content to a maximum number of characters"""
     if len(content) <= max_chars:
         return content
@@ -38,7 +42,7 @@ def truncate_search_result_content(content: str, max_chars: int = 15000) -> str:
 
 
 def _truncate_content_around_snippet(
-    content: str, snippet: str, max_chars: int = 15000
+    content: str, snippet: str, max_chars: int = MAX_CHARS_PER_URL
 ) -> str:
     """
     Truncates content around snippet with max_chars
