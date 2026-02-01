@@ -100,6 +100,7 @@ export const claimLicense = (sessionId?: string) =>
 =======
 
 /**
+<<<<<<< HEAD
  * Fetch license from control plane (self-hosted only).
  * Used to retrieve/refresh license data.
  */
@@ -108,6 +109,8 @@ export const fetchLicense = () =>
 >>>>>>> dedb71fec (add main billing page + plans view)
 
 /**
+=======
+>>>>>>> c5cc8707e (fix: PR feedback - add arrow-up-circle icon, import CSS, remove fetchLicense)
  * Refresh the cached license data (self-hosted only).
  * Forces a re-read of the license and updates the cache.
  */

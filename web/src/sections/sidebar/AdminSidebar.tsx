@@ -317,7 +317,7 @@ const collections = (
             // TODO: PR 6 will change this to /admin/billing to enable new UI
             {
               name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
-              icon: MdOutlineCreditCard,
+              icon: hasSubscription ? MdOutlineCreditCard : SvgArrowUpCircle,
               link: "/ee/admin/billing",
 >>>>>>> 4827c79c8 (fix(billing): redirect new billing page to old UI until full rollout)
             },
