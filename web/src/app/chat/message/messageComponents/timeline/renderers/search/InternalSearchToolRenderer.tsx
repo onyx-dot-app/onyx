@@ -21,15 +21,14 @@ import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   id: `query-${index}`,
-  title: typeof query === "string" ? query : "",
+  title: query,
   sourceType: ValidSources.Web,
   icon: SvgSearch,
 });
 
 const resultToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
   id: doc.document_id,
-  title:
-    typeof doc.semantic_identifier === "string" ? doc.semantic_identifier : "",
+  title: doc.semantic_identifier || "",
   sourceType: doc.source_type,
   sourceUrl: doc.link,
   description: doc.blurb,
@@ -106,7 +105,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
               toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
               onClick={(doc: OnyxDocument) => {
                 if (doc.link) {
-                  window.open(doc.link, "_blank");
+                  window.open(doc.link, "_blank", "noopener,noreferrer");
                 }
               }}
               emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
@@ -159,7 +158,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
             toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
             onClick={(doc: OnyxDocument) => {
               if (doc.link) {
-                window.open(doc.link, "_blank");
+                window.open(doc.link, "_blank", "noopener,noreferrer");
               }
             }}
             emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}
@@ -207,7 +206,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
                 toSourceInfo={(doc: OnyxDocument) => resultToSourceInfo(doc)}
                 onClick={(doc: OnyxDocument) => {
                   if (doc.link) {
-                    window.open(doc.link, "_blank");
+                    window.open(doc.link, "_blank", "noopener,noreferrer");
                   }
                 }}
                 emptyState={!stopPacketSeen ? <BlinkingDot /> : undefined}

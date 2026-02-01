@@ -17,7 +17,7 @@ import Text from "@/refresh-components/texts/Text";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   id: `query-${index}`,
-  title: typeof query === "string" ? query : "",
+  title: query,
   sourceType: ValidSources.Web,
   icon: SvgSearch,
 });
