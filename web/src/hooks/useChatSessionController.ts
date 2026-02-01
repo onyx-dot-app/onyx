@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
-import { ReadonlyURLSearchParams, useRouter } from "next/navigation";
+import { useEffect, useCallback, useState } from "react";
+import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -25,7 +25,6 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { getAvailableContextTokens } from "@/app/app/services/lib";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "@/app/app/projects/projectsService";
 import { getSessionProjectTokenCount } from "@/app/app/projects/projectsService";
@@ -62,7 +61,7 @@ interface UseChatSessionControllerProps {
   }) => Promise<void>;
 }
 
-export function useChatSessionController({
+export default function useChatSessionController({
   existingChatSessionId,
   searchParams,
   filterManager,

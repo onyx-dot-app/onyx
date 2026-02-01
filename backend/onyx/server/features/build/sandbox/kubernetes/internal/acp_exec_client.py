@@ -171,6 +171,7 @@ class ACPExecClient:
                 stderr=True,
                 tty=False,
                 _preload_content=False,
+                _request_timeout=900,  # 15 minute timeout for long-running sessions
             )
 
             # Start reader thread

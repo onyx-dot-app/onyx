@@ -28,7 +28,7 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
