@@ -23,6 +23,7 @@ import {
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { useMarkdownRenderer } from "@/app/chat/message/messageComponents/markdownUtils";
+import { isReasoningPackets } from "../../packetHelpers";
 
 interface NestedToolGroup {
   sub_turn_index: number;
@@ -283,6 +284,8 @@ export const ResearchAgentRenderer: MessageRenderer<
             !fullReportContent &&
             !isComplete;
 
+          const isReasoning = isReasoningPackets(group.packets);
+
           return (
             <TimelineRendererComponent
               key={group.sub_turn_index}
@@ -315,6 +318,7 @@ export const ResearchAgentRenderer: MessageRenderer<
                       }
                       isHover={result.isHover}
                       supportsCollapsible={result.supportsCollapsible}
+                      noPaddingRight={isReasoning}
                     >
                       {result.content}
                     </StepContainer>
@@ -333,6 +337,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           isLastStep={!stopPacketSeen && !isComplete}
           isFirstStep={!researchTask && nestedToolGroups.length === 0}
           isHover={isHover}
+          noPaddingRight={true}
         >
           <ExpandableTextDisplay
             title="Research Report"
