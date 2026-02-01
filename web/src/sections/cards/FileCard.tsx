@@ -175,12 +175,7 @@ export function FileCard({
     >
       <div className="max-w-[12rem]">
         <Hoverable asChild nonInteractive>
-          <HoverableContainer
-            padding={0}
-            rounded="rounded-12"
-            width="fit"
-            border
-          >
+          <HoverableContainer noPadding width="fit" border>
             <AttachmentItemLayout
               icon={isProcessing ? SimpleLoader : SvgFileText}
               title={file.name}

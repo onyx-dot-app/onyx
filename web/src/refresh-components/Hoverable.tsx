@@ -15,8 +15,8 @@ type HoverableVariants = "primary" | "secondary" | "tertiary";
 interface HoverableContainerProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
   border?: boolean;
-  rounded?: string;
-  padding?: number;
+  reducedRounding?: boolean;
+  noPadding?: boolean;
   height?: Length;
   width?: Length;
   ref?: React.Ref<HTMLDivElement>;
@@ -24,8 +24,8 @@ interface HoverableContainerProps
 
 function HoverableContainer({
   border,
-  rounded = "rounded-08",
-  padding = 0.5,
+  reducedRounding,
+  noPadding,
   height = "full",
   width = "full",
   ref,
@@ -47,15 +47,13 @@ function HoverableContainer({
       {...rest}
       className={cn(
         border && "border",
-        rounded,
+        reducedRounding ? "rounded-08" : "rounded-12",
+        !noPadding && "p-2",
         widthClassmap[width],
         heightClassmap[height],
         slotClassName
       )}
-      style={{
-        ...slotStyle,
-        padding: `${padding}rem`,
-      }}
+      style={slotStyle}
     />
   );
 }

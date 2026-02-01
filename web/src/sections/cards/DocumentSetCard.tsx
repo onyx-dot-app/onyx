@@ -39,8 +39,7 @@ export default function DocumentSetCard({
           nonInteractive={disabled || isSelected === undefined}
         >
           <HoverableContainer
-            padding={0}
-            rounded="rounded-12"
+            noPadding
             width="fit"
             border
             data-testid={`document-set-card-${documentSet.id}`}
