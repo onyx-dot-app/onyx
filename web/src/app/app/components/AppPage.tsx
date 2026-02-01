@@ -76,6 +76,8 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useAppFocus from "@/hooks/useAppFocus";
 import useQueryController from "@/hooks/useQueryController";
+import SearchResults from "@/sections/SearchUI";
+import SourceFilter from "@/sections/SourceFilter";
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -446,6 +448,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Unified query controller - handles classification and search routing
   const onChat = useCallback(
     (message: string) => {
+      resetInputBar();
       onSubmit({
         message,
         currentMessageFiles,
@@ -456,6 +459,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
     },
     [
+      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
@@ -463,14 +467,28 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       finishOnboarding,
     ]
   );
-  const queryController = useQueryController(onChat);
+  const {
+    submit: submitQuery,
+    reset: resetQueryController,
+    searchResults,
+    llmSelectedDocIds,
+    classification,
+    selectedSources,
+    setSelectedSources,
+  } = useQueryController(onChat);
+
+  const handleSearchDocumentClick = useCallback(
+    (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
+    []
+  );
 
   const handleChatInputSubmit = useCallback(
     async (message: string) => {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
-        queryController.reset();
+        resetQueryController();
+        resetInputBar();
         onSubmit({
           message,
           currentMessageFiles,
@@ -482,12 +500,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         return;
       }
 
-      // For new sessions, let the query controller handle routing
-      await queryController.submit(message);
+      // For new sessions, let the query controller handle routing.
+      // resetInputBar is called inside onChat for chat-routed queries.
+      // For search-routed queries, the input bar is intentionally kept
+      // so the user can see and refine their search query.
+      await submitQuery(message);
     },
     [
       currentChatSessionId,
-      queryController,
+      submitQuery,
+      resetQueryController,
+      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabled,
@@ -725,140 +748,182 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </>
               )}
 
-              {/* ProjectUI */}
-              {appFocus.isProject() && (
-                <ProjectContextPanel
-                  projectTokenCount={projectContextTokenCount}
-                  availableContextTokens={availableContextTokens}
-                  setPresentingDocument={setPresentingDocument}
-                />
-              )}
-
-              {/* ChatUI */}
-              {appFocus.isChat() &&
-                (currentChatSessionId && liveAssistant ? (
-                  <ChatScrollContainer
-                    ref={scrollContainerRef}
-                    sessionId={currentChatSessionId}
-                    anchorSelector={anchorSelector}
-                    autoScroll={autoScrollEnabled}
-                    isStreaming={isStreaming}
-                    onScrollButtonVisibilityChange={setShowScrollButton}
-                  >
-                    {/* Spacer for the header height */}
-                    <Spacer vertical rem={4} />
-                    <MessageList
-                      liveAssistant={liveAssistant}
-                      llmManager={llmManager}
-                      deepResearchEnabled={deepResearchEnabled}
-                      currentMessageFiles={currentMessageFiles}
+              {/* Main content grid - sidebar column animates for search */}
+              <div
+                className="flex-1 w-full grid min-h-0 transition-[grid-template-columns] duration-300 ease-in-out"
+                style={{
+                  gridTemplateColumns:
+                    classification === "search" ? "1fr 15rem" : "1fr 0rem",
+                }}
+              >
+                {/* Column 1: Main content */}
+                <div className="flex flex-col items-center h-full min-w-0">
+                  {/* ProjectUI */}
+                  {classification !== "search" && appFocus.isProject() && (
+                    <ProjectContextPanel
+                      projectTokenCount={projectContextTokenCount}
+                      availableContextTokens={availableContextTokens}
                       setPresentingDocument={setPresentingDocument}
-                      onSubmit={onSubmit}
-                      onMessageSelection={onMessageSelection}
+                    />
+                  )}
+
+                  {/* ChatUI */}
+                  {classification !== "search" &&
+                    appFocus.isChat() &&
+                    (currentChatSessionId && liveAssistant ? (
+                      <ChatScrollContainer
+                        ref={scrollContainerRef}
+                        sessionId={currentChatSessionId}
+                        anchorSelector={anchorSelector}
+                        autoScroll={autoScrollEnabled}
+                        isStreaming={isStreaming}
+                        onScrollButtonVisibilityChange={setShowScrollButton}
+                      >
+                        {/* Spacer for the header height */}
+                        <Spacer vertical rem={4} />
+                        <MessageList
+                          liveAssistant={liveAssistant}
+                          llmManager={llmManager}
+                          deepResearchEnabled={deepResearchEnabled}
+                          currentMessageFiles={currentMessageFiles}
+                          setPresentingDocument={setPresentingDocument}
+                          onSubmit={onSubmit}
+                          onMessageSelection={onMessageSelection}
+                          stopGenerating={stopGenerating}
+                          onResubmit={handleResubmitLastMessage}
+                          anchorNodeId={anchorNodeId}
+                        />
+                      </ChatScrollContainer>
+                    ) : (
+                      <div className="flex-1" />
+                    ))}
+
+                  {/* WelcomeMessageUI */}
+                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                    !classification && (
+                      <div className="w-full flex-1 flex flex-col items-center justify-end">
+                        <WelcomeMessage
+                          agent={liveAssistant}
+                          isDefaultAgent={isDefaultAgent}
+                        />
+                        <Spacer rem={1.5} />
+                      </div>
+                    )}
+
+                  {/* Search mode header spacer */}
+                  {classification === "search" && <Spacer vertical rem={4} />}
+
+                  {/* ChatInputBar container */}
+                  <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
+                    {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
+                    {showScrollButton && classification !== "search" && (
+                      <div className="absolute top-[-3.5rem] self-center">
+                        <IconButton
+                          icon={SvgChevronDown}
+                          onClick={handleScrollToBottom}
+                          aria-label="Scroll to bottom"
+                          secondary
+                        />
+                      </div>
+                    )}
+
+                    {/* OnboardingUI */}
+                    {classification !== "search" &&
+                      (appFocus.isNewSession() || appFocus.isAgent()) &&
+                      (showOnboarding ||
+                        (user?.role !== UserRole.ADMIN &&
+                          !user?.personalization?.name)) && (
+                        <OnboardingFlow
+                          handleHideOnboarding={hideOnboarding}
+                          handleFinishOnboarding={finishOnboarding}
+                          state={onboardingState}
+                          actions={onboardingActions}
+                          llmDescriptors={llmDescriptors}
+                        />
+                      )}
+
+                    <ChatInputBar
+                      ref={chatInputBarRef}
+                      deepResearchEnabled={deepResearchEnabled}
+                      toggleDeepResearch={toggleDeepResearch}
+                      toggleDocumentSidebar={toggleDocumentSidebar}
+                      filterManager={filterManager}
+                      llmManager={llmManager}
+                      removeDocs={() => setSelectedDocuments([])}
+                      retrievalEnabled={retrievalEnabled}
+                      selectedDocuments={selectedDocuments}
+                      initialMessage={
+                        searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
+                      }
                       stopGenerating={stopGenerating}
-                      onResubmit={handleResubmitLastMessage}
-                      anchorNodeId={anchorNodeId}
+                      onSubmit={handleChatInputSubmit}
+                      chatState={currentChatState}
+                      currentSessionFileTokenCount={
+                        currentChatSessionId
+                          ? currentSessionFileTokenCount
+                          : projectContextTokenCount
+                      }
+                      availableContextTokens={availableContextTokens}
+                      selectedAssistant={selectedAssistant || liveAssistant}
+                      handleFileUpload={handleMessageSpecificFileUpload}
+                      setPresentingDocument={setPresentingDocument}
+                      disabled={
+                        (!llmManager.isLoadingProviders &&
+                          llmManager.hasAnyProvider === false) ||
+                        (!isLoadingOnboarding &&
+                          onboardingState.currentStep !==
+                            OnboardingStep.Complete)
+                      }
                     />
-                  </ChatScrollContainer>
-                ) : (
-                  <div className="flex-1" />
-                ))}
 
-              {/* WelcomeMessageUI */}
-              {(appFocus.isNewSession() || appFocus.isAgent()) && (
-                <div className="w-full flex-1 flex flex-col items-center justify-end">
-                  <WelcomeMessage
-                    agent={liveAssistant}
-                    isDefaultAgent={isDefaultAgent}
-                  />
-                  <Spacer rem={1.5} />
-                </div>
-              )}
-
-              {/* ChatInputBar container */}
-              <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
-                {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
-                {showScrollButton && (
-                  <div className="absolute top-[-3.5rem] self-center">
-                    <IconButton
-                      icon={SvgChevronDown}
-                      onClick={handleScrollToBottom}
-                      aria-label="Scroll to bottom"
-                      secondary
-                    />
+                    {/* ProjectChatSessionsUI */}
+                    {classification !== "search" && appFocus.isProject() && (
+                      <>
+                        <Spacer rem={0.5} />
+                        <ProjectChatSessionList />
+                      </>
+                    )}
                   </div>
-                )}
 
-                {/* OnboardingUI */}
-                {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                  (showOnboarding ||
-                    (user?.role !== UserRole.ADMIN &&
-                      !user?.personalization?.name)) && (
-                    <OnboardingFlow
-                      handleHideOnboarding={hideOnboarding}
-                      handleFinishOnboarding={finishOnboarding}
-                      state={onboardingState}
-                      actions={onboardingActions}
-                      llmDescriptors={llmDescriptors}
+                  {/* SearchResults - search mode only */}
+                  {classification === "search" && (
+                    <div className="flex-1 min-h-0 self-stretch flex flex-col items-center overflow-hidden">
+                      <SearchResults
+                        results={searchResults}
+                        llmSelectedDocIds={llmSelectedDocIds}
+                        onDocumentClick={handleSearchDocumentClick}
+                        selectedSources={selectedSources}
+                      />
+                    </div>
+                  )}
+
+                  {/* SuggestionsUI */}
+                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                    !classification && (
+                      <div className="flex-1 self-stretch flex flex-col items-center">
+                        {hasStarterMessages && (
+                          <>
+                            <Spacer rem={0.5} />
+                            <Suggestions onSubmit={onSubmit} />
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                  <AppLayouts.Footer />
+                </div>
+
+                {/* Column 2: SourceFilter (animated via grid-template-columns) */}
+                <div className="min-h-0 overflow-hidden pt-16">
+                  {classification === "search" && (
+                    <SourceFilter
+                      results={searchResults}
+                      selectedSources={selectedSources}
+                      onSourceChange={setSelectedSources}
                     />
                   )}
-
-                <ChatInputBar
-                  ref={chatInputBarRef}
-                  deepResearchEnabled={deepResearchEnabled}
-                  toggleDeepResearch={toggleDeepResearch}
-                  toggleDocumentSidebar={toggleDocumentSidebar}
-                  filterManager={filterManager}
-                  llmManager={llmManager}
-                  removeDocs={() => setSelectedDocuments([])}
-                  retrievalEnabled={retrievalEnabled}
-                  selectedDocuments={selectedDocuments}
-                  initialMessage={
-                    searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
-                  }
-                  stopGenerating={stopGenerating}
-                  onSubmit={handleChatInputSubmit}
-                  chatState={currentChatState}
-                  currentSessionFileTokenCount={
-                    currentChatSessionId
-                      ? currentSessionFileTokenCount
-                      : projectContextTokenCount
-                  }
-                  availableContextTokens={availableContextTokens}
-                  selectedAssistant={selectedAssistant || liveAssistant}
-                  handleFileUpload={handleMessageSpecificFileUpload}
-                  setPresentingDocument={setPresentingDocument}
-                  disabled={
-                    (!llmManager.isLoadingProviders &&
-                      llmManager.hasAnyProvider === false) ||
-                    (!isLoadingOnboarding &&
-                      onboardingState.currentStep !== OnboardingStep.Complete)
-                  }
-                />
-
-                {/* ProjectChatSessionsUI */}
-                {appFocus.isProject() && (
-                  <>
-                    <Spacer rem={0.5} />
-                    <ProjectChatSessionList />
-                  </>
-                )}
-              </div>
-
-              {/* SearchUI - coming soon */}
-
-              {/* SuggestionsUI */}
-              {(appFocus.isNewSession() || appFocus.isAgent()) && (
-                <div className="flex-1 self-stretch flex flex-col items-center">
-                  {hasStarterMessages && (
-                    <>
-                      <Spacer rem={0.5} />
-                      <Suggestions onSubmit={onSubmit} />
-                    </>
-                  )}
                 </div>
-              )}
-              <AppLayouts.Footer />
+              </div>
             </div>
           )}
         </Dropzone>
