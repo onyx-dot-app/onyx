@@ -40,7 +40,7 @@ def get_paginated_document_batch(
     Returns:
         List of document IDs.
     """
-    stmt = select(Document.id).order_by(Document.id).limit(limit)
+    stmt = select(Document.id).order_by(Document.id.asc()).limit(limit)
     if prev_ending_document_id is not None:
         stmt = stmt.where(Document.id > prev_ending_document_id)
     return list(db_session.scalars(stmt).all())
