@@ -18,15 +18,20 @@ export function getFinalLLM(
   let model = defaultProvider?.default_model_name || "";
 
   if (persona) {
-    // Map "provider override" to actual LLLMProvider
-    if (persona.llm_model_provider_override) {
+    // Map "model override" to actual model
+    if (persona.default_model_configuration_id) {
       const underlyingProvider = llmProviders.find(
         (item: LLMProviderDescriptor) =>
-          item.name === persona.llm_model_provider_override
+          item.model_configurations.find(
+            (m) => m.id === persona.default_model_configuration_id
+          )
+      );
+      const underlyingModel = underlyingProvider?.model_configurations.find(
+        (m) => m.id === persona.default_model_configuration_id
       );
       provider = underlyingProvider?.provider || provider;
+      model = underlyingModel?.name || model;
     }
-    model = persona.llm_model_version_override || model;
   }
 
   if (currentLlm) {
@@ -41,26 +46,27 @@ export function getLLMProviderOverrideForPersona(
   liveAssistant: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
-  const overrideProvider = liveAssistant.llm_model_provider_override;
-  const overrideModel = liveAssistant.llm_model_version_override;
+  const defaultModelConfigurationId =
+    liveAssistant.default_model_configuration_id;
 
-  if (!overrideModel) {
+  if (!defaultModelConfigurationId) {
     return null;
   }
 
-  const matchingProvider = llmProviders.find(
-    (provider) =>
-      (overrideProvider ? provider.name === overrideProvider : true) &&
-      provider.model_configurations
-        .map((modelConfiguration) => modelConfiguration.name)
-        .includes(overrideModel)
+  const matchingProvider = llmProviders.find((provider) =>
+    provider.model_configurations.find(
+      (m) => m.id === defaultModelConfigurationId
+    )
+  );
+  const underlyingModel = matchingProvider?.model_configurations.find(
+    (m) => m.id === defaultModelConfigurationId
   );
 
-  if (matchingProvider) {
+  if (matchingProvider && underlyingModel) {
     return {
       name: matchingProvider.name,
       provider: matchingProvider.provider,
-      modelName: overrideModel,
+      modelName: underlyingModel.name,
     };
   }
 

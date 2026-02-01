@@ -214,6 +214,7 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       default_model_name: "claude-3-opus",
       model_configurations: [
         {
+          id: 1,
           name: "claude-3-opus",
           is_visible: true,
           max_input_tokens: null,

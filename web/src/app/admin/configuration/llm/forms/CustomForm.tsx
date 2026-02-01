@@ -7,7 +7,7 @@ import {
   Formik,
   ErrorMessage,
 } from "formik";
-import { LLMProviderFormProps, LLMProviderView } from "../interfaces";
+import { LLMProviderFormProps } from "../interfaces";
 import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
@@ -69,7 +69,7 @@ export function CustomForm({
               ...modelConfiguration,
               max_input_tokens: modelConfiguration.max_input_tokens ?? null,
             })
-          ) ?? [{ name: "", is_visible: true, max_input_tokens: null }],
+          ) ?? [{ id: -1, name: "", is_visible: true, max_input_tokens: null }],
           custom_config_list: existingLlmProvider?.custom_config
             ? Object.entries(existingLlmProvider.custom_config)
             : [],
