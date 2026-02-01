@@ -18,7 +18,7 @@ import {
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAssistantPreferences } from "@/app/app/hooks/useAssistantPreferences";
+import { useAssistantPreferences } from "@/hooks/useAssistantPreferences";
 import { useUser } from "@/providers/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";

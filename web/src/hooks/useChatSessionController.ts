@@ -6,28 +6,31 @@ import {
   nameChatSession,
   processRawChatHistory,
   patchMessageToBeLatest,
-} from "../services/lib";
+} from "@/app/app/services/lib";
 import {
   getLatestMessageChain,
   setMessageAsLatest,
-} from "../services/messageTree";
-import { BackendChatSession, ChatSessionSharedStatus } from "../interfaces";
+} from "@/app/app/services/messageTree";
+import {
+  BackendChatSession,
+  ChatSessionSharedStatus,
+} from "@/app/app/interfaces";
 import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,
-} from "../services/searchParams";
+} from "@/app/app/services/searchParams";
 import { FilterManager } from "@/lib/hooks";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
-} from "../stores/useChatSessionStore";
-import { getAvailableContextTokens } from "../services/lib";
+} from "@/app/app/stores/useChatSessionStore";
+import { getAvailableContextTokens } from "@/app/app/services/lib";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { ProjectFile } from "../projects/projectsService";
-import { getSessionProjectTokenCount } from "../projects/projectsService";
-import { getProjectFilesForSession } from "../projects/projectsService";
-import { ChatInputBarHandle } from "../components/input/ChatInputBar";
+import { ProjectFile } from "@/app/app/projects/projectsService";
+import { getSessionProjectTokenCount } from "@/app/app/projects/projectsService";
+import { getProjectFilesForSession } from "@/app/app/projects/projectsService";
+import { ChatInputBarHandle } from "@/app/app/components/input/ChatInputBar";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
