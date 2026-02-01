@@ -50,7 +50,6 @@ function HoverableContainer({
         border && "border",
         reducedRounding ? "rounded-08" : "rounded-12",
         !noPadding && "p-2",
-        "w-full",
         buttonHeightVariants[heightVariant],
         slotClassName
       )}
@@ -196,7 +195,11 @@ function Hoverable({
   variant = "primary",
   ...props
 }: HoverableProps) {
-  const classes = cn("hoverable", nonInteractive && "cursor-default", group);
+  const classes = cn(
+    "hoverable",
+    !props.onClick && !href && "cursor-default",
+    group
+  );
   const dataAttrs = {
     "data-variant": variant,
     ...(nonInteractive && { "data-non-interactive": "true" as const }),
