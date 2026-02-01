@@ -293,7 +293,8 @@ def vespa_available(
     full_deployment_setup: None,
 ) -> Generator[None, None, None]:
     """Verifies Vespa is running, fails the test if not."""
-    if not wait_for_vespa_with_timeout():
+    # Try 90 seconds for testing in CI.
+    if not wait_for_vespa_with_timeout(wait_limit=90):
         pytest.fail("Vespa is not available.")
     yield  # Test runs here.
 
