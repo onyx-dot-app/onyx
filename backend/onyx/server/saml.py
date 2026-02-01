@@ -24,6 +24,7 @@ from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SAML_CONF_DIR
+from onyx.configs.app_configs import USE_UPN_AS_EMAIL_FALLBACK
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
@@ -45,6 +46,18 @@ EMAIL_ATTRIBUTE_KEYS = {
     "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mail",
     "http://schemas.microsoft.com/identity/claims/emailaddress",
 }
+
+# When USE_UPN_AS_EMAIL_FALLBACK is enabled, also check UPN (User Principal Name)
+# claims which are commonly used by Microsoft Entra ID / Azure AD
+if USE_UPN_AS_EMAIL_FALLBACK:
+    EMAIL_ATTRIBUTE_KEYS.update(
+        {
+            "upn",
+            "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn",
+            "http://schemas.microsoft.com/identity/claims/upn",
+        }
+    )
+
 EMAIL_ATTRIBUTE_KEYS_LOWER = {key.lower() for key in EMAIL_ATTRIBUTE_KEYS}
 
 
