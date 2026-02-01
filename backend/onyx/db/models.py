@@ -969,7 +969,7 @@ class OpenSearchTenantMigrationRecord(Base):
         default=0,
         nullable=False,
     )
-    last_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+    last_updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
