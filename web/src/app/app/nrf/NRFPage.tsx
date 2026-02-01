@@ -23,7 +23,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
-import { useAssistantController } from "@/hooks/useAssistantController";
+import useAgentController from "@/hooks/useAgentController";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -107,7 +107,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
-    useAssistantController({
+    useAgentController({
       selectedChatSession: undefined,
       onAssistantSelect: () => {},
     });

@@ -36,7 +36,7 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
-import { useAssistantController } from "@/hooks/useAssistantController";
+import useAgentController from "@/hooks/useAgentController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useIsDefaultAgent from "@/hooks/useIsDefaultAgent";
@@ -171,7 +171,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
-    useAssistantController({
+    useAgentController({
       selectedChatSession: currentChatSession,
       onAssistantSelect: () => {
         // Only remove project context if user explicitly selected an assistant

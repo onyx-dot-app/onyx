@@ -18,7 +18,7 @@ import {
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAssistantPreferences } from "@/hooks/useAssistantPreferences";
+import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useUser } from "@/providers/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
@@ -253,7 +253,7 @@ export default function ActionsPopover({
 
   // Get the assistant preference for this assistant
   const { assistantPreferences, setSpecificAssistantPreferences } =
-    useAssistantPreferences();
+    useAgentPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
   // Reset state when assistant changes
