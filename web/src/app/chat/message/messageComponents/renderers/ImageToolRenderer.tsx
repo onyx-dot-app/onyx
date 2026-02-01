@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from "react";
-import { FiImage } from "react-icons/fi";
+import { SvgImage } from "@opal/icons";
 import {
   PacketType,
   ImageGenerationToolPacket,
@@ -71,7 +71,7 @@ export const ImageToolRenderer: MessageRenderer<
     if (isGenerating) {
       return children([
         {
-          icon: FiImage,
+          icon: SvgImage,
           status: "Generating images...",
           supportsCollapsible: false,
           content: (
@@ -89,7 +89,7 @@ export const ImageToolRenderer: MessageRenderer<
     if (isComplete) {
       return children([
         {
-          icon: FiImage,
+          icon: SvgImage,
           status: `Generated ${images.length} image${
             images.length !== 1 ? "s" : ""
           }`,
@@ -114,7 +114,7 @@ export const ImageToolRenderer: MessageRenderer<
                 </div>
               ) : (
                 <div className="py-4 text-center text-gray-500 dark:text-gray-400 ml-7">
-                  <FiImage className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <SvgImage className="w-6 h-6 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No images generated</p>
                 </div>
               )}
@@ -127,7 +127,7 @@ export const ImageToolRenderer: MessageRenderer<
     // Fallback (shouldn't happen in normal flow)
     return children([
       {
-        icon: FiImage,
+        icon: SvgImage,
         status: status,
         supportsCollapsible: false,
         content: <div></div>,
@@ -139,7 +139,7 @@ export const ImageToolRenderer: MessageRenderer<
   if (isGenerating) {
     return children([
       {
-        icon: FiImage,
+        icon: SvgImage,
         status: "Generating image...",
         supportsCollapsible: false,
         content: (
@@ -165,7 +165,7 @@ export const ImageToolRenderer: MessageRenderer<
   if (error) {
     return children([
       {
-        icon: FiImage,
+        icon: SvgImage,
         status: "Image generation failed",
         supportsCollapsible: false,
         content: (
@@ -180,7 +180,7 @@ export const ImageToolRenderer: MessageRenderer<
   if (isComplete && images.length > 0) {
     return children([
       {
-        icon: FiImage,
+        icon: SvgImage,
         status: `Generated ${images.length} image${
           images.length > 1 ? "s" : ""
         }`,
@@ -197,7 +197,7 @@ export const ImageToolRenderer: MessageRenderer<
 
   return children([
     {
-      icon: FiImage,
+      icon: SvgImage,
       status: "Image generation",
       supportsCollapsible: false,
       content: (
