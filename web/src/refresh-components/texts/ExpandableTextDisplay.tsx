@@ -133,15 +133,16 @@ export default function ExpandableTextDisplay({
     downloadAsTxt(content, sanitizedTitle);
   };
 
-  // Map maxLines to Tailwind line-clamp classes
-  const lineClampClass = {
-    1: "line-clamp-1",
-    2: "line-clamp-2",
-    3: "line-clamp-3",
-    4: "line-clamp-4",
-    5: "line-clamp-5",
-    6: "line-clamp-6",
-  }[maxLines];
+  // Map maxLines to Tailwind line-clamp classes (fallback to 5 for invalid runtime values)
+  const lineClampClass =
+    {
+      1: "line-clamp-1",
+      2: "line-clamp-2",
+      3: "line-clamp-3",
+      4: "line-clamp-4",
+      5: "line-clamp-5",
+      6: "line-clamp-6",
+    }[maxLines] ?? "line-clamp-5";
 
   // Single container for renderContent mode (both streaming and static)
   // Keeps scrollRef alive across the streaming → static transition
