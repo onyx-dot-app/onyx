@@ -114,7 +114,7 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "One or more queries to look up on the web. "
-                            "Do not include null characters or special whitespace characters like newlines, tabs, etc.",
+                            "Must contain only printable characters",
                         },
                     },
                     "required": [QUERIES_FIELD],
