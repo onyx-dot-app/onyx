@@ -48,11 +48,6 @@ export interface MessageListProps {
    * This message will get a data-anchor attribute for ChatScrollContainer.
    */
   anchorNodeId?: number;
-
-  /**
-   * When true, disables the backdrop blur effect on the container.
-   */
-  disableBlur?: boolean;
 }
 
 const MessageList = React.memo(
@@ -67,7 +62,6 @@ const MessageList = React.memo(
     currentMessageFiles,
     onResubmit,
     anchorNodeId,
-    disableBlur,
   }: MessageListProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
@@ -120,12 +114,7 @@ const MessageList = React.memo(
     );
 
     return (
-      <div
-        className={cn(
-          "w-[min(50rem,100%)] h-full px-6 rounded-2xl",
-          !disableBlur && "backdrop-blur-md"
-        )}
-      >
+      <div className="w-[min(50rem,100%)] h-full px-6">
         <Spacer />
         {messages.map((message, i) => {
           const messageReactComponentKey = `message-${message.nodeId}`;

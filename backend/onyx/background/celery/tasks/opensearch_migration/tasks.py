@@ -190,7 +190,7 @@ def check_for_documents_for_opensearch_migration_task(
             lock_beat.release()
         else:
             task_logger.warning(
-                "The OpenSearch migration lock was not owned on completion of the check tast."
+                "The OpenSearch migration lock was not owned on completion of the check task."
             )
 
     return True
@@ -323,7 +323,7 @@ def migrate_documents_from_vespa_to_opensearch_task(
                     # completed and let's let a subsequent run take care of it.
                     if chunks_migrated != record.document.chunk_count:
                         raise RuntimeError(
-                            f"Number of chunks migrated ({chunks_migrated}) does not match number of chunks in Vespa "
+                            f"Number of chunks migrated ({chunks_migrated}) does not match number of expected chunks in Vespa "
                             f"({record.document.chunk_count}) for document {record.document_id}."
                         )
 

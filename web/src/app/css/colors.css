@@ -422,6 +422,9 @@
   --mask-01: var(--alpha-grey-100-10);
   --mask-02: var(--alpha-grey-100-20);
   --mask-03: var(--alpha-grey-100-40);
+
+  /* Frost Overlay (for FrostedDiv component) - lighter in light mode */
+  --frost-overlay: var(--alpha-grey-00-10);
 }
 
 /* Dark Colors */
@@ -620,4 +623,7 @@
   --mask-01: var(--alpha-grey-100-10);
   --mask-02: var(--alpha-grey-100-20);
   --mask-03: var(--alpha-grey-100-40);
+
+  /* Frost Overlay (for FrostedDiv component) - darker in dark mode */
+  --frost-overlay: var(--alpha-grey-100-10);
 }

@@ -2,7 +2,7 @@
 
 import { Label, SubLabel } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
