@@ -122,7 +122,7 @@ const MessageList = React.memo(
     return (
       <div
         className={cn(
-          "w-[min(50rem,100%)] h-full px-6 rounded-2xl",
+          "w-[min(50rem,100%)] h-full px-4 rounded-2xl",
           !disableBlur && "backdrop-blur-md"
         )}
       >

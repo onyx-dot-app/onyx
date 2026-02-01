@@ -1,5 +1,4 @@
 import React from "react";
-import { FiLink } from "react-icons/fi";
 import { FetchToolPacket } from "@/app/chat/services/streamingModels";
 import {
   MessageRenderer,
@@ -9,13 +8,14 @@ import { BlinkingDot } from "@/app/chat/message/BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import { SearchChipList, SourceInfo } from "../search/SearchChipList";
-import { getMetadataTags } from "../search";
+import { getMetadataTags } from "../search/searchStateUtils";
 import {
   constructCurrentFetchState,
   INITIAL_URLS_TO_SHOW,
   URLS_PER_EXPANSION,
 } from "./fetchStateUtils";
 import Text from "@/refresh-components/texts/Text";
+import { SvgCircle } from "@opal/icons";
 
 const urlToSourceInfo = (url: string, index: number): SourceInfo => ({
   id: `url-${index}`,
@@ -40,9 +40,9 @@ const documentToSourceInfo = (doc: OnyxDocument): SourceInfo => ({
  * FetchToolRenderer - Renders URL fetch/open tool execution steps
  *
  * RenderType modes:
- * - FULL: Shows all details (URLs being opened + reading results). Header passed as `status` prop.
+ * - FULL: Shows all details (URLs being opened + reading). Header passed as `status` prop.
  *         Used when step is expanded in timeline.
- * - COMPACT: Shows only reading results (no URL list). Header passed as `status` prop.
+ * - COMPACT: Shows only reading (no URL list). Header passed as `status` prop.
  *            Used when step is collapsed in timeline, still wrapped in StepContainer.
  * - HIGHLIGHT: Shows URL list with header embedded directly in content.
  *              No StepContainer wrapper. Used for parallel streaming preview.
@@ -63,7 +63,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   if (!hasStarted) {
     return children([
       {
-        icon: FiLink,
+        icon: SvgCircle,
         status: null,
         content: <div />,
         supportsCollapsible: false,
@@ -84,7 +84,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         content: (
           <div className="flex flex-col">
             <Text as="p" text02 className="text-sm mb-1">
-              Opening URLs:
+              Reading
             </Text>
             {displayDocuments ? (
               <SearchChipList
@@ -119,8 +119,8 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
 
   return children([
     {
-      icon: FiLink,
-      status: "Opening URLs:",
+      icon: SvgCircle,
+      status: "Reading",
       supportsCollapsible: false,
       content: (
         <div className="flex flex-col">

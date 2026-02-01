@@ -16,6 +16,7 @@ import { StepContainer } from "./StepContainer";
 import {
   isResearchAgentPackets,
   isSearchToolPackets,
+  isReasoningPackets,
 } from "@/app/chat/message/messageComponents/timeline/packetHelpers";
 
 // =============================================================================
@@ -53,6 +54,10 @@ const TimelineStep = React.memo(function TimelineStep({
     () => isSearchToolPackets(step.packets),
     [step.packets]
   );
+  const isReasoning = useMemo(
+    () => isReasoningPackets(step.packets),
+    [step.packets]
+  );
 
   const renderStep = useCallback(
     (results: TimelineRendererOutput) => {
@@ -85,6 +90,7 @@ const TimelineStep = React.memo(function TimelineStep({
                   ? (result.icon as FunctionComponent<IconProps>)
                   : undefined
               }
+              noPaddingRight={isReasoning}
             >
               {result.content}
             </StepContainer>
@@ -92,7 +98,14 @@ const TimelineStep = React.memo(function TimelineStep({
         </>
       );
     },
-    [isResearchAgent, isSearchTool, isFirstStep, isLastStep, isSingleStep]
+    [
+      isResearchAgent,
+      isSearchTool,
+      isReasoning,
+      isFirstStep,
+      isLastStep,
+      isSingleStep,
+    ]
   );
 
   return (
