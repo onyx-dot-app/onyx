@@ -895,6 +895,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions ── */}
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full">
+                  {/* SuggestionsUI */}
+                  <Fade
+                    show={
+                      (appFocus.isNewSession() || appFocus.isAgent()) &&
+                      hasStarterMessages
+                    }
+                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)]"
+                  >
+                    <Spacer rem={0.5} />
+                    <Suggestions onSubmit={onSubmit} />
+                  </Fade>
+
+                  {/* SearchUI */}
                   <Fade
                     show={isSearch}
                     className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1"
@@ -902,15 +915,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <Spacer rem={0.75} />
                     <SearchUI onDocumentClick={handleSearchDocumentClick} />
                   </Fade>
-
-                  {/* SuggestionsUI */}
-                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                    hasStarterMessages && (
-                      <>
-                        <Spacer rem={0.5} />
-                        <Suggestions onSubmit={onSubmit} />
-                      </>
-                    )}
                 </div>
               </div>
             </div>

@@ -286,6 +286,12 @@ export function QueryControllerProvider({
     ]
   );
 
+  // Sync classification state with navigation context
+  useEffect(() => {
+    if (appFocus.isNewSession()) return;
+    reset();
+  }, [appFocus, reset]);
+
   return (
     <QueryControllerContext.Provider value={value}>
       {children}
