@@ -132,7 +132,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=expected_default_model,
                         model_configurations=[],  # No model configs provided
                     ),
                     is_creation=True,
@@ -230,7 +229,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -309,7 +307,6 @@ class TestAutoModeSyncFeature:
                     api_key="sk-test-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     is_auto_mode=False,  # Not in auto mode initially
-                    default_model_name="gpt-4",
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
@@ -341,7 +338,6 @@ class TestAutoModeSyncFeature:
                         api_key=None,  # Not changing API key
                         api_key_changed=False,
                         is_auto_mode=True,  # Now enabling auto mode
-                        default_model_name=auto_mode_default,
                         model_configurations=[],  # Auto mode will sync from config
                     ),
                     is_creation=False,  # This is an update
@@ -379,9 +375,6 @@ class TestAutoModeSyncFeature:
                     assert (
                         model_visibility[model_name] is False
                     ), f"Model '{model_name}' not in auto config should NOT be visible"
-
-            # Verify the default model was updated
-            assert provider.default_model_name == auto_mode_default
 
         finally:
             db_session.rollback()
@@ -424,7 +417,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -527,7 +519,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_1_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_1_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -541,7 +532,7 @@ class TestAutoModeSyncFeature:
                 name=provider_1_name, db_session=db_session
             )
             assert provider_1 is not None
-            update_default_provider(provider_1.id, db_session)
+            update_default_provider(provider_1.id, provider_1_default_model, db_session)
 
             with patch(
                 "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
@@ -555,7 +546,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_2_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_2_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -576,7 +566,7 @@ class TestAutoModeSyncFeature:
                 name=provider_2_name, db_session=db_session
             )
             assert provider_2 is not None
-            update_default_provider(provider_2.id, db_session)
+            update_default_provider(provider_2.id, provider_2_default_model, db_session)
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
