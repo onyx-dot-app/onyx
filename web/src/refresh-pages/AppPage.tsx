@@ -70,13 +70,39 @@ import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import useQueryController from "@/hooks/useQueryController";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
 import SearchUI from "@/sections/search/SearchUI";
 import SourceFilter from "@/sections/search/SourceFilter";
+import { motion, AnimatePresence } from "motion/react";
+
+function Fade({
+  show,
+  children,
+  className,
+}: {
+  show: boolean;
+  children?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className={className}
+        >
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export interface ChatPageProps {
   firstMessage?: string;
@@ -622,9 +648,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     );
   }
 
-  // Chat background from context
-  const { hasBackground } = useAppBackground();
-
   const hasStarterMessages = (liveAssistant?.starter_messages?.length ?? 0) > 0;
 
   const isSearch = classification === "search";
@@ -732,8 +755,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                       >
-                        {/* Spacer for the header height */}
-                        <Spacer vertical rem={4} />
                         <ChatUI
                           liveAssistant={liveAssistant}
                           llmManager={llmManager}
@@ -875,37 +896,36 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* ── Bottom-center: SearchResults / Suggestions ── */}
                 <div className="col-start-2 row-start-3 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* SearchResults - search mode only */}
-                  {isSearch && (
+                  <Fade
+                    show={isSearch}
+                    className="h-full w-full flex flex-col items-center"
+                  >
                     <SearchUI
                       results={searchResults}
                       llmSelectedDocIds={llmSelectedDocIds}
                       onDocumentClick={handleSearchDocumentClick}
                       selectedSources={selectedSources}
                     />
-                  )}
+                  </Fade>
 
                   {/* SuggestionsUI */}
-                  {(appFocus.isNewSession() || appFocus.isAgent()) && (
-                    <div className="flex-1 self-stretch flex flex-col items-center">
-                      {hasStarterMessages && (
-                        <>
-                          <Spacer rem={0.5} />
-                          <Suggestions onSubmit={onSubmit} />
-                        </>
-                      )}
-                    </div>
-                  )}
+                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                    hasStarterMessages && (
+                      <div className="flex-1 self-stretch flex flex-col items-center">
+                        <Suggestions onSubmit={onSubmit} />
+                      </div>
+                    )}
                 </div>
 
                 {/* ── Bottom-right: SourceFilter ── */}
                 <div className="col-start-3 row-start-3 min-h-0 overflow-hidden">
-                  {isSearch && (
+                  <Fade show={isSearch} className="h-full">
                     <SourceFilter
                       results={searchResults}
                       selectedSources={selectedSources}
                       onSourceChange={setSelectedSources}
                     />
-                  )}
+                  </Fade>
                 </div>
               </div>
             </div>
