@@ -170,6 +170,7 @@ export const MemoizedLink = memo(
           sources={[sourceInfo]}
           onSourceClick={handleSourceClick}
           showDetailsCard
+          className="mr-0.5"
         />
       );
     }
