@@ -622,10 +622,10 @@ def _patch_responses_api_usage_format() -> None:
                         )
 
         # Call original model_construct (need to call it as unbound method)
-        return original_model_construct.__func__(cls, _fields_set, **values)
+        return original_model_construct.__func__(cls, _fields_set, **values)  # type: ignore[attr-defined]
 
     _patched_model_construct._is_patched = True  # type: ignore[attr-defined]
-    ResponsesAPIResponse.model_construct = _patched_model_construct  # type: ignore[method-assign]
+    ResponsesAPIResponse.model_construct = _patched_model_construct  # type: ignore[method-assign, assignment]
 
 
 def _patch_logging_assembled_streaming_response() -> None:
