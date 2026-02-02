@@ -157,7 +157,7 @@ const AppInputBar = React.memo(
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
-    const { isClassifying } = useQueryController();
+    const { isClassifying, classification } = useQueryController();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -170,7 +170,9 @@ const AppInputBar = React.memo(
     }));
     const { appMode } = useAppMode();
     const appFocus = useAppFocus();
-    const isSearchMode = appMode === "search" && appFocus.isNewSession();
+    const isSearchMode =
+      (appFocus.isNewSession() && appMode === "search") ||
+      classification === "search";
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles } =

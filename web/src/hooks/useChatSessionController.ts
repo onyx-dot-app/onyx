@@ -29,7 +29,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "@/app/app/projects/projectsService";
 import { getSessionProjectTokenCount } from "@/app/app/projects/projectsService";
 import { getProjectFilesForSession } from "@/app/app/projects/projectsService";
-import { ChatInputBarHandle } from "@/app/app/components/input/ChatInputBar";
+import { ChatInputBarHandle } from "@/sections/input/AppInputBar";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;

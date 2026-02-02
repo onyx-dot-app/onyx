@@ -15,9 +15,7 @@ import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import Dropzone from "react-dropzone";
-import AppInputBar, {
-  ChatInputBarHandle,
-} from "@/app/app/components/input/ChatInputBar";
+import AppInputBar, { ChatInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
 import useTags from "@/hooks/useTags";
