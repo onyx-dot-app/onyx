@@ -318,14 +318,8 @@ function Header() {
               internal
             />
           )}
-          {appFocus.isNewSession() && (
-            <Popover
-              open={modePopoverOpen}
-              onOpenChange={(open) => {
-                if (classification === "search") return;
-                setModePopoverOpen(open);
-              }}
-            >
+          {appFocus.isNewSession() && !classification && (
+            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
               <Popover.Trigger asChild>
                 <Hoverable
                   asChild
