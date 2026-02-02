@@ -5,15 +5,15 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
 from onyx.db.models import ImageGenerationConfig
+from onyx.db.models import LLMModelFlow
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
 from onyx.db.models import ModelConfiguration
-from onyx.db.models import ModelFlow
 from onyx.db.models import Persona
 from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
@@ -288,9 +288,9 @@ def upsert_llm_provider(
                 model_provider=llm_provider_upsert_request.provider,
             )
 
-        supported_flows = [ModelFlowType.CONVERSATION]
+        supported_flows = [LLMModelFlowType.CHAT]
         if model_configuration.supports_image_input:
-            supported_flows.append(ModelFlowType.VISION)
+            supported_flows.append(LLMModelFlowType.VISION)
 
         if model_configuration.name in new_model_names:
             insert_new_model_configuration__no_commit(
@@ -314,13 +314,13 @@ def upsert_llm_provider(
                 display_name=model_configuration.display_name,
             )
 
-    default_model = fetch_default_model(db_session, ModelFlowType.CONVERSATION)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
     if default_model and default_model.llm_provider_id == existing_llm_provider.id:
         _update_default_model(
             db_session=db_session,
             provider_id=existing_llm_provider.id,
             model=existing_llm_provider.default_model_name,
-            flow_type=ModelFlowType.CONVERSATION,
+            flow_type=LLMModelFlowType.CHAT,
         )
 
     # Make sure the relationship table stays up to date
@@ -420,12 +420,12 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 
 def fetch_existing_models(
     db_session: Session,
-    flow_types: list[ModelFlowType],
+    flow_types: list[LLMModelFlowType],
 ) -> list[ModelConfiguration]:
     models = (
         select(ModelConfiguration)
-        .join(ModelFlow)
-        .where(ModelFlow.model_flow_type.in_(flow_types))
+        .join(LLMModelFlow)
+        .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
         .options(selectinload(ModelConfiguration.llm_provider))
     )
 
@@ -434,7 +434,7 @@ def fetch_existing_models(
 
 def fetch_existing_llm_providers(
     db_session: Session,
-    flow_types: list[ModelFlowType],
+    flow_types: list[LLMModelFlowType],
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
@@ -449,8 +449,8 @@ def fetch_existing_llm_providers(
     """
     providers_with_flows = (
         select(ModelConfiguration.llm_provider_id)
-        .join(ModelFlow)
-        .where(ModelFlow.model_flow_type.in_(flow_types))
+        .join(LLMModelFlow)
+        .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
         .distinct()
     )
 
@@ -506,24 +506,24 @@ def fetch_embedding_provider(
 
 
 def fetch_default_llm_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, ModelFlowType.CONVERSATION)
+    return fetch_default_model(db_session, LLMModelFlowType.CHAT)
 
 
 def fetch_default_vision_model(db_session: Session) -> ModelConfiguration | None:
-    return fetch_default_model(db_session, ModelFlowType.VISION)
+    return fetch_default_model(db_session, LLMModelFlowType.VISION)
 
 
 def fetch_default_model(
     db_session: Session,
-    flow_type: ModelFlowType,
+    flow_type: LLMModelFlowType,
 ) -> ModelConfiguration | None:
     model_config = db_session.scalar(
         select(ModelConfiguration)
-        .join(ModelFlow)
+        .join(LLMModelFlow)
         .where(
             ModelConfiguration.is_visible == True,  # noqa: E712
-            ModelFlow.model_flow_type == flow_type,
-            ModelFlow.is_default == True,  # noqa: E712
+            LLMModelFlow.llm_model_flow_type == flow_type,
+            LLMModelFlow.is_default == True,  # noqa: E712
         )
     )
 
@@ -621,7 +621,7 @@ def update_default_provider(provider_id: int, db_session: Session) -> None:
         db_session,
         provider_id,
         provider.default_model_name,
-        ModelFlowType.CONVERSATION,
+        LLMModelFlowType.CHAT,
     )
 
 
@@ -646,7 +646,7 @@ def update_default_vision_provider(
         db_session=db_session,
         provider_id=provider_id,
         model=vision_model,
-        flow_type=ModelFlowType.VISION,
+        flow_type=LLMModelFlowType.VISION,
     )
 
 
@@ -750,17 +750,17 @@ def sync_auto_mode_models(
 def create_new_flow_mapping__no_commit(
     db_session: Session,
     model_configuration_id: int,
-    flow_type: ModelFlowType,
-) -> ModelFlow:
+    flow_type: LLMModelFlowType,
+) -> LLMModelFlow:
     result = db_session.execute(
-        insert(ModelFlow)
+        insert(LLMModelFlow)
         .values(
             model_configuration_id=model_configuration_id,
-            model_flow_type=flow_type,
+            llm_model_flow_type=flow_type,
             is_default=False,
         )
         .on_conflict_do_nothing()
-        .returning(ModelFlow)
+        .returning(LLMModelFlow)
     )
 
     flow = result.scalar()
@@ -776,7 +776,7 @@ def insert_new_model_configuration__no_commit(
     db_session: Session,
     llm_provider_id: int,
     model_name: str,
-    supported_flows: list[ModelFlowType],
+    supported_flows: list[LLMModelFlowType],
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
@@ -789,7 +789,7 @@ def insert_new_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
-            supports_image_input=ModelFlowType.VISION in supported_flows,
+            supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .on_conflict_do_nothing()
         .returning(ModelConfiguration.id)
@@ -813,7 +813,7 @@ def insert_new_model_configuration__no_commit(
 def update_model_configuration__no_commit(
     db_session: Session,
     model_configuration_id: int,
-    supported_flows: list[ModelFlowType],
+    supported_flows: list[LLMModelFlowType],
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
@@ -824,7 +824,7 @@ def update_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
-            supports_image_input=ModelFlowType.VISION in supported_flows,
+            supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .where(ModelConfiguration.id == model_configuration_id)
         .returning(ModelConfiguration)
@@ -839,11 +839,11 @@ def update_model_configuration__no_commit(
     new_flows = {
         flow_type
         for flow_type in supported_flows
-        if flow_type not in model_configuration.model_flow_types
+        if flow_type not in model_configuration.llm_model_flow_types
     }
     removed_flows = {
         flow_type
-        for flow_type in model_configuration.model_flow_types
+        for flow_type in model_configuration.llm_model_flow_types
         if flow_type not in supported_flows
     }
 
@@ -856,9 +856,9 @@ def update_model_configuration__no_commit(
 
     for flow_type in removed_flows:
         db_session.execute(
-            delete(ModelFlow).where(
-                ModelFlow.model_configuration_id == model_configuration_id,
-                ModelFlow.model_flow_type == flow_type,
+            delete(LLMModelFlow).where(
+                LLMModelFlow.model_configuration_id == model_configuration_id,
+                LLMModelFlow.llm_model_flow_type == flow_type,
             )
         )
 
@@ -869,15 +869,17 @@ def _update_default_model(
     db_session: Session,
     provider_id: int,
     model: str,
-    flow_type: ModelFlowType,
+    flow_type: LLMModelFlowType,
 ) -> None:
     result = db_session.execute(
-        select(ModelConfiguration, ModelFlow)
-        .join(ModelFlow, ModelFlow.model_configuration_id == ModelConfiguration.id)
+        select(ModelConfiguration, LLMModelFlow)
+        .join(
+            LLMModelFlow, LLMModelFlow.model_configuration_id == ModelConfiguration.id
+        )
         .where(
             ModelConfiguration.llm_provider_id == provider_id,
             ModelConfiguration.name == model,
-            ModelFlow.model_flow_type == flow_type,
+            LLMModelFlow.llm_model_flow_type == flow_type,
         )
     ).first()
 
@@ -890,10 +892,10 @@ def _update_default_model(
 
     # Clear existing default and set in an atomic operation
     db_session.execute(
-        update(ModelFlow)
+        update(LLMModelFlow)
         .where(
-            ModelFlow.model_flow_type == flow_type,
-            ModelFlow.is_default == True,  # noqa: E712
+            LLMModelFlow.llm_model_flow_type == flow_type,
+            LLMModelFlow.is_default == True,  # noqa: E712
         )
         .values(is_default=False)
     )

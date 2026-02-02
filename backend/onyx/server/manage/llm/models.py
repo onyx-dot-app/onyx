@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import LLMModelFlowType
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
@@ -33,7 +33,7 @@ def get_default_llm_model_name(llm_provider_model: "LLMProviderModel") -> str:
     """
     for model_config in llm_provider_model.model_configurations:
         for flow in model_config.model_flows:
-            if flow.is_default and flow.model_flow_type == ModelFlowType.CONVERSATION:
+            if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.CHAT:
                 return model_config.name
     return ""
 
@@ -45,7 +45,7 @@ def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str
     """
     for model_config in llm_provider_model.model_configurations:
         for flow in model_config.model_flows:
-            if flow.is_default and flow.model_flow_type == ModelFlowType.VISION:
+            if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.VISION:
                 return model_config.name
     return None
 
@@ -263,7 +263,8 @@ class ModelConfigurationView(BaseModel):
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 supports_image_input=(
-                    ModelFlowType.VISION in model_configuration_model.model_flow_types
+                    LLMModelFlowType.VISION
+                    in model_configuration_model.llm_model_flow_types
                 ),
                 # Infer reasoning support from model name/display name
                 supports_reasoning=is_reasoning_model(
@@ -306,7 +307,8 @@ class ModelConfigurationView(BaseModel):
             ),
             supports_image_input=(
                 True
-                if ModelFlowType.VISION in model_configuration_model.model_flow_types
+                if LLMModelFlowType.VISION
+                in model_configuration_model.llm_model_flow_types
                 else litellm_thinks_model_supports_image_input(
                     model_configuration_model.name, provider_name
                 )

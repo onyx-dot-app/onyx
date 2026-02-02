@@ -21,9 +21,9 @@ def upgrade() -> None:
     # Exclude models that are part of ImageGenerationConfig
     op.execute(
         """
-        INSERT INTO model_flow (model_flow_type, is_default, model_configuration_id)
+        INSERT INTO model_flow (llm_model_flow_type, is_default, model_configuration_id)
         SELECT
-            'conversation' AS model_flow_type,
+            'conversation' AS llm_model_flow_type,
             COALESCE(
                 (lp.is_default_provider IS TRUE AND lp.default_model_name = mc.name),
                 FALSE
@@ -42,9 +42,9 @@ def upgrade() -> None:
     # Add models with supports_image_input to the vision flow
     op.execute(
         """
-        INSERT INTO model_flow (model_flow_type, is_default, model_configuration_id)
+        INSERT INTO model_flow (llm_model_flow_type, is_default, model_configuration_id)
         SELECT
-            'vision' AS model_flow_type,
+            'vision' AS llm_model_flow_type,
             COALESCE(
                 (lp.is_default_vision_provider IS TRUE AND lp.default_vision_model = mc.name),
                 FALSE
@@ -68,7 +68,7 @@ def downgrade() -> None:
             default_vision_model = mc.name
         FROM model_flow mf
         JOIN model_configuration mc ON mc.id = mf.model_configuration_id
-        WHERE mf.model_flow_type = 'vision'
+        WHERE mf.llm_model_flow_type = 'vision'
           AND mf.is_default = TRUE
           AND mc.llm_provider_id = lp.id;
         """
@@ -83,7 +83,7 @@ def downgrade() -> None:
             default_model_name = mc.name
         FROM model_flow mf
         JOIN model_configuration mc ON mc.id = mf.model_configuration_id
-        WHERE mf.model_flow_type = 'conversation'
+        WHERE mf.llm_model_flow_type = 'conversation'
           AND mf.is_default = TRUE
           AND mc.llm_provider_id = lp.id;
         """
@@ -100,7 +100,7 @@ def downgrade() -> None:
             FROM model_configuration mc
             JOIN model_flow mf ON mf.model_configuration_id = mc.id
             WHERE mc.llm_provider_id = lp.id
-              AND mf.model_flow_type = 'conversation'
+              AND mf.llm_model_flow_type = 'conversation'
             ORDER BY mc.is_visible DESC, mc.id ASC
             LIMIT 1
         )
