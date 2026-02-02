@@ -5,6 +5,8 @@ from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
 
+from onyx.db.models import ModelConfiguration
+
 # Set environment variables to disable model server for testing
 os.environ["DISABLE_MODEL_SERVER"] = "true"
 os.environ["MODEL_SERVER_HOST"] = "disabled"
@@ -423,6 +425,16 @@ class TestSlackBotFederatedSearch:
             is_public=True,
         )
         db_session.add(llm_provider)
+
+        model_configuration = ModelConfiguration(
+            llm_provider_id=llm_provider.id,
+            name="gpt-4o",
+            is_visible=True,
+            max_input_tokens=None,
+            display_name="gpt-4o",
+        )
+        db_session.add(model_configuration)
+
         db_session.commit()
 
     def _teardown_common_mocks(self, patches: list) -> None:
