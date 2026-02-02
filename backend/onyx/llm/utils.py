@@ -690,8 +690,8 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                     LLMProvider.provider == model_provider,
                 )
             )
-            if model_config:
-                return ModelFlowType.VISION in model_config.model_flow_types
+            if model_config and ModelFlowType.VISION in model_config.model_flow_types:
+                return True
     except Exception as e:
         logger.warning(
             f"Failed to query database for {model_provider} model {model_name} image support: {e}"
