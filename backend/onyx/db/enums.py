@@ -287,7 +287,7 @@ class HierarchyNodeType(str, PyEnum):
     CHANNEL = "channel"
 
 
-class ModelFlowType(str, PyEnum):
-    CONVERSATION = "conversation"
+class LLMModelFlowType(str, PyEnum):
+    CHAT = "chat"
     VISION = "vision"
     EMBEDDINGS = "embeddings"

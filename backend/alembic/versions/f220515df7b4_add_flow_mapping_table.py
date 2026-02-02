@@ -6,7 +6,7 @@ Create Date: 2026-01-30 12:21:24.955922
 
 """
 
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import LLMModelFlowType
 from alembic import op
 import sqlalchemy as sa
 
@@ -20,11 +20,11 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "model_flow",
+        "llm_model_flow",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column(
-            "model_flow_type",
-            sa.Enum(ModelFlowType, name="modelflowtype", native_enum=False),
+            "llm_model_flow_type",
+            sa.Enum(LLMModelFlowType, name="llmmodelflowtype", native_enum=False),
             nullable=False,
         ),
         sa.Column(
@@ -36,22 +36,22 @@ def upgrade() -> None:
             ["model_configuration_id"], ["model_configuration.id"], ondelete="CASCADE"
         ),
         sa.UniqueConstraint(
-            "model_flow_type",
+            "llm_model_flow_type",
             "model_configuration_id",
-            name="uq_model_config_per_flow_type",
+            name="uq_model_config_per_llm_model_flow_type",
         ),
     )
 
     # Partial unique index so that there is at most one default for each flow type
     op.create_index(
-        "ix_one_default_per_model_flow",
-        "model_flow",
-        ["model_flow_type"],
+        "ix_one_default_per_llm_model_flow",
+        "llm_model_flow",
+        ["llm_model_flow_type"],
         unique=True,
         postgresql_where=sa.text("is_default IS TRUE"),
     )
 
 
 def downgrade() -> None:
-    # Drop the model_flow table (index is dropped automatically with table)
-    op.drop_table("model_flow")
+    # Drop the llm_model_flow table (index is dropped automatically with table)
+    op.drop_table("llm_model_flow")
