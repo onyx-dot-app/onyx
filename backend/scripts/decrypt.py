@@ -32,8 +32,9 @@ def decrypt_raw_credential(encrypted_value: str) -> None:
     except binascii.Error:
         print("Error: Invalid hex encoded string")
 
-    except json.JSONDecodeError as e:
-        print(f"Decrypted raw value (not JSON): {e}")
+    except json.JSONDecodeError:
+        print("Decrypted value (not JSON):")
+        print(decrypted_str)
 
     except Exception as e:
         print(f"Error decrypting value: {e}")
