@@ -206,11 +206,13 @@ export default function ExpandableTextDisplay({
     <>
       {/* Collapsed View */}
       <div className={cn("w-full flex", className)}>
-        {renderContent
-          ? renderContentWithRef()
-          : isStreaming
-            ? renderPlainTextStreaming()
-            : renderPlainTextStatic()}
+        <div className="flex-1 min-w-0">
+          {renderContent
+            ? renderContentWithRef()
+            : isStreaming
+              ? renderPlainTextStreaming()
+              : renderPlainTextStatic()}
+        </div>
 
         {/* Expand button - only show when content is truncated */}
 
