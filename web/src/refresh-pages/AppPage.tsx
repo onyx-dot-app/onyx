@@ -655,7 +655,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     gridTemplateColumns: "15rem 1fr 15rem",
     gridTemplateRows: isSearch
       ? "0fr auto 1fr"
-      : classification === "chat"
+      : classification === "chat" || appFocus.isChat()
         ? "1fr auto 0fr"
         : "1fr auto 1fr",
   };
@@ -882,7 +882,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
-                          classification === "chat" ? "h-[14px]" : "h-0"
+                          (classification === "chat" || appFocus.isChat()) &&
+                            "h-[14px]"
                         )}
                       />
                     </div>
