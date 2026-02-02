@@ -5,7 +5,9 @@ from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
 
-from onyx.db.models import ModelConfiguration
+from onyx.db.llm import upsert_llm_provider
+from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 
 # Set environment variables to disable model server for testing
 os.environ["DISABLE_MODEL_SERVER"] = "true"
@@ -405,9 +407,13 @@ class TestSlackBotFederatedSearch:
     def _setup_llm_provider(self, db_session: Session) -> None:
         """Create a default LLM provider in the database for testing with real API key"""
         # Delete any existing default LLM provider to ensure clean state
+        # Use SQL-level delete to properly trigger ON DELETE CASCADE
+        # (ORM-level delete tries to set foreign keys to NULL instead)
+        from sqlalchemy import delete
+
         existing_providers = db_session.query(LLMProvider).all()
         for provider in existing_providers:
-            db_session.delete(provider)
+            db_session.execute(delete(LLMProvider).where(LLMProvider.id == provider.id))
         db_session.commit()
 
         api_key = os.getenv("OPENAI_API_KEY")
@@ -416,27 +422,25 @@ class TestSlackBotFederatedSearch:
                 "OPENAI_API_KEY environment variable not set - test requires real API key"
             )
 
-        llm_provider = LLMProvider(
-            name=f"test-llm-provider-{uuid4().hex[:8]}",
-            provider=LlmProviderNames.OPENAI,
-            api_key=api_key,
-            default_model_name="gpt-4o",
-            is_default_provider=True,
-            is_public=True,
+        upsert_llm_provider(
+            LLMProviderUpsertRequest(
+                name=f"test-llm-provider-{uuid4().hex[:8]}",
+                provider=LlmProviderNames.OPENAI,
+                api_key=api_key,
+                default_model_name="gpt-4o",
+                is_default_provider=True,
+                is_public=True,
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o",
+                        is_visible=True,
+                        max_input_tokens=None,
+                        display_name="gpt-4o",
+                    ),
+                ],
+            ),
+            db_session=db_session,
         )
-        db_session.add(llm_provider)
-        db_session.flush()
-
-        model_configuration = ModelConfiguration(
-            llm_provider_id=llm_provider.id,
-            name="gpt-4o",
-            is_visible=True,
-            max_input_tokens=None,
-            display_name="gpt-4o",
-        )
-        db_session.add(model_configuration)
-
-        db_session.commit()
 
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""
