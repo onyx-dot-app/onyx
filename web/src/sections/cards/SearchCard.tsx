@@ -12,6 +12,7 @@ import { Section } from "@/layouts/general-layouts";
 import { Hoverable, HoverableContainer } from "@/refresh-components/Hoverable";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { formatRelativeTime } from "@/lib/utils";
+import { useMemo } from "react";
 
 export interface SearchResultCardProps {
   /** The search result document to display */
@@ -35,12 +36,19 @@ export default function SearchCard({
   const isWebSource =
     document.is_internet || document.source_type === ValidSources.Web;
 
-  const handleClick = () => {
+  function handleClick() {
     onDocumentClick({
       document_id: document.document_id,
       semantic_identifier: document.semantic_identifier,
     });
-  };
+  }
+
+  const content = useMemo(
+    () =>
+      buildDocumentSummaryDisplay(document.match_highlights, document.blurb) ||
+      document.blurb,
+    [document.match_highlights, document.blurb]
+  );
 
   return (
     <Hoverable onClick={handleClick} asChild variant="secondary">
@@ -49,7 +57,7 @@ export default function SearchCard({
         paddingVariant="compact"
         widthVariant="full"
       >
-        <Section alignItems="start" gap={0} padding={0.25}>
+        <Section alignItems="start" gap={0} padding={0}>
           {/* Title Row */}
           <Section
             flexDirection="row"
@@ -90,12 +98,11 @@ export default function SearchCard({
               </Section>
 
               {/* Blurb */}
-              <Text secondaryBody text03 className="text-left">
-                {buildDocumentSummaryDisplay(
-                  document.match_highlights,
-                  document.blurb
-                ) || document.blurb}
-              </Text>
+              {content && (
+                <Text secondaryBody text03 className="text-left">
+                  {content}
+                </Text>
+              )}
             </Section>
           </div>
         </Section>
