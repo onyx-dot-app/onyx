@@ -251,6 +251,8 @@ def transform_vespa_chunks_to_opensearch_chunks(
                 )
 
         opensearch_chunk = DocumentChunk(
+            # We deliberately choose to use the doc ID supplied to this function
+            # over the Vespa doc ID.
             document_id=document_id,
             chunk_index=chunk_index,
             title=title,
