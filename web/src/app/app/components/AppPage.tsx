@@ -747,12 +747,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 />
 
                 {/* ProjectChatSessionsUI */}
-                {appFocus.isProject() && (
-                  <>
-                    <Spacer rem={0.5} />
-                    <ProjectChatSessionList />
-                  </>
-                )}
+                {appFocus.isProject() && <ProjectChatSessionList />}
               </div>
 
               {/* SearchUI - coming soon */}
@@ -760,12 +755,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {/* SuggestionsUI */}
               {(appFocus.isNewSession() || appFocus.isAgent()) && (
                 <div className="flex-1 self-stretch flex flex-col items-center">
-                  {hasStarterMessages && (
-                    <>
-                      <Spacer rem={0.5} />
-                      <Suggestions onSubmit={onSubmit} />
-                    </>
-                  )}
+                  {hasStarterMessages && <Suggestions onSubmit={onSubmit} />}
                 </div>
               )}
             </div>
