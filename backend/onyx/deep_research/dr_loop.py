@@ -33,6 +33,8 @@ from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FINAL_REPORT_PROMPT
+from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER
+from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER_TOKENS
 from onyx.prompts.deep_research.orchestration_layer import (
     INTERNAL_SEARCH_CLARIFICATION_GUIDANCE,
 )
@@ -412,6 +414,17 @@ def run_deep_research_llm_loop(
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
 
+                if cycle == 1:
+                    first_cycle_reminder_message = ChatMessageSimple(
+                        message=FIRST_CYCLE_REMINDER,
+                        token_count=FIRST_CYCLE_REMINDER_TOKENS,
+                        message_type=MessageType.USER,
+                    )
+                    first_cycle_tokens = FIRST_CYCLE_REMINDER_TOKENS
+                else:
+                    first_cycle_tokens = 0
+                    first_cycle_reminder_message = None
+
                 research_agent_calls: list[ToolCallKickoff] = []
 
                 orchestrator_prompt = orchestrator_prompt_template.format(
@@ -434,9 +447,12 @@ def run_deep_research_llm_loop(
                     simple_chat_history=simple_chat_history,
                     reminder_message=None,
                     project_files=None,
-                    available_tokens=available_tokens,
+                    available_tokens=available_tokens - first_cycle_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
                 )
+
+                if first_cycle_reminder_message is not None:
+                    truncated_message_history.append(first_cycle_reminder_message)
 
                 # Use think tool processor for non-reasoning models to convert
                 # think_tool calls to reasoning content
