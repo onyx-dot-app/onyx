@@ -32,7 +32,7 @@ def get_default_llm_model_name(llm_provider_model: "LLMProviderModel") -> str:
     Returns the model name if found, otherwise returns empty string.
     """
     for model_config in llm_provider_model.model_configurations:
-        for flow in model_config.model_flows:
+        for flow in model_config.llm_model_flows:
             if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.CHAT:
                 return model_config.name
     return ""
@@ -44,7 +44,7 @@ def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str
     Returns the model name if found, otherwise returns None.
     """
     for model_config in llm_provider_model.model_configurations:
-        for flow in model_config.model_flows:
+        for flow in model_config.llm_model_flows:
             if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.VISION:
                 return model_config.name
     return None
