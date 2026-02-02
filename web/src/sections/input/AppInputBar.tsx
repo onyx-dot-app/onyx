@@ -250,7 +250,7 @@ const AppInputBar = React.memo(
           )}px`;
         }
       }
-    }, [message]);
+    }, [message, isSearchMode]);
 
     useEffect(() => {
       if (initialMessage) {

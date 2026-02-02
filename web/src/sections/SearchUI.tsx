@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BaseFilters } from "@/lib/search/searchApi";
 import { MinimalOnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
 import SearchCard from "@/sections/cards/SearchCard";
@@ -16,6 +16,8 @@ import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import useFilter from "@/hooks/useFilter";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // ============================================================================
@@ -82,6 +84,16 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const [timeFilterOpen, setTimeFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
+
+  const tagExtractor = useCallback(
+    (tag: Tag) => `${tag.tag_key} ${tag.tag_value}`,
+    []
+  );
+  const {
+    query: tagQuery,
+    setQuery: setTagQuery,
+    filtered: filteredTags,
+  } = useFilter(availableTags, tagExtractor);
 
   // Build the combined server-side filters from current state
   const buildFilters = (
@@ -232,7 +244,15 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             </Popover.Trigger>
             <Popover.Content align="start" width="lg">
               <PopoverMenu>
-                {availableTags.map((tag) => {
+                <InputTypeIn
+                  leftSearchIcon
+                  placeholder="Filter tags..."
+                  value={tagQuery}
+                  onChange={(e) => setTagQuery(e.target.value)}
+                  onClear={() => setTagQuery("")}
+                  variant="internal"
+                />
+                {filteredTags.map((tag) => {
                   const isSelected = selectedTags.some(
                     (t) =>
                       t.tag_key === tag.tag_key && t.tag_value === tag.tag_value
