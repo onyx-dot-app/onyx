@@ -264,7 +264,7 @@ function ExpandableCardContent({
   }, [registerContent]);
 
   return (
-    <Collapsible open={!isFolded}>
+    <Collapsible open={!isFolded} className="w-full">
       <CollapsibleContent>
         <div
           className={cn(
