@@ -423,7 +423,7 @@ class TestSlackBotFederatedSearch:
                 "OPENAI_API_KEY environment variable not set - test requires real API key"
             )
 
-        provider = upsert_llm_provider(
+        provider_view = upsert_llm_provider(
             LLMProviderUpsertRequest(
                 name=f"test-llm-provider-{uuid4().hex[:8]}",
                 provider=LlmProviderNames.OPENAI,
@@ -442,7 +442,7 @@ class TestSlackBotFederatedSearch:
             db_session=db_session,
         )
 
-        update_default_provider(provider.id, db_session)
+        update_default_provider(provider_view.id, db_session)
 
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""
