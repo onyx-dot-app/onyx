@@ -20,7 +20,7 @@ import ChatInputBar, {
 } from "@/app/app/components/input/ChatInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useTags } from "@/lib/hooks/useTags";
+import useTags from "@/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/hooks/useAgents";
 import { AppPopup } from "@/app/app/components/AppPopup";
@@ -71,7 +71,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import useAppFocus from "@/hooks/useAppFocus";
-import useQueryController from "@/hooks/useQueryController";
+import { useQueryControllerContext } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
 import SearchUI from "@/sections/SearchUI";
@@ -465,7 +465,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     redirect("/auth/login");
   }
 
-  // Unified query controller - handles classification and search routing
   const onChat = useCallback(
     (message: string) => {
       resetInputBar();
@@ -495,7 +494,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     classification,
     refineSearch,
     isClassifying,
-  } = useQueryController(onChat);
+    registerOnChat,
+  } = useQueryControllerContext();
+
+  useEffect(() => {
+    registerOnChat(onChat);
+  }, [registerOnChat, onChat]);
 
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),

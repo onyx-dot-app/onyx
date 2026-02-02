@@ -8,7 +8,7 @@ import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
-import { useTags } from "@/lib/hooks/useTags";
+import useTags from "@/hooks/useTags";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -16,6 +16,7 @@ import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
+import { useAppMode } from "@/providers/AppModeProvider";
 
 // ============================================================================
 // Types
@@ -87,6 +88,7 @@ export default function SearchUI({
   const [timeFilterOpen, setTimeFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
+  const { setAppMode } = useAppMode();
 
   // Build the combined server-side filters from current state
   const buildFilters = (
@@ -103,6 +105,8 @@ export default function SearchUI({
           : null,
     };
   };
+
+  useEffect(() => setAppMode("search"), [setAppMode]);
 
   // Reset source filter when results change
   useEffect(() => {

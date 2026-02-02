@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   BaseFilters,
   classifyQuery,
@@ -14,10 +21,10 @@ import useAppFocus from "@/hooks/useAppFocus";
 
 export type QueryClassification = "search" | "chat" | null;
 
-export interface UseQueryControllerReturn {
+export interface QueryControllerContextValue {
   /** The query that was submitted */
   query: string | null;
-  /** Classification state: null (idle), "pending" (classifying), "search", or "chat" */
+  /** Classification state: null (idle), "search", or "chat" */
   classification: QueryClassification;
   /** Whether or not the currently submitted query is being actively classified by the backend */
   isClassifying: boolean;
@@ -31,38 +38,39 @@ export interface UseQueryControllerReturn {
   refineSearch: (filters: BaseFilters) => Promise<void>;
   /** Reset all state to initial values */
   reset: () => void;
+  /** Register the onChat callback (called from AppPage) */
+  registerOnChat: (cb: (query: string) => void) => void;
 }
 
-/**
- * Unified hook for query handling - classification and search.
- *
- * Routes queries based on the current app mode:
- * - "chat" mode: immediately calls onChat callback
- * - "search" mode: performs document search
- * - "auto" mode: classifies query first, then routes accordingly
- *
- * @example
- * ```tsx
- * const queryController = useQueryController({
- *   onChat: (query) => {
- *     onSubmit({ message: query, files, deepResearch });
- *   }
- * });
- *
- * // For new sessions, use the controller's submit
- * <ChatInputBar onSubmit={queryController.submit} />
- *
- * // Check classification for UI state
- * if (queryController.classification === null) {
- *   // Show welcome message
- * }
- * ```
- */
-export default function useQueryController(
-  onChat: (query: string) => void
-): UseQueryControllerReturn {
+const QueryControllerContext =
+  createContext<QueryControllerContextValue | null>(null);
+
+export function useQueryControllerContext(): QueryControllerContextValue {
+  const ctx = useContext(QueryControllerContext);
+  if (!ctx) {
+    throw new Error(
+      "useQueryControllerContext must be used within a QueryControllerProvider"
+    );
+  }
+  return ctx;
+}
+
+interface QueryControllerProviderProps {
+  children: React.ReactNode;
+}
+
+export function QueryControllerProvider({
+  children,
+}: QueryControllerProviderProps) {
   const { appMode } = useAppMode();
   const appFocus = useAppFocus();
+
+  // onChat callback ref — set by the consumer via registerOnChat
+  const onChatRef = useRef<((query: string) => void) | null>(null);
+
+  const registerOnChat = useCallback((cb: (query: string) => void) => {
+    onChatRef.current = cb;
+  }, []);
 
   // Query state
   const [query, setQuery] = useState<string | null>(null);
@@ -87,7 +95,6 @@ export default function useQueryController(
    */
   const performSearch = useCallback(
     async (searchQuery: string, filters?: BaseFilters): Promise<void> => {
-      // Abort any previous search request
       if (searchAbortRef.current) {
         searchAbortRef.current.abort();
       }
@@ -106,7 +113,6 @@ export default function useQueryController(
           }
         );
 
-        // Check if the response contains an error
         if (response.error) {
           setSearchResults([]);
           setLlmSelectedDocIds(null);
@@ -116,7 +122,6 @@ export default function useQueryController(
         setSearchResults(response.search_docs);
         setLlmSelectedDocIds(response.llm_selected_doc_ids ?? null);
       } catch (err) {
-        // Don't update state if the request was aborted
         if (err instanceof Error && err.name === "AbortError") {
           return;
         }
@@ -134,7 +139,6 @@ export default function useQueryController(
    */
   const performClassification = useCallback(
     async (classifyQueryText: string): Promise<"search" | "chat"> => {
-      // Abort any previous classification request
       if (classifyAbortRef.current) {
         classifyAbortRef.current.abort();
       }
@@ -153,13 +157,11 @@ export default function useQueryController(
         const result = response.is_search_flow ? "search" : "chat";
         return result;
       } catch (error) {
-        // Re-throw abort errors so caller can handle
         if (error instanceof Error && error.name === "AbortError") {
           throw error;
         }
 
         console.error("Query classification failed:", error);
-        // Default to chat flow on error (matches backend behavior)
         return "chat";
       } finally {
         setIsClassifying(false);
@@ -175,27 +177,23 @@ export default function useQueryController(
     async (submitQuery: string, filters?: BaseFilters): Promise<void> => {
       setQuery(submitQuery);
 
-      // # Note (@raunakab)
-      //
-      // We only perform search routing when we're in the "New Session" tab.
-      // Nowhere else.
+      const onChat = onChatRef.current;
+
       if (!appFocus.isNewSession()) {
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-        onChat(submitQuery);
+        onChat?.(submitQuery);
         return;
       }
 
-      // Chat mode: skip classification, go directly to chat
       if (appMode === "chat") {
         setClassification("chat");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-        onChat(submitQuery);
+        onChat?.(submitQuery);
         return;
       }
 
-      // Search mode: skip classification, go directly to search
       if (appMode === "search") {
         await performSearch(submitQuery, filters);
         setClassification("search");
@@ -211,25 +209,22 @@ export default function useQueryController(
           setClassification("search");
         } else {
           setClassification("chat");
-          // Clear any previous search results when going to chat
           setSearchResults([]);
           setLlmSelectedDocIds(null);
-          onChat(submitQuery);
+          onChat?.(submitQuery);
         }
       } catch (error) {
-        // If classification was aborted, do nothing
         if (error instanceof Error && error.name === "AbortError") {
           return;
         }
 
-        // On other errors, default to chat
         setClassification("chat");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-        onChat(submitQuery);
+        onChat?.(submitQuery);
       }
     },
-    [appMode, onChat, performClassification, performSearch]
+    [appMode, appFocus, performClassification, performSearch]
   );
 
   /**
@@ -247,7 +242,6 @@ export default function useQueryController(
    * Reset all state to initial values
    */
   const reset = useCallback(() => {
-    // Abort any in-flight requests
     if (classifyAbortRef.current) {
       classifyAbortRef.current.abort();
       classifyAbortRef.current = null;
@@ -264,8 +258,6 @@ export default function useQueryController(
   }, []);
 
   // Sync classification state with navigation context
-  // When in an existing chat session, classification should be "chat"
-  // When switching agents or projects (no session), reset to allow new classification
   const appFocusType = appFocus.getType();
   const appFocusId = appFocus.getId();
   useEffect(() => {
@@ -273,7 +265,7 @@ export default function useQueryController(
     else reset();
   }, [appFocusType, appFocusId, reset]);
 
-  return {
+  const value: QueryControllerContextValue = {
     query,
     classification,
     isClassifying,
@@ -282,5 +274,12 @@ export default function useQueryController(
     submit,
     refineSearch,
     reset,
+    registerOnChat,
   };
+
+  return (
+    <QueryControllerContext.Provider value={value}>
+      {children}
+    </QueryControllerContext.Provider>
+  );
 }
