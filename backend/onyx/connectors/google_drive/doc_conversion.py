@@ -476,13 +476,24 @@ def _get_external_access_for_raw_gdrive_file(
     company_domain: str,
     retriever_drive_service: GoogleDriveService | None,
     admin_drive_service: GoogleDriveService,
+    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
+
+    add_prefix: When True, prefix group IDs with source type (for indexing path).
+               When False (default), leave unprefixed (for permission sync path
+               where upsert_document_external_perms handles prefixing).
     """
     external_access_fn = cast(
         Callable[
-            [GoogleDriveFileType, str, GoogleDriveService | None, GoogleDriveService],
+            [
+                GoogleDriveFileType,
+                str,
+                GoogleDriveService | None,
+                GoogleDriveService,
+                bool,
+            ],
             ExternalAccess,
         ],
         fetch_versioned_implementation_with_fallback(
@@ -496,6 +507,7 @@ def _get_external_access_for_raw_gdrive_file(
         company_domain,
         retriever_drive_service,
         admin_drive_service,
+        add_prefix,
     )
 
 
@@ -659,6 +671,7 @@ def _convert_drive_item_to_document(
                 admin_drive_service=get_drive_service(
                     creds, user_email=permission_sync_context.primary_admin_email
                 ),
+                add_prefix=True,  # Indexing path - prefix here
             )
             if permission_sync_context
             else None

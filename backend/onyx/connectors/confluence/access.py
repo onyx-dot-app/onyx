@@ -18,6 +18,9 @@ def get_page_restrictions(
     Get page access restrictions for a Confluence page.
     This functionality requires Enterprise Edition.
 
+    Note: This wrapper is only called from permission sync path. Group IDs are
+    left unprefixed here because upsert_document_external_perms handles prefixing.
+
     Args:
         confluence_client: OnyxConfluence client instance
         page_id: The ID of the page
@@ -34,7 +37,7 @@ def get_page_restrictions(
     # Fetch the EE implementation
     ee_get_all_page_restrictions = cast(
         Callable[
-            [OnyxConfluence, str, dict[str, Any], list[dict[str, Any]]],
+            [OnyxConfluence, str, dict[str, Any], list[dict[str, Any]], bool],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -42,8 +45,9 @@ def get_page_restrictions(
         ),
     )
 
+    # add_prefix=False: permission sync path - upsert_document_external_perms handles prefixing
     return ee_get_all_page_restrictions(
-        confluence_client, page_id, page_restrictions, ancestors
+        confluence_client, page_id, page_restrictions, ancestors, False
     )
 
 
@@ -54,6 +58,9 @@ def get_all_space_permissions(
     """
     Get access permissions for all spaces in Confluence.
     This functionality requires Enterprise Edition.
+
+    Note: This wrapper is only called from permission sync path. Group IDs are
+    left unprefixed here because upsert_document_external_perms handles prefixing.
 
     Args:
         confluence_client: OnyxConfluence client instance
@@ -69,7 +76,7 @@ def get_all_space_permissions(
     # Fetch the EE implementation
     ee_get_all_space_permissions = cast(
         Callable[
-            [OnyxConfluence, bool],
+            [OnyxConfluence, bool, bool],
             dict[str, ExternalAccess],
         ],
         fetch_versioned_implementation(
@@ -78,4 +85,5 @@ def get_all_space_permissions(
         ),
     )
 
-    return ee_get_all_space_permissions(confluence_client, is_cloud)
+    # add_prefix=False: permission sync path - upsert_document_external_perms handles prefixing
+    return ee_get_all_space_permissions(confluence_client, is_cloud, False)
