@@ -62,7 +62,7 @@ interface QueryControllerProviderProps {
 export function QueryControllerProvider({
   children,
 }: QueryControllerProviderProps) {
-  const { appMode, setAppMode } = useAppMode();
+  const { appMode } = useAppMode();
   const appFocus = useAppFocus();
 
   // Query state
@@ -215,7 +215,6 @@ export function QueryControllerProvider({
         if (result === "search") {
           await performSearch(submitQuery, filters);
           setClassification("search");
-          setAppMode("search");
         } else {
           setClassification("chat");
           setSearchResults([]);

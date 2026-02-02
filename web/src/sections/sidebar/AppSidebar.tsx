@@ -441,13 +441,6 @@ const MemoizedAppSidebarInner = memo(
             folded={folded}
             href={href}
             transient={activeSidebarTab.isNewSession()}
-            onClick={() => {
-              reset();
-
-              // This is a re-press of this button.
-              // We also reset the app-mode.
-              if (activeSidebarTab.isNewSession()) setAppMode("auto");
-            }}
           >
             New Session
           </SidebarTab>

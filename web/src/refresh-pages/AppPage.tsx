@@ -74,6 +74,7 @@ import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
 import SearchUI from "@/sections/SearchUI";
 import { motion, AnimatePresence } from "motion/react";
+import { useAppMode } from "@/providers/AppModeProvider";
 
 interface FadeProps {
   show: boolean;
@@ -123,6 +124,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
+  const { setAppMode } = useAppMode();
   const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
@@ -343,6 +345,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       window.removeEventListener("message", loadNewPageLogic);
     };
   }, []);
+
+  // Always reset the app-focus back to "auto" when navigating back to the "New Sessions" page.
+  useEffect(() => setAppMode("auto"), [appFocus.isNewSession()]);
 
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
