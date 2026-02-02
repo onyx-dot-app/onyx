@@ -316,22 +316,10 @@ function Header() {
               internal
             />
           )}
-          {(appFocus.isNewSession() ||
-            appFocus.isAgent() ||
-            appFocus.isChat()) && (
-            <Popover
-              open={modePopoverOpen}
-              onOpenChange={(open) => {
-                if (!appFocus.isNewSession()) return;
-                setModePopoverOpen(open);
-              }}
-            >
+          {appFocus.isNewSession() && (
+            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
               <Popover.Trigger asChild>
-                <Hoverable
-                  asChild
-                  variant="secondary"
-                  transient={!appFocus.isNewSession()}
-                >
+                <Hoverable asChild variant="secondary">
                   <ChevronHoverableContainer>
                     <LineItemLayout
                       icon={

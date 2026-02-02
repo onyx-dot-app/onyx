@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BaseFilters, SearchDocWithContent } from "@/lib/search/searchApi";
+import { BaseFilters } from "@/lib/search/searchApi";
 import { MinimalOnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
 import SearchCard from "@/sections/cards/SearchCard";
 import Separator from "@/refresh-components/Separator";
@@ -16,20 +16,15 @@ import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface SearchResultsProps {
-  /** Search results to display */
-  results: SearchDocWithContent[];
-  /** Document IDs that the LLM selected as most relevant */
-  llmSelectedDocIds?: string[] | null;
   /** Callback when a document is clicked */
   onDocumentClick: (doc: MinimalOnyxDocument) => void;
-  /** Re-run the search with updated server-side filters */
-  onRefineSearch: (filters: BaseFilters) => Promise<void>;
 }
 
 // ============================================================================
@@ -72,14 +67,14 @@ function getTimeFilterDate(filter: TimeFilter): Date | null {
 /**
  * Component for displaying search results with source filter sidebar.
  */
-export default function SearchUI({
-  results,
-  llmSelectedDocIds,
-  onDocumentClick,
-  onRefineSearch,
-}: SearchResultsProps) {
+export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   // Available tags from backend
   const { tags: availableTags } = useTags();
+  const {
+    searchResults: results,
+    llmSelectedDocIds,
+    refineSearch: onRefineSearch,
+  } = useQueryController();
 
   // Filter state
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
@@ -108,8 +103,6 @@ export default function SearchUI({
   useEffect(() => {
     setSelectedSources([]);
   }, [results]);
-  const [ownerFilter, setOwnerFilter] = useState<string>("everyone");
-  const [tagFilter, setTagFilter] = useState<string>("all-tags");
 
   // Create a set for fast lookup of LLM-selected docs
   const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
@@ -122,22 +115,6 @@ export default function SearchUI({
         if (!doc.source_type || !selectedSources.includes(doc.source_type)) {
           return false;
         }
-      }
-
-      // Owner filter
-      if (ownerFilter !== "everyone") {
-        if (!doc.primary_owners || !doc.primary_owners.includes(ownerFilter)) {
-          return false;
-        }
-      }
-
-      // Tag filter
-      if (tagFilter !== "all-tags") {
-        if (!doc.metadata?.tags) return false;
-        const docTags = Array.isArray(doc.metadata.tags)
-          ? doc.metadata.tags
-          : [doc.metadata.tags];
-        if (!docTags.includes(tagFilter)) return false;
       }
 
       return true;
@@ -153,7 +130,7 @@ export default function SearchUI({
 
       return (b.score ?? 0) - (a.score ?? 0);
     });
-  }, [results, selectedSources, ownerFilter, tagFilter, llmSelectedSet]);
+  }, [results, selectedSources, llmSelectedSet]);
 
   // Extract unique sources with metadata for the source filter
   const sourcesWithMeta = useMemo(() => {

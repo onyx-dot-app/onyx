@@ -15,7 +15,7 @@ import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import Dropzone from "react-dropzone";
-import ChatInputBar, {
+import AppInputBar, {
   ChatInputBarHandle,
 } from "@/app/app/components/input/ChatInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -71,7 +71,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useQueryControllerContext } from "@/providers/QueryControllerProvider";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
 import SearchUI from "@/sections/SearchUI";
@@ -489,17 +489,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const {
     submit: submitQuery,
     reset: resetQueryController,
-    searchResults,
-    llmSelectedDocIds,
     classification,
-    refineSearch,
-    isClassifying,
-    registerOnChat,
-  } = useQueryControllerContext();
-
-  useEffect(() => {
-    registerOnChat(onChat);
-  }, [registerOnChat, onChat]);
+  } = useQueryController();
 
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
@@ -528,11 +519,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
-      await submitQuery(message);
+      await submitQuery(message, onChat);
     },
     [
       currentChatSessionId,
       submitQuery,
+      onChat,
       resetQueryController,
       resetInputBar,
       onSubmit,
@@ -847,7 +839,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           classification === "search" ? "h-[14px]" : "h-0"
                         )}
                       />
-                      <ChatInputBar
+                      <AppInputBar
                         ref={chatInputBarRef}
                         deepResearchEnabled={deepResearchEnabled}
                         toggleDeepResearch={toggleDeepResearch}
@@ -880,7 +872,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)
                         }
-                        isClassifying={isClassifying}
                       />
                       <div
                         className={cn(
@@ -909,12 +900,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1"
                   >
                     <Spacer rem={0.75} />
-                    <SearchUI
-                      results={searchResults}
-                      llmSelectedDocIds={llmSelectedDocIds}
-                      onDocumentClick={handleSearchDocumentClick}
-                      onRefineSearch={refineSearch}
-                    />
+                    <SearchUI onDocumentClick={handleSearchDocumentClick} />
                   </Fade>
 
                   {/* SuggestionsUI */}

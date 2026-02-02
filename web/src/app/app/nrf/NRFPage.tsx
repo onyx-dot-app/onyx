@@ -6,7 +6,7 @@ import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
-import ChatInputBar, {
+import AppInputBar, {
   ChatInputBarHandle,
 } from "@/app/app/components/input/ChatInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -407,7 +407,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   hasMessages && "pointer-events-auto"
                 )}
               >
-                <ChatInputBar
+                <AppInputBar
                   ref={chatInputBarRef}
                   deepResearchEnabled={deepResearchEnabled}
                   toggleDeepResearch={toggleDeepResearch}

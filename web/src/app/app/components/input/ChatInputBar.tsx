@@ -53,6 +53,7 @@ import {
 } from "@opal/icons";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 const LINE_HEIGHT = 24;
 const MIN_INPUT_HEIGHT = 44;
@@ -124,11 +125,10 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
-  isClassifying?: boolean;
   ref?: React.Ref<ChatInputBarHandle>;
 }
 
-const ChatInputBar = React.memo(
+const AppInputBar = React.memo(
   ({
     retrievalEnabled,
     removeDocs,
@@ -150,7 +150,6 @@ const ChatInputBar = React.memo(
     toggleDeepResearch,
     setPresentingDocument,
     disabled,
-    isClassifying,
     ref,
   }: ChatInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
@@ -158,6 +157,7 @@ const ChatInputBar = React.memo(
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
+    const { isClassifying } = useQueryController();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -774,6 +774,6 @@ const ChatInputBar = React.memo(
     );
   }
 );
-ChatInputBar.displayName = "ChatInputBar";
+AppInputBar.displayName = "AppInputBar";
 
-export default ChatInputBar;
+export default AppInputBar;

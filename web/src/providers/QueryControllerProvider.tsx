@@ -7,6 +7,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useMemo,
 } from "react";
 import {
   BaseFilters,
@@ -21,9 +22,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 
 export type QueryClassification = "search" | "chat" | null;
 
-export interface QueryControllerContextValue {
-  /** The query that was submitted */
-  query: string | null;
+export interface QueryControllerValue {
   /** Classification state: null (idle), "search", or "chat" */
   classification: QueryClassification;
   /** Whether or not the currently submitted query is being actively classified by the backend */
@@ -33,19 +32,20 @@ export interface QueryControllerContextValue {
   /** Document IDs selected by the LLM as most relevant */
   llmSelectedDocIds: string[] | null;
   /** Submit a query - routes to search or chat based on app mode */
-  submit: (query: string, filters?: BaseFilters) => Promise<void>;
+  submit: (
+    query: string,
+    onChat: (query: string) => void,
+    filters?: BaseFilters
+  ) => Promise<void>;
   /** Re-run the current search query with updated server-side filters */
   refineSearch: (filters: BaseFilters) => Promise<void>;
   /** Reset all state to initial values */
   reset: () => void;
-  /** Register the onChat callback (called from AppPage) */
-  registerOnChat: (cb: (query: string) => void) => void;
 }
 
-const QueryControllerContext =
-  createContext<QueryControllerContextValue | null>(null);
+const QueryControllerContext = createContext<QueryControllerValue | null>(null);
 
-export function useQueryControllerContext(): QueryControllerContextValue {
+export function useQueryController(): QueryControllerValue {
   const ctx = useContext(QueryControllerContext);
   if (!ctx) {
     throw new Error(
@@ -64,13 +64,6 @@ export function QueryControllerProvider({
 }: QueryControllerProviderProps) {
   const { appMode } = useAppMode();
   const appFocus = useAppFocus();
-
-  // onChat callback ref — set by the consumer via registerOnChat
-  const onChatRef = useRef<((query: string) => void) | null>(null);
-
-  const registerOnChat = useCallback((cb: (query: string) => void) => {
-    onChatRef.current = cb;
-  }, []);
 
   // Query state
   const [query, setQuery] = useState<string | null>(null);
@@ -174,23 +167,22 @@ export function QueryControllerProvider({
    * Submit a query - routes based on app mode
    */
   const submit = useCallback(
-    async (submitQuery: string, filters?: BaseFilters): Promise<void> => {
+    async (
+      submitQuery: string,
+      onChat: (query: string) => void,
+      filters?: BaseFilters
+    ): Promise<void> => {
       setQuery(submitQuery);
 
-      const onChat = onChatRef.current;
-
-      if (!appFocus.isNewSession()) {
+      // 1.
+      // We only go down the classification route if we're in the "New Session" tab.
+      // Everywhere else, we always use the chat-flow.
+      //
+      // 2. If we're in the "New Session" tab and the app-mode is "Chat", we continue with the chat-flow anyways.
+      if (!appFocus.isNewSession() || appMode === "chat") {
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-        onChat?.(submitQuery);
-        return;
-      }
-
-      if (appMode === "chat") {
-        setClassification("chat");
-        setSearchResults([]);
-        setLlmSelectedDocIds(null);
-        onChat?.(submitQuery);
+        onChat(submitQuery);
         return;
       }
 
@@ -199,6 +191,22 @@ export function QueryControllerProvider({
         setClassification("search");
         return;
       }
+
+      // # Note (@raunakab)
+      //
+      // Interestingly enough, for search, we do:
+      // 1. setClassification("search")
+      // 2. performSearch
+      //
+      // But for chat, we do:
+      // 1. performChat
+      // 2. setClassification("chat")
+      //
+      // The ChatUI has a nice loading UI, so it's fine for us to prematurely set the
+      // classification-state before the chat has finished loading.
+      //
+      // However, the SearchUI does not. Prematurely setting the classification-state
+      // will lead to a slightly ugly UI.
 
       // Auto mode: classify first, then route
       try {
@@ -211,7 +219,7 @@ export function QueryControllerProvider({
           setClassification("chat");
           setSearchResults([]);
           setLlmSelectedDocIds(null);
-          onChat?.(submitQuery);
+          onChat(submitQuery);
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
@@ -221,7 +229,7 @@ export function QueryControllerProvider({
         setClassification("chat");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-        onChat?.(submitQuery);
+        onChat(submitQuery);
       }
     },
     [appMode, appFocus, performClassification, performSearch]
@@ -257,25 +265,26 @@ export function QueryControllerProvider({
     setLlmSelectedDocIds(null);
   }, []);
 
-  // Sync classification state with navigation context
-  const appFocusType = appFocus.getType();
-  const appFocusId = appFocus.getId();
-  useEffect(() => {
-    if (appFocusType === "chat") setClassification("chat");
-    else reset();
-  }, [appFocusType, appFocusId, reset]);
-
-  const value: QueryControllerContextValue = {
-    query,
-    classification,
-    isClassifying,
-    searchResults,
-    llmSelectedDocIds,
-    submit,
-    refineSearch,
-    reset,
-    registerOnChat,
-  };
+  const value: QueryControllerValue = useMemo(
+    () => ({
+      classification,
+      isClassifying,
+      searchResults,
+      llmSelectedDocIds,
+      submit,
+      refineSearch,
+      reset,
+    }),
+    [
+      classification,
+      isClassifying,
+      searchResults,
+      llmSelectedDocIds,
+      submit,
+      refineSearch,
+      reset,
+    ]
+  );
 
   return (
     <QueryControllerContext.Provider value={value}>
