@@ -113,6 +113,23 @@
     document.head.appendChild(style);
   }
 
+  function updateTitleBarTheme(isDark) {
+    const titleBar = document.getElementById(TITLEBAR_ID);
+    if (!titleBar) return;
+
+    if (isDark) {
+      titleBar.style.background =
+        "linear-gradient(180deg, rgba(18, 18, 18, 0.82) 0%, rgba(18, 18, 18, 0.72) 100%)";
+      titleBar.style.borderBottom = "1px solid rgba(255, 255, 255, 0.08)";
+      titleBar.style.boxShadow = "0 8px 28px rgba(0, 0, 0, 0.2)";
+    } else {
+      titleBar.style.background =
+        "linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.78) 100%)";
+      titleBar.style.borderBottom = "1px solid rgba(0, 0, 0, 0.06)";
+      titleBar.style.boxShadow = "0 8px 28px rgba(0, 0, 0, 0.04)";
+    }
+  }
+
   function buildTitleBar() {
     const titleBar = document.createElement("div");
     titleBar.id = TITLEBAR_ID;
@@ -133,6 +150,11 @@
         startWindowDrag();
       }
     });
+
+    // Apply initial styles matching current theme
+    const htmlHasDark = document.documentElement.classList.contains("dark");
+    const bodyHasDark = document.body?.classList.contains("dark");
+    const isDark = htmlHasDark || bodyHasDark;
 
     // Apply styles matching Onyx design system with translucent glass effect
     titleBar.style.cssText = `
@@ -156,7 +178,11 @@
       -webkit-backdrop-filter: blur(18px) saturate(180%);
       -webkit-app-region: drag;
       padding: 0 12px;
+      transition: background 0.3s ease, border-bottom 0.3s ease, box-shadow 0.3s ease;
     `;
+
+    // Apply correct theme
+    updateTitleBarTheme(isDark);
 
     return titleBar;
   }
@@ -168,6 +194,11 @@
 
     const existing = document.getElementById(TITLEBAR_ID);
     if (existing?.parentElement === document.body) {
+      // Update theme on existing titlebar
+      const htmlHasDark = document.documentElement.classList.contains("dark");
+      const bodyHasDark = document.body?.classList.contains("dark");
+      const isDark = htmlHasDark || bodyHasDark;
+      updateTitleBarTheme(isDark);
       return;
     }
 
@@ -178,6 +209,14 @@
     const titleBar = buildTitleBar();
     document.body.insertBefore(titleBar, document.body.firstChild);
     injectStyles();
+
+    // Ensure theme is applied immediately after mount
+    setTimeout(() => {
+      const htmlHasDark = document.documentElement.classList.contains("dark");
+      const bodyHasDark = document.body?.classList.contains("dark");
+      const isDark = htmlHasDark || bodyHasDark;
+      updateTitleBarTheme(isDark);
+    }, 0);
   }
 
   function syncViewportHeight() {
@@ -194,9 +233,66 @@
     }
   }
 
+  function observeThemeChanges() {
+    let lastKnownTheme = null;
+
+    function checkAndUpdateTheme() {
+      // Check both html and body for dark class (some apps use body)
+      const htmlHasDark = document.documentElement.classList.contains("dark");
+      const bodyHasDark = document.body?.classList.contains("dark");
+      const isDark = htmlHasDark || bodyHasDark;
+
+      if (lastKnownTheme !== isDark) {
+        lastKnownTheme = isDark;
+        updateTitleBarTheme(isDark);
+      }
+    }
+
+    // Immediate check on setup
+    checkAndUpdateTheme();
+
+    // Watch for theme changes on the HTML element
+    const themeObserver = new MutationObserver(() => {
+      checkAndUpdateTheme();
+    });
+
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    // Also observe body if it exists
+    if (document.body) {
+      const bodyObserver = new MutationObserver(() => {
+        checkAndUpdateTheme();
+      });
+      bodyObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    }
+
+    // Also check periodically in case classList is manipulated directly
+    // or the theme loads asynchronously after page load
+    const intervalId = setInterval(() => {
+      checkAndUpdateTheme();
+    }, 300);
+
+    // Clean up after 30 seconds once theme should be stable
+    setTimeout(() => {
+      clearInterval(intervalId);
+      // But keep checking every 2 seconds for manual theme changes
+      setInterval(() => {
+        checkAndUpdateTheme();
+      }, 2000);
+    }, 30000);
+  }
+
   function init() {
     mountTitleBar();
     syncViewportHeight();
+    observeThemeChanges();
+
     window.addEventListener("resize", syncViewportHeight, { passive: true });
     window.visualViewport?.addEventListener("resize", syncViewportHeight, {
       passive: true,

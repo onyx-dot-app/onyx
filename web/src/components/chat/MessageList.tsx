@@ -114,7 +114,7 @@ const MessageList = React.memo(
     );
 
     return (
-      <div className="w-[min(50rem,100%)] h-full px-6">
+      <div className="w-full max-w-[var(--app-page-main-content-width)] h-full px-6">
         <Spacer />
         {messages.map((message, i) => {
           const messageReactComponentKey = `message-${message.nodeId}`;

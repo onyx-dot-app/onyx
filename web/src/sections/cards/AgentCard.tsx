@@ -27,7 +27,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
-import Hoverable from "@/refresh-components/Hoverable";
+import { Hoverable } from "@/refresh-components/Hoverable";
 import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {

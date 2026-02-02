@@ -3,7 +3,7 @@
 import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import Separator from "@/refresh-components/Separator";
-import { useProjectsContext } from "../../projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -135,7 +135,7 @@ export default function ProjectContextPanel({
           }}
         />
       </projectFilesModal.Provider>
-      <div className="flex flex-col gap-6 w-full max-w-[min(50rem,100%)] mx-auto p-4 pt-14 pb-6">
+      <div className="flex flex-col gap-6 w-full max-w-[var(--app-page-main-content-width)] mx-auto p-4 pt-14 pb-6">
         <div className="flex flex-col gap-1 text-text-04">
           <SvgFolderOpen className="h-8 w-8 text-text-04" />
           <div className="group flex items-center gap-2">

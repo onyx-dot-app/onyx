@@ -135,7 +135,6 @@ const UserRoleDropdown = ({
           value={localRole}
           onValueChange={handleChange}
           disabled={isSettingRole}
-          className="w-40"
         >
           <InputSelect.Trigger placeholder="Select role" />
 

@@ -389,7 +389,8 @@ def bulk_invite_users(
     ]
 
     # Check seat availability for new users
-    if emails_needing_seats:
+    # Only for self-hosted (non-multi-tenant) deployments
+    if not MULTI_TENANT and emails_needing_seats:
         result = fetch_ee_implementation_or_noop(
             "onyx.db.license", "check_seat_availability", None
         )(db_session, seats_needed=len(emails_needing_seats))
@@ -491,9 +492,11 @@ def deactivate_user_api(
     deactivate_user(user_to_deactivate, db_session)
 
     # Invalidate license cache so used_seats reflects the new count
-    fetch_ee_implementation_or_noop(
-        "onyx.db.license", "invalidate_license_cache", None
-    )()
+    # Only for self-hosted (non-multi-tenant) deployments
+    if not MULTI_TENANT:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.license", "invalidate_license_cache", None
+        )()
 
 
 @router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
@@ -528,9 +531,11 @@ async def delete_user(
         logger.info(f"Deleted user {user_to_delete.email}")
 
         # Invalidate license cache so used_seats reflects the new count
-        fetch_ee_implementation_or_noop(
-            "onyx.db.license", "invalidate_license_cache", None
-        )()
+        # Only for self-hosted (non-multi-tenant) deployments
+        if not MULTI_TENANT:
+            fetch_ee_implementation_or_noop(
+                "onyx.db.license", "invalidate_license_cache", None
+            )()
 
     except Exception as e:
         db_session.rollback()
@@ -555,18 +560,22 @@ def activate_user_api(
         return
 
     # Check seat availability before activating
-    result = fetch_ee_implementation_or_noop(
-        "onyx.db.license", "check_seat_availability", None
-    )(db_session, seats_needed=1)
-    if result is not None and not result.available:
-        raise HTTPException(status_code=402, detail=result.error_message)
+    # Only for self-hosted (non-multi-tenant) deployments
+    if not MULTI_TENANT:
+        result = fetch_ee_implementation_or_noop(
+            "onyx.db.license", "check_seat_availability", None
+        )(db_session, seats_needed=1)
+        if result is not None and not result.available:
+            raise HTTPException(status_code=402, detail=result.error_message)
 
     activate_user(user_to_activate, db_session)
 
     # Invalidate license cache so used_seats reflects the new count
-    fetch_ee_implementation_or_noop(
-        "onyx.db.license", "invalidate_license_cache", None
-    )()
+    # Only for self-hosted (non-multi-tenant) deployments
+    if not MULTI_TENANT:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.license", "invalidate_license_cache", None
+        )()
 
 
 @router.get("/manage/admin/valid-domains")

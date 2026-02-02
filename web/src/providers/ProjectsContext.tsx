@@ -1,6 +1,6 @@
 "use client";
 
-import React, {
+import {
   createContext,
   useCallback,
   useContext,
@@ -17,7 +17,7 @@ import type {
   Project,
   ProjectFile,
   UserFileDeleteResult,
-} from "./projectsService";
+} from "@/app/app/projects/projectsService";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -36,15 +36,15 @@ import {
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
   UserFileStatus,
-} from "./projectsService";
+} from "@/app/app/projects/projectsService";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { ChatFileType } from "../interfaces";
+import { ChatFileType } from "@/app/app/interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useProjects } from "@/lib/hooks/useProjects";
 
-export type { Project, ProjectFile } from "./projectsService";
+export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
 
 // Helper to generate unique temp IDs
 const generateTempId = () => {
@@ -129,9 +129,7 @@ interface ProjectsProviderProps {
   children: ReactNode;
 }
 
-export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
-  children,
-}) => {
+export function ProjectsProvider({ children }: ProjectsProviderProps) {
   // Use SWR hook for projects list - no more SSR initial data
   const { projects, refreshProjects } = useProjects();
   const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
@@ -788,9 +786,9 @@ export const ProjectsProvider: React.FC<ProjectsProviderProps> = ({
       {children}
     </ProjectsContext.Provider>
   );
-};
+}
 
-export const useProjectsContext = (): ProjectsContextType => {
+export function useProjectsContext(): ProjectsContextType {
   const ctx = useContext(ProjectsContext);
   if (!ctx) {
     throw new Error(
@@ -798,4 +796,4 @@ export const useProjectsContext = (): ProjectsContextType => {
     );
   }
   return ctx;
-};
+}
