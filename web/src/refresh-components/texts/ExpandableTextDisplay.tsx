@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import TruncateMarkup from "react-truncate-markup";
 import Modal from "@/refresh-components/Modal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -101,8 +100,7 @@ export default function ExpandableTextDisplay({
   const contentSize = useMemo(() => getContentSize(content), [content]);
   const displaySubtitle = subtitle ?? contentSize;
 
-  // Detect truncation for renderContent mode and streaming
-  // (TruncateMarkup's onTruncate handles plain text static mode)
+  // Detect truncation for renderContent mode, streaming, and plain text static
   useLayoutEffect(() => {
     if (renderContent && scrollRef.current) {
       // For renderContent mode (streaming or static), use scroll-based detection
@@ -115,8 +113,12 @@ export default function ExpandableTextDisplay({
       const textToCheck = displayContent ?? content;
       const lineCount = getLineCount(textToCheck);
       setIsTruncated(lineCount > maxLines);
+    } else if (scrollRef.current) {
+      // For plain text static, use scroll-based detection with line-clamp
+      setIsTruncated(
+        scrollRef.current.scrollHeight > scrollRef.current.clientHeight
+      );
     }
-    // Plain text static mode is handled by TruncateMarkup's onTruncate
   }, [isStreaming, renderContent, content, displayContent, maxLines]);
 
   // Scroll to bottom during streaming for renderContent mode
@@ -131,11 +133,6 @@ export default function ExpandableTextDisplay({
   useEffect(() => {
     prevIsStreamingRef.current = isStreaming;
   }, [isStreaming]);
-
-  // Handle truncation callback from TruncateMarkup (static mode only)
-  const handleTruncate = (wasTruncated: boolean) => {
-    setIsTruncated(wasTruncated);
-  };
 
   const handleDownload = () => {
     const sanitizedTitle = title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
@@ -214,15 +211,13 @@ export default function ExpandableTextDisplay({
     );
   };
 
-  // Render plain text static (TruncateMarkup for reliable truncation)
+  // Render plain text static (CSS line-clamp + scroll-based truncation detection)
   const renderPlainTextStatic = () => (
-    <TruncateMarkup lines={maxLines} ellipsis="…" onTruncate={handleTruncate}>
-      <div className="whitespace-pre-wrap">
-        <Text as="p" mainUiMuted text03>
-          {displayContent ?? content}
-        </Text>
-      </div>
-    </TruncateMarkup>
+    <div ref={scrollRef} className={cn("overflow-hidden", lineClampClass)}>
+      <Text as="span" mainUiMuted text03 className="whitespace-pre-wrap">
+        {displayContent ?? content}
+      </Text>
+    </div>
   );
 
   return (
