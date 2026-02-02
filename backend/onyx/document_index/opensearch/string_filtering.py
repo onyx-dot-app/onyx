@@ -29,6 +29,6 @@ def filter_and_validate_document_id(document_id: str) -> str:
     filtered_document_id = re.sub(r"[^A-Za-z0-9_.\-~]", "", document_id)
     if not filtered_document_id:
         raise ValueError(f"Document ID {document_id} is empty after filtering.")
-    if len(filtered_document_id) >= 512:
+    if len(filtered_document_id.encode("utf-8")) >= 512:
         raise ValueError(f"Document ID {document_id} is too long after filtering.")
     return filtered_document_id
