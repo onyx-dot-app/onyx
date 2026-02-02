@@ -258,6 +258,11 @@ function Header() {
     handleMoveClick,
   ]);
 
+  useEffect(() => {
+    if (appFocus.isNewSession()) return;
+    setAppMode("chat");
+  }, [appFocus, setAppMode]);
+
   return (
     <>
       {popup}
@@ -330,7 +335,7 @@ function Header() {
                 <Hoverable
                   asChild
                   variant="secondary"
-                  transient={appFocus.isChat()}
+                  transient={!appFocus.isNewSession()}
                 >
                   <ChevronHoverableContainer>
                     <LineItemLayout

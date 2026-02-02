@@ -777,16 +777,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   )}
 
                   {/* WelcomeMessageUI */}
-                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                    !classification && (
-                      <div className="w-full flex-1 flex flex-col items-center justify-end">
-                        <WelcomeMessage
-                          agent={liveAssistant}
-                          isDefaultAgent={isDefaultAgent}
-                        />
-                        <Spacer rem={1.5} />
-                      </div>
-                    )}
+                  <Fade
+                    show={
+                      (appFocus.isNewSession() || appFocus.isAgent()) &&
+                      !classification
+                    }
+                    className="w-full flex-1 flex flex-col items-center justify-end"
+                  >
+                    <WelcomeMessage
+                      agent={liveAssistant}
+                      isDefaultAgent={isDefaultAgent}
+                    />
+                    <Spacer rem={1.5} />
+                  </Fade>
                 </div>
 
                 {/* ── Middle-center: ChatInputBar ── */}
@@ -882,8 +885,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
-                          (classification === "chat" || appFocus.isChat()) &&
-                            "h-[14px]"
+                          classification === "chat" || appFocus.isChat()
+                            ? "h-[14px]"
+                            : "h-0"
                         )}
                       />
                     </div>
@@ -916,9 +920,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SuggestionsUI */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     hasStarterMessages && (
-                      <div className="flex-1 self-stretch flex flex-col items-center">
+                      <>
+                        <Spacer rem={0.5} />
                         <Suggestions onSubmit={onSubmit} />
-                      </div>
+                      </>
                     )}
                 </div>
 
