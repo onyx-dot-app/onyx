@@ -74,19 +74,16 @@ import useAppFocus from "@/hooks/useAppFocus";
 import useQueryController from "@/hooks/useQueryController";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
-import SearchUI from "@/sections/search/SearchUI";
-import SourceFilter from "@/sections/search/SourceFilter";
+import SearchUI from "@/sections/SearchUI";
 import { motion, AnimatePresence } from "motion/react";
 
-function Fade({
-  show,
-  children,
-  className,
-}: {
+interface FadeProps {
   show: boolean;
   children?: React.ReactNode;
   className?: string;
-}) {
+}
+
+function Fade({ show, children, className }: FadeProps) {
   return (
     <AnimatePresence>
       {show && (
@@ -652,7 +649,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const isSearch = classification === "search";
   const gridStyle = {
-    gridTemplateColumns: "15rem 1fr 15rem",
+    gridTemplateColumns: "1fr",
     gridTemplateRows: isSearch
       ? "0fr auto 1fr"
       : classification === "chat" || appFocus.isChat()
@@ -728,45 +725,45 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               className="h-full w-full flex flex-col items-center outline-none relative"
               {...getRootProps({ tabIndex: -1 })}
             >
-              {/* Main content grid — 3 columns × 3 rows, animated */}
+              {/* Main content grid — 3 rows, animated */}
               <div
                 className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >
-                {/* ── Top row: ChatUI (spans all columns) ── */}
-                <Fade
-                  show={
-                    appFocus.isChat() &&
-                    !!currentChatSessionId &&
-                    !!liveAssistant
-                  }
-                  className="col-span-3 col-start-1 row-start-1 min-h-0 overflow-hidden flex flex-col items-center"
-                >
-                  <ChatScrollContainer
-                    ref={scrollContainerRef}
-                    sessionId={currentChatSessionId!}
-                    anchorSelector={anchorSelector}
-                    autoScroll={autoScrollEnabled}
-                    isStreaming={isStreaming}
-                    onScrollButtonVisibilityChange={setShowScrollButton}
+                {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
+                  {/* ChatUI */}
+                  <Fade
+                    show={
+                      appFocus.isChat() &&
+                      !!currentChatSessionId &&
+                      !!liveAssistant
+                    }
+                    className="h-full w-full flex flex-col items-center"
                   >
-                    <ChatUI
-                      liveAssistant={liveAssistant!}
-                      llmManager={llmManager}
-                      deepResearchEnabled={deepResearchEnabled}
-                      currentMessageFiles={currentMessageFiles}
-                      setPresentingDocument={setPresentingDocument}
-                      onSubmit={onSubmit}
-                      onMessageSelection={onMessageSelection}
-                      stopGenerating={stopGenerating}
-                      onResubmit={handleResubmitLastMessage}
-                      anchorNodeId={anchorNodeId}
-                    />
-                  </ChatScrollContainer>
-                </Fade>
+                    <ChatScrollContainer
+                      ref={scrollContainerRef}
+                      sessionId={currentChatSessionId!}
+                      anchorSelector={anchorSelector}
+                      autoScroll={autoScrollEnabled}
+                      isStreaming={isStreaming}
+                      onScrollButtonVisibilityChange={setShowScrollButton}
+                    >
+                      <ChatUI
+                        liveAssistant={liveAssistant!}
+                        llmManager={llmManager}
+                        deepResearchEnabled={deepResearchEnabled}
+                        currentMessageFiles={currentMessageFiles}
+                        setPresentingDocument={setPresentingDocument}
+                        onSubmit={onSubmit}
+                        onMessageSelection={onMessageSelection}
+                        stopGenerating={stopGenerating}
+                        onResubmit={handleResubmitLastMessage}
+                        anchorNodeId={anchorNodeId}
+                      />
+                    </ChatScrollContainer>
+                  </Fade>
 
-                {/* ── Top-center: WelcomeMessage / ProjectUI ── */}
-                <div className="col-span-3 col-start-1 row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
                     <ProjectContextPanel
@@ -793,7 +790,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Middle-center: ChatInputBar ── */}
-                <div className="col-span-3 col-start-1 row-start-2 flex flex-col items-center">
+                <div className="row-start-2 flex flex-col items-center">
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
                     {showScrollButton && !isSearch && (
@@ -902,18 +899,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </div>
                 </div>
 
-                {/* ── Bottom-center: SearchResults / Suggestions ── */}
-                <div className="col-start-2 row-start-3 min-h-0 overflow-hidden flex flex-col items-center">
-                  {/* SearchResults - search mode only */}
+                {/* ── Bottom: SearchResults + SourceFilter / Suggestions ── */}
+                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full">
                   <Fade
                     show={isSearch}
-                    className="h-full w-full flex flex-col items-center"
+                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1"
                   >
                     <SearchUI
                       results={searchResults}
                       llmSelectedDocIds={llmSelectedDocIds}
                       onDocumentClick={handleSearchDocumentClick}
                       selectedSources={selectedSources}
+                      onSourceChange={setSelectedSources}
                     />
                   </Fade>
 
@@ -925,17 +922,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <Suggestions onSubmit={onSubmit} />
                       </>
                     )}
-                </div>
-
-                {/* ── Bottom-right: SourceFilter ── */}
-                <div className="col-start-3 row-start-3 min-h-0 overflow-hidden">
-                  <Fade show={isSearch} className="h-full">
-                    <SourceFilter
-                      results={searchResults}
-                      selectedSources={selectedSources}
-                      onSourceChange={setSelectedSources}
-                    />
-                  </Fade>
                 </div>
               </div>
             </div>

@@ -6,20 +6,27 @@ import type { Route } from "next";
 import { WithoutStyles } from "@/types";
 import { SvgChevronDownSmall } from "@opal/icons";
 
-type ButtonHeightVariants = "standard" | "compact" | "full";
+type ButtonHeightVariants = "standard" | "compact" | "auto";
+type ButtonPaddingVariants = "standard" | "compact" | "none";
 type HoverableVariants = "primary" | "secondary" | "tertiary";
 
 const buttonHeightVariants = {
   standard: "h-[2.25rem]",
   compact: "h-[1.75rem]",
-  full: "h-full",
+  auto: "h-auto",
+} as const;
+
+const buttonPadingVariants = {
+  standard: "p-2",
+  compact: "p-1",
+  none: "p-0",
 } as const;
 
 interface HoverableContainerProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
   border?: boolean;
   reducedRounding?: boolean;
-  noPadding?: boolean;
+  paddingVariant?: ButtonPaddingVariants;
   heightVariant?: ButtonHeightVariants;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -27,8 +34,8 @@ interface HoverableContainerProps
 function HoverableContainer({
   border,
   reducedRounding,
-  noPadding,
   heightVariant = "standard",
+  paddingVariant = "standard",
   ref,
   ...props
 }: HoverableContainerProps) {
@@ -49,8 +56,8 @@ function HoverableContainer({
       className={cn(
         border && "border",
         reducedRounding ? "rounded-08" : "rounded-12",
-        !noPadding && "p-2",
         buttonHeightVariants[heightVariant],
+        buttonPadingVariants[paddingVariant],
         slotClassName
       )}
       style={slotStyle}

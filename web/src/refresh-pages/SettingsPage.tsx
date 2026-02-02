@@ -1452,7 +1452,10 @@ function AccountsAccessSettings() {
                         nonInteractive
                         variant="secondary"
                       >
-                        <HoverableContainer noPadding heightVariant="full">
+                        <HoverableContainer
+                          paddingVariant="none"
+                          heightVariant="auto"
+                        >
                           <AttachmentItemLayout
                             icon={SvgKey}
                             title={pat.name}

@@ -39,10 +39,10 @@ export default function DocumentSetCard({
           nonInteractive={disabled || isSelected === undefined}
         >
           <HoverableContainer
-            noPadding
             border
             data-testid={`document-set-card-${documentSet.id}`}
-            heightVariant="full"
+            heightVariant="auto"
+            paddingVariant="none"
           >
             <AttachmentItemLayout
               icon={SvgFiles}

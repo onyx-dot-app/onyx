@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { SearchDocWithContent } from "@/lib/search/searchApi";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
 import SearchCard from "@/sections/cards/SearchCard";
-import { Section } from "@/layouts/general-layouts";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
-import Spacer from "@/refresh-components/Spacer";
-import { SvgClock, SvgTag, SvgUser } from "@opal/icons";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
+import { getSourceMetadata } from "@/lib/sources";
+import { ValidSources } from "@/lib/types";
+import { SourceIcon } from "@/components/SourceIcon";
+import Text from "@/refresh-components/texts/Text";
+import LineItem from "@/refresh-components/buttons/LineItem";
 
 // ============================================================================
 // Types
@@ -24,6 +25,8 @@ export interface SearchResultsProps {
   onDocumentClick: (doc: MinimalOnyxDocument) => void;
   /** Selected sources for filtering */
   selectedSources: string[];
+  /** Callback when source selection changes */
+  onSourceChange: (sources: string[]) => void;
 }
 
 // ============================================================================
@@ -67,13 +70,14 @@ function getTimeFilterDate(filter: TimeFilter): Date | null {
 // ============================================================================
 
 /**
- * Component for displaying search results with filters.
+ * Component for displaying search results with source filter sidebar.
  */
-export default function SearchResults({
+export default function SearchUI({
   results,
   llmSelectedDocIds,
   onDocumentClick,
   selectedSources,
+  onSourceChange,
 }: SearchResultsProps) {
   // Filter state
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all-time");
@@ -168,87 +172,94 @@ export default function SearchResults({
     llmSelectedSet,
   ]);
 
+  // Extract unique sources with metadata for the source filter
+  const sourcesWithMeta = useMemo(() => {
+    const sourceMap = new Map<
+      string,
+      { meta: SourceMetadata; count: number }
+    >();
+
+    for (const doc of results) {
+      if (doc.source_type) {
+        const existing = sourceMap.get(doc.source_type);
+        if (existing) {
+          existing.count++;
+        } else {
+          sourceMap.set(doc.source_type, {
+            meta: getSourceMetadata(doc.source_type as ValidSources),
+            count: 1,
+          });
+        }
+      }
+    }
+
+    return Array.from(sourceMap.entries())
+      .map(([source, data]) => ({
+        source,
+        ...data,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [results]);
+
+  const handleSourceToggle = (source: string) => {
+    if (selectedSources.includes(source)) {
+      onSourceChange(selectedSources.filter((s) => s !== source));
+    } else {
+      onSourceChange([...selectedSources, source]);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full w-full max-w-[var(--app-page-main-content-width)]">
-      <Spacer rem={1.5} />
+    <div className="h-full w-full flex flex-row gap-2">
+      {/* Results list */}
+      <div className="flex-[3] min-w-0 flex flex-col min-h-0 h-full overflow-y-scroll py-3">
+        {filteredAndSortedResults.length > 0 ? (
+          filteredAndSortedResults.map((doc) => (
+            <SearchCard
+              key={`${doc.document_id}-${doc.chunk_ind}`}
+              document={doc}
+              isLlmSelected={llmSelectedSet.has(doc.document_id)}
+              onDocumentClick={onDocumentClick}
+            />
+          ))
+        ) : (
+          <EmptyMessage
+            title="No documents found"
+            description="Try searching for something else"
+          />
+        )}
+      </div>
 
-      {/* Filters - fixed at top */}
-      {/*<div className="flex flex-col flex-shrink-0 gap-4">
-        <div className="flex flex-row items-center justify-start">
-          <InputSelect
-            value={timeFilter}
-            onValueChange={(value) => setTimeFilter(value as TimeFilter)}
-          >
-            <InputSelect.Trigger placeholder="Time" />
-            <InputSelect.Content>
-              {TIME_FILTER_OPTIONS.map((option) => (
-                <InputSelect.Item
-                  key={option.value}
-                  value={option.value}
-                  icon={SvgClock}
-                >
-                  {option.label}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
-
-          <InputSelect value={ownerFilter} onValueChange={setOwnerFilter}>
-            <InputSelect.Trigger />
-            <InputSelect.Content>
-              <InputSelect.Item value="everyone" icon={SvgUser}>
-                Everyone
-              </InputSelect.Item>
-              {uniqueOwners.map((owner) => (
-                <InputSelect.Item key={owner} value={owner} icon={SvgUser}>
-                  {owner}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
-
-          <InputSelect value={tagFilter} onValueChange={setTagFilter}>
-            <InputSelect.Trigger placeholder="Tags" />
-            <InputSelect.Content>
-              <InputSelect.Item value="all-tags" icon={SvgTag}>
-                All Tags
-              </InputSelect.Item>
-              {uniqueTags.map((tag) => (
-                <InputSelect.Item key={tag} value={tag} icon={SvgTag}>
-                  {tag}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
+      {/* Source filter sidebar */}
+      <div className="flex-1 h-full overflow-y-auto py-4 flex flex-col gap-4 px-1">
+        <div className="py-4 h-[2.75rem] px-2">
+          <Text text03 mainUiMuted>
+            {results.length} Results
+          </Text>
         </div>
 
         <Separator noPadding />
-      </div>*/}
 
-      {/* Results list */}
-      <div className="flex-1 min-h-0 overflow-y-auto py-4">
-        <Section
-          gap={0.5}
-          justifyContent={
-            filteredAndSortedResults.length > 0 ? "start" : "center"
-          }
-        >
-          {filteredAndSortedResults.length > 0 ? (
-            filteredAndSortedResults.map((doc) => (
-              <SearchCard
-                key={`${doc.document_id}-${doc.chunk_ind}`}
-                document={doc}
-                isLlmSelected={llmSelectedSet.has(doc.document_id)}
-                onDocumentClick={onDocumentClick}
-              />
-            ))
-          ) : (
-            <EmptyMessage
-              title="No documents found"
-              description="Try searching for something else"
-            />
-          )}
-        </Section>
+        <div className="flex flex-col gap-1">
+          {sourcesWithMeta.map(({ source, meta, count }) => (
+            <LineItem
+              key={source}
+              icon={(props) => (
+                <SourceIcon
+                  sourceType={source as ValidSources}
+                  iconSize={16}
+                  {...props}
+                />
+              )}
+              onClick={() => handleSourceToggle(source)}
+              selected={selectedSources.includes(source)}
+              emphasized
+              rightChildren={<Text text03>{count}</Text>}
+            >
+              {meta.displayName}
+            </LineItem>
+          ))}
+        </div>
       </div>
     </div>
   );
