@@ -453,6 +453,7 @@ export interface AppRootProps {
 function Root({ children, enableBackground }: AppRootProps) {
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
+  const appFocus = useAppFocus();
   const isLightMode = resolvedTheme === "light";
   const showBackground = hasBackground && enableBackground;
 
@@ -487,7 +488,7 @@ function Root({ children, enableBackground }: AppRootProps) {
 
       {/* Effect 2 */}
       {/* Semi-transparent overlay for readability when background is set */}
-      {showBackground && (
+      {showBackground && appFocus.isChat() && (
         <>
           <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
           <div

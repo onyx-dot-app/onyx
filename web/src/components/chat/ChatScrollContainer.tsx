@@ -53,8 +53,8 @@ export interface ChatScrollContainerProps {
 // Build a CSS mask that fades content opacity at top/bottom edges
 function buildContentMask(): string {
   // Mask uses black = visible, transparent = hidden
-  // Top: completely transparent for first 2.5rem (~50% of 6rem), then fades to visible over remaining 3.5rem
-  // Bottom: simple 16px fade
+  // Top: fades from transparent to visible over 1rem
+  // Bottom: fades from visible to transparent over 1rem
   return `linear-gradient(to bottom, transparent 0%, transparent 0rem, black ${TOP_FADE_HEIGHT}, black calc(100% - ${BOTTOM_FADE_HEIGHT}), transparent 100%)`;
 }
 
