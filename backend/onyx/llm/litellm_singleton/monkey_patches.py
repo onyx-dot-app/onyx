@@ -44,6 +44,7 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
            in litellm.utils.supports_native_streaming(). Custom Azure deployments will
            still use fake streaming without this patch.
 
+# Note: 5 and 6 are to supress a warning and may fix usage info but is not strictly required for the app to run
 5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
    - LiteLLM uses model_construct as a fallback in multiple places when
      ResponsesAPIResponse validation fails
