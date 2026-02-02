@@ -177,7 +177,6 @@ export const ReasoningRenderer: MessageRenderer<
       title="Full text"
       content={content}
       displayContent={displayContent}
-      maxLines={5}
       renderContent={renderMarkdown}
       isStreaming={!hasEnd}
     />

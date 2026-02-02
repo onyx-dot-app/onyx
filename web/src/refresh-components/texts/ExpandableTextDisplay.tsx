@@ -19,8 +19,8 @@ export interface ExpandableTextDisplayProps {
   displayContent?: string;
   /** Subtitle text (e.g., file size). If not provided, calculates from content */
   subtitle?: string;
-  /** Maximum lines to show in collapsed state (1-6). Values outside this range default to 5. */
-  maxLines?: 1 | 2 | 3 | 4 | 5 | 6;
+  /** Maximum lines to show in collapsed state (1-10). Values outside this range default to 8. */
+  maxLines?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   /** Additional className for the container */
   className?: string;
   /** Optional custom renderer for content (e.g., markdown). Falls back to plain text.
@@ -87,7 +87,7 @@ export default function ExpandableTextDisplay({
   content,
   displayContent,
   subtitle,
-  maxLines = 5,
+  maxLines = 8,
   className,
   renderContent,
   isStreaming = false,
@@ -101,22 +101,31 @@ export default function ExpandableTextDisplay({
   const contentSize = useMemo(() => getContentSize(content), [content]);
   const displaySubtitle = subtitle ?? contentSize;
 
-  // Detect truncation for renderContent mode (both streaming and static)
+  // Detect truncation for renderContent mode and streaming
   // (TruncateMarkup's onTruncate handles plain text static mode)
   useLayoutEffect(() => {
-    const textToCheck = displayContent ?? content;
-    if (isStreaming) {
-      // For streaming, use line-based truncation detection
-      const lineCount = getLineCount(textToCheck);
-      setIsTruncated(lineCount > maxLines);
-    } else if (renderContent && scrollRef.current) {
-      // For renderContent static mode, use scroll-based detection
+    if (renderContent && scrollRef.current) {
+      // For renderContent mode (streaming or static), use scroll-based detection
+      // CSS line-clamp handles visual truncation, we just need to detect if it happened
       setIsTruncated(
         scrollRef.current.scrollHeight > scrollRef.current.clientHeight
       );
+    } else if (isStreaming) {
+      // For plain text streaming, use line-based detection (still works for plain text)
+      const textToCheck = displayContent ?? content;
+      const lineCount = getLineCount(textToCheck);
+      setIsTruncated(lineCount > maxLines);
     }
     // Plain text static mode is handled by TruncateMarkup's onTruncate
   }, [isStreaming, renderContent, content, displayContent, maxLines]);
+
+  // Scroll to bottom during streaming for renderContent mode
+  // This creates a "scrolling from bottom" effect showing the latest content
+  useLayoutEffect(() => {
+    if (isStreaming && renderContent && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [isStreaming, renderContent, content, displayContent]);
 
   // Track streaming state transitions (no longer need scroll management with top-truncation)
   useEffect(() => {
@@ -133,7 +142,7 @@ export default function ExpandableTextDisplay({
     downloadAsTxt(content, sanitizedTitle);
   };
 
-  // Map maxLines to Tailwind line-clamp classes (fallback to 5 for invalid runtime values)
+  // Map maxLines to Tailwind line-clamp classes (fallback to 8 for invalid runtime values)
   const lineClampClass =
     {
       1: "line-clamp-1",
@@ -142,7 +151,11 @@ export default function ExpandableTextDisplay({
       4: "line-clamp-4",
       5: "line-clamp-5",
       6: "line-clamp-6",
-    }[maxLines] ?? "line-clamp-5";
+      7: "line-clamp-7",
+      8: "line-clamp-8",
+      9: "line-clamp-9",
+      10: "line-clamp-10",
+    }[maxLines] ?? "line-clamp-8";
 
   // Single container for renderContent mode (both streaming and static)
   // Keeps scrollRef alive across the streaming → static transition
@@ -150,23 +163,33 @@ export default function ExpandableTextDisplay({
     const textToDisplay = displayContent ?? content;
 
     if (isStreaming) {
-      // During streaming: show last N lines with top ellipsis if truncated
-      const { lines, hasTruncation } = getLastLines(textToDisplay, maxLines);
+      // During streaming: use max-height with overflow-auto to create scrollable container,
+      // then scroll to bottom to show latest content (handled by useLayoutEffect above).
+      // We can't use line-clamp here because it sets overflow:hidden and shows from top,
+      // but we need scrollable overflow to show the latest (bottom) content.
+      // Line height is approximately 1.5rem (24px) for body text.
+      // We show a top ellipsis indicator when content is truncated.
       return (
-        <div ref={scrollRef} className="overflow-hidden">
-          {hasTruncation && (
+        <div>
+          {isTruncated && (
             <Text as="span" mainUiMuted text03>
               …
             </Text>
           )}
-          {renderContent!(hasTruncation ? "\n" + lines : lines, false)}
+          <div
+            ref={scrollRef}
+            className="overflow-auto no-scrollbar"
+            style={{ maxHeight: `calc(${maxLines} * 1.5rem)` }}
+          >
+            {renderContent!(textToDisplay, false)}
+          </div>
         </div>
       );
     }
 
-    // Static mode: use line-clamp for bottom truncation
+    // Static mode: use CSS line-clamp for bottom truncation
     return (
-      <div ref={scrollRef} className={cn("no-scrollbar", lineClampClass)}>
+      <div ref={scrollRef} className={cn("overflow-hidden", lineClampClass)}>
         {renderContent!(textToDisplay, false)}
       </div>
     );

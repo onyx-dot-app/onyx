@@ -22,7 +22,11 @@ import {
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import Text from "@/refresh-components/texts/Text";
-import { useMarkdownRenderer } from "@/app/app/message/messageComponents/markdownUtils";
+import {
+  processContent,
+  useMarkdownComponents,
+  renderMarkdown,
+} from "@/app/app/message/messageComponents/markdownUtils";
 import { isReasoningPackets } from "../../packetHelpers";
 
 interface NestedToolGroup {
@@ -149,16 +153,29 @@ export const ResearchAgentRenderer: MessageRenderer<
   const showOnlyTools =
     isCondensedMode && !fullReportContent && visibleNestedToolGroups.length > 0;
 
-  // Markdown renderer for ExpandableTextDisplay
-  const { renderedContent } = useMarkdownRenderer(
-    fullReportContent,
+  // Get markdown components for rendering (stable across renders)
+  // Note: We pass fullReportContent for code block extraction context,
+  // but renderReport will render whatever content is passed to it
+  const markdownComponents = useMarkdownComponents(
     state,
+    fullReportContent,
     "text-text-03 font-main-ui-body"
   );
 
   // Stable callbacks to avoid creating new functions on every render
   const noopComplete = useCallback(() => {}, []);
-  const renderReport = useCallback(() => renderedContent, [renderedContent]);
+
+  // renderReport now renders whatever content is passed to it
+  // This enables ExpandableTextDisplay to pass truncated content during streaming
+  const renderReport = useCallback(
+    (content: string) =>
+      renderMarkdown(
+        processContent(content),
+        markdownComponents,
+        "text-text-03 font-main-ui-body"
+      ),
+    [markdownComponents]
+  );
 
   // HIGHLIGHT mode: return raw content with header embedded in content
   if (isHighlight) {
@@ -342,7 +359,6 @@ export const ResearchAgentRenderer: MessageRenderer<
           <ExpandableTextDisplay
             title="Research Report"
             content={fullReportContent}
-            maxLines={5}
             renderContent={renderReport}
             isStreaming={isReportStreaming}
           />
