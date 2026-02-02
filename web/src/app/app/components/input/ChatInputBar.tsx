@@ -23,7 +23,7 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString, cn } from "@/lib/utils";
 import { useUser } from "@/providers/UserProvider";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import {
   ProjectFile,

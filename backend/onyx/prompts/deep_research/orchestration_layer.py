@@ -194,4 +194,11 @@ You are encouraged to call the {RESEARCH_AGENT_TOOL_NAME} in parallel when the r
 
 Don't mention this reminder or underlying details about the system.
 """.strip()
+
+
+# Only for the first cycle, we encourage the model to research more, since it is unlikely that it has already addressed all parts of the plan at this point.
+FIRST_CYCLE_REMINDER_TOKENS = 100
+FIRST_CYCLE_REMINDER = """
+Make sure all parts of the user question and the plan have been thoroughly explored before calling generate_report. If new interesting angles have been revealed from the research, you may deviate from the plan to research new directions.
+""".strip()
 # ruff: noqa: E501, W605 end

@@ -152,6 +152,7 @@ class OpenURLToolOverrideKwargs(BaseModel):
     starting_citation_num: int
     citation_mapping: dict[str, int]
     url_snippet_map: dict[str, str]
+    max_urls: int = 10
 
 
 # None indicates that the default value should be used

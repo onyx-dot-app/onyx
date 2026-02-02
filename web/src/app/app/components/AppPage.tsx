@@ -35,11 +35,11 @@ import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import { useChatController } from "@/app/app/hooks/useChatController";
-import { useAssistantController } from "@/app/app/hooks/useAssistantController";
-import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
-import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useIsDefaultAgent } from "@/app/app/hooks/useIsDefaultAgent";
+import useChatController from "@/hooks/useChatController";
+import useAgentController from "@/hooks/useAgentController";
+import useChatSessionController from "@/hooks/useChatSessionController";
+import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import useIsDefaultAgent from "@/hooks/useIsDefaultAgent";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
@@ -56,7 +56,7 @@ import ChatScrollContainer, {
 import MessageList from "@/components/chat/MessageList";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import {
   getProjectTokenCount,
   getMaxSelectedDocumentTokens,
@@ -69,7 +69,6 @@ import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import AppHeader from "@/app/app/components/AppHeader";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
@@ -172,7 +171,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
-    useAssistantController({
+    useAgentController({
       selectedChatSession: currentChatSession,
       onAssistantSelect: () => {
         // Only remove project context if user explicitly selected an assistant
@@ -650,7 +649,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {...getRootProps({ tabIndex: -1 })}
             >
               <div className="absolute top-0 left-0 right-0 z-app-header">
-                <AppHeader />
+                <AppLayouts.Header />
               </div>
 
               {/* Vignette overlay for custom backgrounds (disabled in light mode) */}

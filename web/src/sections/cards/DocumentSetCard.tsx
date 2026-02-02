@@ -4,7 +4,7 @@ import { DocumentSetSummary } from "@/lib/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { SvgFiles } from "@opal/icons";
-import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
+import { Hoverable, HoverableContainer } from "@/refresh-components/Hoverable";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 
@@ -39,11 +39,10 @@ export default function DocumentSetCard({
           nonInteractive={disabled || isSelected === undefined}
         >
           <HoverableContainer
-            padding={0}
-            rounded="rounded-12"
-            width="fit"
+            noPadding
             border
             data-testid={`document-set-card-${documentSet.id}`}
+            heightVariant="full"
           >
             <AttachmentItemLayout
               icon={SvgFiles}

@@ -3,7 +3,7 @@
 import React, { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import Separator from "@/refresh-components/Separator";
-import { useProjectsContext } from "../../projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import type { ProjectFile } from "../../projects/projectsService";
 import { usePopup } from "@/components/admin/connectors/Popup";

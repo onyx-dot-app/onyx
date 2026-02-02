@@ -18,7 +18,7 @@ import {
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAssistantPreferences } from "@/app/app/hooks/useAssistantPreferences";
+import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useUser } from "@/providers/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
@@ -37,7 +37,7 @@ import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionL
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
 
 const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
@@ -253,7 +253,7 @@ export default function ActionsPopover({
 
   // Get the assistant preference for this assistant
   const { assistantPreferences, setSpecificAssistantPreferences } =
-    useAssistantPreferences();
+    useAgentPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
   // Reset state when assistant changes
