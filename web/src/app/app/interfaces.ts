@@ -161,8 +161,6 @@ export interface Message {
 
   // new gen
   packets: Packet[];
-  // Version counter for efficient memo comparison (increments with each packet)
-  packetsVersion?: number;
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
   // cached values for easy access
@@ -171,6 +169,9 @@ export interface Message {
 
   // feedback state
   currentFeedback?: FeedbackType | null;
+
+  // Duration in seconds for processing this message (assistant messages only)
+  processingDurationSeconds?: number;
 }
 
 export interface BackendChatSession {
@@ -220,6 +221,8 @@ export interface BackendMessage {
   files: FileDescriptor[];
   tool_call: ToolCallFinalResult | null;
   current_feedback: string | null;
+  // Duration in seconds for processing this message (assistant messages only)
+  processing_duration_seconds?: number;
 
   sub_questions: SubQuestionDetail[];
   // Keeping existing properties

@@ -481,6 +481,12 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         """
         urls = _normalize_string_list(llm_kwargs.get(URLS_FIELD))
 
+        if len(urls) > override_kwargs.max_urls:
+            logger.warning(
+                f"OpenURL tool received {len(urls)} URLs, but the max is {override_kwargs.max_urls}."
+            )
+            urls = urls[: override_kwargs.max_urls]
+
         if not urls:
             raise ValueError("OpenURL requires at least one URL to run.")
 

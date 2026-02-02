@@ -3,26 +3,18 @@ import {
   TurnGroup,
   TransformedStep,
 } from "@/app/app/message/messageComponents/timeline/transformers";
-import { getToolIconByName } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import {
   isResearchAgentPackets,
-  stepSupportsCompact,
+  stepSupportsCollapsedStreaming,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
-
-export interface UniqueTool {
-  key: string;
-  name: string;
-  icon: React.JSX.Element;
-}
 
 export interface TimelineMetrics {
   totalSteps: number;
   isSingleStep: boolean;
-  uniqueTools: UniqueTool[];
   lastTurnGroup: TurnGroup | undefined;
   lastStep: TransformedStep | undefined;
   lastStepIsResearchAgent: boolean;
-  lastStepSupportsCompact: boolean;
+  lastStepSupportsCollapsedStreaming: boolean;
 }
 
 /**
@@ -31,7 +23,6 @@ export interface TimelineMetrics {
  */
 export function useTimelineMetrics(
   turnGroups: TurnGroup[],
-  uniqueToolNames: string[],
   userStopped: boolean
 ): TimelineMetrics {
   return useMemo(() => {
@@ -48,22 +39,17 @@ export function useTimelineMetrics(
     const lastStepIsResearchAgent = lastStep
       ? isResearchAgentPackets(lastStep.packets)
       : false;
-    const lastStepSupportsCompact = lastStep
-      ? stepSupportsCompact(lastStep.packets)
+    const lastStepSupportsCollapsedStreaming = lastStep
+      ? stepSupportsCollapsedStreaming(lastStep.packets)
       : false;
 
     return {
       totalSteps,
       isSingleStep: totalSteps === 1 && !userStopped,
-      uniqueTools: uniqueToolNames.map((name) => ({
-        key: name,
-        name,
-        icon: getToolIconByName(name),
-      })),
       lastTurnGroup,
       lastStep,
       lastStepIsResearchAgent,
-      lastStepSupportsCompact,
+      lastStepSupportsCollapsedStreaming,
     };
-  }, [turnGroups, uniqueToolNames, userStopped]);
+  }, [turnGroups, userStopped]);
 }
