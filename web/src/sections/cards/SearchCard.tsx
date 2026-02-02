@@ -44,7 +44,11 @@ export default function SearchCard({
 
   return (
     <Hoverable onClick={handleClick} asChild variant="secondary">
-      <HoverableContainer heightVariant="auto" paddingVariant="compact">
+      <HoverableContainer
+        heightVariant="auto"
+        paddingVariant="compact"
+        widthVariant="full"
+      >
         <Section alignItems="start" gap={0} padding={0.25}>
           {/* Title Row */}
           <Section

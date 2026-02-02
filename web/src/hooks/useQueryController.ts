@@ -27,6 +27,8 @@ export interface UseQueryControllerReturn {
   llmSelectedDocIds: string[] | null;
   /** Submit a query - routes to search or chat based on app mode */
   submit: (query: string, filters?: BaseFilters) => Promise<void>;
+  /** Re-run the current search query with updated server-side filters */
+  refineSearch: (filters: BaseFilters) => Promise<void>;
   /** Reset all state to initial values */
   reset: () => void;
 }
@@ -231,6 +233,17 @@ export default function useQueryController(
   );
 
   /**
+   * Re-run the current search query with updated server-side filters
+   */
+  const refineSearch = useCallback(
+    async (filters: BaseFilters): Promise<void> => {
+      if (!query) return;
+      await performSearch(query, filters);
+    },
+    [query, performSearch]
+  );
+
+  /**
    * Reset all state to initial values
    */
   const reset = useCallback(() => {
@@ -267,6 +280,7 @@ export default function useQueryController(
     searchResults,
     llmSelectedDocIds,
     submit,
+    refineSearch,
     reset,
   };
 }

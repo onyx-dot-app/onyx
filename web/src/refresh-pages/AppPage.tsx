@@ -493,6 +493,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     searchResults,
     llmSelectedDocIds,
     classification,
+    refineSearch,
     isClassifying,
   } = useQueryController(onChat);
 
@@ -908,6 +909,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       results={searchResults}
                       llmSelectedDocIds={llmSelectedDocIds}
                       onDocumentClick={handleSearchDocumentClick}
+                      onRefineSearch={refineSearch}
                     />
                   </Fade>
 
