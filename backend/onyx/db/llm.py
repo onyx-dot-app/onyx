@@ -412,7 +412,10 @@ def fetch_existing_models(
         select(ModelConfiguration)
         .join(LLMModelFlow)
         .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
-        .options(selectinload(ModelConfiguration.llm_provider))
+        .options(
+            selectinload(ModelConfiguration.llm_provider),
+            selectinload(ModelConfiguration.llm_model_flows),
+        )
     )
 
     return list(db_session.scalars(models).all())
