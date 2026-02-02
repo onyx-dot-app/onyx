@@ -19,6 +19,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import get_document_chunk_ids
+from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -49,7 +50,9 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
 from onyx.document_index.vespa_constants import BATCH_SIZE
+from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
@@ -624,6 +627,8 @@ class VespaDocumentIndex(DocumentIndex):
     def get_raw_document_chunks(self, document_id: str) -> list[dict[str, Any]]:
         """Gets all raw document chunks for a document as returned by Vespa.
 
+        Used in the Vespa migration task.
+
         Args:
             document_id: The ID of the document to get chunks for.
 
@@ -642,3 +647,28 @@ class VespaDocumentIndex(DocumentIndex):
         # chunk we're interested in is in the "fields" field.
         raw_document_chunks = [chunk["fields"] for chunk in raw_chunks]
         return raw_document_chunks
+
+    def index_raw_chunks(self, chunks: list[dict[str, Any]]) -> None:
+        """Indexes raw document chunks into Vespa.
+
+        To only be used in tests. Not for production.
+        """
+        json_header = {
+            "Content-Type": "application/json",
+        }
+        with self._httpx_client_context as http_client:
+            for chunk in chunks:
+                chunk_id = str(
+                    get_uuid_from_chunk_info(
+                        document_id=chunk[DOCUMENT_ID],
+                        chunk_id=chunk[CHUNK_ID],
+                        tenant_id=self._tenant_id,
+                    )
+                )
+                vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=self._index_name)}/{chunk_id}"
+                response = http_client.post(
+                    vespa_url,
+                    headers=json_header,
+                    json={"fields": chunk},
+                )
+                response.raise_for_status()
