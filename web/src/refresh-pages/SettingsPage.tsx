@@ -1449,7 +1449,7 @@ function AccountsAccessSettings() {
                       <Hoverable
                         key={pat.id}
                         asChild
-                        nonInteractive
+                        disableHover
                         variant="secondary"
                       >
                         <HoverableContainer

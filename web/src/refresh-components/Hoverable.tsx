@@ -147,7 +147,8 @@ export interface HoverableProps
    * Enables group-hover utilities on descendant elements.
    */
   group?: string;
-  nonInteractive?: boolean;
+
+  disableHover?: boolean;
   /** When true, forces the pressed visual state (same as `data-pressed="true"`). */
   transient?: boolean;
   /** Controls background color styling on the hoverable element. */
@@ -206,7 +207,7 @@ function Hoverable({
   href,
   ref,
   group,
-  nonInteractive,
+  disableHover,
   transient,
   variant = "primary",
   ...props
@@ -218,7 +219,7 @@ function Hoverable({
   );
   const dataAttrs = {
     "data-variant": variant,
-    ...(nonInteractive && { "data-non-interactive": "true" as const }),
+    ...(disableHover && { "data-disable-hover": "true" as const }),
     ...(transient && { "data-pressed": "true" as const }),
   };
 

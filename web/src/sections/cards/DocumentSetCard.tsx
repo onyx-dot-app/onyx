@@ -36,7 +36,7 @@ export default function DocumentSetCard({
               ? undefined
               : () => onSelectToggle?.(!isSelected)
           }
-          nonInteractive={disabled || isSelected === undefined}
+          disableHover={disabled || isSelected === undefined}
         >
           <HoverableContainer
             border

@@ -8,13 +8,13 @@
   @apply bg-background-tint-00 transition-colors;
 }
 
-.hoverable[data-variant="primary"]:hover:not([data-non-interactive]) {
+.hoverable[data-variant="primary"]:hover:not([data-disable-hover]) {
   @apply bg-background-tint-02;
 }
 
-.hoverable[data-variant="primary"]:active:not([data-non-interactive]),
+.hoverable[data-variant="primary"]:active:not([data-disable-hover]),
 .hoverable[data-variant="primary"][data-pressed="true"]:not(
-    [data-non-interactive]
+    [data-disable-hover]
   ) {
   @apply bg-background-tint-00;
 }
@@ -23,13 +23,13 @@
   @apply bg-background-tint-01 transition-colors;
 }
 
-.hoverable[data-variant="secondary"]:hover:not([data-non-interactive]) {
+.hoverable[data-variant="secondary"]:hover:not([data-disable-hover]) {
   @apply bg-background-tint-02;
 }
 
-.hoverable[data-variant="secondary"]:active:not([data-non-interactive]),
+.hoverable[data-variant="secondary"]:active:not([data-disable-hover]),
 .hoverable[data-variant="secondary"][data-pressed="true"]:not(
-    [data-non-interactive]
+    [data-disable-hover]
   ) {
   @apply bg-background-tint-00;
 }
@@ -38,13 +38,13 @@
   @apply bg-background-tint-02 transition-colors;
 }
 
-.hoverable[data-variant="tertiary"]:hover:not([data-non-interactive]) {
+.hoverable[data-variant="tertiary"]:hover:not([data-disable-hover]) {
   @apply bg-background-tint-03;
 }
 
-.hoverable[data-variant="tertiary"]:active:not([data-non-interactive]),
+.hoverable[data-variant="tertiary"]:active:not([data-disable-hover]),
 .hoverable[data-variant="tertiary"][data-pressed="true"]:not(
-    [data-non-interactive]
+    [data-disable-hover]
   ) {
   @apply bg-background-tint-00;
 }
