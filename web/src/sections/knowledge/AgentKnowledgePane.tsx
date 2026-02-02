@@ -862,38 +862,6 @@ export default function AgentKnowledgePane({
   const [view, setView] = useState<KnowledgeView>("main");
   const [activeSource, setActiveSource] = useState<ValidSources | undefined>();
 
-  // Track per-source selection counts
-  // Initialized from initialHierarchyNodes (which have source info)
-  const [sourceSelectionCounts, setSourceSelectionCounts] = useState<
-    Map<ValidSources, number>
-  >(() => {
-    const counts = new Map<ValidSources, number>();
-    if (initialHierarchyNodes) {
-      // Count initial hierarchy nodes by source
-      for (const node of initialHierarchyNodes) {
-        const current = counts.get(node.source) ?? 0;
-        counts.set(node.source, current + 1);
-      }
-    }
-    return counts;
-  });
-
-  // Handler for selection count changes from SourceHierarchyBrowser
-  const handleSelectionCountChange = useCallback(
-    (source: ValidSources, count: number) => {
-      setSourceSelectionCounts((prev) => {
-        const newCounts = new Map(prev);
-        if (count === 0) {
-          newCounts.delete(source);
-        } else {
-          newCounts.set(source, count);
-        }
-        return newCounts;
-      });
-    },
-    []
-  );
-
   // Get connected sources from CC pairs
   const { ccPairs } = useCCPairs();
   const connectedSources: ConnectedSource[] = useMemo(() => {
