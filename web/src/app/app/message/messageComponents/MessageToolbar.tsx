@@ -184,21 +184,13 @@ export default function MessageToolbar({
       }
 
       // Clicking like (will automatically clear dislike if it was active).
-      // Check if we need modal for positive feedback.
+      // Open modal for positive feedback.
       else if (clickedFeedback === "like") {
-        const predefinedOptions =
-          process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS;
-        if (predefinedOptions && predefinedOptions.trim()) {
-          // Open modal for positive feedback
-          setFeedbackModalProps({
-            feedbackType: "like",
-            messageId,
-          });
-          modal.toggle(true);
-        } else {
-          // No modal needed - just submit like (this replaces any existing feedback)
-          await handleFeedbackChange(messageId, "like");
-        }
+        setFeedbackModalProps({
+          feedbackType: "like",
+          messageId,
+        });
+        modal.toggle(true);
       }
 
       // Clicking dislike (will automatically clear like if it was active).
