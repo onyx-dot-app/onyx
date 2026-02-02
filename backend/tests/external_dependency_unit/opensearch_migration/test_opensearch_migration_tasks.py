@@ -238,9 +238,12 @@ def full_deployment_setup() -> Generator[None, None, None]:
     # Patch ENABLE_OPENSEARCH_INDEXING_FOR_ONYX just for this test because we
     # don't yet want that enabled for all tests.
     # TODO(andrei): Remove this once CI enables OpenSearch for all tests.
-    with patch(
-        "onyx.configs.app_configs.ENABLE_OPENSEARCH_INDEXING_FOR_ONYX",
-        True,
+    with (
+        patch(
+            "onyx.configs.app_configs.ENABLE_OPENSEARCH_INDEXING_FOR_ONYX",
+            True,
+        ),
+        patch("onyx.document_index.factory.ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", True),
     ):
         ensure_full_deployment_setup(opensearch_available=True)
         yield  # Test runs here.
