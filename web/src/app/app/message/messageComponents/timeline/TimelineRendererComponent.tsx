@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useState, JSX } from "react";
+import React, { useState, useCallback, JSX } from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState, RenderType, RendererResult } from "../interfaces";
+import {
+  FullChatState,
+  RenderType,
+  RendererResult,
+  RendererOutput,
+} from "../interfaces";
 import { findRenderer } from "../renderMessageComponent";
 
 /** Extended result that includes collapse state */
@@ -15,7 +20,12 @@ export interface TimelineRendererResult extends RendererResult {
   renderType: RenderType;
   /** Whether this is the last step (passed through from props) */
   isLastStep: boolean;
+  /** Hover state from parent */
+  isHover: boolean;
 }
+
+// All renderers return an array of results
+export type TimelineRendererOutput = TimelineRendererResult[];
 
 export interface TimelineRendererComponentProps {
   /** Packets to render */
@@ -34,8 +44,12 @@ export interface TimelineRendererComponentProps {
   defaultExpanded?: boolean;
   /** Whether this is the last step in the timeline (for connector line decisions) */
   isLastStep?: boolean;
-  /** Children render function - receives extended result with collapse state */
-  children: (result: TimelineRendererResult) => JSX.Element;
+  /** Hover state from parent component */
+  isHover?: boolean;
+  /** Override render type (if not set, derives from defaultExpanded) */
+  renderTypeOverride?: RenderType;
+  /** Children render function - receives extended result with collapse state (single or array) */
+  children: (result: TimelineRendererOutput) => JSX.Element;
 }
 
 // Custom comparison function to prevent unnecessary re-renders
@@ -45,12 +59,14 @@ function arePropsEqual(
   next: TimelineRendererComponentProps
 ): boolean {
   return (
-    prev.packets.length === next.packets.length &&
+    prev.packets === next.packets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
     prev.isLastStep === next.isLastStep &&
-    prev.defaultExpanded === next.defaultExpanded
+    prev.isHover === next.isHover &&
+    prev.defaultExpanded === next.defaultExpanded &&
+    prev.renderTypeOverride === next.renderTypeOverride
     // Skipping chatState (memoized upstream)
   );
 }
@@ -65,25 +81,41 @@ export const TimelineRendererComponent = React.memo(
     stopReason,
     defaultExpanded = true,
     isLastStep,
+    isHover = false,
+    renderTypeOverride,
     children,
   }: TimelineRendererComponentProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-    const handleToggle = () => setIsExpanded((prev) => !prev);
+    const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
     const RendererFn = findRenderer({ packets });
-    const renderType = isExpanded ? RenderType.FULL : RenderType.COMPACT;
+    const renderType =
+      renderTypeOverride ?? (isExpanded ? RenderType.FULL : RenderType.COMPACT);
 
     if (!RendererFn) {
-      return children({
-        icon: null,
-        status: null,
-        content: <></>,
-        supportsCompact: false,
-        isExpanded,
-        onToggle: handleToggle,
-        renderType,
-        isLastStep: isLastStep ?? true,
-      });
+      return children([
+        {
+          icon: null,
+          status: null,
+          content: <></>,
+          supportsCollapsible: false,
+          isExpanded,
+          onToggle: handleToggle,
+          renderType,
+          isLastStep: isLastStep ?? true,
+          isHover,
+        },
+      ]);
     }
+
+    // Helper to add timeline context to a result
+    const enhanceResult = (result: RendererResult): TimelineRendererResult => ({
+      ...result,
+      isExpanded,
+      onToggle: handleToggle,
+      renderType,
+      isLastStep: isLastStep ?? true,
+      isHover,
+    });
 
     return (
       <RendererFn
@@ -95,19 +127,10 @@ export const TimelineRendererComponent = React.memo(
         stopPacketSeen={stopPacketSeen}
         stopReason={stopReason}
         isLastStep={isLastStep}
+        isHover={isHover}
       >
-        {({ icon, status, content, expandedText, supportsCompact }) =>
-          children({
-            icon,
-            status,
-            content,
-            expandedText,
-            supportsCompact,
-            isExpanded,
-            onToggle: handleToggle,
-            renderType,
-            isLastStep: isLastStep ?? true,
-          })
+        {(rendererOutput: RendererOutput) =>
+          children(rendererOutput.map((result) => enhanceResult(result)))
         }
       </RendererFn>
     );

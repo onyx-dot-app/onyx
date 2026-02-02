@@ -20,11 +20,17 @@ export interface TimelineHeaderResult {
  */
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
-  stopReason?: StopReason
+  stopReason?: StopReason,
+  isGeneratingImage?: boolean
 ): TimelineHeaderResult {
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
+
+    // If generating image with no tool packets, show image generation header
+    if (isGeneratingImage && !hasPackets) {
+      return { headerText: "Generating image...", hasPackets, userStopped };
+    }
 
     if (!hasPackets) {
       return { headerText: "Thinking...", hasPackets, userStopped };
@@ -53,14 +59,19 @@ export function useTimelineHeader(
       const searchState = constructCurrentSearchState(
         currentStep.packets as SearchToolPacket[]
       );
-      const headerText = searchState.isInternetSearch
-        ? "Searching web"
-        : "Searching internal documents";
+      let headerText: string;
+      if (searchState.hasResults && !searchState.isInternetSearch) {
+        headerText = "Reading";
+      } else {
+        headerText = searchState.isInternetSearch
+          ? "Searching the web"
+          : "Searching internal documents";
+      }
       return { headerText, hasPackets, userStopped };
     }
 
     if (packetType === PacketType.FETCH_TOOL_START) {
-      return { headerText: "Opening URLs", hasPackets, userStopped };
+      return { headerText: "Reading", hasPackets, userStopped };
     }
 
     if (packetType === PacketType.PYTHON_TOOL_START) {
@@ -93,5 +104,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };
-  }, [turnGroups, stopReason]);
+  }, [turnGroups, stopReason, isGeneratingImage]);
 }

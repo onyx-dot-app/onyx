@@ -2,38 +2,50 @@ import React from "react";
 import { SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import type { UniqueTool } from "@/app/app/message/messageComponents/timeline/hooks";
+import { formatDurationSeconds } from "@/lib/time";
 
 export interface CollapsedHeaderProps {
-  uniqueTools: UniqueTool[];
   totalSteps: number;
   collapsible: boolean;
   onToggle: () => void;
+  processingDurationSeconds?: number;
+  generatedImageCount?: number;
 }
 
-/** Header when completed + collapsed - tools summary + step count */
+/** Header when completed + collapsed - duration text + step count */
 export const CollapsedHeader = React.memo(function CollapsedHeader({
-  uniqueTools,
   totalSteps,
   collapsible,
   onToggle,
+  processingDurationSeconds = 0,
+  generatedImageCount = 0,
 }: CollapsedHeaderProps) {
+  const durationText = processingDurationSeconds
+    ? `Thought for ${formatDurationSeconds(processingDurationSeconds)}`
+    : "Thought for some time";
+
+  const imageText =
+    generatedImageCount > 0
+      ? `Generated ${generatedImageCount} ${
+          generatedImageCount === 1 ? "image" : "images"
+        }`
+      : null;
+
   return (
     <>
-      <div className="flex items-center gap-2">
-        {uniqueTools.map((tool) => (
-          <div
-            key={tool.key}
-            className="inline-flex items-center gap-1 rounded-08 p-1 bg-background-tint-02"
-          >
-            {tool.icon}
-            <Text as="span" secondaryBody text04>
-              {tool.name}
-            </Text>
-          </div>
-        ))}
+      <div className="flex flex-col">
+        {!imageText && (
+          <Text as="p" mainUiAction text03>
+            {durationText}
+          </Text>
+        )}
+        {imageText && (
+          <Text as="p" mainUiAction text03>
+            {imageText}
+          </Text>
+        )}
       </div>
-      {collapsible && (
+      {collapsible && totalSteps > 0 && (
         <Button
           tertiary
           onClick={onToggle}

@@ -8,7 +8,7 @@ import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import AIMessage from "@/app/app/message/messageComponents/AIMessage";
+import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import Spacer from "@/refresh-components/Spacer";
 import {
   useCurrentMessageHistory,
@@ -114,7 +114,7 @@ const MessageList = React.memo(
     );
 
     return (
-      <div className="w-full max-w-[var(--app-page-main-content-width)] h-full px-6">
+      <div className="w-full max-w-[var(--app-page-main-content-width)] h-full pl-1.5">
         <Spacer />
         {messages.map((message, i) => {
           const messageReactComponentKey = `message-${message.nodeId}`;
@@ -182,9 +182,9 @@ const MessageList = React.memo(
                 key={messageReactComponentKey}
                 data-anchor={isAnchor ? "true" : undefined}
               >
-                <AIMessage
+                <AgentMessage
                   rawPackets={message.packets}
-                  packetsVersion={message.packetsVersion}
+                  packetCount={message.packetCount}
                   chatState={chatStateData}
                   nodeId={message.nodeId}
                   messageId={message.messageId}
@@ -196,6 +196,7 @@ const MessageList = React.memo(
                   onMessageSelection={onMessageSelection}
                   onRegenerate={createRegenerator}
                   parentMessage={previousMessage}
+                  processingDurationSeconds={message.processingDurationSeconds}
                 />
               </div>
             );
