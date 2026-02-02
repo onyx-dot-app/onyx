@@ -111,7 +111,7 @@ function areAgentTimelinePropsEqual(
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.className === next.className &&
-    prev.chatState.assistant?.id === next.chatState.assistant?.id &&
+    prev.chatState === next.chatState &&
     prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration

@@ -16,9 +16,10 @@ export const ExpandedHeader = React.memo(function ExpandedHeader({
   onToggle,
   processingDurationSeconds,
 }: ExpandedHeaderProps) {
-  const durationText = processingDurationSeconds
-    ? `Thought for ${formatDurationSeconds(processingDurationSeconds)}`
-    : "Thought for some time";
+  const durationText =
+    processingDurationSeconds !== undefined
+      ? `Thought for ${formatDurationSeconds(processingDurationSeconds)}`
+      : "Thought for some time";
 
   return (
     <>

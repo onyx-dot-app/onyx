@@ -59,7 +59,7 @@ function arePropsEqual(
   next: TimelineRendererComponentProps
 ): boolean {
   return (
-    prev.packets.length === next.packets.length &&
+    prev.packets === next.packets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
