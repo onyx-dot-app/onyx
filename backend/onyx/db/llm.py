@@ -378,17 +378,18 @@ def sync_model_configurations(
         model_name = model["name"]
         if model_name not in existing_names:
             # Insert new model with is_visible=False (user must explicitly enable)
-            db_session.execute(
-                insert(ModelConfiguration)
-                .values(
-                    llm_provider_id=provider.id,
-                    name=model_name,
-                    is_visible=False,
-                    max_input_tokens=model.get("max_input_tokens"),
-                    supports_image_input=model.get("supports_image_input", False),
-                    display_name=model.get("display_name"),
-                )
-                .on_conflict_do_nothing()
+            supported_flows = [LLMModelFlowType.CHAT]
+            if model.get("supports_image_input", False):
+                supported_flows.append(LLMModelFlowType.VISION)
+
+            insert_new_model_configuration__no_commit(
+                db_session=db_session,
+                llm_provider_id=provider.id,
+                model_name=model_name,
+                supported_flows=supported_flows,
+                is_visible=False,
+                max_input_tokens=model.get("max_input_tokens"),
+                display_name=model.get("display_name"),
             )
             new_count += 1
 
