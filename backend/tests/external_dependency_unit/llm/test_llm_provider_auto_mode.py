@@ -160,13 +160,8 @@ class TestAutoModeSyncFeature:
                 if mc.name in all_expected_models:
                     assert mc.is_visible is True, f"Model '{mc.name}' should be visible"
 
-            # Verify the default model was set correctly
-            assert (
-                provider.default_model_name == expected_default_model
-            ), f"Default model should be '{expected_default_model}'"
-
             # Step 4: Set the provider as default
-            update_default_provider(provider.id, db_session)
+            update_default_provider(provider.id, expected_default_model, db_session)
 
             # Step 5: Fetch the default provider and verify
             default_model = fetch_default_llm_model(db_session)
