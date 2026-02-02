@@ -57,8 +57,8 @@ test.describe("Message feedback thumbs controls", () => {
     await sendMessage(page, "Share a short fun fact.");
 
     const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const likeButton = aiMessage.getByTestId("AIMessage/like-button");
-    const dislikeButton = aiMessage.getByTestId("AIMessage/dislike-button");
+    const likeButton = aiMessage.getByTestId("AgentMessage/like-button");
+    const dislikeButton = aiMessage.getByTestId("AgentMessage/dislike-button");
 
     await expect(likeButton).toBeVisible({ timeout: 15000 });
     await expect(dislikeButton).toBeVisible();

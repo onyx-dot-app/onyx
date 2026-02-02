@@ -80,7 +80,7 @@ def _migrate_single_document(
             f"number of chunks in Vespa ({len(vespa_document_chunks)})."
         )
 
-    opensearch_document_index.raw_index_chunks(chunks=opensearch_document_chunks)
+    opensearch_document_index.index_raw_chunks(chunks=opensearch_document_chunks)
 
     return len(opensearch_document_chunks)
 
