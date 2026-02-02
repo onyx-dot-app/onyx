@@ -425,6 +425,7 @@ class TestSlackBotFederatedSearch:
             is_public=True,
         )
         db_session.add(llm_provider)
+        db_session.flush()
 
         model_configuration = ModelConfiguration(
             llm_provider_id=llm_provider.id,
