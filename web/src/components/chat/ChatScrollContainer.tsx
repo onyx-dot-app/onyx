@@ -15,9 +15,8 @@ const DEFAULT_FADE_THRESHOLD_PX = 80; // 5rem
 const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
 
 // Fade configuration
-const TOP_FADE_HEIGHT = "6rem";
-const TOP_OPAQUE_ZONE = "2.5rem";
-const BOTTOM_FADE_HEIGHT = "16px";
+const TOP_FADE_HEIGHT = "1rem";
+const BOTTOM_FADE_HEIGHT = "1rem";
 
 export interface ScrollState {
   isAtBottom: boolean;
@@ -54,9 +53,9 @@ export interface ChatScrollContainerProps {
 // Build a CSS mask that fades content opacity at top/bottom edges
 function buildContentMask(): string {
   // Mask uses black = visible, transparent = hidden
-  // Top: completely transparent for first 2.5rem (~50% of 6rem), then fades to visible over remaining 3.5rem
-  // Bottom: simple 16px fade
-  return `linear-gradient(to bottom, transparent 0%, transparent ${TOP_OPAQUE_ZONE}, black ${TOP_FADE_HEIGHT}, black calc(100% - ${BOTTOM_FADE_HEIGHT}), transparent 100%)`;
+  // Top: fades from transparent to visible over 1rem
+  // Bottom: fades from visible to transparent over 1rem
+  return `linear-gradient(to bottom, transparent 0%, transparent 0rem, black ${TOP_FADE_HEIGHT}, black calc(100% - ${BOTTOM_FADE_HEIGHT}), transparent 100%)`;
 }
 
 const ChatScrollContainer = React.memo(
