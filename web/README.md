@@ -77,7 +77,7 @@ with SKIP_AUTH=true. This is convenient but slightly different from what happens
 in CI so tests might pass locally and fail in CI.
 
 ```cd web
-SKIP_AUTH=true npx playwright test create_and_edit_assistant.spec.ts --project=no-auth
+SKIP_AUTH=true npx playwright test create_and_edit_assistant.spec.ts --project=admin
 ```
 
 2. Run playwright
