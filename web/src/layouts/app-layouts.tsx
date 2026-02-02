@@ -397,17 +397,15 @@ function Footer() {
         // # Note (from @raunakab):
         //
         // The conditional rendering of vertical padding based on the current page is intentional.
-        // The reason is because the `ChatInputBar` has `shadow-01` placed on it.
-        // Shadows, in CSS, are not internal to the element; rather, they're external.
-        // This means that they can be clipped if a component with a shadow is at the bottom of a div with certain overflow styles attached to it.
+        // The `ChatInputBar` has `shadow-01` applied, which extends ~14px below it.
+        // Because the content area in `Root` uses `overflow-auto`, the shadow would be
+        // clipped at the container boundary — causing a visible rendering artefact.
         //
-        // This is exactly the situation for `ChatInputBar`: it's at the bottom of the `AppPage` component during chats, which means that its shadow would be clipped.
-        // This causes a very ugly rendering artefact.
-        // Therefore, as such, we add EXTRA bottom padding underneath the ChatInputBar when it's at the bottom of the page (i.e., when `appFocus.isChat()`).
+        // To fix this, `ChatInputBar` has `mb-[14px]` to give the shadow breathing room.
+        // However, that extra margin adds visible space between the input and the Footer.
+        // To compensate, we remove the Footer's top padding when `appFocus.isChat()`.
         //
-        // However, since we add extra padding during chats, we then try to compensate here to *remove* that extra padding by then not rendering any top-padding when `appFocus.isChat*()`.
-        //
-        // There is a corresponding note left inside of `AppPage.tsx` on why the `<Spacer pixels={14} />` is added.
+        // There is a corresponding note inside `ChatInputBar.tsx` explaining the `mb-[14px]`.
         // Please refer to that note as well.
         appFocus.isChat() ? "pb-2" : "py-2"
       )}
