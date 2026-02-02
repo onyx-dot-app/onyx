@@ -309,15 +309,6 @@ def upsert_llm_provider(
                 display_name=model_configuration.display_name,
             )
 
-    default_model = fetch_default_model(db_session, ModelFlowType.CONVERSATION)
-    if default_model and default_model.llm_provider_id == existing_llm_provider.id:
-        _update_default_model(
-            db_session=db_session,
-            provider_id=existing_llm_provider.id,
-            model=existing_llm_provider.default_model_name,
-            flow_type=ModelFlowType.CONVERSATION,
-        )
-
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
         llm_provider_id=existing_llm_provider.id,
