@@ -153,28 +153,37 @@ export const ResearchAgentRenderer: MessageRenderer<
   const showOnlyTools =
     isCondensedMode && !fullReportContent && visibleNestedToolGroups.length > 0;
 
+  // Process content once for consistent markdown handling
+  // This ensures code block extraction uses the same offsets as rendered content
+  const processedReportContent = useMemo(
+    () => processContent(fullReportContent),
+    [fullReportContent]
+  );
+
   // Get markdown components for rendering (stable across renders)
-  // Note: We pass fullReportContent for code block extraction context,
-  // but renderReport will render whatever content is passed to it
+  // Uses processed content so code block extraction offsets match rendered content
   const markdownComponents = useMarkdownComponents(
     state,
-    fullReportContent,
+    processedReportContent,
     "text-text-03 font-main-ui-body"
   );
 
   // Stable callbacks to avoid creating new functions on every render
   const noopComplete = useCallback(() => {}, []);
 
-  // renderReport now renders whatever content is passed to it
-  // This enables ExpandableTextDisplay to pass truncated content during streaming
+  // renderReport renders the processed content
+  // Uses pre-computed processedReportContent since ExpandableTextDisplay
+  // passes the same fullReportContent that we processed above
+  // Parameters are required by ExpandableTextDisplay interface but we use
+  // the pre-processed content to ensure offsets match code block extraction
   const renderReport = useCallback(
-    (content: string) =>
+    (_content: string, _isExpanded?: boolean) =>
       renderMarkdown(
-        processContent(content),
+        processedReportContent,
         markdownComponents,
         "text-text-03 font-main-ui-body"
       ),
-    [markdownComponents]
+    [processedReportContent, markdownComponents]
   );
 
   // HIGHLIGHT mode: return raw content with header embedded in content
