@@ -79,6 +79,8 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
+import { useAppMode } from "@/providers/AppModeProvider";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -151,6 +153,8 @@ const MemoizedAppSidebarInner = memo(
     const { popup, setPopup } = usePopup();
     const posthog = usePostHog();
     const { newTenantInfo, invitationInfo } = useModalContext();
+    const { setAppMode } = useAppMode();
+    const { reset } = useQueryController();
 
     // Use SWR hooks for data fetching
     const {
@@ -437,6 +441,10 @@ const MemoizedAppSidebarInner = memo(
             folded={folded}
             href={href}
             transient={activeSidebarTab.isNewSession()}
+            onClick={() => {
+              setAppMode("auto");
+              reset();
+            }}
           >
             New Session
           </SidebarTab>
