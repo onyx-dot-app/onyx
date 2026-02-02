@@ -997,9 +997,10 @@ export default function AgentEditorPage({
             const hasUploadingFiles = values.user_file_ids.some(
               (fileId: string) => {
                 const status = fileStatusMap.get(fileId);
-                return (
-                  status === undefined || status === UserFileStatus.UPLOADING
-                );
+                if (status === undefined) {
+                  return fileId.startsWith("temp_");
+                }
+                return status === UserFileStatus.UPLOADING;
               }
             );
 
