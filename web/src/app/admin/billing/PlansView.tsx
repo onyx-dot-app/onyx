@@ -92,13 +92,12 @@ function PlanCard({
       gap={0}
       alignItems="stretch"
       aria-label={title + " plan card"}
-      className="plan-card"
     >
       <Section
         flexDirection="column"
         alignItems="stretch"
         padding={1}
-        height="auto"
+        height="full"
       >
         {/* Title */}
         <Section
