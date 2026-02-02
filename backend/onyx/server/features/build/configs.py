@@ -110,6 +110,15 @@ SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
 # ============================================================================
+# SSE Streaming Configuration
+# ============================================================================
+
+# Maximum character length for tool call content in SSE events
+# Content exceeding this length will be truncated to prevent large payloads
+# that can cause timeouts or client disconnects during streaming
+MAX_SSE_CONTENT_LENGTH = int(os.environ.get("MAX_SSE_CONTENT_LENGTH", "500"))
+
+# ============================================================================
 # Rate Limiting Configuration
 # ============================================================================
 
