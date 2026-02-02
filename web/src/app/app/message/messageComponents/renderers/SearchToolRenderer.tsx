@@ -13,9 +13,10 @@ import { truncateString } from "@/lib/utils";
 import { SourceChip2 } from "@/app/app/components/SourceChip2";
 import { BlinkingDot } from "../../BlinkingDot";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { IconType } from "react-icons";
 import { OnyxIconType } from "@/components/icons/icons";
+import { WebResultIcon } from "@/components/WebResultIcon";
+import { SourceIcon } from "@/components/SourceIcon";
 
 const MAX_TITLE_LENGTH = 25;
 
@@ -27,6 +28,25 @@ const RESULTS_PER_EXPANSION = 10;
 
 const SEARCHING_MIN_DURATION_MS = 1000; // 1 second minimum for "Searching" state
 const SEARCHED_MIN_DURATION_MS = 1000; // 1 second minimum for "Searched" state
+
+export const ResultIcon = ({
+  doc,
+  size,
+}: {
+  doc: OnyxDocument;
+  size: number;
+}) => {
+  return (
+    <div className="flex-none">
+      {" "}
+      {doc.is_internet || doc.source_type === "web" ? (
+        <WebResultIcon size={size} url={doc.link} />
+      ) : (
+        <SourceIcon iconSize={size} sourceType={doc.source_type} />
+      )}
+    </div>
+  );
+};
 
 export interface SearchState {
   queries: string[];
