@@ -484,23 +484,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       finishOnboarding,
     ]
   );
-  const {
-    submit: submitQuery,
-    reset: resetQueryController,
-    classification,
-  } = useQueryController();
+  const { submit: submitQuery, classification } = useQueryController();
 
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
     []
   );
 
-  const handleChatInputSubmit = useCallback(
+  const handleAppInputBarSubmit = useCallback(
     async (message: string) => {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
-        resetQueryController();
         resetInputBar();
         onSubmit({
           message,
@@ -523,7 +518,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentChatSessionId,
       submitQuery,
       onChat,
-      resetQueryController,
       resetInputBar,
       onSubmit,
       currentMessageFiles,
@@ -852,7 +846,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           ""
                         }
                         stopGenerating={stopGenerating}
-                        onSubmit={handleChatInputSubmit}
+                        onSubmit={handleAppInputBarSubmit}
                         chatState={currentChatState}
                         currentSessionFileTokenCount={
                           currentChatSessionId
