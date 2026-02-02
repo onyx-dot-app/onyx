@@ -733,7 +733,39 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >
-                {/* ── Top-center: ChatUI / WelcomeMessage / ProjectUI ── */}
+                {/* ── Top row: ChatUI (spans all columns) ── */}
+                <Fade
+                  show={
+                    appFocus.isChat() &&
+                    !!currentChatSessionId &&
+                    !!liveAssistant
+                  }
+                  className="col-span-3 col-start-1 row-start-1 min-h-0 overflow-hidden flex flex-col items-center"
+                >
+                  <ChatScrollContainer
+                    ref={scrollContainerRef}
+                    sessionId={currentChatSessionId!}
+                    anchorSelector={anchorSelector}
+                    autoScroll={autoScrollEnabled}
+                    isStreaming={isStreaming}
+                    onScrollButtonVisibilityChange={setShowScrollButton}
+                  >
+                    <ChatUI
+                      liveAssistant={liveAssistant!}
+                      llmManager={llmManager}
+                      deepResearchEnabled={deepResearchEnabled}
+                      currentMessageFiles={currentMessageFiles}
+                      setPresentingDocument={setPresentingDocument}
+                      onSubmit={onSubmit}
+                      onMessageSelection={onMessageSelection}
+                      stopGenerating={stopGenerating}
+                      onResubmit={handleResubmitLastMessage}
+                      anchorNodeId={anchorNodeId}
+                    />
+                  </ChatScrollContainer>
+                </Fade>
+
+                {/* ── Top-center: WelcomeMessage / ProjectUI ── */}
                 <div className="col-start-2 row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
@@ -743,34 +775,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       setPresentingDocument={setPresentingDocument}
                     />
                   )}
-
-                  {/* ChatUI */}
-                  {appFocus.isChat() &&
-                    (currentChatSessionId && liveAssistant ? (
-                      <ChatScrollContainer
-                        ref={scrollContainerRef}
-                        sessionId={currentChatSessionId}
-                        anchorSelector={anchorSelector}
-                        autoScroll={autoScrollEnabled}
-                        isStreaming={isStreaming}
-                        onScrollButtonVisibilityChange={setShowScrollButton}
-                      >
-                        <ChatUI
-                          liveAssistant={liveAssistant}
-                          llmManager={llmManager}
-                          deepResearchEnabled={deepResearchEnabled}
-                          currentMessageFiles={currentMessageFiles}
-                          setPresentingDocument={setPresentingDocument}
-                          onSubmit={onSubmit}
-                          onMessageSelection={onMessageSelection}
-                          stopGenerating={stopGenerating}
-                          onResubmit={handleResubmitLastMessage}
-                          anchorNodeId={anchorNodeId}
-                        />
-                      </ChatScrollContainer>
-                    ) : (
-                      <div className="flex-1" />
-                    ))}
 
                   {/* WelcomeMessageUI */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&

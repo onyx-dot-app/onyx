@@ -30,7 +30,7 @@ import {
   useChatSessionStore,
   useDocumentSidebarVisible,
 } from "@/app/app/stores/useChatSessionStore";
-import MessageList from "@/sections/chat/ChatUI";
+import ChatUI from "@/sections/chat/ChatUI";
 import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -367,7 +367,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
                 >
-                  <MessageList
+                  <ChatUI
                     liveAssistant={resolvedAssistant}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}

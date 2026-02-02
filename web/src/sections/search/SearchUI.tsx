@@ -169,7 +169,7 @@ export default function SearchResults({
   ]);
 
   return (
-    <div className="flex flex-col h-full w-full max-w-[var(--main-app-width)]">
+    <div className="flex flex-col h-full w-full max-w-[var(--app-page-main-content-width)]">
       <Spacer rem={1.5} />
 
       {/* Filters - fixed at top */}

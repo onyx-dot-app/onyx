@@ -16,7 +16,7 @@ import {
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
 
-export interface MessageListProps {
+export interface ChatUIProps {
   liveAssistant: MinimalPersonaSnapshot;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
@@ -49,7 +49,7 @@ export interface MessageListProps {
   anchorNodeId?: number;
 }
 
-const MessageList = React.memo(
+const ChatUI = React.memo(
   ({
     liveAssistant,
     llmManager,
@@ -61,7 +61,7 @@ const MessageList = React.memo(
     currentMessageFiles,
     onResubmit,
     anchorNodeId,
-  }: MessageListProps) => {
+  }: ChatUIProps) => {
     // Get messages and error state from store
     const messages = useCurrentMessageHistory();
     const messageTree = useCurrentMessageTree();
@@ -223,7 +223,6 @@ const MessageList = React.memo(
     );
   }
 );
+ChatUI.displayName = "ChatUI";
 
-MessageList.displayName = "MessageList";
-
-export default MessageList;
+export default ChatUI;
