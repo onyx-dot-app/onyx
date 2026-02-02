@@ -43,6 +43,29 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
            so it inherits from OpenAIResponsesAPIConfig which returns True for models not
            in litellm.utils.supports_native_streaming(). Custom Azure deployments will
            still use fake streaming without this patch.
+
+5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
+   - LiteLLM uses model_construct as a fallback in multiple places when
+     ResponsesAPIResponse validation fails
+   - This bypasses the usage validator, allowing chat completion format usage
+     (completion_tokens, prompt_tokens) to be stored instead of Responses API format
+     (input_tokens, output_tokens)
+   - When model_dump() is later called, Pydantic emits a serialization warning
+   STATUS: STILL NEEDED - Multiple files use model_construct which bypasses validation:
+           openai/responses/transformation.py, chatgpt/responses/transformation.py,
+           manus/responses/transformation.py, volcengine/responses/transformation.py,
+           and handler.py. Our patch wraps ResponsesAPIResponse.model_construct itself
+           to transform usage in all code paths.
+
+6. Logging Usage Transformation Warning (_patch_logging_assembled_streaming_response):
+   - LiteLLM's _get_assembled_streaming_response in litellm_logging.py transforms
+     ResponseAPIUsage to chat completion format and sets it as a dict on the
+     ResponsesAPIResponse.usage field
+   - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
+     to emit a serialization warning when model_dump() is called later
+   STATUS: STILL NEEDED - litellm_core_utils/litellm_logging.py lines 3185-3199 set
+           usage as a dict with chat completion format instead of keeping it as
+           ResponseAPIUsage. Our patch creates a deep copy before modification.
 """
 
 import time
@@ -539,6 +562,153 @@ def _patch_azure_responses_should_fake_stream() -> None:
     AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream  # type: ignore[method-assign]
 
 
+def _patch_responses_api_usage_format() -> None:
+    """
+    Patches ResponsesAPIResponse.model_construct to properly transform usage data
+    from chat completion format to Responses API format.
+
+    LiteLLM uses model_construct as a fallback in multiple places when ResponsesAPIResponse
+    validation fails. This bypasses the usage validator, allowing usage data in chat
+    completion format (completion_tokens, prompt_tokens) to be stored instead of Responses
+    API format (input_tokens, output_tokens), causing Pydantic serialization warnings.
+
+    This patch wraps model_construct to transform usage before construction, ensuring
+    the correct type regardless of which code path calls model_construct.
+
+    Affected locations in LiteLLM:
+    - litellm/llms/openai/responses/transformation.py (lines 183, 563)
+    - litellm/llms/chatgpt/responses/transformation.py (line 153)
+    - litellm/llms/manus/responses/transformation.py (lines 243, 334)
+    - litellm/llms/volcengine/responses/transformation.py (line 280)
+    - litellm/completion_extras/litellm_responses_transformation/handler.py (line 51)
+    """
+    from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
+
+    original_model_construct = ResponsesAPIResponse.model_construct
+
+    if getattr(original_model_construct, "_is_patched", False):
+        return
+
+    @classmethod  # type: ignore[misc]
+    def _patched_model_construct(
+        cls: Any,
+        _fields_set: Optional[set[str]] = None,
+        **values: Any,
+    ) -> "ResponsesAPIResponse":
+        """
+        Patched model_construct that ensures usage is a ResponseAPIUsage object.
+        """
+        # Transform usage if present and not already the correct type
+        if "usage" in values and values["usage"] is not None:
+            usage = values["usage"]
+            if not isinstance(usage, ResponseAPIUsage):
+                if isinstance(usage, dict):
+                    values = dict(values)  # Don't mutate original
+                    # Check if it's in chat completion format
+                    if "prompt_tokens" in usage or "completion_tokens" in usage:
+                        # Transform from chat completion format
+                        values["usage"] = ResponseAPIUsage(
+                            input_tokens=usage.get("prompt_tokens", 0),
+                            output_tokens=usage.get("completion_tokens", 0),
+                            total_tokens=usage.get("total_tokens", 0),
+                        )
+                    elif "input_tokens" in usage or "output_tokens" in usage:
+                        # Already in Responses API format, just convert to proper type
+                        values["usage"] = ResponseAPIUsage(
+                            input_tokens=usage.get("input_tokens", 0),
+                            output_tokens=usage.get("output_tokens", 0),
+                            total_tokens=usage.get("total_tokens", 0),
+                        )
+
+        # Call original model_construct (need to call it as unbound method)
+        return original_model_construct.__func__(cls, _fields_set, **values)
+
+    _patched_model_construct._is_patched = True  # type: ignore[attr-defined]
+    ResponsesAPIResponse.model_construct = _patched_model_construct  # type: ignore[method-assign]
+
+
+def _patch_logging_assembled_streaming_response() -> None:
+    """
+    Patches LiteLLMLoggingObj._get_assembled_streaming_response to create a deep copy
+    of the ResponsesAPIResponse before modifying its usage field.
+
+    The original code transforms usage to chat completion format and sets it as a dict
+    directly on the ResponsesAPIResponse.usage field. This mutates the original object,
+    causing Pydantic serialization warnings when model_dump() is called later because
+    the usage field contains a dict instead of the expected ResponseAPIUsage type.
+
+    This patch creates a copy of the response before modification, preserving the
+    original object with its proper ResponseAPIUsage type.
+    """
+    from litellm import LiteLLMLoggingObj
+    from litellm.responses.utils import ResponseAPILoggingUtils
+    from litellm.types.llms.openai import (
+        ResponseAPIUsage,
+        ResponseCompletedEvent,
+        ResponsesAPIResponse,
+    )
+    from litellm.types.utils import ModelResponse, TextCompletionResponse
+
+    original_method = LiteLLMLoggingObj._get_assembled_streaming_response
+
+    if getattr(original_method, "_is_patched", False):
+        return
+
+    def _patched_get_assembled_streaming_response(
+        self: Any,
+        result: Any,
+        start_time: Any,
+        end_time: Any,
+        is_async: bool,
+        streaming_chunks: List[Any],
+    ) -> Any:
+        """
+        Patched version that creates a copy before modifying usage.
+
+        The original LiteLLM code transforms usage to chat completion format and
+        sets it directly as a dict, which causes Pydantic serialization warnings.
+        This patch uses model_construct to rebuild the response with the transformed
+        usage, ensuring proper typing.
+        """
+        if isinstance(result, ModelResponse):
+            return result
+        elif isinstance(result, TextCompletionResponse):
+            return result
+        elif isinstance(result, ResponseCompletedEvent):
+            # Get the original response data
+            original_response = result.response
+            response_data = original_response.model_dump()
+
+            # Transform usage if present
+            if isinstance(original_response.usage, ResponseAPIUsage):
+                transformed_usage = (
+                    ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
+                        original_response.usage
+                    )
+                )
+                # Put the transformed usage (in chat completion format) into response_data
+                # Our patched model_construct will convert it back to ResponseAPIUsage
+                response_data["usage"] = (
+                    transformed_usage.model_dump()
+                    if hasattr(transformed_usage, "model_dump")
+                    else dict(transformed_usage)
+                )
+
+            # Rebuild using model_construct - our patch ensures usage is properly typed
+            response_copy = ResponsesAPIResponse.model_construct(**response_data)
+
+            # Copy hidden params
+            if hasattr(original_response, "_hidden_params"):
+                response_copy._hidden_params = dict(original_response._hidden_params)
+
+            return response_copy
+        else:
+            return None
+
+    _patched_get_assembled_streaming_response._is_patched = True  # type: ignore[attr-defined]
+    LiteLLMLoggingObj._get_assembled_streaming_response = _patched_get_assembled_streaming_response  # type: ignore[method-assign]
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -548,8 +718,12 @@ def apply_monkey_patches() -> None:
     - Patching translate_responses_chunk_to_openai_stream for parallel tool calls
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
     - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
+    - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
+    - Patching LiteLLMLoggingObj._get_assembled_streaming_response to avoid mutating original response
     """
     _patch_ollama_chunk_parser()
     _patch_openai_responses_parallel_tool_calls()
     _patch_openai_responses_transform_response()
     _patch_azure_responses_should_fake_stream()
+    _patch_responses_api_usage_format()
+    _patch_logging_assembled_streaming_response()

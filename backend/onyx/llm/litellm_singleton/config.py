@@ -1,5 +1,4 @@
 import json
-import warnings
 from pathlib import Path
 
 import litellm
@@ -17,14 +16,6 @@ def configure_litellm_settings() -> None:
     litellm.modify_params = True
     litellm.add_function_to_prompt = False
     litellm.suppress_debug_info = True
-
-    # Suppress Pydantic serialization warning for ResponseAPIUsage type mismatch.
-    # LiteLLM's completions->responses API bridge passes usage data in chat completion
-    # format (completion_tokens, prompt_tokens) instead of Responses API format
-    # (output_tokens, input_tokens). This is a LiteLLM bug but harmless.
-    warnings.filterwarnings(
-        "ignore", message=".*ResponseAPIUsage.*", category=UserWarning
-    )
 
 
 # TODO: We might not need to register ollama_chat in addition to ollama but let's just do it for good measure for now.
