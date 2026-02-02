@@ -77,6 +77,8 @@ IMAGE_FILE_NAME = "image_file_name"
 # Specific to Vespa, needed for highlighting matching keywords / section
 CONTENT_SUMMARY = "content_summary"
 
+FULL_CHUNK_EMBEDDING_KEY = "full_chunk"
+
 
 YQL_BASE = (
     f"select "

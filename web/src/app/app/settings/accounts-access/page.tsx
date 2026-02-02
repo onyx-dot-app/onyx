@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { useAuthType } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
 import { AccountsAccessSettings } from "@/refresh-pages/SettingsPage";

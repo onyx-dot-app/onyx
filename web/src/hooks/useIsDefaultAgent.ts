@@ -1,8 +1,10 @@
+"use client";
+
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { SEARCH_PARAM_NAMES } from "../services/searchParams";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
-import { ChatSession } from "../interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
 
@@ -12,7 +14,7 @@ import { DEFAULT_ASSISTANT_ID } from "@/lib/constants";
  * 2. If URL has an assistantId specified
  * 3. Based on the current chat session
  */
-export function useIsDefaultAgent({
+export default function useIsDefaultAgent({
   liveAssistant,
   existingChatSessionId,
   selectedChatSession,

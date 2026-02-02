@@ -601,12 +601,14 @@ class DocumentQuery:
         def _get_assistant_knowledge_filter(
             attached_doc_ids: list[str] | None,
             node_ids: list[int] | None,
+            file_ids: list[UUID] | None,
         ) -> dict[str, Any]:
-            """Combined filter for assistant knowledge (documents OR hierarchy nodes).
+            """Combined filter for assistant knowledge (documents OR hierarchy nodes OR user files).
 
             When an assistant has attached knowledge, search should be scoped to:
             - Documents explicitly attached (by document ID), OR
-            - Documents under attached hierarchy nodes (by ancestor node IDs)
+            - Documents under attached hierarchy nodes (by ancestor node IDs), OR
+            - User-uploaded files attached to the assistant
             """
             knowledge_filter: dict[str, Any] = {
                 "bool": {"should": [], "minimum_should_match": 1}
@@ -618,6 +620,10 @@ class DocumentQuery:
             if node_ids:
                 knowledge_filter["bool"]["should"].append(
                     _get_hierarchy_node_filter(node_ids)
+                )
+            if file_ids:
+                knowledge_filter["bool"]["should"].append(
+                    _get_user_file_id_filter(file_ids)
                 )
             return knowledge_filter
 
@@ -652,12 +658,25 @@ class DocumentQuery:
             # is present in the document's document sets list.
             filter_clauses.append(_get_document_set_filter(document_sets))
 
-        if user_file_ids:
+        # Check if this is an assistant knowledge search (has any assistant-scoped knowledge)
+        has_assistant_knowledge = (
+            attached_document_ids or hierarchy_node_ids or user_file_ids
+        )
+
+        if has_assistant_knowledge:
+            # If assistant has attached knowledge, scope search to that knowledge.
+            # This is an OR filter: match documents OR hierarchy nodes OR user files.
+            # ACL is still applied separately as an AND filter.
+            filter_clauses.append(
+                _get_assistant_knowledge_filter(
+                    attached_document_ids, hierarchy_node_ids, user_file_ids
+                )
+            )
+        elif user_file_ids:
+            # Fallback for non-assistant user file searches (e.g., project searches)
             # If at least one user file ID is provided, the caller will only
             # retrieve documents where the document ID is in this input list of
-            # file IDs. Note that these IDs correspond to Onyx documents whereas
-            # the entries retrieved from the document index correspond to Onyx
-            # document chunks.
+            # file IDs.
             filter_clauses.append(_get_user_file_id_filter(user_file_ids))
 
         if project_id is not None:
@@ -689,16 +708,6 @@ class DocumentQuery:
         if max_chunk_size is not None:
             filter_clauses.append(
                 {"term": {MAX_CHUNK_SIZE_FIELD_NAME: {"value": max_chunk_size}}}
-            )
-
-        if attached_document_ids or hierarchy_node_ids:
-            # If assistant has attached knowledge, scope search to that knowledge.
-            # This is an OR filter: match documents OR hierarchy nodes.
-            # ACL is still applied separately as an AND filter.
-            filter_clauses.append(
-                _get_assistant_knowledge_filter(
-                    attached_document_ids, hierarchy_node_ids
-                )
             )
 
         if tenant_state.multitenant:

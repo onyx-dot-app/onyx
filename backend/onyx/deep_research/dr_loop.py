@@ -17,6 +17,7 @@ from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import MessageType
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
@@ -32,6 +33,8 @@ from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FINAL_REPORT_PROMPT
+from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER
+from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER_TOKENS
 from onyx.prompts.deep_research.orchestration_layer import (
     INTERNAL_SEARCH_CLARIFICATION_GUIDANCE,
 )
@@ -218,7 +221,7 @@ def run_deep_research_llm_loop(
             if include_internal_search_tunings
             else ""
         )
-        if not skip_clarification:
+        if not SKIP_DEEP_RESEARCH_CLARIFICATION and not skip_clarification:
             with function_span("clarification_step") as span:
                 clarification_prompt = CLARIFICATION_PROMPT.format(
                     current_datetime=get_current_llm_day_time(full_sentence=False),
@@ -411,6 +414,17 @@ def run_deep_research_llm_loop(
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
 
+                if cycle == 1:
+                    first_cycle_reminder_message = ChatMessageSimple(
+                        message=FIRST_CYCLE_REMINDER,
+                        token_count=FIRST_CYCLE_REMINDER_TOKENS,
+                        message_type=MessageType.USER,
+                    )
+                    first_cycle_tokens = FIRST_CYCLE_REMINDER_TOKENS
+                else:
+                    first_cycle_tokens = 0
+                    first_cycle_reminder_message = None
+
                 research_agent_calls: list[ToolCallKickoff] = []
 
                 orchestrator_prompt = orchestrator_prompt_template.format(
@@ -433,9 +447,12 @@ def run_deep_research_llm_loop(
                     simple_chat_history=simple_chat_history,
                     reminder_message=None,
                     project_files=None,
-                    available_tokens=available_tokens,
+                    available_tokens=available_tokens - first_cycle_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
                 )
+
+                if first_cycle_reminder_message is not None:
+                    truncated_message_history.append(first_cycle_reminder_message)
 
                 # Use think tool processor for non-reasoning models to convert
                 # think_tool calls to reasoning content
