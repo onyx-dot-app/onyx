@@ -24,20 +24,22 @@ def decrypt_raw_credential(encrypted_value: str) -> None:
         # Decrypt the bytes
         decrypted_str = decrypt_bytes_to_string(encrypted_bytes)
 
-        # Parse and pretty print the decrypted JSON
-        decrypted_json = json.loads(decrypted_str)
-        print("Decrypted credential value:")
-        print(json.dumps(decrypted_json, indent=2))
-
     except binascii.Error:
         print("Error: Invalid hex encoded string")
-
-    except json.JSONDecodeError:
-        print("Decrypted value (not JSON):")
-        print(decrypted_str)
+        return
 
     except Exception as e:
         print(f"Error decrypting value: {e}")
+        return
+
+    # Try to pretty print as JSON, otherwise print as plain text
+    try:
+        decrypted_json = json.loads(decrypted_str)
+        print("Decrypted credential value:")
+        print(json.dumps(decrypted_json, indent=2))
+    except json.JSONDecodeError:
+        print("Decrypted value:")
+        print(decrypted_str)
 
 
 if __name__ == "__main__":
