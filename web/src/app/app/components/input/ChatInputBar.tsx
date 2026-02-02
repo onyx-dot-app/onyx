@@ -711,7 +711,9 @@ const ChatInputBar = React.memo(
                     : SvgStop
               }
               disabled={
-                (chatState === "input" && !message) || hasUploadingFiles
+                (chatState === "input" && !message) ||
+                hasUploadingFiles ||
+                isClassifying
               }
               onClick={() => {
                 if (chatState == "streaming") {
