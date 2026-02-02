@@ -3,7 +3,7 @@ from collections.abc import Callable
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
@@ -165,7 +165,7 @@ def get_default_llm_with_vision(
         # Fall back to searching all providers
         models = fetch_existing_models(
             db_session=db_session,
-            flow_types=[ModelFlowType.VISION, ModelFlowType.CONVERSATION],
+            flow_types=[LLMModelFlowType.VISION, LLMModelFlowType.CHAT],
         )
 
     if not models:
@@ -176,8 +176,8 @@ def get_default_llm_with_vision(
     sorted_models = sorted(
         models,
         key=lambda x: (
-            ModelFlowType.VISION in x.model_flow_types,
-            ModelFlowType.CONVERSATION in x.model_flow_types,
+            LLMModelFlowType.VISION in x.llm_model_flow_types,
+            LLMModelFlowType.CHAT in x.llm_model_flow_types,
         ),
         reverse=True,
     )

@@ -20,7 +20,7 @@ from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
@@ -258,7 +258,7 @@ def list_llm_providers(
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(
         db_session=db_session,
-        flow_types=[ModelFlowType.CONVERSATION, ModelFlowType.VISION],
+        flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
         exclude_image_generation_providers=not include_image_gen,
     ):
         from_model_start = datetime.now(timezone.utc)
@@ -452,7 +452,7 @@ def get_vision_capable_providers(
 ) -> LLMProviderResponse[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
     vision_models = fetch_existing_models(
-        db_session=db_session, flow_types=[ModelFlowType.VISION]
+        db_session=db_session, flow_types=[LLMModelFlowType.VISION]
     )
 
     # Group vision models by provider ID (using ID as key since it's hashable)
@@ -513,7 +513,7 @@ def list_llm_provider_basics(
     logger.debug("Starting to fetch user-accessible LLM providers")
 
     all_providers = fetch_existing_llm_providers(
-        db_session, [ModelFlowType.CONVERSATION, ModelFlowType.VISION]
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
@@ -558,7 +558,7 @@ def get_valid_model_names_for_persona(
 
     is_admin = user.role == UserRole.ADMIN
     all_providers = fetch_existing_llm_providers(
-        db_session, [ModelFlowType.CONVERSATION, ModelFlowType.VISION]
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
@@ -607,7 +607,7 @@ def list_llm_providers_for_persona(
 
     is_admin = user.role == UserRole.ADMIN
     all_providers = fetch_existing_llm_providers(
-        db_session, [ModelFlowType.CONVERSATION, ModelFlowType.VISION]
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
@@ -646,7 +646,7 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(db_session, [ModelFlowType.CONVERSATION])
+    providers = fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT])
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:

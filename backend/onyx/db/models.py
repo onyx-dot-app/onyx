@@ -73,7 +73,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
-    ModelFlowType,
+    LLMModelFlowType,
     ThemePreference,
     SwitchoverType,
 )
@@ -2445,6 +2445,10 @@ class ChatMessage(Base):
     )
     # True if this assistant message is a clarification question (deep research flow)
     is_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Duration in seconds for processing this message (assistant messages only)
+    processing_duration_seconds: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
 
     # Relationships
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
@@ -2764,25 +2768,25 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
-    model_flows: Mapped[list["ModelFlow"]] = relationship(
-        "ModelFlow",
+    llm_model_flows: Mapped[list["LLMModelFlow"]] = relationship(
+        "LLMModelFlow",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
     @property
-    def model_flow_types(self) -> list[ModelFlowType]:
-        return [flow.model_flow_type for flow in self.model_flows]
+    def llm_model_flow_types(self) -> list[LLMModelFlowType]:
+        return [flow.llm_model_flow_type for flow in self.llm_model_flows]
 
 
-class ModelFlow(Base):
-    __tablename__ = "model_flow"
+class LLMModelFlow(Base):
+    __tablename__ = "llm_model_flow"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    model_flow_type: Mapped[ModelFlowType] = mapped_column(
-        Enum(ModelFlowType, native_enum=False), nullable=False
+    llm_model_flow_type: Mapped[LLMModelFlowType] = mapped_column(
+        Enum(LLMModelFlowType, native_enum=False), nullable=False
     )
     model_configuration_id: Mapped[int] = mapped_column(
         ForeignKey("model_configuration.id", ondelete="CASCADE"),
@@ -2792,18 +2796,18 @@ class ModelFlow(Base):
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration",
-        back_populates="model_flows",
+        back_populates="llm_model_flows",
     )
 
     __table_args__ = (
         UniqueConstraint(
-            "model_flow_type",
+            "llm_model_flow_type",
             "model_configuration_id",
-            name="uq_model_config_per_flow_type",
+            name="uq_model_config_per_llm_model_flow_type",
         ),
         Index(
-            "ix_one_default_per_model_flow",
-            "model_flow_type",
+            "ix_one_default_per_llm_model_flow",
+            "llm_model_flow_type",
             unique=True,
             postgresql_where=(is_default == True),  # noqa: E712
         ),

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import LLMModelFlowType
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
@@ -167,8 +167,8 @@ class ModelConfigurationUpsertRequest(BaseModel):
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
-            supports_image_input=ModelFlowType.VISION
-            in model_configuration_model.model_flow_types,
+            supports_image_input=LLMModelFlowType.VISION
+            in model_configuration_model.llm_model_flow_types,
             display_name=model_configuration_model.display_name,
         )
 
@@ -207,7 +207,8 @@ class ModelConfigurationView(BaseModel):
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 supports_image_input=(
-                    ModelFlowType.VISION in model_configuration_model.model_flow_types
+                    LLMModelFlowType.VISION
+                    in model_configuration_model.llm_model_flow_types
                 ),
                 # Infer reasoning support from model name/display name
                 supports_reasoning=is_reasoning_model(
@@ -250,7 +251,8 @@ class ModelConfigurationView(BaseModel):
             ),
             supports_image_input=(
                 True
-                if ModelFlowType.VISION in model_configuration_model.model_flow_types
+                if LLMModelFlowType.VISION
+                in model_configuration_model.llm_model_flow_types
                 else litellm_thinks_model_supports_image_input(
                     model_configuration_model.name, provider_name
                 )

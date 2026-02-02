@@ -1,12 +1,5 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useCallback,
-  FunctionComponent,
-} from "react";
-import { FiTarget } from "react-icons/fi";
-import { SvgCircle, SvgCheckCircle } from "@opal/icons";
+import React, { useMemo, useCallback, FunctionComponent } from "react";
+import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
 import { IconProps } from "@opal/types";
 
 import {
@@ -19,15 +12,22 @@ import {
 import {
   MessageRenderer,
   FullChatState,
+  RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
 import { getToolName } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
 import {
   TimelineRendererComponent,
-  TimelineRendererResult,
+  TimelineRendererOutput,
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import { useMarkdownRenderer } from "@/app/app/message/messageComponents/markdownUtils";
+import Text from "@/refresh-components/texts/Text";
+import {
+  processContent,
+  useMarkdownComponents,
+  renderMarkdown,
+} from "@/app/app/message/messageComponents/markdownUtils";
+import { isReasoningPackets } from "../../packetHelpers";
 
 interface NestedToolGroup {
   sub_turn_index: number;
@@ -38,8 +38,18 @@ interface NestedToolGroup {
 }
 
 /**
- * Renderer for research agent steps in deep research.
+ * ResearchAgentRenderer - Renders research agent steps in deep research
+ *
  * Segregates packets by tool and uses StepContainer + TimelineRendererComponent.
+ *
+ * RenderType modes:
+ * - FULL: Shows all nested tool groups, research task, and report. Headers passed as `status` prop.
+ *         Used when step is expanded in timeline.
+ * - COMPACT: Shows only the latest active item (tool or report). Header passed as `status` prop.
+ *            Used when step is collapsed in timeline, still wrapped in StepContainer.
+ * - HIGHLIGHT: Shows only the latest active item with header embedded directly in content.
+ *              No StepContainer wrapper. Used for parallel streaming preview.
+ *              Nested tools are rendered with HIGHLIGHT mode recursively.
  */
 export const ResearchAgentRenderer: MessageRenderer<
   ResearchAgentPacket,
@@ -48,8 +58,10 @@ export const ResearchAgentRenderer: MessageRenderer<
   packets,
   state,
   onComplete,
+  renderType,
   stopPacketSeen,
   isLastStep = true,
+  isHover = false,
   children,
 }) => {
   // Extract the research task from the start packet
@@ -99,18 +111,27 @@ export const ResearchAgentRenderer: MessageRenderer<
     return { parentPackets: parent, nestedToolGroups: groups };
   }, [packets]);
 
+  // Filter nested tool groups based on renderType (COMPACT and HIGHLIGHT show only latest)
+  const visibleNestedToolGroups = useMemo(() => {
+    if (
+      (renderType !== RenderType.COMPACT &&
+        renderType !== RenderType.HIGHLIGHT) ||
+      nestedToolGroups.length === 0
+    ) {
+      return nestedToolGroups;
+    }
+    // COMPACT/HIGHLIGHT mode: show only the latest group (last in sorted array)
+    const latestGroup = nestedToolGroups[nestedToolGroups.length - 1];
+    return latestGroup ? [latestGroup] : [];
+  }, [renderType, nestedToolGroups]);
+
   // Check completion from parent packets
   const isComplete = parentPackets.some(
     (p) => p.obj.type === PacketType.SECTION_END
   );
-  const hasCalledCompleteRef = useRef(false);
 
-  useEffect(() => {
-    if (isComplete && !hasCalledCompleteRef.current) {
-      hasCalledCompleteRef.current = true;
-      onComplete();
-    }
-  }, [isComplete, onComplete]);
+  // Determine if report is actively streaming
+  const isReportStreaming = !isComplete && !stopPacketSeen;
 
   // Build report content from parent packets
   const fullReportContent = parentPackets
@@ -122,102 +143,257 @@ export const ResearchAgentRenderer: MessageRenderer<
     })
     .join("");
 
-  // Markdown renderer for ExpandableTextDisplay
-  const { renderedContent } = useMarkdownRenderer(
-    fullReportContent,
+  // Condensed modes: show only the currently active/streaming section
+  const isCompact = renderType === RenderType.COMPACT;
+  const isHighlight = renderType === RenderType.HIGHLIGHT;
+  const isCondensedMode = isCompact || isHighlight;
+  // Report takes priority if it has content (means tools are done, report is streaming)
+  const showOnlyReport =
+    isCondensedMode && fullReportContent && visibleNestedToolGroups.length > 0;
+  const showOnlyTools =
+    isCondensedMode && !fullReportContent && visibleNestedToolGroups.length > 0;
+
+  // Process content once for consistent markdown handling
+  // This ensures code block extraction uses the same offsets as rendered content
+  const processedReportContent = useMemo(
+    () => processContent(fullReportContent),
+    [fullReportContent]
+  );
+
+  // Get markdown components for rendering (stable across renders)
+  // Uses processed content so code block extraction offsets match rendered content
+  const markdownComponents = useMarkdownComponents(
     state,
+    processedReportContent,
     "text-text-03 font-main-ui-body"
   );
 
   // Stable callbacks to avoid creating new functions on every render
   const noopComplete = useCallback(() => {}, []);
-  const renderReport = useCallback(() => renderedContent, [renderedContent]);
+
+  // renderReport renders the processed content
+  // Uses pre-computed processedReportContent since ExpandableTextDisplay
+  // passes the same fullReportContent that we processed above
+  // Parameters are required by ExpandableTextDisplay interface but we use
+  // the pre-processed content to ensure offsets match code block extraction
+  const renderReport = useCallback(
+    (_content: string, _isExpanded?: boolean) =>
+      renderMarkdown(
+        processedReportContent,
+        markdownComponents,
+        "text-text-03 font-main-ui-body"
+      ),
+    [processedReportContent, markdownComponents]
+  );
+
+  // HIGHLIGHT mode: return raw content with header embedded in content
+  if (isHighlight) {
+    if (showOnlyReport) {
+      return children([
+        {
+          icon: null,
+          status: null,
+          content: (
+            <div className="flex flex-col">
+              <Text as="p" text02 className="text-sm mb-1">
+                Research Report
+              </Text>
+              <ExpandableTextDisplay
+                title="Research Report"
+                content={fullReportContent}
+                maxLines={5}
+                renderContent={renderReport}
+                isStreaming={isReportStreaming}
+              />
+            </div>
+          ),
+          supportsCollapsible: true,
+        },
+      ]);
+    }
+
+    if (showOnlyTools) {
+      const latestGroup = visibleNestedToolGroups[0];
+      if (latestGroup) {
+        return (
+          <TimelineRendererComponent
+            key={latestGroup.sub_turn_index}
+            packets={latestGroup.packets}
+            chatState={state}
+            onComplete={noopComplete}
+            animate={!stopPacketSeen && !latestGroup.isComplete}
+            stopPacketSeen={stopPacketSeen}
+            defaultExpanded={false}
+            renderTypeOverride={RenderType.HIGHLIGHT}
+            isLastStep={true}
+            isHover={isHover}
+          >
+            {(results: TimelineRendererOutput) =>
+              children([
+                {
+                  icon: null,
+                  status: null,
+                  content: (
+                    <>
+                      {results.map((result, index) => (
+                        <React.Fragment key={index}>
+                          {result.content}
+                        </React.Fragment>
+                      ))}
+                    </>
+                  ),
+                  supportsCollapsible: true,
+                },
+              ])
+            }
+          </TimelineRendererComponent>
+        );
+      }
+    }
+
+    // Fallback: research task with header embedded
+    if (researchTask) {
+      return children([
+        {
+          icon: null,
+          status: null,
+          content: (
+            <div className="flex flex-col">
+              <Text as="p" text02 className="text-sm mb-1">
+                Research Task
+              </Text>
+              <div className="text-text-600 text-sm">{researchTask}</div>
+            </div>
+          ),
+          supportsCollapsible: true,
+        },
+      ]);
+    }
+
+    return children([
+      {
+        icon: null,
+        status: null,
+        content: <></>,
+        supportsCollapsible: true,
+      },
+    ]);
+  }
 
   // Build content using StepContainer pattern
   const researchAgentContent = (
     <div className="flex flex-col">
-      {/* Research Task - using StepContainer (collapsible) */}
-      {researchTask && (
+      {/* Research Task - hidden in compact mode when tools/report are active */}
+      {researchTask && !showOnlyReport && !showOnlyTools && (
         <StepContainer
-          stepIcon={FiTarget as FunctionComponent<IconProps>}
+          stepIcon={SvgCircle}
           header="Research Task"
           collapsible={true}
           isLastStep={
-            nestedToolGroups.length === 0 && !fullReportContent && !isComplete
+            !stopPacketSeen &&
+            nestedToolGroups.length === 0 &&
+            !fullReportContent &&
+            !isComplete
           }
+          isHover={isHover}
         >
           <div className="text-text-600 text-sm">{researchTask}</div>
         </StepContainer>
       )}
 
-      {/* Nested tool calls - using TimelineRendererComponent + StepContainer */}
-      {nestedToolGroups.map((group, index) => {
-        const isLastNestedStep =
-          index === nestedToolGroups.length - 1 &&
-          !fullReportContent &&
-          !isComplete;
+      {/* Nested tool calls - hidden when report is streaming in compact mode */}
+      {!showOnlyReport &&
+        visibleNestedToolGroups.map((group, index) => {
+          const isLastNestedStep =
+            !stopPacketSeen &&
+            index === visibleNestedToolGroups.length - 1 &&
+            !fullReportContent &&
+            !isComplete;
 
-        return (
-          <TimelineRendererComponent
-            key={group.sub_turn_index}
-            packets={group.packets}
-            chatState={state}
-            onComplete={noopComplete}
-            animate={!stopPacketSeen && !group.isComplete}
-            stopPacketSeen={stopPacketSeen}
-            defaultExpanded={true}
-            isLastStep={isLastNestedStep}
-          >
-            {({ icon, status, content, isExpanded, onToggle }) => (
-              <StepContainer
-                stepIcon={icon as FunctionComponent<IconProps> | undefined}
-                header={status}
-                isExpanded={isExpanded}
-                onToggle={onToggle}
-                collapsible={true}
-                isLastStep={isLastNestedStep}
-                isFirstStep={!researchTask && index === 0}
-              >
-                {content}
-              </StepContainer>
-            )}
-          </TimelineRendererComponent>
-        );
-      })}
+          const isReasoning = isReasoningPackets(group.packets);
 
-      {/* Intermediate report - using ExpandableTextDisplay */}
-      {fullReportContent && (
+          return (
+            <TimelineRendererComponent
+              key={group.sub_turn_index}
+              packets={group.packets}
+              chatState={state}
+              onComplete={noopComplete}
+              animate={!stopPacketSeen && !group.isComplete}
+              stopPacketSeen={stopPacketSeen}
+              defaultExpanded={true}
+              isLastStep={isLastNestedStep}
+              isHover={isHover}
+            >
+              {(results: TimelineRendererOutput) => (
+                <>
+                  {results.map((result, resultIndex) => (
+                    <StepContainer
+                      key={resultIndex}
+                      stepIcon={
+                        result.icon as FunctionComponent<IconProps> | undefined
+                      }
+                      header={result.status}
+                      isExpanded={result.isExpanded}
+                      onToggle={result.onToggle}
+                      collapsible={true}
+                      isLastStep={
+                        resultIndex === results.length - 1 && isLastNestedStep
+                      }
+                      isFirstStep={
+                        !researchTask && index === 0 && resultIndex === 0
+                      }
+                      isHover={result.isHover}
+                      supportsCollapsible={result.supportsCollapsible}
+                      noPaddingRight={isReasoning}
+                    >
+                      {result.content}
+                    </StepContainer>
+                  ))}
+                </>
+              )}
+            </TimelineRendererComponent>
+          );
+        })}
+
+      {/* Intermediate report - hidden when tools are active in compact mode */}
+      {fullReportContent && !showOnlyTools && (
         <StepContainer
-          stepIcon={SvgCircle as FunctionComponent<IconProps>}
+          stepIcon={SvgBookOpen}
           header="Research Report"
-          isLastStep={!isComplete}
+          isLastStep={!stopPacketSeen && !isComplete}
           isFirstStep={!researchTask && nestedToolGroups.length === 0}
+          isHover={isHover}
+          noPaddingRight={true}
         >
           <ExpandableTextDisplay
             title="Research Report"
             content={fullReportContent}
-            maxLines={5}
             renderContent={renderReport}
+            isStreaming={isReportStreaming}
           />
         </StepContainer>
       )}
 
-      {/* Done indicator at end of research agent */}
-      {isComplete && !isLastStep && (
+      {/* Done indicator - hidden in compact mode when active content */}
+      {isComplete && !isLastStep && !showOnlyReport && !showOnlyTools && (
         <StepContainer
           stepIcon={SvgCheckCircle}
           header="Done"
-          isLastStep={isLastStep}
+          isLastStep={!stopPacketSeen && isLastStep}
           isFirstStep={false}
+          isHover={isHover}
         />
       )}
     </div>
   );
 
   // Return simplified result (no icon, no status)
-  return children({
-    icon: null,
-    status: null,
-    content: researchAgentContent,
-  });
+  return children([
+    {
+      icon: null,
+      status: null,
+      content: researchAgentContent,
+      supportsCollapsible: true,
+    },
+  ]);
 };

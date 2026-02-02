@@ -51,7 +51,7 @@ class LLMProviderManager:
                     is_visible=True,
                     max_input_tokens=None,
                     display_name=default_model_name or "gpt-4o-mini",
-                    supports_image_input=False,
+                    supports_image_input=True,
                 )
             ],
             api_key_changed=True,

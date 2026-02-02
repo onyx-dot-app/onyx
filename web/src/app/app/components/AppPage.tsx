@@ -73,7 +73,6 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
-import { useTheme } from "next-themes";
 import useAppFocus from "@/hooks/useAppFocus";
 
 export interface ChatPageProps {
@@ -133,8 +132,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useSettingsContext();
-  const { resolvedTheme } = useTheme();
-  const isLightMode = resolvedTheme === "light";
 
   const isInitialLoad = useRef(true);
 
@@ -568,7 +565,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   // Chat background from context
-  const { hasBackground, appBackgroundUrl } = useAppBackground();
+  const { hasBackground } = useAppBackground();
 
   const hasStarterMessages = (liveAssistant?.starter_messages?.length ?? 0) > 0;
 
@@ -628,7 +625,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root disableHeader disableFooter>
+      <AppLayouts.Root enableBackground>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -637,60 +634,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className={cn(
-                "h-full w-full flex flex-col items-center outline-none relative",
-                hasBackground && "bg-cover bg-center bg-fixed"
-              )}
-              style={
-                hasBackground
-                  ? { backgroundImage: `url(${appBackgroundUrl})` }
-                  : undefined
-              }
+              className="h-full w-full flex flex-col items-center outline-none relative"
               {...getRootProps({ tabIndex: -1 })}
             >
-              <div className="absolute top-0 left-0 right-0 z-app-header">
-                <AppLayouts.Header />
-              </div>
-
-              {/* Vignette overlay for custom backgrounds (disabled in light mode) */}
-              {hasBackground && !isLightMode && (
-                <div
-                  className="absolute z-0 inset-0 pointer-events-none"
-                  style={{
-                    background: `
-                      linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
-                      linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
-                    `,
-                  }}
-                />
-              )}
-
-              {/* Semi-transparent overlay for readability when background is set */}
-              {appFocus.isChat() && hasBackground && (
-                <>
-                  <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
-                  <div
-                    className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-                    style={{
-                      maskImage: `linear-gradient(
-                        to right,
-                        transparent 0%,
-                        black max(0%, calc(50% - 25rem)),
-                        black min(100%, calc(50% + 25rem)),
-                        transparent 100%
-                      )`,
-                      WebkitMaskImage: `linear-gradient(
-                        to right,
-                        transparent 0%,
-                        black max(0%, calc(50% - 25rem)),
-                        black min(100%, calc(50% + 25rem)),
-                        transparent 100%
-                      )`,
-                    }}
-                  />
-                </>
-              )}
-
               {/* ProjectUI */}
               {appFocus.isProject() && (
                 <ProjectContextPanel
@@ -711,8 +657,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     isStreaming={isStreaming}
                     onScrollButtonVisibilityChange={setShowScrollButton}
                   >
-                    {/* Spacer for the header height */}
-                    <Spacer vertical rem={4} />
                     <MessageList
                       liveAssistant={liveAssistant}
                       llmManager={llmManager}
@@ -803,12 +747,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 />
 
                 {/* ProjectChatSessionsUI */}
-                {appFocus.isProject() && (
-                  <>
-                    <Spacer rem={0.5} />
-                    <ProjectChatSessionList />
-                  </>
-                )}
+                {appFocus.isProject() && <ProjectChatSessionList />}
               </div>
 
               {/* SearchUI - coming soon */}
@@ -816,15 +755,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               {/* SuggestionsUI */}
               {(appFocus.isNewSession() || appFocus.isAgent()) && (
                 <div className="flex-1 self-stretch flex flex-col items-center">
-                  {hasStarterMessages && (
-                    <>
-                      <Spacer rem={0.5} />
-                      <Suggestions onSubmit={onSubmit} />
-                    </>
-                  )}
+                  {hasStarterMessages && <Suggestions onSubmit={onSubmit} />}
                 </div>
               )}
-              <AppLayouts.Footer />
             </div>
           )}
         </Dropzone>

@@ -14,7 +14,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ModelFlowType
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
@@ -518,7 +518,7 @@ class TestDefaultProviderEndpoint:
 
         try:
             existing_providers = fetch_existing_llm_providers(
-                db_session, flow_types=[ModelFlowType.CONVERSATION]
+                db_session, flow_types=[LLMModelFlowType.CHAT]
             )
             provider_names_to_restore: list[str] = []
 
