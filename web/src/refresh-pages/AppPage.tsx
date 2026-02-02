@@ -493,8 +493,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     searchResults,
     llmSelectedDocIds,
     classification,
-    selectedSources,
-    setSelectedSources,
     isClassifying,
   } = useQueryController(onChat);
 
@@ -905,12 +903,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     show={isSearch}
                     className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1"
                   >
+                    <Spacer rem={0.75} />
                     <SearchUI
                       results={searchResults}
                       llmSelectedDocIds={llmSelectedDocIds}
                       onDocumentClick={handleSearchDocumentClick}
-                      selectedSources={selectedSources}
-                      onSourceChange={setSelectedSources}
                     />
                   </Fade>
 

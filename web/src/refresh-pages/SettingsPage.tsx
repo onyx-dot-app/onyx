@@ -1455,6 +1455,7 @@ function AccountsAccessSettings() {
                         <HoverableContainer
                           paddingVariant="none"
                           heightVariant="auto"
+                          widthVariant="full"
                         >
                           <AttachmentItemLayout
                             icon={SvgKey}

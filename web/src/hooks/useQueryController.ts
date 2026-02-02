@@ -29,10 +29,6 @@ export interface UseQueryControllerReturn {
   submit: (query: string, filters?: BaseFilters) => Promise<void>;
   /** Reset all state to initial values */
   reset: () => void;
-  /** Currently selected sources for filtering */
-  selectedSources: string[];
-  /** Set the selected sources */
-  setSelectedSources: (sources: string[]) => void;
 }
 
 /**
@@ -79,9 +75,6 @@ export default function useQueryController(
   const [llmSelectedDocIds, setLlmSelectedDocIds] = useState<string[] | null>(
     null
   );
-
-  // Source filter state (reset when search results change)
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
 
   // Abort controllers for in-flight requests
   const classifyAbortRef = useRef<AbortController | null>(null);
@@ -255,13 +248,7 @@ export default function useQueryController(
     setClassification(null);
     setSearchResults([]);
     setLlmSelectedDocIds(null);
-    setSelectedSources([]);
   }, []);
-
-  // Reset source filter when search results change
-  useEffect(() => {
-    setSelectedSources([]);
-  }, [searchResults]);
 
   // Sync classification state with navigation context
   // When in an existing chat session, classification should be "chat"
@@ -281,7 +268,5 @@ export default function useQueryController(
     llmSelectedDocIds,
     submit,
     reset,
-    selectedSources,
-    setSelectedSources,
   };
 }

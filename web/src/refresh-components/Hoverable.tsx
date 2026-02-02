@@ -6,9 +6,16 @@ import type { Route } from "next";
 import { WithoutStyles } from "@/types";
 import { SvgChevronDownSmall } from "@opal/icons";
 
-type ButtonHeightVariants = "standard" | "compact" | "auto";
 type ButtonPaddingVariants = "standard" | "compact" | "none";
+type ButtonHeightVariants = "standard" | "compact" | "auto";
+type ButtonWidthVariants = "full" | "fit";
 type HoverableVariants = "primary" | "secondary" | "tertiary";
+
+const buttonPaddingVariants = {
+  standard: "p-2",
+  compact: "p-1",
+  none: "p-0",
+} as const;
 
 const buttonHeightVariants = {
   standard: "h-[2.25rem]",
@@ -16,10 +23,9 @@ const buttonHeightVariants = {
   auto: "h-auto",
 } as const;
 
-const buttonPadingVariants = {
-  standard: "p-2",
-  compact: "p-1",
-  none: "p-0",
+const buttonWidthVariants = {
+  full: "w-full",
+  fit: "w-fit",
 } as const;
 
 interface HoverableContainerProps
@@ -28,6 +34,7 @@ interface HoverableContainerProps
   reducedRounding?: boolean;
   paddingVariant?: ButtonPaddingVariants;
   heightVariant?: ButtonHeightVariants;
+  widthVariant?: ButtonWidthVariants;
   ref?: React.Ref<HTMLDivElement>;
 }
 
@@ -36,6 +43,7 @@ function HoverableContainer({
   reducedRounding,
   heightVariant = "standard",
   paddingVariant = "standard",
+  widthVariant = "fit",
   ref,
   ...props
 }: HoverableContainerProps) {
@@ -56,8 +64,9 @@ function HoverableContainer({
       className={cn(
         border && "border",
         reducedRounding ? "rounded-08" : "rounded-12",
+        buttonPaddingVariants[paddingVariant],
         buttonHeightVariants[heightVariant],
-        buttonPadingVariants[paddingVariant],
+        buttonWidthVariants[widthVariant],
         slotClassName
       )}
       style={slotStyle}

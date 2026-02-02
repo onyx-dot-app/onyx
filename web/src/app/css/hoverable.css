@@ -1,6 +1,6 @@
 /* Hoverable - base (structural only, no color changes) */
 .hoverable {
-  @apply flex self-stretch cursor-pointer select-none;
+  @apply flex cursor-pointer select-none;
 }
 
 /* Primary: tint-00 base, hover → tint-02 */

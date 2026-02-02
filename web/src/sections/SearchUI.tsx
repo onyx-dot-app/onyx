@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SearchDocWithContent } from "@/lib/search/searchApi";
 import { MinimalOnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
 import SearchCard from "@/sections/cards/SearchCard";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { getSourceMetadata } from "@/lib/sources";
@@ -11,6 +12,14 @@ import { ValidSources } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import { LineItemLayout, Section } from "@/layouts/general-layouts";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import {
+  ChevronHoverableContainer,
+  Hoverable,
+} from "@/refresh-components/Hoverable";
+import { SvgCheck, SvgClock } from "@opal/icons";
+import FilterButton from "@/refresh-components/buttons/FilterButton";
 
 // ============================================================================
 // Types
@@ -23,20 +32,15 @@ export interface SearchResultsProps {
   llmSelectedDocIds?: string[] | null;
   /** Callback when a document is clicked */
   onDocumentClick: (doc: MinimalOnyxDocument) => void;
-  /** Selected sources for filtering */
-  selectedSources: string[];
-  /** Callback when source selection changes */
-  onSourceChange: (sources: string[]) => void;
 }
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-type TimeFilter = "all-time" | "day" | "week" | "month" | "year";
+type TimeFilter = "day" | "week" | "month" | "year";
 
 const TIME_FILTER_OPTIONS: { value: TimeFilter; label: string }[] = [
-  { value: "all-time", label: "All Time" },
   { value: "day", label: "Past 24 hours" },
   { value: "week", label: "Past week" },
   { value: "month", label: "Past month" },
@@ -48,8 +52,6 @@ const TIME_FILTER_OPTIONS: { value: TimeFilter; label: string }[] = [
 // ============================================================================
 
 function getTimeFilterDate(filter: TimeFilter): Date | null {
-  if (filter === "all-time") return null;
-
   const now = new Date();
   switch (filter) {
     case "day":
@@ -76,11 +78,16 @@ export default function SearchUI({
   results,
   llmSelectedDocIds,
   onDocumentClick,
-  selectedSources,
-  onSourceChange,
 }: SearchResultsProps) {
   // Filter state
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all-time");
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter | null>(null);
+  const [timeFilterOpen, setTimeFilterOpen] = useState(false);
+
+  // Reset source filter when results change
+  useEffect(() => {
+    setSelectedSources([]);
+  }, [results]);
   const [ownerFilter, setOwnerFilter] = useState<string>("everyone");
   const [tagFilter, setTagFilter] = useState<string>("all-tags");
 
@@ -118,7 +125,7 @@ export default function SearchUI({
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
-    const timeThreshold = getTimeFilterDate(timeFilter);
+    const timeThreshold = timeFilter ? getTimeFilterDate(timeFilter) : null;
 
     const filtered = results.filter((doc) => {
       // Source filter
@@ -203,16 +210,65 @@ export default function SearchUI({
 
   const handleSourceToggle = (source: string) => {
     if (selectedSources.includes(source)) {
-      onSourceChange(selectedSources.filter((s) => s !== source));
+      setSelectedSources(selectedSources.filter((s) => s !== source));
     } else {
-      onSourceChange([...selectedSources, source]);
+      setSelectedSources([...selectedSources, source]);
     }
   };
 
   return (
-    <div className="h-full w-full flex flex-row gap-2">
-      {/* Results list */}
-      <div className="flex-[3] min-w-0 flex flex-col min-h-0 h-full overflow-y-scroll py-3">
+    <div
+      className="h-full w-full grid min-h-0 gap-x-4"
+      style={{ gridTemplateColumns: "3fr 1fr", gridTemplateRows: "auto 1fr" }}
+    >
+      {/* Top-left: Search filters */}
+      <div className="row-start-1 col-start-1 flex flex-col justify-end gap-3">
+        <Popover open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
+          <Popover.Trigger asChild>
+            <FilterButton
+              leftIcon={SvgClock}
+              active={!!timeFilter}
+              onClear={() => setTimeFilter(null)}
+            >
+              {TIME_FILTER_OPTIONS.find((o) => o.value === timeFilter)?.label ??
+                "All Time"}
+            </FilterButton>
+          </Popover.Trigger>
+          <Popover.Content align="start" width="md">
+            <PopoverMenu>
+              {TIME_FILTER_OPTIONS.map((opt) => (
+                <LineItem
+                  key={opt.value}
+                  onClick={() => {
+                    setTimeFilter(opt.value);
+                    setTimeFilterOpen(false);
+                  }}
+                  selected={timeFilter === opt.value}
+                  icon={timeFilter === opt.value ? SvgCheck : SvgClock}
+                >
+                  {opt.label}
+                </LineItem>
+              ))}
+            </PopoverMenu>
+          </Popover.Content>
+        </Popover>
+
+        <Separator noPadding />
+      </div>
+
+      {/* Top-right: Number of results */}
+      <div className="row-start-1 col-start-2 flex flex-col justify-end gap-3">
+        <Section alignItems="start">
+          <Text text03 mainUiMuted>
+            {results.length} Results
+          </Text>
+        </Section>
+
+        <Separator noPadding />
+      </div>
+
+      {/* Bottom-left: Search results */}
+      <div className="row-start-2 col-start-1 min-h-0 overflow-y-scroll py-3">
         {filteredAndSortedResults.length > 0 ? (
           filteredAndSortedResults.map((doc) => (
             <SearchCard
@@ -230,17 +286,9 @@ export default function SearchUI({
         )}
       </div>
 
-      {/* Source filter sidebar */}
-      <div className="flex-1 h-full overflow-y-auto py-4 flex flex-col gap-4 px-1">
-        <div className="py-4 h-[2.75rem] px-2">
-          <Text text03 mainUiMuted>
-            {results.length} Results
-          </Text>
-        </div>
-
-        <Separator noPadding />
-
-        <div className="flex flex-col gap-1">
+      {/* Bottom-right: Source filter */}
+      <div className="row-start-2 col-start-2 min-h-0 overflow-y-auto flex flex-col gap-4 px-1 py-3">
+        <Section gap={0.25} height="fit">
           {sourcesWithMeta.map(({ source, meta, count }) => (
             <LineItem
               key={source}
@@ -259,7 +307,7 @@ export default function SearchUI({
               {meta.displayName}
             </LineItem>
           ))}
-        </div>
+        </Section>
       </div>
     </div>
   );
