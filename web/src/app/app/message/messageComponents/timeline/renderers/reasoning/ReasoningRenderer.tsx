@@ -25,7 +25,7 @@ import { SvgCircle } from "@opal/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
-const THINKING_STATUS = "Researching…";
+const THINKING_STATUS = "Thinking";
 
 function extractFirstParagraph(content: string): {
   title: string | null;

@@ -127,7 +127,7 @@ export function StepContainer({
           </div>
         )}
 
-        <div className={cn("px-2 pb-2", !noPaddingRight && "pr-8")}>
+        <div className={cn("pl-2 pb-2", !noPaddingRight && "pr-8")}>
           {children}
         </div>
       </div>
