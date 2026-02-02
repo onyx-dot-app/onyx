@@ -19,6 +19,7 @@ import {
 } from "@/lib/search/searchApi";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 export type QueryClassification = "search" | "chat" | null;
 
@@ -64,6 +65,7 @@ export function QueryControllerProvider({
 }: QueryControllerProviderProps) {
   const { appMode } = useAppMode();
   const appFocus = useAppFocus();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   // Query state
   const [query, setQuery] = useState<string | null>(null);
@@ -175,11 +177,19 @@ export function QueryControllerProvider({
       setQuery(submitQuery);
 
       // 1.
+      // We always route through chat if we're not Enterprise Enabled.
+      //
+      // 2.
       // We only go down the classification route if we're in the "New Session" tab.
       // Everywhere else, we always use the chat-flow.
       //
-      // 2. If we're in the "New Session" tab and the app-mode is "Chat", we continue with the chat-flow anyways.
-      if (!appFocus.isNewSession() || appMode === "chat") {
+      // 3.
+      // If we're in the "New Session" tab and the app-mode is "Chat", we continue with the chat-flow anyways.
+      if (
+        !isPaidEnterpriseFeaturesEnabled ||
+        !appFocus.isNewSession() ||
+        appMode === "chat"
+      ) {
         setSearchResults([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);

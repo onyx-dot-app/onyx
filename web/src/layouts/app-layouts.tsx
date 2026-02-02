@@ -69,6 +69,7 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 /**
  * App Header Component
@@ -85,6 +86,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
  * - App-Mode toggle (EE gated)
  */
 function Header() {
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { appMode, setAppMode } = useAppMode();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
@@ -318,82 +320,84 @@ function Header() {
               internal
             />
           )}
-          {appFocus.isNewSession() && !classification && (
-            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
-              <Popover.Trigger asChild>
-                <Hoverable
-                  asChild
-                  variant="secondary"
-                  // # NOTE (@raunakab):
-                  //
-                  // This was previously `transient={!!classification}` (essentially, always make this button transient when a query-classification is present).
-                  // However, this lead to a slight UI glitch in Auto-Mode when transitioning from the "New Session" to a "Chat".
-                  // This button would flash transient, and then disappear (since `ChatUI` does not render this app-mode-toggle).
-                  //
-                  // Therefore, we apply the milder condition, `classification === "search"`, instead.
-                  transient={classification === "search"}
-                >
-                  <ChevronHoverableContainer>
-                    <LineItemLayout
-                      icon={
-                        effectiveMode === "auto"
-                          ? SvgSparkle
-                          : effectiveMode === "search"
-                            ? SvgSearchMenu
-                            : SvgBubbleText
-                      }
-                      title={
-                        effectiveMode === "auto"
-                          ? "Auto"
-                          : effectiveMode === "search"
-                            ? "Search"
-                            : "Chat"
-                      }
-                      variant="secondary"
-                      center
-                    />
-                  </ChevronHoverableContainer>
-                </Hoverable>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="lg">
-                <Popover.Menu>
-                  <LineItem
-                    icon={SvgSparkle}
-                    selected={effectiveMode === "auto"}
-                    description="Automatic Search/Chat mode"
-                    onClick={noProp(() => {
-                      setAppMode("auto");
-                      setModePopoverOpen(false);
-                    })}
+          {isPaidEnterpriseFeaturesEnabled &&
+            appFocus.isNewSession() &&
+            !classification && (
+              <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+                <Popover.Trigger asChild>
+                  <Hoverable
+                    asChild
+                    variant="secondary"
+                    // # NOTE (@raunakab):
+                    //
+                    // This was previously `transient={!!classification}` (essentially, always make this button transient when a query-classification is present).
+                    // However, this lead to a slight UI glitch in Auto-Mode when transitioning from the "New Session" to a "Chat".
+                    // This button would flash transient, and then disappear (since `ChatUI` does not render this app-mode-toggle).
+                    //
+                    // Therefore, we apply the milder condition, `classification === "search"`, instead.
+                    transient={classification === "search"}
                   >
-                    Auto
-                  </LineItem>
-                  <LineItem
-                    icon={SvgSearchMenu}
-                    selected={effectiveMode === "search"}
-                    description="Quick search for documents"
-                    onClick={noProp(() => {
-                      setAppMode("search");
-                      setModePopoverOpen(false);
-                    })}
-                  >
-                    Search
-                  </LineItem>
-                  <LineItem
-                    icon={SvgBubbleText}
-                    selected={effectiveMode === "chat"}
-                    description="Conversation and research"
-                    onClick={noProp(() => {
-                      setAppMode("chat");
-                      setModePopoverOpen(false);
-                    })}
-                  >
-                    Chat
-                  </LineItem>
-                </Popover.Menu>
-              </Popover.Content>
-            </Popover>
-          )}
+                    <ChevronHoverableContainer>
+                      <LineItemLayout
+                        icon={
+                          effectiveMode === "auto"
+                            ? SvgSparkle
+                            : effectiveMode === "search"
+                              ? SvgSearchMenu
+                              : SvgBubbleText
+                        }
+                        title={
+                          effectiveMode === "auto"
+                            ? "Auto"
+                            : effectiveMode === "search"
+                              ? "Search"
+                              : "Chat"
+                        }
+                        variant="secondary"
+                        center
+                      />
+                    </ChevronHoverableContainer>
+                  </Hoverable>
+                </Popover.Trigger>
+                <Popover.Content align="start" width="lg">
+                  <Popover.Menu>
+                    <LineItem
+                      icon={SvgSparkle}
+                      selected={effectiveMode === "auto"}
+                      description="Automatic Search/Chat mode"
+                      onClick={noProp(() => {
+                        setAppMode("auto");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Auto
+                    </LineItem>
+                    <LineItem
+                      icon={SvgSearchMenu}
+                      selected={effectiveMode === "search"}
+                      description="Quick search for documents"
+                      onClick={noProp(() => {
+                        setAppMode("search");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Search
+                    </LineItem>
+                    <LineItem
+                      icon={SvgBubbleText}
+                      selected={effectiveMode === "chat"}
+                      description="Conversation and research"
+                      onClick={noProp(() => {
+                        setAppMode("chat");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Chat
+                    </LineItem>
+                  </Popover.Menu>
+                </Popover.Content>
+              </Popover>
+            )}
         </div>
 
         {/*

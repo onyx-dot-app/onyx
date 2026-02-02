@@ -44,6 +44,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback } from "react";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 export type AppMode = "auto" | "search" | "chat";
 
@@ -74,11 +75,18 @@ export function AppModeProvider({
   children,
   defaultMode = "auto",
 }: AppModeProviderProps) {
-  const [appMode, setAppModeState] = useState<AppMode>(defaultMode);
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const [appMode, setAppModeState] = useState<AppMode>(
+    isPaidEnterpriseFeaturesEnabled ? defaultMode : "chat"
+  );
 
-  const setAppMode = useCallback((mode: AppMode) => {
-    setAppModeState(mode);
-  }, []);
+  const setAppMode = useCallback(
+    (mode: AppMode) => {
+      if (!isPaidEnterpriseFeaturesEnabled) return;
+      setAppModeState(mode);
+    },
+    [isPaidEnterpriseFeaturesEnabled]
+  );
 
   return (
     <AppModeContext.Provider value={{ appMode, setAppMode }}>
