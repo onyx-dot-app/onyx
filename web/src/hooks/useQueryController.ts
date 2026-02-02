@@ -180,6 +180,17 @@ export default function useQueryController(
     async (submitQuery: string, filters?: BaseFilters): Promise<void> => {
       setQuery(submitQuery);
 
+      // # Note (@raunakab)
+      //
+      // We only perform search routing when we're in the "New Session" tab.
+      // Nowhere else.
+      if (!appFocus.isNewSession()) {
+        setSearchResults([]);
+        setLlmSelectedDocIds(null);
+        onChat(submitQuery);
+        return;
+      }
+
       // Chat mode: skip classification, go directly to chat
       if (appMode === "chat") {
         setClassification("chat");

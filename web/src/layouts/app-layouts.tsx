@@ -114,7 +114,7 @@ function Header() {
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
 
-  const effectiveMode: AppMode = appFocus.isChat() ? "chat" : appMode;
+  const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -258,11 +258,6 @@ function Header() {
     handleMoveClick,
   ]);
 
-  useEffect(() => {
-    if (appFocus.isNewSession()) return;
-    setAppMode("chat");
-  }, [appFocus, setAppMode]);
-
   return (
     <>
       {popup}
@@ -307,7 +302,7 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+      <div className="w-full flex flex-row justify-center items-center pt-4 pb-3 px-4 max-h-[5rem]">
         {/*
           Left:
           - (mobile) sidebar toggle
@@ -327,7 +322,7 @@ function Header() {
             <Popover
               open={modePopoverOpen}
               onOpenChange={(open) => {
-                if (appFocus.isChat()) return;
+                if (!appFocus.isNewSession()) return;
                 setModePopoverOpen(open);
               }}
             >

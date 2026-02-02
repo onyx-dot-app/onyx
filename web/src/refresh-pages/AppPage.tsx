@@ -766,7 +766,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </Fade>
 
                 {/* ── Top-center: WelcomeMessage / ProjectUI ── */}
-                <div className="col-start-2 row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
+                <div className="col-span-3 col-start-1 row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
                     <ProjectContextPanel
@@ -793,7 +793,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Middle-center: ChatInputBar ── */}
-                <div className="col-start-2 row-start-2 flex flex-col items-center">
+                <div className="col-span-3 col-start-1 row-start-2 flex flex-col items-center">
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
                     {showScrollButton && !isSearch && (
@@ -808,8 +808,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
 
                     {/* OnboardingUI */}
-                    {!isSearch &&
-                      (appFocus.isNewSession() || appFocus.isAgent()) &&
+                    {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                      !isSearch &&
                       (showOnboarding ||
                         (user?.role !== UserRole.ADMIN &&
                           !user?.personalization?.name)) && (
