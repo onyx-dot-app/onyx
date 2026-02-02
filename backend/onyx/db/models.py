@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 from sqlalchemy.orm import validates
+
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 from pydantic import ValidationError
@@ -72,6 +73,7 @@ from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPTransport,
     MCPServerStatus,
+    LLMModelFlowType,
     ThemePreference,
     SwitchoverType,
 )
@@ -2771,6 +2773,51 @@ class ModelConfiguration(Base):
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
+    )
+
+    llm_model_flows: Mapped[list["LLMModelFlow"]] = relationship(
+        "LLMModelFlow",
+        back_populates="model_configuration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    @property
+    def llm_model_flow_types(self) -> list[LLMModelFlowType]:
+        return [flow.llm_model_flow_type for flow in self.llm_model_flows]
+
+
+class LLMModelFlow(Base):
+    __tablename__ = "llm_model_flow"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    llm_model_flow_type: Mapped[LLMModelFlowType] = mapped_column(
+        Enum(LLMModelFlowType, native_enum=False), nullable=False
+    )
+    model_configuration_id: Mapped[int] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    model_configuration: Mapped["ModelConfiguration"] = relationship(
+        "ModelConfiguration",
+        back_populates="llm_model_flows",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "llm_model_flow_type",
+            "model_configuration_id",
+            name="uq_model_config_per_llm_model_flow_type",
+        ),
+        Index(
+            "ix_one_default_per_llm_model_flow",
+            "llm_model_flow_type",
+            unique=True,
+            postgresql_where=(is_default == True),  # noqa: E712
+        ),
     )
 
 
