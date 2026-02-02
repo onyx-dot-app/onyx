@@ -749,7 +749,7 @@ def llm_loop_completion_handle(
         assistant_message=assistant_message,
         is_clarification=state_container.is_clarification,
         emitted_citations=state_container.get_emitted_citations(),
-        tool_processing_duration=state_container.get_tool_processing_duration(),
+        pre_answer_processing_time=state_container.get_pre_answer_processing_time(),
     )
 
 

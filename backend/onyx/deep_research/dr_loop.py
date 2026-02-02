@@ -101,7 +101,7 @@ def generate_final_report(
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
     saved_reasoning: str | None = None,
-    tool_processing_duration: float | None = None,
+    pre_answer_processing_time: float | None = None,
 ) -> bool:
     """Generate the final research report.
 
@@ -152,7 +152,7 @@ def generate_final_report(
             user_identity=user_identity,
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
-            tool_processing_duration=tool_processing_duration,
+            pre_answer_processing_time=pre_answer_processing_time,
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -266,7 +266,7 @@ def run_deep_research_llm_loop(
                     final_documents=None,
                     user_identity=user_identity,
                     is_deep_research=True,
-                    tool_processing_duration=clarification_tool_duration,
+                    pre_answer_processing_time=clarification_tool_duration,
                 )
 
                 if not llm_step_result.tool_calls:
@@ -419,7 +419,7 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
-                        tool_processing_duration=time.monotonic()
+                        pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
                     )
                     # Update final_turn_index: base + 1 for the report itself + 1 if reasoning occurred
@@ -522,7 +522,7 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
-                        tool_processing_duration=time.monotonic()
+                        pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
@@ -544,7 +544,7 @@ def run_deep_research_llm_loop(
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                         saved_reasoning=most_recent_reasoning,
-                        tool_processing_duration=time.monotonic()
+                        pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
@@ -607,7 +607,7 @@ def run_deep_research_llm_loop(
                             turn_index=report_turn_index,
                             citation_mapping=citation_mapping,
                             user_identity=user_identity,
-                            tool_processing_duration=time.monotonic()
+                            pre_answer_processing_time=time.monotonic()
                             - processing_start_time,
                         )
                         final_turn_index = report_turn_index + (

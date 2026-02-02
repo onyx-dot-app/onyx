@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useRef, RefObject, useMemo } from "react";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";

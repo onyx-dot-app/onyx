@@ -391,8 +391,8 @@ def run_llm_loop(
 
         initialize_litellm()
 
-        # Track processing start time for tool duration calculation
-        processing_start_time = time.monotonic()
+        # Track when the loop starts for calculating time-to-answer
+        loop_start_time = time.monotonic()
 
         # Initialize citation processor for handling citations dynamically
         # When include_citations is True, use HYPERLINK mode to format citations as [[1]](url)
@@ -556,9 +556,9 @@ def run_llm_loop(
             # It also pre-processes the tool calls in preparation for running them
             tool_defs = [tool.tool_definition() for tool in final_tools]
 
-            # Calculate tool processing duration at this point
-            # This captures the time spent on tool calls before the answer starts streaming
-            tool_processing_duration = time.monotonic() - processing_start_time
+            # Calculate total processing time from loop start until now
+            # This measures how long the user waits before the answer starts streaming
+            pre_answer_processing_time = time.monotonic() - loop_start_time
 
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
@@ -574,7 +574,7 @@ def run_llm_loop(
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
                 user_identity=user_identity,
-                tool_processing_duration=tool_processing_duration,
+                pre_answer_processing_time=pre_answer_processing_time,
             )
             if has_reasoned:
                 reasoning_cycles += 1

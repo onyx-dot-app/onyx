@@ -622,7 +622,7 @@ def run_llm_step_pkt_generator(
     # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
-    tool_processing_duration: float | None = None,
+    pre_answer_processing_time: float | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -822,10 +822,10 @@ def run_llm_step_pkt_generator(
                         reasoning_start = False
 
                     if not answer_start:
-                        # Store tool processing duration in state container for save_chat
-                        if state_container and tool_processing_duration is not None:
-                            state_container.set_tool_processing_duration(
-                                tool_processing_duration
+                        # Store pre-answer processing time in state container for save_chat
+                        if state_container and pre_answer_processing_time is not None:
+                            state_container.set_pre_answer_processing_time(
+                                pre_answer_processing_time
                             )
 
                         yield Packet(
@@ -836,7 +836,7 @@ def run_llm_step_pkt_generator(
                             ),
                             obj=AgentResponseStart(
                                 final_documents=final_documents,
-                                tool_processing_duration_seconds=tool_processing_duration,
+                                pre_answer_processing_seconds=pre_answer_processing_time,
                             ),
                         )
                         answer_start = True
@@ -1045,7 +1045,7 @@ def run_llm_step(
     max_tokens: int | None = None,
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
-    tool_processing_duration: float | None = None,
+    pre_answer_processing_time: float | None = None,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -1067,7 +1067,7 @@ def run_llm_step(
         max_tokens=max_tokens,
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
-        tool_processing_duration=tool_processing_duration,
+        pre_answer_processing_time=pre_answer_processing_time,
     )
 
     while True:

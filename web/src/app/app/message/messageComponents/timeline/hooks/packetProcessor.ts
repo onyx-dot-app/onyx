@@ -246,12 +246,11 @@ function handleStreamingStatusPacket(
     state.finalAnswerComing = true;
   }
 
-  // Capture tool processing duration from MESSAGE_START packet
+  // Capture pre-answer processing time from MESSAGE_START packet
   if (packet.obj.type === PacketType.MESSAGE_START) {
     const messageStart = packet.obj as MessageStart;
-    if (messageStart.tool_processing_duration_seconds !== undefined) {
-      state.toolProcessingDuration =
-        messageStart.tool_processing_duration_seconds;
+    if (messageStart.pre_answer_processing_seconds !== undefined) {
+      state.toolProcessingDuration = messageStart.pre_answer_processing_seconds;
     }
   }
 }
