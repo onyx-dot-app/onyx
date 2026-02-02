@@ -235,16 +235,16 @@ def get_default_llm(
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_llm_model(db_session)
 
-    if not model:
-        raise ValueError("No default LLM model found")
+        if not model:
+            raise ValueError("No default LLM model found")
 
-    return llm_from_provider(
-        model_name=model.name,
-        llm_provider=LLMProviderView.from_model(model.llm_provider),
-        timeout=timeout,
-        temperature=temperature,
-        additional_headers=additional_headers,
-    )
+        return llm_from_provider(
+            model_name=model.name,
+            llm_provider=LLMProviderView.from_model(model.llm_provider),
+            timeout=timeout,
+            temperature=temperature,
+            additional_headers=additional_headers,
+        )
 
 
 def get_llm(

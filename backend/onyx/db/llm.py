@@ -249,9 +249,29 @@ def upsert_llm_provider(
         # If its not already in the db, we need to generate an ID by flushing
         db_session.flush()
 
-    # Delete existing model configurations
+    models_to_exist = {
+        mc.name for mc in llm_provider_upsert_request.model_configurations
+    }
+
+    removed_model_configuration_ids = {
+        mc.id
+        for mc in existing_llm_provider.model_configurations
+        if mc.name not in models_to_exist
+    }
+
+    updated_model_configuration_names = {
+        mc.name: mc.id
+        for mc in existing_llm_provider.model_configurations
+        if mc.name in models_to_exist
+    }
+
+    new_model_names = models_to_exist - {
+        mc.name for mc in existing_llm_provider.model_configurations
+    }
+
+    # Delete removed models
     db_session.query(ModelConfiguration).filter(
-        ModelConfiguration.llm_provider_id == existing_llm_provider.id
+        ModelConfiguration.id.in_(removed_model_configuration_ids)
     ).delete(synchronize_session="fetch")
 
     db_session.flush()
@@ -272,14 +292,35 @@ def upsert_llm_provider(
         if model_configuration.supports_image_input:
             supported_flows.append(ModelFlowType.VISION)
 
-        insert_new_model_configuration__no_commit(
+        if model_configuration.name in new_model_names:
+            insert_new_model_configuration__no_commit(
+                db_session=db_session,
+                llm_provider_id=existing_llm_provider.id,
+                model_name=model_configuration.name,
+                supported_flows=supported_flows,
+                is_visible=model_configuration.is_visible,
+                max_input_tokens=max_input_tokens,
+                display_name=model_configuration.display_name,
+            )
+        elif model_configuration.name in updated_model_configuration_names:
+            update_model_configuration__no_commit(
+                db_session=db_session,
+                model_configuration_id=updated_model_configuration_names[
+                    model_configuration.name
+                ],
+                supported_flows=supported_flows,
+                is_visible=model_configuration.is_visible,
+                max_input_tokens=max_input_tokens,
+                display_name=model_configuration.display_name,
+            )
+
+    default_model = fetch_default_model(db_session, ModelFlowType.CONVERSATION)
+    if default_model and default_model.llm_provider_id == existing_llm_provider.id:
+        _update_default_model(
             db_session=db_session,
-            llm_provider_id=existing_llm_provider.id,
-            model_name=model_configuration.name,
-            supported_flows=supported_flows,
-            is_visible=model_configuration.is_visible,
-            max_input_tokens=max_input_tokens,
-            display_name=model_configuration.display_name,
+            provider_id=existing_llm_provider.id,
+            model=existing_llm_provider.default_model_name,
+            flow_type=ModelFlowType.CONVERSATION,
         )
 
     # Make sure the relationship table stays up to date
@@ -711,15 +752,23 @@ def create_new_flow_mapping__no_commit(
     model_configuration_id: int,
     flow_type: ModelFlowType,
 ) -> ModelFlow:
-    flow = ModelFlow(
-        model_configuration_id=model_configuration_id,
-        model_flow_type=flow_type,
-        is_default=False,
+    result = db_session.execute(
+        insert(ModelFlow)
+        .values(
+            model_configuration_id=model_configuration_id,
+            model_flow_type=flow_type,
+            is_default=False,
+        )
+        .on_conflict_do_nothing()
+        .returning(ModelFlow)
     )
 
-    db_session.add(flow)
-    db_session.flush()
-    db_session.refresh(flow)
+    flow = result.scalar()
+    if not flow:
+        raise ValueError(
+            f"Failed to create new flow mapping for model_configuration_id={model_configuration_id} and flow_type={flow_type}"
+        )
+
     return flow
 
 
@@ -759,6 +808,61 @@ def insert_new_model_configuration__no_commit(
         )
 
     return model_config_id
+
+
+def update_model_configuration__no_commit(
+    db_session: Session,
+    model_configuration_id: int,
+    supported_flows: list[ModelFlowType],
+    is_visible: bool,
+    max_input_tokens: int | None,
+    display_name: str | None,
+) -> None:
+    result = db_session.execute(
+        update(ModelConfiguration)
+        .values(
+            is_visible=is_visible,
+            max_input_tokens=max_input_tokens,
+            display_name=display_name,
+            supports_image_input=ModelFlowType.VISION in supported_flows,
+        )
+        .where(ModelConfiguration.id == model_configuration_id)
+        .returning(ModelConfiguration)
+    )
+
+    model_configuration = result.scalar()
+    if not model_configuration:
+        raise ValueError(
+            f"Failed to update model configuration with id={model_configuration_id}"
+        )
+
+    new_flows = {
+        flow_type
+        for flow_type in supported_flows
+        if flow_type not in model_configuration.model_flow_types
+    }
+    removed_flows = {
+        flow_type
+        for flow_type in model_configuration.model_flow_types
+        if flow_type not in supported_flows
+    }
+
+    for flow_type in new_flows:
+        create_new_flow_mapping__no_commit(
+            db_session=db_session,
+            model_configuration_id=model_configuration_id,
+            flow_type=flow_type,
+        )
+
+    for flow_type in removed_flows:
+        db_session.execute(
+            delete(ModelFlow).where(
+                ModelFlow.model_configuration_id == model_configuration_id,
+                ModelFlow.model_flow_type == flow_type,
+            )
+        )
+
+    db_session.flush()
 
 
 def _update_default_model(
