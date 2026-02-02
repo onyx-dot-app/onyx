@@ -5,6 +5,7 @@ from unittest.mock import Mock
 from unittest.mock import patch
 from uuid import uuid4
 
+from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
@@ -422,13 +423,12 @@ class TestSlackBotFederatedSearch:
                 "OPENAI_API_KEY environment variable not set - test requires real API key"
             )
 
-        upsert_llm_provider(
+        provider = upsert_llm_provider(
             LLMProviderUpsertRequest(
                 name=f"test-llm-provider-{uuid4().hex[:8]}",
                 provider=LlmProviderNames.OPENAI,
                 api_key=api_key,
                 default_model_name="gpt-4o",
-                is_default_provider=True,
                 is_public=True,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
@@ -441,6 +441,8 @@ class TestSlackBotFederatedSearch:
             ),
             db_session=db_session,
         )
+
+        update_default_provider(provider.id, db_session)
 
     def _teardown_common_mocks(self, patches: list) -> None:
         """Stop all patches"""
