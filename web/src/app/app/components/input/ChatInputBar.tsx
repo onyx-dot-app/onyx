@@ -432,13 +432,10 @@ const ChatInputBar = React.memo(
           // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
           // shadows that exceed the container bounds are clipped.
           //
-          // `mb-[14px]` adds breathing room so the shadow renders fully without
-          // being cut off by the overflow boundary.
-          //
-          // There is a corresponding note inside `app-layouts.tsx` (Footer) that
-          // explains why the Footer removes its top padding during chat to
-          // compensate for this extra space.
-          "mb-[14px]",
+          // The 14px breathing room is now applied externally via animated spacer
+          // divs in `AppPage.tsx` (above and below the ChatInputBar) so that the
+          // spacing can transition smoothly when switching between search and chat
+          // modes. See the corresponding note there for details.
           disabled && "opacity-50 cursor-not-allowed pointer-events-none"
         )}
         aria-disabled={disabled}

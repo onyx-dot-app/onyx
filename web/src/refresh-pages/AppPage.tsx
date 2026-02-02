@@ -707,11 +707,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             >
               {/* Main content grid — 3 columns × 3 rows, animated */}
               <div
-                className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-300 ease-in-out"
+                className="flex-1 w-full grid min-h-0 transition-[grid-template-rows] duration-150 ease-in-out"
                 style={gridStyle}
               >
                 {/* ── Top-center: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="col-start-2 row-start-1 min-h-0 overflow-hidden flex flex-col items-center dbg-red">
+                <div className="col-start-2 row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
                     <ProjectContextPanel
@@ -765,7 +765,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Middle-center: ChatInputBar ── */}
-                <div className="col-start-2 row-start-2 flex flex-col items-center dbg-red">
+                <div className="col-start-2 row-start-2 flex flex-col items-center">
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
                     {showScrollButton && !isSearch && (
@@ -794,50 +794,86 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         />
                       )}
 
-                    <ChatInputBar
-                      ref={chatInputBarRef}
-                      deepResearchEnabled={deepResearchEnabled}
-                      toggleDeepResearch={toggleDeepResearch}
-                      toggleDocumentSidebar={toggleDocumentSidebar}
-                      filterManager={filterManager}
-                      llmManager={llmManager}
-                      removeDocs={() => setSelectedDocuments([])}
-                      retrievalEnabled={retrievalEnabled}
-                      selectedDocuments={selectedDocuments}
-                      initialMessage={
-                        searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
-                      }
-                      stopGenerating={stopGenerating}
-                      onSubmit={handleChatInputSubmit}
-                      chatState={currentChatState}
-                      currentSessionFileTokenCount={
-                        currentChatSessionId
-                          ? currentSessionFileTokenCount
-                          : projectContextTokenCount
-                      }
-                      availableContextTokens={availableContextTokens}
-                      selectedAssistant={selectedAssistant || liveAssistant}
-                      handleFileUpload={handleMessageSpecificFileUpload}
-                      setPresentingDocument={setPresentingDocument}
-                      disabled={
-                        (!llmManager.isLoadingProviders &&
-                          llmManager.hasAnyProvider === false) ||
-                        (!isLoadingOnboarding &&
-                          onboardingState.currentStep !==
-                            OnboardingStep.Complete)
-                      }
-                      isClassifying={isClassifying}
-                    />
+                    {/*
+                      # Note (@raunakab)
+
+                      `shadow-01` on ChatInputBar extends ~14px below the element
+                      (2px offset + 12px blur). Because the content area in `Root`
+                      (app-layouts.tsx) uses `overflow-auto`, shadows that exceed
+                      the container bounds are clipped.
+
+                      The animated spacer divs above and below the ChatInputBar
+                      provide 14px of breathing room so the shadow renders fully.
+                      They transition between h-0 and h-[14px] depending on whether
+                      the classification is "search" (spacer above) or "chat"
+                      (spacer below).
+
+                      There is a corresponding note inside `app-layouts.tsx`
+                      (Footer) that explains why the Footer removes its top
+                      padding during chat to compensate for this extra space.
+                    */}
+                    <div>
+                      <div
+                        className={cn(
+                          "transition-all duration-150 ease-in-out overflow-hidden",
+                          classification === "search" ? "h-[14px]" : "h-0"
+                        )}
+                      />
+                      <ChatInputBar
+                        ref={chatInputBarRef}
+                        deepResearchEnabled={deepResearchEnabled}
+                        toggleDeepResearch={toggleDeepResearch}
+                        toggleDocumentSidebar={toggleDocumentSidebar}
+                        filterManager={filterManager}
+                        llmManager={llmManager}
+                        removeDocs={() => setSelectedDocuments([])}
+                        retrievalEnabled={retrievalEnabled}
+                        selectedDocuments={selectedDocuments}
+                        initialMessage={
+                          searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
+                          ""
+                        }
+                        stopGenerating={stopGenerating}
+                        onSubmit={handleChatInputSubmit}
+                        chatState={currentChatState}
+                        currentSessionFileTokenCount={
+                          currentChatSessionId
+                            ? currentSessionFileTokenCount
+                            : projectContextTokenCount
+                        }
+                        availableContextTokens={availableContextTokens}
+                        selectedAssistant={selectedAssistant || liveAssistant}
+                        handleFileUpload={handleMessageSpecificFileUpload}
+                        setPresentingDocument={setPresentingDocument}
+                        disabled={
+                          (!llmManager.isLoadingProviders &&
+                            llmManager.hasAnyProvider === false) ||
+                          (!isLoadingOnboarding &&
+                            onboardingState.currentStep !==
+                              OnboardingStep.Complete)
+                        }
+                        isClassifying={isClassifying}
+                      />
+                      <div
+                        className={cn(
+                          "transition-all duration-150 ease-in-out overflow-hidden",
+                          classification === "chat" ? "h-[14px]" : "h-0"
+                        )}
+                      />
+                    </div>
 
                     {/* ProjectChatSessionsUI */}
                     {!isSearch && appFocus.isProject() && (
-                      <ProjectChatSessionList />
+                      <>
+                        <Spacer rem={0.5} />
+                        <ProjectChatSessionList />
+                      </>
                     )}
                   </div>
                 </div>
 
                 {/* ── Bottom-center: SearchResults / Suggestions ── */}
-                <div className="col-start-2 row-start-3 min-h-0 overflow-hidden flex flex-col items-center dbg-red">
+                <div className="col-start-2 row-start-3 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* SearchResults - search mode only */}
                   {isSearch && (
                     <SearchUI
@@ -849,18 +885,20 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   )}
 
                   {/* SuggestionsUI */}
-                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                    !classification && (
-                      <div className="flex-1 self-stretch flex flex-col items-center">
-                        {hasStarterMessages && (
+                  {(appFocus.isNewSession() || appFocus.isAgent()) && (
+                    <div className="flex-1 self-stretch flex flex-col items-center">
+                      {hasStarterMessages && (
+                        <>
+                          <Spacer rem={0.5} />
                           <Suggestions onSubmit={onSubmit} />
-                        )}
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Bottom-right: SourceFilter ── */}
-                <div className="col-start-3 row-start-3 min-h-0 overflow-hidden dbg-red">
+                <div className="col-start-3 row-start-3 min-h-0 overflow-hidden">
                   {isSearch && (
                     <SourceFilter
                       results={searchResults}
