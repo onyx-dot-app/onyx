@@ -159,8 +159,6 @@ const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_DELTA,
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
-  PacketType.PYTHON_TOOL_START,
-  PacketType.PYTHON_TOOL_DELTA,
 ]);
 
 // ============================================================================
