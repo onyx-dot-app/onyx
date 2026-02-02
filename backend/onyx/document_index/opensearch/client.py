@@ -73,6 +73,9 @@ class OpenSearchClient:
         ssl_show_warn: bool = False,
     ):
         self._index_name = index_name
+        logger.debug(
+            f"Creating OpenSearch client for index {index_name} with host {host} and port {port}."
+        )
         self._client = OpenSearch(
             hosts=[{"host": host, "port": port}],
             http_auth=auth,

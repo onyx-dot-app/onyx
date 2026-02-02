@@ -118,7 +118,7 @@ def _generate_test_vector(base_value: float = 0.1, dimension: int = 128) -> list
 def opensearch_available() -> None:
     """Verifies OpenSearch is running, skips all tests if not."""
     if not wait_for_opensearch_with_timeout():
-        pytest.skip("OpenSearch is not available.")
+        pytest.fail("OpenSearch is not available.")
 
 
 @pytest.fixture(scope="function")
