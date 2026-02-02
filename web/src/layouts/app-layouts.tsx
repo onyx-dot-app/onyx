@@ -25,6 +25,8 @@ import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
+import { useTheme } from "next-themes";
 import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -56,6 +58,7 @@ import {
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import useAppFocus from "@/hooks/useAppFocus";
 
 /**
  * App Header Component
@@ -379,6 +382,7 @@ const footerMarkdownComponents = {
 
 function Footer() {
   const settings = useSettingsContext();
+  const appFocus = useAppFocus();
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
@@ -387,7 +391,25 @@ function Footer() {
     }](https://www.onyx.app/) - Open Source AI Platform`;
 
   return (
-    <footer className="relative w-full flex flex-row justify-center items-center gap-2 p-2 mt-auto">
+    <footer
+      className={cn(
+        "relative w-full flex flex-row justify-center items-center gap-2 px-2 mt-auto",
+        // # Note (from @raunakab):
+        //
+        // The conditional rendering of vertical padding based on the current page is intentional.
+        // The `ChatInputBar` has `shadow-01` applied, which extends ~14px below it.
+        // Because the content area in `Root` uses `overflow-auto`, the shadow would be
+        // clipped at the container boundary — causing a visible rendering artefact.
+        //
+        // To fix this, `ChatInputBar` has `mb-[14px]` to give the shadow breathing room.
+        // However, that extra margin adds visible space between the input and the Footer.
+        // To compensate, we remove the Footer's top padding when `appFocus.isChat()`.
+        //
+        // There is a corresponding note inside `ChatInputBar.tsx` explaining the `mb-[14px]`.
+        // Please refer to that note as well.
+        appFocus.isChat() ? "pb-2" : "py-2"
+      )}
+    >
       <MinimalMarkdown
         content={customFooterContent}
         className={cn("max-w-full text-center")}
@@ -423,28 +445,85 @@ function Footer() {
  * ```
  */
 export interface AppRootProps {
-  /**
-   * @deprecated This prop should rarely be used. Prefer letting the Header render.
-   */
-  disableHeader?: boolean;
-  /**
-   * @deprecated This prop should rarely be used. Prefer letting the Footer render.
-   */
-  disableFooter?: boolean;
+  /** Opt-in to render the user's custom background image */
+  enableBackground?: boolean;
   children?: React.ReactNode;
 }
 
-function Root({ children, disableHeader, disableFooter }: AppRootProps) {
+function Root({ children, enableBackground }: AppRootProps) {
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
+  const { resolvedTheme } = useTheme();
+  const appFocus = useAppFocus();
+  const isLightMode = resolvedTheme === "light";
+  const showBackground = hasBackground && enableBackground;
+
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
       breakout of their immediate containers using cqw units.
     */
-    <div className="@container flex flex-col h-full w-full relative overflow-hidden">
-      {!disableHeader && <Header />}
-      <div className="flex-1 overflow-auto h-full w-full">{children}</div>
-      {!disableFooter && <Footer />}
+    <div
+      className={cn(
+        "@container flex flex-col h-full w-full relative overflow-hidden",
+        showBackground && "bg-cover bg-center bg-fixed"
+      )}
+      style={
+        showBackground
+          ? { backgroundImage: `url(${appBackgroundUrl})` }
+          : undefined
+      }
+    >
+      {/* Effect 1 */}
+      {/* Vignette overlay for custom backgrounds (disabled in light mode) */}
+      {showBackground && !isLightMode && (
+        <div
+          className="absolute z-0 inset-0 pointer-events-none"
+          style={{
+            background: `
+              linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
+              linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
+            `,
+          }}
+        />
+      )}
+
+      {/* Effect 2 */}
+      {/* Semi-transparent overlay for readability when background is set */}
+      {showBackground && appFocus.isChat() && (
+        <>
+          <div className="absolute inset-0 backdrop-blur-[1px] pointer-events-none" />
+          <div
+            className="absolute z-0 inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+            style={{
+              maskImage: `linear-gradient(
+                to right,
+                transparent 0%,
+                black max(0%, calc(50% - 25rem)),
+                black min(100%, calc(50% + 25rem)),
+                transparent 100%
+              )`,
+              WebkitMaskImage: `linear-gradient(
+                to right,
+                transparent 0%,
+                black max(0%, calc(50% - 25rem)),
+                black min(100%, calc(50% + 25rem)),
+                transparent 100%
+              )`,
+            }}
+          />
+        </>
+      )}
+
+      <div className="z-app-layout">
+        <Header />
+      </div>
+      <div className="z-app-layout flex-1 overflow-auto h-full w-full">
+        {children}
+      </div>
+      <div className="z-app-layout">
+        <Footer />
+      </div>
     </div>
   );
 }
 
-export { Root, Header, Footer };
+export { Root };

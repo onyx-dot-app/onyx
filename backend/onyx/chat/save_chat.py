@@ -145,6 +145,7 @@ def save_chat_turn(
     assistant_message: ChatMessage,
     is_clarification: bool = False,
     emitted_citations: set[int] | None = None,
+    pre_answer_processing_time: float | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -169,11 +170,16 @@ def save_chat_turn(
         is_clarification: Whether this assistant message is a clarification question (deep research flow)
         emitted_citations: Set of citation numbers that were actually emitted during streaming.
             If provided, only citations in this set will be saved; others are filtered out.
+        pre_answer_processing_time: Duration of processing before answer starts (in seconds)
     """
     # 1. Update ChatMessage with message content, reasoning tokens, and token count
     assistant_message.message = message_text
     assistant_message.reasoning_tokens = reasoning_tokens
     assistant_message.is_clarification = is_clarification
+
+    # Use pre-answer processing time (captured when MESSAGE_START was emitted)
+    if pre_answer_processing_time is not None:
+        assistant_message.processing_duration_seconds = pre_answer_processing_time
 
     # Calculate token count using default tokenizer, when storing, this should not use the LLM
     # specific one so we use a system default tokenizer here.

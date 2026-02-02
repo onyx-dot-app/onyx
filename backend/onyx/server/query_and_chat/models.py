@@ -310,6 +310,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     error: str | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
+    processing_duration_seconds: float | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore

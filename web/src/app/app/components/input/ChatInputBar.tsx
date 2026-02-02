@@ -423,6 +423,19 @@ const ChatInputBar = React.memo(
         id="onyx-chat-input"
         className={cn(
           "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
+          // # Note (from @raunakab):
+          //
+          // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
+          // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
+          // shadows that exceed the container bounds are clipped.
+          //
+          // `mb-[14px]` adds breathing room so the shadow renders fully without
+          // being cut off by the overflow boundary.
+          //
+          // There is a corresponding note inside `app-layouts.tsx` (Footer) that
+          // explains why the Footer removes its top padding during chat to
+          // compensate for this extra space.
+          "mb-[14px]",
           disabled && "opacity-50 cursor-not-allowed pointer-events-none"
         )}
         aria-disabled={disabled}
