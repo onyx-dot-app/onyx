@@ -68,6 +68,7 @@ import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 /**
  * App Header Component
@@ -110,6 +111,7 @@ function Header() {
   const { popup, setPopup } = usePopup();
   const router = useRouter();
   const appFocus = useAppFocus();
+  const { classification } = useQueryController();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
@@ -317,9 +319,26 @@ function Header() {
             />
           )}
           {appFocus.isNewSession() && (
-            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+            <Popover
+              open={modePopoverOpen}
+              onOpenChange={(open) => {
+                if (classification === "search") return;
+                setModePopoverOpen(open);
+              }}
+            >
               <Popover.Trigger asChild>
-                <Hoverable asChild variant="secondary">
+                <Hoverable
+                  asChild
+                  variant="secondary"
+                  // # NOTE (@raunakab):
+                  //
+                  // This was previously `transient={!!classification}` (essentially, always make this button transient when a query-classification is present).
+                  // However, this lead to a slight UI glitch in Auto-Mode when transitioning from the "New Session" to a "Chat".
+                  // This button would flash transient, and then disappear (since `ChatUI` does not render this app-mode-toggle).
+                  //
+                  // Therefore, we apply the milder condition, `classification === "search"`, instead.
+                  transient={classification === "search"}
+                >
                   <ChevronHoverableContainer>
                     <LineItemLayout
                       icon={
