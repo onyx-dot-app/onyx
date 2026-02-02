@@ -282,7 +282,7 @@ export default function SearchUI({
                   : "Tags"}
               </FilterButton>
             </Popover.Trigger>
-            <Popover.Content align="start" width="md">
+            <Popover.Content align="start" width="lg">
               <PopoverMenu>
                 {availableTags.map((tag) => {
                   const isSelected = selectedTags.some(
