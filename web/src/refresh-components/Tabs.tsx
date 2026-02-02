@@ -1,13 +1,21 @@
 "use client";
 
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn, mergeRefs } from "@/lib/utils";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
+import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import Text from "./texts/Text";
+import IconButton from "./buttons/IconButton";
 
 /* =============================================================================
    CONTEXT
@@ -63,13 +71,13 @@ const useTabsContext = () => {
 /** Style classes for TabsList variants */
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex items-center pb-[4px] bg-background-tint-00",
+  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden pr-1",
 } as const;
 
 /** Base style classes for TabsTrigger variants */
 const triggerBaseStyles = {
   contained: "p-2 gap-2",
-  pill: "p-1.5 font-secondary-action transition-all duration-200 ease-out",
+  pill: "p-1 font-secondary-action transition-all duration-200 ease-out",
 } as const;
 
 /** Icon style classes for TabsTrigger variants */
@@ -77,6 +85,16 @@ const iconVariants = {
   contained: "stroke-text-03",
   pill: "stroke-current",
 } as const;
+
+/* =============================================================================
+   CONSTANTS
+   ============================================================================= */
+
+/** Pixel tolerance for detecting scroll boundaries (accounts for rounding) */
+const SCROLL_TOLERANCE_PX = 1;
+
+/** Pixel amount to scroll when clicking scroll arrows */
+const SCROLL_AMOUNT_PX = 200;
 
 /* =============================================================================
    HOOKS
@@ -101,21 +119,24 @@ interface IndicatorStyle {
  */
 function usePillIndicator(
   listRef: React.RefObject<HTMLElement | null>,
-  enabled: boolean
-): IndicatorStyle {
+  enabled: boolean,
+  scrollContainerRef?: React.RefObject<HTMLElement | null>
+): { style: IndicatorStyle; isScrolling: boolean } {
   const [style, setStyle] = useState<IndicatorStyle>({
     left: 0,
     width: 0,
     opacity: 0,
   });
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
 
-    const updateIndicator = () => {
-      const list = listRef.current;
-      if (!list) return;
+    const list = listRef.current;
+    if (!list) return;
 
+    const updateIndicator = () => {
       const activeTab = list.querySelector<HTMLElement>(
         '[data-state="active"]'
       );
@@ -130,21 +151,136 @@ function usePillIndicator(
       }
     };
 
+    const handleScroll = () => {
+      setIsScrolling(true);
+      updateIndicator();
+
+      // Clear existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      // Reset scrolling state after scroll ends
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 150);
+    };
+
     updateIndicator();
 
-    const observer = new MutationObserver(updateIndicator);
-    if (listRef.current) {
-      observer.observe(listRef.current, {
-        attributes: true,
-        subtree: true,
-        attributeFilter: ["data-state"],
-      });
+    // Watch for size changes on ANY tab (sibling size changes affect active tab position)
+    const resizeObserver = new ResizeObserver(() => updateIndicator());
+    list.querySelectorAll<HTMLElement>('[role="tab"]').forEach((tab) => {
+      resizeObserver.observe(tab);
+    });
+
+    // Watch for data-state changes (tab switches)
+    const mutationObserver = new MutationObserver(() => updateIndicator());
+    mutationObserver.observe(list, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["data-state"],
+    });
+
+    // Listen for scroll events on scroll container
+    const scrollContainer = scrollContainerRef?.current;
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll);
     }
 
-    return () => observer.disconnect();
-  }, [enabled, listRef]);
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      if (scrollContainer) {
+        scrollContainer.removeEventListener("scroll", handleScroll);
+      }
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [enabled, listRef, scrollContainerRef]);
 
-  return style;
+  return { style, isScrolling };
+}
+
+/** State for horizontal scroll arrows */
+interface ScrollState {
+  canScrollLeft: boolean;
+  canScrollRight: boolean;
+  scrollLeft: () => void;
+  scrollRight: () => void;
+}
+
+/**
+ * Hook to manage horizontal scrolling with arrow navigation.
+ *
+ * Tracks scroll position and overflow state of a container, providing
+ * scroll functions and boolean flags for arrow visibility.
+ *
+ * @param containerRef - Ref to the scrollable container element
+ * @param enabled - Whether scroll tracking is enabled
+ * @returns Object with canScrollLeft, canScrollRight, and scroll functions
+ */
+function useHorizontalScroll(
+  containerRef: React.RefObject<HTMLElement | null>,
+  enabled: boolean
+): ScrollState {
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = container;
+    setCanScrollLeft(scrollLeft > 0);
+    setCanScrollRight(
+      scrollLeft + clientWidth < scrollWidth - SCROLL_TOLERANCE_PX
+    );
+  }, [containerRef]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Delay initial measurement until after layout
+    const rafId = requestAnimationFrame(() => {
+      updateScrollState();
+    });
+
+    container.addEventListener("scroll", updateScrollState);
+
+    const resizeObserver = new ResizeObserver(updateScrollState);
+    resizeObserver.observe(container);
+
+    // Also observe children for size changes
+    Array.from(container.children).forEach((child) => {
+      resizeObserver.observe(child);
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      container.removeEventListener("scroll", updateScrollState);
+      resizeObserver.disconnect();
+    };
+  }, [enabled, containerRef, updateScrollState]);
+
+  const scrollLeft = useCallback(() => {
+    containerRef.current?.scrollBy({
+      left: -SCROLL_AMOUNT_PX,
+      behavior: "smooth",
+    });
+  }, [containerRef]);
+
+  const scrollRight = useCallback(() => {
+    containerRef.current?.scrollBy({
+      left: SCROLL_AMOUNT_PX,
+      behavior: "smooth",
+    });
+  }, [containerRef]);
+
+  return { canScrollLeft, canScrollRight, scrollLeft, scrollRight };
 }
 
 /* =============================================================================
@@ -154,13 +290,25 @@ function usePillIndicator(
 /**
  * Renders the bottom line and sliding indicator for the pill variant.
  * The indicator animates smoothly when switching between tabs.
+ *
+ * @param style - Position and opacity for the sliding indicator
+ * @param rightOffset - Distance from the right edge where the border line should stop (for rightContent)
  */
-function PillIndicator({ style }: { style: IndicatorStyle }) {
+function PillIndicator({
+  style,
+  rightOffset = 0,
+}: {
+  style: IndicatorStyle;
+  rightOffset?: number;
+}) {
   return (
     <>
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-border-02 pointer-events-none" />
       <div
-        className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 transition-all duration-200 ease-out pointer-events-none"
+        className="absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none"
+        style={{ right: rightOffset }}
+      />
+      <div
+        className="absolute bottom-0 h-[2px] bg-background-tint-inverted-03 z-10 pointer-events-none transition-all duration-200 ease-out"
         style={{
           left: style.left,
           width: style.width,
@@ -199,8 +347,9 @@ TabsRoot.displayName = TabsPrimitive.Root.displayName;
  * Tabs List Props
  */
 interface TabsListProps
-  extends WithoutStyles<
-    React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
+  extends Omit<
+    React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
+    "style"
   > {
   /**
    * Visual variant of the tabs list.
@@ -226,6 +375,13 @@ interface TabsListProps
    * ```
    */
   rightContent?: React.ReactNode;
+
+  /**
+   * Enable horizontal scroll arrows when tabs overflow.
+   * Only applies to the `pill` variant.
+   * @default false
+   */
+  enableScrollArrows?: boolean;
 }
 
 /**
@@ -242,43 +398,144 @@ interface TabsListProps
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   TabsListProps
->(({ variant = "contained", rightContent, children, ...props }, ref) => {
-  const listRef = useRef<HTMLDivElement>(null);
-  const isPill = variant === "pill";
-  const indicatorStyle = usePillIndicator(listRef, isPill);
-  const contextValue = useMemo(() => ({ variant }), [variant]);
+>(
+  (
+    {
+      variant = "contained",
+      rightContent,
+      enableScrollArrows = false,
+      children,
+      className,
+      ...props
+    },
+    ref
+  ) => {
+    const listRef = useRef<HTMLDivElement>(null);
+    const tabsContainerRef = useRef<HTMLDivElement>(null);
+    const scrollArrowsRef = useRef<HTMLDivElement>(null);
+    const rightContentRef = useRef<HTMLDivElement>(null);
+    const [rightOffset, setRightOffset] = useState(0);
+    const isPill = variant === "pill";
+    const { style: indicatorStyle } = usePillIndicator(
+      listRef,
+      isPill,
+      enableScrollArrows ? tabsContainerRef : undefined
+    );
+    const contextValue = useMemo(() => ({ variant }), [variant]);
+    const {
+      canScrollLeft,
+      canScrollRight,
+      scrollLeft: handleScrollLeft,
+      scrollRight: handleScrollRight,
+    } = useHorizontalScroll(tabsContainerRef, isPill && enableScrollArrows);
 
-  return (
-    <TabsPrimitive.List
-      ref={mergeRefs(listRef, ref)}
-      className={cn(listVariants[variant])}
-      style={
-        variant === "contained"
-          ? {
-              gridTemplateColumns: `repeat(${React.Children.count(
-                children
-              )}, 1fr)`,
-            }
-          : undefined
+    const showScrollArrows =
+      isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
+
+    // Track right content and scroll arrows width to offset the border line
+    useEffect(() => {
+      if (!isPill) {
+        setRightOffset(0);
+        return;
       }
-      {...props}
-    >
-      <TabsContext.Provider value={contextValue}>
-        {isPill ? (
-          <div className="flex items-center gap-2">{children}</div>
-        ) : (
-          children
-        )}
 
-        {isPill && rightContent && (
-          <div className="ml-auto pl-2">{rightContent}</div>
-        )}
+      const updateWidth = () => {
+        let totalWidth = 0;
 
-        {isPill && <PillIndicator style={indicatorStyle} />}
-      </TabsContext.Provider>
-    </TabsPrimitive.List>
-  );
-});
+        // Add scroll arrows width if visible
+        if (scrollArrowsRef.current) {
+          totalWidth += scrollArrowsRef.current.offsetWidth;
+        }
+
+        // Add right content width if present
+        if (rightContentRef.current) {
+          totalWidth += rightContentRef.current.offsetWidth;
+        }
+
+        setRightOffset(totalWidth);
+      };
+
+      updateWidth();
+
+      const resizeObserver = new ResizeObserver(updateWidth);
+      if (scrollArrowsRef.current)
+        resizeObserver.observe(scrollArrowsRef.current);
+      if (rightContentRef.current)
+        resizeObserver.observe(rightContentRef.current);
+
+      return () => resizeObserver.disconnect();
+    }, [isPill, rightContent, showScrollArrows]);
+
+    return (
+      <TabsPrimitive.List
+        ref={mergeRefs(listRef, ref)}
+        className={cn(listVariants[variant], className)}
+        style={
+          variant === "contained"
+            ? {
+                gridTemplateColumns: `repeat(${React.Children.count(
+                  children
+                )}, 1fr)`,
+              }
+            : undefined
+        }
+        {...props}
+      >
+        <TabsContext.Provider value={contextValue}>
+          {isPill ? (
+            enableScrollArrows ? (
+              <div
+                ref={tabsContainerRef}
+                className="flex items-center gap-2 pt-1 overflow-x-auto scrollbar-hide flex-1 min-w-0"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                {children}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pt-1">{children}</div>
+            )
+          ) : (
+            children
+          )}
+
+          {showScrollArrows && (
+            <div
+              ref={scrollArrowsRef}
+              className="flex items-center gap-1 pl-2 flex-shrink-0"
+            >
+              <IconButton
+                main
+                internal
+                icon={SvgChevronLeft}
+                onClick={handleScrollLeft}
+                disabled={!canScrollLeft}
+                tooltip="Scroll tabs left"
+              />
+              <IconButton
+                main
+                internal
+                icon={SvgChevronRight}
+                onClick={handleScrollRight}
+                disabled={!canScrollRight}
+                tooltip="Scroll tabs right"
+              />
+            </div>
+          )}
+
+          {isPill && rightContent && (
+            <div ref={rightContentRef} className="ml-auto pl-2 flex-shrink-0">
+              {rightContent}
+            </div>
+          )}
+
+          {isPill && (
+            <PillIndicator style={indicatorStyle} rightOffset={rightOffset} />
+          )}
+        </TabsContext.Provider>
+      </TabsPrimitive.List>
+    );
+  }
+);
 TabsList.displayName = TabsPrimitive.List.displayName;
 
 /* -------------------------------------------------------------------------- */
@@ -353,11 +610,15 @@ const TabsTrigger = React.forwardRef<
 
     const inner = (
       <>
-        {Icon && <Icon size={14} className={cn(iconVariants[variant])} />}
+        {Icon && (
+          <div className="p-0.5">
+            <Icon size={14} className={cn(iconVariants[variant])} />
+          </div>
+        )}
         {typeof children === "string" ? <Text>{children}</Text> : children}
         {isLoading && (
           <span
-            className="inline-block w-3 h-3 border-2 border-text-03 border-t-transparent rounded-full animate-spin"
+            className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ml-1"
             aria-label="Loading"
           />
         )}
@@ -389,7 +650,7 @@ const TabsTrigger = React.forwardRef<
             "data-[state=inactive]:border-transparent",
           ],
           variant === "pill" && [
-            "data-[state=inactive]:bg-transparent",
+            "data-[state=inactive]:bg-background-tint-00",
             "data-[state=inactive]:text-text-03",
           ]
         )}
@@ -397,7 +658,9 @@ const TabsTrigger = React.forwardRef<
       >
         {tooltip && !disabled ? (
           <SimpleTooltip tooltip={tooltip} side={tooltipSide}>
-            {inner}
+            <span className="inline-flex items-center gap-inherit">
+              {inner}
+            </span>
           </SimpleTooltip>
         ) : (
           inner
