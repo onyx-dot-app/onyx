@@ -862,19 +862,43 @@ export default function AgentKnowledgePane({
   const [view, setView] = useState<KnowledgeView>("main");
   const [activeSource, setActiveSource] = useState<ValidSources | undefined>();
 
+  // Get connected sources from CC pairs
+  const { ccPairs } = useCCPairs();
+  const connectedSources: ConnectedSource[] = useMemo(() => {
+    if (!ccPairs || ccPairs.length === 0) return [];
+    const sourceSet = new Set<ValidSources>();
+    ccPairs.forEach((pair) => sourceSet.add(pair.source));
+    return Array.from(sourceSet).map((source) => ({
+      source,
+      connectorCount: ccPairs.filter((p) => p.source === source).length,
+    }));
+  }, [ccPairs]);
+
   // Track per-source selection counts
-  // Initialized from initialHierarchyNodes (which have source info)
+  // Initialized from initialHierarchyNodes and initialAttachedDocuments
   const [sourceSelectionCounts, setSourceSelectionCounts] = useState<
     Map<ValidSources, number>
   >(() => {
     const counts = new Map<ValidSources, number>();
+
+    // Count folders from initialHierarchyNodes (which have source info)
     if (initialHierarchyNodes) {
-      // Count initial hierarchy nodes by source
       for (const node of initialHierarchyNodes) {
         const current = counts.get(node.source) ?? 0;
         counts.set(node.source, current + 1);
       }
     }
+
+    // Count documents from initialAttachedDocuments (which now include source)
+    if (initialAttachedDocuments) {
+      for (const doc of initialAttachedDocuments) {
+        if (doc.source) {
+          const current = counts.get(doc.source) ?? 0;
+          counts.set(doc.source, current + 1);
+        }
+      }
+    }
+
     return counts;
   });
 
@@ -893,18 +917,6 @@ export default function AgentKnowledgePane({
     },
     []
   );
-
-  // Get connected sources from CC pairs
-  const { ccPairs } = useCCPairs();
-  const connectedSources: ConnectedSource[] = useMemo(() => {
-    if (!ccPairs || ccPairs.length === 0) return [];
-    const sourceSet = new Set<ValidSources>();
-    ccPairs.forEach((pair) => sourceSet.add(pair.source));
-    return Array.from(sourceSet).map((source) => ({
-      source,
-      connectorCount: ccPairs.filter((p) => p.source === source).length,
-    }));
-  }, [ccPairs]);
 
   // Check if any knowledge is selected
   const hasAnyKnowledge =
