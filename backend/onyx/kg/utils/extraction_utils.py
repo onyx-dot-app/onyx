@@ -35,6 +35,8 @@ from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
 from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import MASTER_EXTRACTION_PROMPT
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -415,12 +417,19 @@ def kg_classify_document(
         vendor=kg_config_settings.KG_VENDOR,
     )
 
-    # classify with LLM
+    # classify with LLM with Braintrust tracing
     llm = get_default_llm()
     try:
-        raw_classification_result = llm_response_to_string(
-            llm.invoke(UserMessage(content=prompt))
-        )
+        prompt_msg = UserMessage(content=prompt)
+        with llm_generation_span(
+            llm=llm, flow="kg_document_classification", input_messages=[prompt_msg]
+        ) as span_generation:
+            response = llm.invoke(prompt_msg)
+            raw_classification_result = llm_response_to_string(response)
+            record_llm_span_output(
+                span_generation, raw_classification_result, response.usage
+            )
+
         classification_result = (
             raw_classification_result.replace("```json", "").replace("```", "").strip()
         )
@@ -481,12 +490,19 @@ def kg_deep_extract_chunks(
         relationship_types=relationship_types_str,
     ).replace("---content---", llm_context)
 
-    # extract with LLM
+    # extract with LLM with Braintrust tracing
     llm = get_default_llm()
     try:
-        raw_extraction_result = llm_response_to_string(
-            llm.invoke(UserMessage(content=prompt))
-        )
+        prompt_msg = UserMessage(content=prompt)
+        with llm_generation_span(
+            llm=llm, flow="kg_deep_extraction", input_messages=[prompt_msg]
+        ) as span_generation:
+            response = llm.invoke(prompt_msg)
+            raw_extraction_result = llm_response_to_string(response)
+            record_llm_span_output(
+                span_generation, raw_extraction_result, response.usage
+            )
+
         cleaned_response = (
             raw_extraction_result.replace("{{", "{")
             .replace("}}", "}")

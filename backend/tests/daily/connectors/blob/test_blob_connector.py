@@ -10,6 +10,7 @@ import pytest
 from onyx.configs.constants import BlobType
 from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -101,6 +102,8 @@ def test_blob_s3_connector(
     document_batches = blob_connector.load_from_state()
     for doc_batch in document_batches:
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             all_docs.append(doc)
 
     assert len(all_docs) == 15
@@ -141,7 +144,9 @@ def test_blob_s3_cross_region_and_citation_link(
     # Load documents and validate the single object + its link
     all_docs: list[Document] = []
     for doc_batch in blob_connector.load_from_state():
-        all_docs.extend(doc_batch)
+        all_docs.extend(
+            [doc for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # The test bucket contains exactly one object named "Chapter 6.pdf"
     assert len(all_docs) == 1
@@ -184,7 +189,9 @@ def test_blob_r2_connector(
 
     all_docs: list[Document] = []
     for doc_batch in blob_connector.load_from_state():
-        all_docs.extend(doc_batch)
+        all_docs.extend(
+            [doc for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     assert len(all_docs) >= 1
     doc = all_docs[0]
@@ -207,7 +214,9 @@ def test_blob_r2_eu_residency_connector(
 
     all_docs: list[Document] = []
     for doc_batch in blob_connector.load_from_state():
-        all_docs.extend(doc_batch)
+        all_docs.extend(
+            [doc for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     assert len(all_docs) >= 1
     doc = all_docs[0]
@@ -226,7 +235,9 @@ def test_blob_gcs_connector(
 ) -> None:
     all_docs: list[Document] = []
     for doc_batch in blob_connector.load_from_state():
-        all_docs.extend(doc_batch)
+        all_docs.extend(
+            [doc for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # At least one object from the test bucket
     assert len(all_docs) >= 1

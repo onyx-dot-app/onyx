@@ -11,6 +11,7 @@ from typing import Any
 from typing import cast
 from typing import Dict
 from typing import List
+from typing import Literal
 from typing import Optional
 from typing import Protocol
 from typing import Tuple
@@ -74,7 +75,6 @@ from onyx.auth.schemas import UserUpdateWithRole
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
 from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
@@ -91,6 +91,8 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.configs.constants import ANONYMOUS_USER_UUID
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
@@ -133,12 +135,8 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def is_user_admin(user: User | None) -> bool:
-    if AUTH_TYPE == AuthType.DISABLED:
-        return True
-    if user and user.role == UserRole.ADMIN:
-        return True
-    return False
+def is_user_admin(user: User) -> bool:
+    return user.role == UserRole.ADMIN
 
 
 def verify_auth_setting() -> None:
@@ -1330,6 +1328,14 @@ async def optional_user(
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
 
+    tenant_id = get_current_tenant_id()
+    if (
+        user is not None
+        and user.is_anonymous
+        and anonymous_user_enabled(tenant_id=tenant_id)
+    ):
+        return get_anonymous_user()
+
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         return user
@@ -1346,15 +1352,26 @@ async def optional_user(
     return user
 
 
+def get_anonymous_user() -> User:
+    """Create anonymous user object."""
+    user = User(
+        id=uuid.UUID(ANONYMOUS_USER_UUID),
+        email=ANONYMOUS_USER_EMAIL,
+        hashed_password="",
+        is_active=True,
+        is_verified=True,
+        is_superuser=False,
+        role=UserRole.LIMITED,
+        use_memories=False,
+    )
+    return user
+
+
 async def double_check_user(
     user: User | None,
-    optional: bool = DISABLE_AUTH,
     include_expired: bool = False,
     allow_anonymous_access: bool = False,
-) -> User | None:
-    if optional:
-        return user
-
+) -> User:
     if user is not None:
         # If user attempted to authenticate, verify them, do not default
         # to anonymous access if it fails.
@@ -1375,7 +1392,7 @@ async def double_check_user(
         return user
 
     if allow_anonymous_access:
-        return None
+        return get_anonymous_user()
 
     raise BasicAuthenticationError(
         detail="Access denied. User is not authenticated.",
@@ -1384,19 +1401,19 @@ async def double_check_user(
 
 async def current_user_with_expired_token(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     return await double_check_user(user, include_expired=True)
 
 
 async def current_limited_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     return await double_check_user(user)
 
 
 async def current_chat_accessible_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     tenant_id = get_current_tenant_id()
 
     return await double_check_user(
@@ -1406,10 +1423,8 @@ async def current_chat_accessible_user(
 
 async def current_user(
     user: User | None = Depends(optional_user),
-) -> User | None:
+) -> User:
     user = await double_check_user(user)
-    if not user:
-        return None
 
     if user.role == UserRole.LIMITED:
         raise BasicAuthenticationError(
@@ -1419,16 +1434,8 @@ async def current_user(
 
 
 async def current_curator_or_admin_user(
-    user: User | None = Depends(current_user),
-) -> User | None:
-    if DISABLE_AUTH:
-        return None
-
-    if not user or not hasattr(user, "role"):
-        raise BasicAuthenticationError(
-            detail="Access denied. User is not authenticated or lacks role information.",
-        )
-
+    user: User = Depends(current_user),
+) -> User:
     allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
     if user.role not in allowed_roles:
         raise BasicAuthenticationError(
@@ -1438,11 +1445,8 @@ async def current_curator_or_admin_user(
     return user
 
 
-async def current_admin_user(user: User | None = Depends(current_user)) -> User | None:
-    if DISABLE_AUTH:
-        return None
-
-    if not user or not hasattr(user, "role") or user.role != UserRole.ADMIN:
+async def current_admin_user(user: User = Depends(current_user)) -> User:
+    if user.role != UserRole.ADMIN:
         raise BasicAuthenticationError(
             detail="Access denied. User must be an admin to perform this action.",
         )
@@ -1456,6 +1460,9 @@ def get_default_admin_user_emails_() -> list[str]:
 
 
 STATE_TOKEN_AUDIENCE = "fastapi-users:oauth-state"
+STATE_TOKEN_LIFETIME_SECONDS = 3600
+CSRF_TOKEN_KEY = "csrftoken"
+CSRF_TOKEN_COOKIE_NAME = "fastapiusersoauthcsrf"
 
 
 class OAuth2AuthorizeResponse(BaseModel):
@@ -1463,11 +1470,17 @@ class OAuth2AuthorizeResponse(BaseModel):
 
 
 def generate_state_token(
-    data: Dict[str, str], secret: SecretType, lifetime_seconds: int = 3600
+    data: Dict[str, str],
+    secret: SecretType,
+    lifetime_seconds: int = STATE_TOKEN_LIFETIME_SECONDS,
 ) -> str:
     data["aud"] = STATE_TOKEN_AUDIENCE
 
     return generate_jwt(data, secret, lifetime_seconds)
+
+
+def generate_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 # refer to https://github.com/fastapi-users/fastapi-users/blob/42ddc241b965475390e2bce887b084152ae1a2cd/fastapi_users/fastapi_users.py#L91
@@ -1498,6 +1511,13 @@ def get_oauth_router(
     redirect_url: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
+    *,
+    csrf_token_cookie_name: str = CSRF_TOKEN_COOKIE_NAME,
+    csrf_token_cookie_path: str = "/",
+    csrf_token_cookie_domain: Optional[str] = None,
+    csrf_token_cookie_secure: Optional[bool] = None,
+    csrf_token_cookie_httponly: bool = True,
+    csrf_token_cookie_samesite: Optional[Literal["lax", "strict", "none"]] = "lax",
 ) -> APIRouter:
     """Generate a router with the OAuth routes."""
     router = APIRouter()
@@ -1514,6 +1534,9 @@ def get_oauth_router(
             route_name=callback_route_name,
         )
 
+    if csrf_token_cookie_secure is None:
+        csrf_token_cookie_secure = WEB_DOMAIN.startswith("https")
+
     @router.get(
         "/authorize",
         name=f"oauth:{oauth_client.name}.{backend.name}.authorize",
@@ -1521,8 +1544,10 @@ def get_oauth_router(
     )
     async def authorize(
         request: Request,
+        response: Response,
+        redirect: bool = Query(False),
         scopes: List[str] = Query(None),
-    ) -> OAuth2AuthorizeResponse:
+    ) -> Response | OAuth2AuthorizeResponse:
         referral_source = request.cookies.get("referral_source", None)
 
         if redirect_url is not None:
@@ -1532,9 +1557,11 @@ def get_oauth_router(
 
         next_url = request.query_params.get("next", "/")
 
+        csrf_token = generate_csrf_token()
         state_data: Dict[str, str] = {
             "next_url": next_url,
             "referral_source": referral_source or "default_referral",
+            CSRF_TOKEN_KEY: csrf_token,
         }
         state = generate_state_token(state_data, state_secret)
 
@@ -1550,6 +1577,31 @@ def get_oauth_router(
             authorization_url = add_url_params(
                 authorization_url, {"access_type": "offline", "prompt": "consent"}
             )
+
+        if redirect:
+            redirect_response = RedirectResponse(authorization_url, status_code=302)
+            redirect_response.set_cookie(
+                key=csrf_token_cookie_name,
+                value=csrf_token,
+                max_age=STATE_TOKEN_LIFETIME_SECONDS,
+                path=csrf_token_cookie_path,
+                domain=csrf_token_cookie_domain,
+                secure=csrf_token_cookie_secure,
+                httponly=csrf_token_cookie_httponly,
+                samesite=csrf_token_cookie_samesite,
+            )
+            return redirect_response
+
+        response.set_cookie(
+            key=csrf_token_cookie_name,
+            value=csrf_token,
+            max_age=STATE_TOKEN_LIFETIME_SECONDS,
+            path=csrf_token_cookie_path,
+            domain=csrf_token_cookie_domain,
+            secure=csrf_token_cookie_secure,
+            httponly=csrf_token_cookie_httponly,
+            samesite=csrf_token_cookie_samesite,
+        )
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
@@ -1600,7 +1652,33 @@ def get_oauth_router(
         try:
             state_data = decode_jwt(state, state_secret, [STATE_TOKEN_AUDIENCE])
         except jwt.DecodeError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=getattr(
+                    ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
+                ),
+            )
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=getattr(
+                    ErrorCode,
+                    "ACCESS_TOKEN_ALREADY_EXPIRED",
+                    "ACCESS_TOKEN_ALREADY_EXPIRED",
+                ),
+            )
+
+        cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
+        state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
+        if (
+            not cookie_csrf_token
+            or not state_csrf_token
+            or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
+            )
 
         next_url = state_data.get("next_url", "/")
         referral_source = state_data.get("referral_source", None)

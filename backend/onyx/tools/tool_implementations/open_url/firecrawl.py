@@ -12,12 +12,14 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_t
 from onyx.tools.tool_implementations.open_url.models import WebContent
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.utils.logger import setup_logger
-from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
 FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
-_DEFAULT_MAX_WORKERS = 4
+_DEFAULT_MAX_WORKERS = 5
+
+# Timeout is tuned to stay under the 2-minute outer timeout in
+_DEFAULT_TIMEOUT_SECONDS = 55  # 10 max urls, 2 max batches
 
 
 @dataclass
@@ -33,7 +35,7 @@ class FirecrawlClient(WebContentProvider):
         api_key: str,
         *,
         base_url: str = FIRECRAWL_SCRAPE_URL,
-        timeout_seconds: int = 30,
+        timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
 
         self._headers = {
@@ -69,7 +71,8 @@ class FirecrawlClient(WebContentProvider):
                 scrape_successful=False,
             )
 
-    @retry_builder(tries=3, delay=1, backoff=2)
+    # Note: explicitly deciding not to retry here, Firecrawl does not seem to ever recover on failed site crawls
+    # Retrying causes other issues like timing out and dropping the entire batch when it's not needed.
     def _get_webpage_content(self, url: str) -> WebContent:
         payload = {
             "url": url,

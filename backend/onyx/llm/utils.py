@@ -84,7 +84,7 @@ def build_litellm_passthrough_kwargs(
     if not (SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity):
         return model_kwargs
 
-    passthrough_kwargs = dict(model_kwargs)
+    passthrough_kwargs = copy.deepcopy(model_kwargs)
 
     if user_identity.user_id:
         passthrough_kwargs["user"] = truncate_litellm_user_id(user_identity.user_id)
@@ -95,7 +95,7 @@ def build_litellm_passthrough_kwargs(
         if existing_metadata is None:
             metadata = {}
         elif isinstance(existing_metadata, dict):
-            metadata = dict(existing_metadata)
+            metadata = copy.deepcopy(existing_metadata)
         else:
             metadata = None
 
@@ -738,7 +738,7 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
 
         # Fallback: try using litellm.supports_reasoning() for newer models
         try:
-            logger.debug("Falling back to `litellm.supports_reasoning`")
+            # logger.debug("Falling back to `litellm.supports_reasoning`")
             full_model_name = (
                 f"{model_provider}/{model_name}"
                 if model_provider not in model_name

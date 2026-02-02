@@ -5,7 +5,7 @@ import LLMStep from "./steps/LLMStep";
 import FinalStep from "./steps/FinalStep";
 import { OnboardingActions, OnboardingState, OnboardingStep } from "./types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import NonAdminStep from "./components/NonAdminStep";
 

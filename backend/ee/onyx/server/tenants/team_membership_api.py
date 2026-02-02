@@ -24,12 +24,12 @@ router = APIRouter(prefix="/tenants")
 @router.post("/leave-team")
 async def leave_organization(
     user_email: UserByEmail,
-    current_user: User | None = Depends(current_admin_user),
+    current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     tenant_id = get_current_tenant_id()
 
-    if current_user is None or current_user.email != user_email.user_email:
+    if current_user.email != user_email.user_email:
         raise HTTPException(
             status_code=403, detail="You can only leave the organization as yourself"
         )

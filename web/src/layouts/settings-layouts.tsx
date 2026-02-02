@@ -42,31 +42,43 @@ import { WithoutStyles } from "@/types";
 import { IconProps } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 
+const widthClasses = {
+  md: "w-[min(50rem,100%)]",
+  lg: "w-[min(60rem,100%)]",
+};
+
 /**
  * Settings Root Component
  *
  * Wrapper component that provides the base structure for settings pages.
- * Creates a centered, scrollable container with a maximum width of 50rem.
+ * Creates a centered, scrollable container with configurable width.
  *
  * Features:
  * - Full height container with centered content
  * - Automatic overflow-y scrolling
  * - Contains the scroll container ID that Settings.Header uses for shadow detection
- * - Maximum content width of 50rem (responsive)
+ * - Configurable width: "md" (50rem max) or "full" (full width with 4rem padding)
  *
  * @example
  * ```tsx
+ * // Default medium width (50rem max)
  * <SettingsLayouts.Root>
+ *   <SettingsLayouts.Header {...} />
+ *   <SettingsLayouts.Body>...</SettingsLayouts.Body>
+ * </SettingsLayouts.Root>
+ *
+ * // Full width with padding
+ * <SettingsLayouts.Root width="full">
  *   <SettingsLayouts.Header {...} />
  *   <SettingsLayouts.Body>...</SettingsLayouts.Body>
  * </SettingsLayouts.Root>
  * ```
  */
-export type SettingsRootProps = WithoutStyles<
-  React.HtmlHTMLAttributes<HTMLDivElement>
->;
-
-function SettingsRoot(props: SettingsRootProps) {
+interface SettingsRootProps
+  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+  width?: keyof typeof widthClasses;
+}
+function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
   return (
     <div
       id="page-wrapper-scroll-container"
@@ -75,7 +87,7 @@ function SettingsRoot(props: SettingsRootProps) {
       {/* WARNING: The id="page-wrapper-scroll-container" above is used by SettingsHeader
           to detect scroll position and show/hide the scroll shadow.
           DO NOT REMOVE this ID without updating SettingsHeader accordingly. */}
-      <div className="h-full w-[min(50rem,100%)]">
+      <div className={cn("h-full", widthClasses[width])}>
         <div {...props} />
       </div>
     </div>
@@ -166,7 +178,6 @@ export interface SettingsHeaderProps {
   backButton?: boolean;
   separator?: boolean;
 }
-
 function SettingsHeader({
   icon: Icon,
   title,
@@ -202,7 +213,7 @@ function SettingsHeader({
     <div
       ref={headerRef}
       className={cn(
-        "sticky top-0 z-10 w-full bg-background-tint-01",
+        "sticky top-0 z-settings-header w-full bg-background-tint-01",
         backButton ? "pt-4" : "pt-10"
       )}
     >
@@ -283,11 +294,9 @@ function SettingsHeader({
  * </SettingsLayouts.Body>
  * ```
  */
-export type SettingsBodyProps = WithoutStyles<
-  HtmlHTMLAttributes<HTMLDivElement>
->;
-
-function SettingsBody(props: SettingsBodyProps) {
+function SettingsBody(
+  props: WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>>
+) {
   return (
     <div
       className="pt-6 pb-[4.5rem] px-4 flex flex-col gap-8 w-full"

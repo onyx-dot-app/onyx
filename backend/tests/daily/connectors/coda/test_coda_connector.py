@@ -9,6 +9,17 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.coda.connector import CodaConnector
 from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
+
+
+def connector_doc_generator(
+    connector: CodaConnector,
+) -> Generator[Document, None, None]:
+    for batch in connector.load_from_state():
+        for doc in batch:
+            if isinstance(doc, HierarchyNode):
+                continue
+            yield doc
 
 
 @pytest.fixture
@@ -212,19 +223,16 @@ class TestLoadFromState:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that both page and table documents are generated correctly."""
-        gen = connector.load_from_state()
-
         page_docs = []
         table_docs = []
 
-        for batch in gen:
-            for doc in batch:
-                if "coda-page-" in doc.id:
-                    page_docs.append(doc)
-                    assert "content_type" in doc.metadata
-                elif "coda-table-" in doc.id:
-                    table_docs.append(doc)
-                    assert "row_count" in doc.metadata
+        for doc in connector_doc_generator(connector):
+            if "coda-page-" in doc.id:
+                page_docs.append(doc)
+                assert "content_type" in doc.metadata
+            elif "coda-table-" in doc.id:
+                table_docs.append(doc)
+                assert "row_count" in doc.metadata
 
         # Verify we found both types (if both exist in the workspace)
         if reference_data["total_pages"] > 0:
@@ -245,12 +253,9 @@ class TestLoadFromState:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that no documents are yielded twice."""
-        gen = connector.load_from_state()
-
         document_ids = []
-        for batch in gen:
-            for doc in batch:
-                document_ids.append(doc.id)
+        for doc in connector_doc_generator(connector):
+            document_ids.append(doc.id)
 
         unique_ids = set(document_ids)
         assert len(document_ids) == len(
@@ -261,13 +266,10 @@ class TestLoadFromState:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that content from all docs are included."""
-        gen = connector.load_from_state()
-
         processed_doc_ids = set()
-        for batch in gen:
-            for doc in batch:
-                doc_id = doc.metadata.get("doc_id")
-                processed_doc_ids.add(doc_id)
+        for doc in connector_doc_generator(connector):
+            doc_id = doc.metadata.get("doc_id")
+            processed_doc_ids.add(doc_id)
 
         expected_doc_ids = {doc.id for doc in reference_data["docs"]}
 
@@ -286,21 +288,14 @@ class TestLoadFromState:
         self, connector: CodaConnector, reference_data: dict[str, Any]
     ) -> None:
         """Test that all documents have meaningful content."""
-        gen = connector.load_from_state()
+        for doc in connector_doc_generator(connector):
+            assert doc.semantic_identifier, "Semantic identifier should not be empty"
+            assert (
+                len(doc.semantic_identifier) > 0
+            ), "Semantic identifier should have content"
 
-        for batch in gen:
-            for doc in batch:
-                assert (
-                    doc.semantic_identifier
-                ), "Semantic identifier should not be empty"
-                assert (
-                    len(doc.semantic_identifier) > 0
-                ), "Semantic identifier should have content"
-
-                total_text_length = sum(
-                    len(section.text or "") for section in doc.sections
-                )
-                assert total_text_length > 0, f"Document {doc.id} has no content"
+            total_text_length = sum(len(section.text or "") for section in doc.sections)
+            assert total_text_length > 0, f"Document {doc.id} has no content"
 
     def test_page_content_indexing(self, coda_credentials: dict[str, str]) -> None:
         """Test that index_page_content flag works correctly."""
@@ -315,6 +310,8 @@ class TestLoadFromState:
         docs_no_content = []
         for batch in conn_no_content.load_from_state():
             for doc in batch:
+                if isinstance(doc, HierarchyNode):
+                    continue
                 if "coda-page-" in doc.id:
                     docs_no_content.append(doc)
                     break
@@ -324,6 +321,8 @@ class TestLoadFromState:
         docs_with_content = []
         for batch in conn_with_content.load_from_state():
             for doc in batch:
+                if isinstance(doc, HierarchyNode):
+                    continue
                 if "coda-page-" in doc.id:
                     docs_with_content.append(doc)
                     break
@@ -367,6 +366,8 @@ class TestPollSource:
 
         # All returned documents should be updated within the time range
         for doc in documents:
+            if isinstance(doc, HierarchyNode):
+                continue
             assert doc.doc_updated_at is not None, "doc_updated_at should not be None"
             doc_timestamp = doc.doc_updated_at.timestamp()
             assert (
@@ -427,6 +428,8 @@ class TestWorkspaceScoping:
 
         workspace_id = workspace_scoped_connector.workspace_id
         for doc in scoped_docs:
+            if isinstance(doc, HierarchyNode):
+                continue
             doc_id = doc.metadata.get("doc_id")
             assert isinstance(doc_id, str), "doc_id should be a string"
             coda_doc = workspace_scoped_connector._get_doc(doc_id)
@@ -454,18 +457,13 @@ class TestErrorHandling:
 
     def test_handles_empty_tables_gracefully(self, connector: CodaConnector) -> None:
         """Test that connector handles tables with no rows."""
-        gen = connector.load_from_state()
-
-        for batch in gen:
-            for doc in batch:
-                if "coda-table-" in doc.id:
+        for doc in connector_doc_generator(connector):
+            if "coda-table-" in doc.id:
+                assert len(doc.sections) > 0, "Empty table should still have a section"
+                if doc.metadata.get("row_count") == "0":
                     assert (
-                        len(doc.sections) > 0
-                    ), "Empty table should still have a section"
-                    if doc.metadata.get("row_count") == "0":
-                        assert (
-                            len(doc.sections) == 1
-                        ), "Empty table should have exactly one section"
+                        len(doc.sections) == 1
+                    ), "Empty table should have exactly one section"
 
 
 if __name__ == "__main__":

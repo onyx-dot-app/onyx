@@ -7,14 +7,27 @@
 @import "css/code.css";
 @import "css/color-swatch.css";
 @import "css/colors.css";
+@import "css/divider.css";
 @import "css/general-layouts.css";
+@import "css/hoverable.css";
 @import "css/inputs.css";
+@import "css/knowledge-table.css";
 @import "css/line-item.css";
 @import "css/sidebar-tab.css";
+@import "css/sizes.css";
 @import "css/square-button.css";
 @import "css/switch.css";
 @import "css/z-index.css";
-@import "css/nrf.css";
+
+/* KH Teka Font */
+
+@font-face {
+  font-family: "KH Teka";
+  src: url("/fonts/KHTeka-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
 
 @tailwind base;
 @tailwind components;
@@ -111,6 +124,11 @@
   .prose > :first-child {
     margin-top: 0;
   }
+
+  /* Remove bottom margin from last child to avoid extra space */
+  .prose > :last-child {
+    margin-bottom: 0;
+  }
 }
 
 @layer utilities {
@@ -168,6 +186,8 @@
     "Segoe UI", Roboto, sans-serif;
   --font-dm-mono: "DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
     Consolas, "Courier New", monospace;
+  --font-kh-teka: "KH Teka", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
 }
 
 /* HEADING STYLES */

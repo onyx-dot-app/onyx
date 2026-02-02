@@ -1,12 +1,15 @@
+"use client";
+
 import React, { useState, useRef, useEffect } from "react";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { Label } from "@/components/ui/label";
+import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX } from "@opal/icons";
+
 interface ConnectorMultiSelectProps {
   name: string;
   label: string;
@@ -41,7 +44,8 @@ export const ConnectorMultiSelect = ({
     (connector) => !selectedIds.includes(connector.cc_pair_id)
   );
 
-  const allConnectorsSelected = unselectedConnectors.length === 0;
+  const allConnectorsSelected =
+    connectors.length > 0 && unselectedConnectors.length === 0;
 
   const filteredUnselectedConnectors = unselectedConnectors.filter(
     (connector) => {
@@ -51,16 +55,7 @@ export const ConnectorMultiSelect = ({
   );
 
   useEffect(() => {
-    if (allConnectorsSelected && open) {
-      setOpen(false);
-      inputRef.current?.blur();
-      setSearchQuery("");
-    }
-  }, [allConnectorsSelected, open]);
-
-  useEffect(() => {
     if (allConnectorsSelected) {
-      inputRef.current?.blur();
       setSearchQuery("");
     }
   }, [allConnectorsSelected, selectedIds]);
@@ -111,11 +106,15 @@ export const ConnectorMultiSelect = ({
     ? "All connectors selected"
     : placeholder;
 
-  const isInputDisabled = disabled || allConnectorsSelected;
+  const isInputDisabled = disabled;
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">
-      {label && <Label className="text-base font-medium">{label}</Label>}
+      {label && (
+        <Label>
+          <Text>{label}</Text>
+        </Label>
+      )}
 
       <Text as="p" mainUiMuted text03>
         All documents indexed by the selected connectors will be part of this
@@ -129,32 +128,39 @@ export const ConnectorMultiSelect = ({
           value={searchQuery}
           variant={isInputDisabled ? "disabled" : undefined}
           onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => {
             if (!allConnectorsSelected) {
+              setSearchQuery(e.target.value);
               setOpen(true);
             }
           }}
+          onFocus={() => {
+            setOpen(true);
+          }}
           onKeyDown={handleKeyDown}
-          className={
-            allConnectorsSelected
-              ? "rounded-12 bg-background-neutral-01"
-              : "rounded-12"
-          }
+          className="rounded-12"
         />
 
-        {open && !allConnectorsSelected && (
+        {open && (
           <div
             ref={dropdownRef}
             className="absolute z-50 w-full mt-1 rounded-12 border border-border-02 bg-background-neutral-00 shadow-md default-scrollbar max-h-[300px] overflow-auto"
           >
-            {filteredUnselectedConnectors.length === 0 ? (
-              <div className="py-4 text-center text-xs text-text-03">
-                {searchQuery
-                  ? "No matching connectors found"
-                  : "No more connectors available"}
+            {allConnectorsSelected ? (
+              <div className="py-4 px-3">
+                <Text as="p" text03 className="text-center text-xs">
+                  All available connectors have been selected. Remove connectors
+                  below to add different ones.
+                </Text>
+              </div>
+            ) : filteredUnselectedConnectors.length === 0 ? (
+              <div className="py-4 px-3">
+                <Text as="p" text03 className="text-center text-xs">
+                  {searchQuery
+                    ? "No matching connectors found"
+                    : connectors.length === 0
+                      ? "No private connectors available. Create a private connector first."
+                      : "No more connectors available"}
+                </Text>
               </div>
             ) : (
               <div>

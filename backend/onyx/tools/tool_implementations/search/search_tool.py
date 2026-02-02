@@ -225,8 +225,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         tool_id: int,
         db_session: Session,
         emitter: Emitter,
-        # Used for ACLs and federated search
-        user: User | None,
+        # Used for ACLs and federated search, anonymous users only see public docs
+        user: User,
         # Used for filter settings
         persona: Persona,
         llm: LLM,
@@ -832,7 +832,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections=merged_sections,
                 citation_start=override_kwargs.starting_citation_num,
                 limit=override_kwargs.max_llm_chunks,
-                include_document_id=True,
+                include_document_id=False,
             )
 
             # End overall timing
@@ -844,12 +844,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 f"document expansion: {document_expansion_elapsed:.3f}s)"
             )
 
-            # TODO: extension - this can include the smaller set of approved docs to be saved/displayed in the UI
-            # for replaying. Currently the full set is returned and saved.
             return ToolResponse(
                 # Typically the rich response will give more docs in case it needs to be displayed in the UI
                 rich_response=SearchDocsResponse(
-                    search_docs=search_docs, citation_mapping=citation_mapping
+                    search_docs=search_docs,
+                    citation_mapping=citation_mapping,
+                    displayed_docs=final_ui_docs or None,
                 ),
                 # The LLM facing response typically includes less docs to cut down on noise and token usage
                 llm_facing_response=docs_str,

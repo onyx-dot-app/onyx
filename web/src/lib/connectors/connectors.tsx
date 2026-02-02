@@ -494,7 +494,7 @@ export const connectorConfigs: Record<
             ],
           },
         ],
-        defaultTab: "space",
+        defaultTab: "general",
       },
     ],
     advanced_values: [

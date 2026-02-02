@@ -19,7 +19,6 @@ from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces import DocumentIndex
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -96,7 +95,7 @@ def construct_tools(
     persona: Persona,
     db_session: Session,
     emitter: Emitter,
-    user: User | None,
+    user: User,
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
@@ -117,21 +116,12 @@ def construct_tools(
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
     # Get user's OAuth token if available
     user_oauth_token = None
-    if user and user.oauth_accounts:
+    if user.oauth_accounts:
         user_oauth_token = user.oauth_accounts[0].access_token
 
-    document_index_cache: DocumentIndex | None = None
-    search_settings_cache = None
-
-    def _get_document_index() -> DocumentIndex:
-        nonlocal document_index_cache, search_settings_cache
-        if document_index_cache is None:
-            if search_settings_cache is None:
-                search_settings_cache = get_current_search_settings(db_session)
-            document_index_cache = get_default_document_index(
-                search_settings_cache, None
-            )
-        return document_index_cache
+    search_settings = get_current_search_settings(db_session)
+    # This flow is for search so we do not get all indices.
+    document_index = get_default_document_index(search_settings, None)
 
     added_search_tool = False
     for db_tool_model in persona.tools:
@@ -174,7 +164,7 @@ def construct_tools(
                     user=user,
                     persona=persona,
                     llm=llm,
-                    document_index=_get_document_index(),
+                    document_index=document_index,
                     user_selected_filters=search_tool_config.user_selected_filters,
                     project_id=search_tool_config.project_id,
                     bypass_acl=search_tool_config.bypass_acl,
@@ -228,7 +218,7 @@ def construct_tools(
                         OpenURLTool(
                             tool_id=db_tool_model.id,
                             emitter=emitter,
-                            document_index=_get_document_index(),
+                            document_index=document_index,
                             user=user,
                         )
                     ]
@@ -272,7 +262,12 @@ def construct_tools(
             oauth_token_for_tool = None
 
             # Priority 1: OAuth config (per-tool OAuth)
-            if db_tool_model.oauth_config_id and user:
+            if db_tool_model.oauth_config_id:
+                if user.is_anonymous:
+                    logger.warning(
+                        f"Anonymous user cannot use OAuth tool {db_tool_model.id}"
+                    )
+                    continue
                 oauth_config = get_oauth_config(
                     db_tool_model.oauth_config_id, db_session
                 )
@@ -287,6 +282,11 @@ def construct_tools(
 
             # Priority 2: Passthrough auth (user's login OAuth token)
             elif db_tool_model.passthrough_auth:
+                if user.is_anonymous:
+                    logger.warning(
+                        f"Anonymous user cannot use passthrough auth tool {db_tool_model.id}"
+                    )
+                    continue
                 oauth_token_for_tool = user_oauth_token
 
             tool_dict[db_tool_model.id] = cast(
@@ -321,11 +321,16 @@ def construct_tools(
 
             # Get user-specific connection config if needed
             connection_config = None
-            user_email = user.email if user else ""
+            user_email = user.email
             mcp_user_oauth_token = None
 
             if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
                 # Pass-through OAuth: use the user's login OAuth token
+                if user.is_anonymous:
+                    logger.warning(
+                        f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
+                    )
+                    continue
                 mcp_user_oauth_token = user_oauth_token
             elif (
                 mcp_server.auth_type == MCPAuthenticationType.API_TOKEN
@@ -386,9 +391,6 @@ def construct_tools(
         # Use the passed-in config if available, otherwise create a new one
         if not search_tool_config:
             search_tool_config = SearchToolConfig()
-
-        search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(search_settings, None)
 
         search_tool = SearchTool(
             tool_id=search_tool_db_model.id,

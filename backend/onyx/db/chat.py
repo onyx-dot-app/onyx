@@ -208,7 +208,7 @@ def create_chat_session(
 
 def duplicate_chat_session_for_user_from_slack(
     db_session: Session,
-    user: User | None,
+    user: User,
     chat_session_id: UUID,
 ) -> ChatSession:
     """
@@ -235,7 +235,7 @@ def duplicate_chat_session_for_user_from_slack(
 
     return create_chat_session(
         db_session=db_session,
-        user_id=user.id if user else None,
+        user_id=user.id,
         persona_id=new_persona_id,
         # Set this to empty string so the frontend will force a rename
         description="",
@@ -273,9 +273,9 @@ def update_chat_session(
 
 
 def delete_all_chat_sessions_for_user(
-    user: User | None, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
+    user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
 ) -> None:
-    user_id = user.id if user is not None else None
+    user_id = user.id
 
     chat_sessions = (
         db_session.query(ChatSession)

@@ -4,17 +4,22 @@ kind: Ingress
 metadata:
   name: {{ include "onyx.fullname" . }}-ingress-api
   annotations:
+    {{- if not .Values.ingress.className }}
     kubernetes.io/ingress.class: nginx
+    {{- end }}
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
 spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.api.host }}
       http:
         paths:
           - path: /api(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: {{ include "onyx.fullname" . }}-api-service

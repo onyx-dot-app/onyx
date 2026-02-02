@@ -22,6 +22,7 @@ from google.oauth2.service_account import Credentials as ServiceAccountCredentia
 from googleapiclient.errors import HttpError  # type: ignore
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_DRIVE_WORKERS
@@ -41,7 +42,9 @@ from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
 from onyx.connectors.google_drive.file_retrieval import (
     get_all_files_in_my_drive_and_shared,
 )
+from onyx.connectors.google_drive.file_retrieval import get_external_access_for_folder
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
+from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import DriveRetrievalStage
@@ -73,12 +76,16 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import SlimDocument
+from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 logger = setup_logger()
 # TODO: Improve this by using the batch utility: https://googleapis.github.io/google-api-python-client/docs/batch.html
@@ -120,6 +127,47 @@ def _clean_requested_drive_ids(
 
     valid_requested_drive_ids = requested_drive_ids - invalid_requested_drive_ids
     return sorted(valid_requested_drive_ids), sorted(filtered_folder_ids)
+
+
+def _get_parent_id_from_file(drive_file: GoogleDriveFileType) -> str | None:
+    """Extract the first parent ID from a drive file."""
+    parents = drive_file.get("parents")
+    if parents and len(parents) > 0:
+        return parents[0]  # files have a unique parent
+    return None
+
+
+def _is_shared_drive_root(folder: GoogleDriveFileType) -> bool:
+    """
+    Check if a folder is a verified shared drive root.
+
+    For shared drives, we can verify using driveId:
+    - If driveId is set and folder_id == driveId AND no parents, it's the shared drive root
+    - If driveId is set but folder_id != driveId with empty parents, it's a permission issue
+
+    Returns True only for verified shared drive roots.
+    """
+    folder_id = folder.get("id")
+    drive_id = folder.get("driveId")
+    parents = folder.get("parents", [])
+
+    # Must have no parents to be a root
+    if parents:
+        return False
+
+    # For shared drive content, the root has id == driveId
+    if drive_id and folder_id == drive_id:
+        return True
+
+    return False
+
+
+def _public_access() -> ExternalAccess:
+    return ExternalAccess(
+        external_user_emails=set(),
+        external_user_group_ids=set(),
+        is_public=True,
+    )
 
 
 class CredentialedRetrievalMethod(Protocol):
@@ -246,6 +294,11 @@ class GoogleDriveConnector(
 
         # ids of folders and shared drives that have been traversed
         self._retrieved_folder_and_drive_ids: set[str] = set()
+
+        # Cache of known My Drive root IDs (user_email -> root_id)
+        # Used to verify if a folder with no parents is actually a My Drive root
+        # Thread-safe because multiple impersonation threads access this concurrently
+        self._my_drive_root_id_cache: ThreadSafeDict[str, str] = ThreadSafeDict()
 
         self.allow_images = False
 
@@ -391,6 +444,208 @@ class GoogleDriveConnector(
                     if email not in user_emails:
                         user_emails.append(email)
         return user_emails
+
+    def _get_my_drive_root_id(self, user_email: str) -> str | None:
+        """
+        Get the My Drive root folder ID for a user.
+
+        Uses a cache to avoid repeated API calls. Returns None if the user
+        doesn't have access to Drive APIs or the call fails.
+        """
+        if user_email in self._my_drive_root_id_cache:
+            return self._my_drive_root_id_cache[user_email]
+
+        try:
+            drive_service = get_drive_service(self.creds, user_email)
+            root_id = get_root_folder_id(drive_service)
+            self._my_drive_root_id_cache[user_email] = root_id
+            return root_id
+        except Exception:
+            # User might not have access to Drive APIs
+            return None
+
+    def _is_my_drive_root(
+        self, folder: GoogleDriveFileType, retriever_email: str
+    ) -> bool:
+        """
+        Check if a folder is a My Drive root.
+
+        For My Drive folders (no driveId), we verify by comparing the folder ID
+        to the actual My Drive root ID obtained via files().get(fileId='root').
+        """
+        folder_id = folder.get("id")
+        drive_id = folder.get("driveId")
+        parents = folder.get("parents", [])
+
+        # If there are parents, this is not a root
+        if parents:
+            return False
+
+        # If driveId is set, this is shared drive content, not My Drive
+        if drive_id:
+            return False
+
+        # Get the My Drive root ID for this user and compare
+        root_id = self._get_my_drive_root_id(retriever_email)
+        if root_id and folder_id == root_id:
+            return True
+
+        # Also check with admin in case the retriever doesn't have access
+        admin_root_id = self._get_my_drive_root_id(self.primary_admin_email)
+        if admin_root_id and folder_id == admin_root_id:
+            return True
+
+        return False
+
+    def _get_new_ancestors_for_files(
+        self,
+        files: list[RetrievedDriveFile],
+        seen_hierarchy_node_raw_ids: ThreadSafeSet[str],
+        fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str],
+        permission_sync_context: PermissionSyncContext | None = None,
+    ) -> list[HierarchyNode]:
+        """
+        Get all NEW ancestor hierarchy nodes for a batch of files.
+
+        For each file, walks up the parent chain until reaching a root/drive
+        (terminal node with no parent). Returns HierarchyNode objects for all
+        new ancestors.
+
+        The function tracks two separate sets:
+        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (to avoid duplicates)
+        - fully_walked_hierarchy_node_raw_ids: Nodes where we've successfully walked
+          to a terminal root. Only skip walking from a node if it's in this set.
+
+        This separation ensures that if User A can access folder C but not its parent B,
+        a later User B who has access to both can still complete the walk to the root.
+
+        Args:
+            files: List of retrieved drive files to get ancestors for
+            seen_hierarchy_node_raw_ids: Set of already-yielded node IDs (modified in place)
+            fully_walked_hierarchy_node_raw_ids: Set of node IDs where the walk to root
+                succeeded (modified in place)
+            permission_sync_context: If provided, permissions will be fetched for hierarchy nodes.
+                Contains google_domain and primary_admin_email needed for permission syncing.
+
+        Returns:
+            List of HierarchyNode objects for new ancestors (ordered parent-first)
+        """
+        service = get_drive_service(self.creds, self.primary_admin_email)
+        field_type = (
+            DriveFileFieldType.WITH_PERMISSIONS
+            if permission_sync_context
+            else DriveFileFieldType.STANDARD
+        )
+        new_nodes: list[HierarchyNode] = []
+
+        for file in files:
+            parent_id = _get_parent_id_from_file(file.drive_file)
+            if not parent_id:
+                continue
+
+            # Only skip if we've already successfully walked from this node to a root.
+            # Don't skip just because it's "seen" - a previous user may have failed
+            # to walk to the root, and this user might have better access.
+            if parent_id in fully_walked_hierarchy_node_raw_ids:
+                continue
+
+            # Walk up the parent chain
+            ancestors_to_add: list[HierarchyNode] = []
+            node_ids_in_walk: list[str] = []
+            current_id: str | None = parent_id
+            reached_terminal = False
+
+            while current_id:
+                node_ids_in_walk.append(current_id)
+
+                # If we hit a node that's already been fully walked, we know
+                # the path from here to root is complete
+                if current_id in fully_walked_hierarchy_node_raw_ids:
+                    reached_terminal = True
+                    break
+
+                # Fetch folder metadata
+                folder = self._get_folder_metadata(
+                    current_id, file.user_email, field_type
+                )
+                if not folder:
+                    # Can't access this folder - stop climbing
+                    # Don't mark as fully walked since we didn't reach root
+                    break
+
+                folder_parent_id = _get_parent_id_from_file(folder)
+
+                # Create the node BEFORE marking as seen to avoid a race condition where:
+                # 1. Thread A marks node as "seen"
+                # 2. Thread A fails to create node (e.g., API error in get_external_access)
+                # 3. Thread B sees node as "already seen" and skips it
+                # 4. Result: node is never yielded
+                #
+                # By creating first and then atomically checking/marking, we ensure that
+                # if creation fails, another thread can still try. If both succeed,
+                # only one will add to ancestors_to_add (the one that wins check_and_add).
+                if permission_sync_context:
+                    external_access = get_external_access_for_folder(
+                        folder, permission_sync_context.google_domain, service
+                    )
+                else:
+                    external_access = _public_access()
+
+                node = HierarchyNode(
+                    raw_node_id=current_id,
+                    raw_parent_id=folder_parent_id,
+                    display_name=folder.get("name", "Unknown Folder"),
+                    link=folder.get("webViewLink"),
+                    node_type=HierarchyNodeType.FOLDER,
+                    external_access=external_access,
+                )
+
+                # Now atomically check and add - only append if we're the first thread
+                # to successfully create this node
+                already_seen = seen_hierarchy_node_raw_ids.check_and_add(current_id)
+                if not already_seen:
+                    ancestors_to_add.append(node)
+
+                # Check if this is a verified terminal node (actual root, not just
+                # empty parents due to permission limitations)
+                # Check shared drive root first (simple ID comparison)
+                if _is_shared_drive_root(folder):
+                    reached_terminal = True
+                    break
+
+                # Check if this is a My Drive root (requires API call, but cached)
+                if self._is_my_drive_root(folder, file.user_email):
+                    reached_terminal = True
+                    break
+
+                # If parents is empty but we couldn't verify it's a true root,
+                # stop walking but don't mark as fully walked (another user
+                # with better access might be able to continue)
+                if folder_parent_id is None:
+                    break
+
+                # Move to parent
+                current_id = folder_parent_id
+
+            # If we successfully reached a terminal node (or a fully-walked node),
+            # mark all nodes in this walk as fully walked
+            if reached_terminal:
+                fully_walked_hierarchy_node_raw_ids.update(set(node_ids_in_walk))
+
+            new_nodes += ancestors_to_add
+
+        return new_nodes
+
+    def _get_folder_metadata(
+        self, folder_id: str, retriever_email: str, field_type: DriveFileFieldType
+    ) -> GoogleDriveFileType | None:
+        """Fetch metadata for a folder by ID."""
+        for email in [retriever_email, self.primary_admin_email]:
+            service = get_drive_service(self.creds, email)
+            folder = get_folder_metadata(service, folder_id, field_type)
+            if folder:
+                return folder
+        return None
 
     def get_all_drive_ids(self) -> set[str]:
         return self._get_all_drives_for_user(self.primary_admin_email)
@@ -1187,9 +1442,10 @@ class GoogleDriveConnector(
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
         include_permissions: bool,
-    ) -> Iterator[Document | ConnectorFailure]:
+    ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
         """
         Retrieves and converts Google Drive files to documents.
+        Also yields HierarchyNode objects for ancestor folders.
         """
         field_type = (
             DriveFileFieldType.WITH_PERMISSIONS
@@ -1198,20 +1454,24 @@ class GoogleDriveConnector(
         )
 
         try:
+
+            # Build permission sync context if needed
+            permission_sync_context = (
+                PermissionSyncContext(
+                    primary_admin_email=self.primary_admin_email,
+                    google_domain=self.google_domain,
+                )
+                if include_permissions
+                else None
+            )
+
             # Prepare a partial function with the credentials and admin email
             convert_func = partial(
                 convert_drive_item_to_document,
                 self.creds,
                 self.allow_images,
                 self.size_threshold,
-                (
-                    PermissionSyncContext(
-                        primary_admin_email=self.primary_admin_email,
-                        google_domain=self.google_domain,
-                    )
-                    if include_permissions
-                    else None
-                ),
+                permission_sync_context,
             )
             # Fetch files in batches
             batches_complete = 0
@@ -1219,8 +1479,22 @@ class GoogleDriveConnector(
 
             def _yield_batch(
                 files_batch: list[RetrievedDriveFile],
-            ) -> Iterator[Document | ConnectorFailure]:
+            ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
                 nonlocal batches_complete
+
+                # First, yield any new ancestor hierarchy nodes
+                new_ancestors = self._get_new_ancestors_for_files(
+                    files=files_batch,
+                    seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                    fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                    permission_sync_context=permission_sync_context,
+                )
+                if new_ancestors:
+                    logger.debug(
+                        f"Yielding {len(new_ancestors)} new hierarchy nodes for batch {batches_complete}"
+                    )
+                    yield from new_ancestors
+
                 # Process the batch using run_functions_tuples_in_parallel
                 func_with_args = [
                     (
@@ -1358,7 +1632,45 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        slim_batch = []
+        files_batch: list[RetrievedDriveFile] = []
+        slim_batch: list[SlimDocument | HierarchyNode] = []
+
+        def _yield_slim_batch() -> list[SlimDocument | HierarchyNode]:
+            """Process files batch and return items to yield (hierarchy nodes + slim docs)."""
+            nonlocal files_batch, slim_batch
+
+            # Get new ancestor hierarchy nodes first
+            permission_sync_context = PermissionSyncContext(
+                primary_admin_email=self.primary_admin_email,
+                google_domain=self.google_domain,
+            )
+            new_ancestors = self._get_new_ancestors_for_files(
+                files=files_batch,
+                seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                permission_sync_context=permission_sync_context,
+            )
+
+            # Build slim documents
+            for file in files_batch:
+                if doc := build_slim_document(
+                    self.creds,
+                    file.drive_file,
+                    PermissionSyncContext(
+                        primary_admin_email=self.primary_admin_email,
+                        google_domain=self.google_domain,
+                    ),
+                ):
+                    slim_batch.append(doc)
+
+            # Combine: hierarchy nodes first, then slim docs
+            result: list[SlimDocument | HierarchyNode] = []
+            result.extend(new_ancestors)
+            result.extend(slim_batch)
+            files_batch = []
+            slim_batch = []
+            return result
+
         for file in self._fetch_drive_items(
             field_type=DriveFileFieldType.SLIM,
             checkpoint=checkpoint,
@@ -1371,28 +1683,20 @@ class GoogleDriveConnector(
                 file.drive_file
             ):
                 continue
-            if doc := build_slim_document(
-                self.creds,
-                file.drive_file,
-                # for now, always fetch permissions for slim runs
-                # TODO: move everything to load_from_checkpoint
-                # and only fetch permissions if needed
-                PermissionSyncContext(
-                    primary_admin_email=self.primary_admin_email,
-                    google_domain=self.google_domain,
-                ),
-            ):
-                slim_batch.append(doc)
-            if len(slim_batch) >= SLIM_BATCH_SIZE:
-                yield slim_batch
-                slim_batch = []
+            files_batch.append(file)
+
+            if len(files_batch) >= SLIM_BATCH_SIZE:
+                yield _yield_slim_batch()
                 if callback:
                     if callback.should_stop():
                         raise RuntimeError(
                             "_extract_slim_docs_from_google_drive: Stop signal detected"
                         )
                     callback.progress("_extract_slim_docs_from_google_drive", 1)
-        yield slim_batch
+
+        # Yield remaining files
+        if files_batch:
+            yield _yield_slim_batch()
 
     def retrieve_all_slim_docs_perm_sync(
         self,

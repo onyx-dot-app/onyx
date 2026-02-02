@@ -41,6 +41,7 @@ from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
+from onyx.configs.app_configs import OAUTH_ENABLED
 from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OPENID_CONFIG_URL
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -63,10 +64,13 @@ from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
+from onyx.server.features.build.api.api import nextjs_assets_router
+from onyx.server.features.build.api.api import router as build_router
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
 )
 from onyx.server.features.document_set.api import router as document_set_router
+from onyx.server.features.hierarchy.api import router as hierarchy_router
 from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
@@ -92,9 +96,6 @@ from onyx.server.features.user_oauth_token.api import router as user_oauth_token
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
 from onyx.server.kg.api import admin_router as kg_admin_router
-from onyx.server.long_term_logs.long_term_logs_api import (
-    router as long_term_logs_router,
-)
 from onyx.server.manage.administrative import router as admin_router
 from onyx.server.manage.discord_bot.api import router as discord_bot_router
 from onyx.server.manage.embedding.api import admin_router as embedding_admin_router
@@ -376,7 +377,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
     include_router_with_global_prefix_prepended(application, projects_router)
+    include_router_with_global_prefix_prepended(application, build_router)
+    include_router_with_global_prefix_prepended(application, nextjs_assets_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
+    include_router_with_global_prefix_prepended(application, hierarchy_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(
         application, slack_bot_management_router
@@ -410,15 +414,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
-    include_router_with_global_prefix_prepended(application, long_term_logs_router)
     include_router_with_global_prefix_prepended(application, api_key_router)
     include_router_with_global_prefix_prepended(application, standard_oauth_router)
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
 
-    if AUTH_TYPE != AuthType.DISABLED:
-        include_router_with_global_prefix_prepended(application, pat_router)
+    include_router_with_global_prefix_prepended(application, pat_router)
 
     if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
         include_auth_router_with_prefix(
@@ -449,14 +451,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/users",
         )
 
-    if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
-        # For Google OAuth, refresh tokens are requested by:
-        # 1. Adding the right scopes
-        # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
+    # Register Google OAuth when AUTH_TYPE is GOOGLE_OAUTH, or when
+    # AUTH_TYPE is BASIC and OAuth credentials are configured
+    if AUTH_TYPE == AuthType.GOOGLE_OAUTH or (
+        AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED
+    ):
         oauth_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
             OAUTH_CLIENT_SECRET,
-            # Use standard scopes that include profile and email
             scopes=["openid", "email", "profile"],
         )
         include_auth_router_with_prefix(
@@ -467,18 +469,18 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 USER_AUTH_SECRET,
                 associate_by_email=True,
                 is_verified_by_default=True,
-                # Points the user back to the login page
                 redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
             ),
             prefix="/auth/oauth",
         )
 
-        # Need basic auth router for `logout` endpoint
-        include_auth_router_with_prefix(
-            application,
-            fastapi_users.get_logout_router(auth_backend),
-            prefix="/auth",
-        )
+        # Need logout router for GOOGLE_OAUTH only (BASIC already has it from above)
+        if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
+            include_auth_router_with_prefix(
+                application,
+                fastapi_users.get_logout_router(auth_backend),
+                prefix="/auth",
+            )
 
     if AUTH_TYPE == AuthType.OIDC:
         # Ensure we request offline_access for refresh tokens

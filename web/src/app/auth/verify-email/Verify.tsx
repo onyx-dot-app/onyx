@@ -42,7 +42,7 @@ export default function Verify({ user }: VerifyProps) {
       // Use window.location.href to force a full page reload,
       // ensuring app re-initializes with the new state (including
       // server-side provider values)
-      window.location.href = firstUser ? "/chat?new_team=true" : "/chat";
+      window.location.href = firstUser ? "/app?new_team=true" : "/app";
     } else {
       const errorDetail = (await response.json()).detail;
       setError(

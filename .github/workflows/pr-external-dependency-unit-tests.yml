@@ -45,6 +45,9 @@ env:
   # TODO: debug why this is failing and enable
   CODE_INTERPRETER_BASE_URL: http://localhost:8000
 
+  # OpenSearch
+  OPENSEARCH_ADMIN_PASSWORD: "StrongPassword123!"
+
 jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -54,7 +57,7 @@ jobs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -88,7 +91,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -125,11 +128,13 @@ jobs:
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
+            -f docker-compose.opensearch.yml \
             up -d \
             minio \
             relational_db \
             cache \
             index \
+            opensearch \
             code-interpreter
 
       - name: Run migrations
@@ -158,7 +163,7 @@ jobs:
           cd deployment/docker_compose
 
           # Get list of running containers
-          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
+          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.opensearch.yml ps -q)
 
           # Collect logs from each container
           for container in $containers; do

@@ -70,44 +70,59 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     """
     Add users to a tenant with proper transaction handling.
     Checks if users already have a tenant mapping to avoid duplicates.
-    If a user already has an active mapping to any tenant, the new mapping will be added as inactive.
+
+    If a user already has an active mapping to a different tenant, they receive
+    an inactive mapping (invitation) to this tenant. They can accept the
+    invitation later to switch tenants.
+
     """
+    unique_emails = set(emails)
+    if not unique_emails:
+        return
+
     with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
         try:
             # Start a transaction
             db_session.begin()
 
-            for email in emails:
-                # Check if the user already has a mapping to this tenant
-                existing_mapping = (
-                    db_session.query(UserTenantMapping)
-                    .filter(
-                        UserTenantMapping.email == email,
-                        UserTenantMapping.tenant_id == tenant_id,
-                    )
-                    .with_for_update()
-                    .first()
+            # Batch query 1: Get all existing mappings for these emails to this tenant
+            # Lock rows to prevent concurrent modifications
+            existing_mappings = (
+                db_session.query(UserTenantMapping)
+                .filter(
+                    UserTenantMapping.email.in_(unique_emails),
+                    UserTenantMapping.tenant_id == tenant_id,
                 )
+                .with_for_update()
+                .all()
+            )
+            emails_with_mapping = {m.email for m in existing_mappings}
 
-                # If user already has an active mapping, add this one as inactive
-                if not existing_mapping:
-                    # Check if the user already has an active mapping to any tenant
-                    has_active_mapping = (
-                        db_session.query(UserTenantMapping)
-                        .filter(
-                            UserTenantMapping.email == email,
-                            UserTenantMapping.active == True,  # noqa: E712
-                        )
-                        .first()
-                    )
+            # Batch query 2: Get all active mappings for these emails (any tenant)
+            active_mappings = (
+                db_session.query(UserTenantMapping)
+                .filter(
+                    UserTenantMapping.email.in_(unique_emails),
+                    UserTenantMapping.active == True,  # noqa: E712
+                )
+                .all()
+            )
+            emails_with_active_mapping = {m.email for m in active_mappings}
 
-                    db_session.add(
-                        UserTenantMapping(
-                            email=email,
-                            tenant_id=tenant_id,
-                            active=False if has_active_mapping else True,
-                        )
+            # Add mappings for emails that don't already have one to this tenant
+            for email in unique_emails:
+                if email in emails_with_mapping:
+                    continue
+
+                # Create mapping: inactive if user belongs to another tenant (invitation),
+                # active otherwise
+                db_session.add(
+                    UserTenantMapping(
+                        email=email,
+                        tenant_id=tenant_id,
+                        active=email not in emails_with_active_mapping,
                     )
+                )
 
             # Commit the transaction
             db_session.commit()
@@ -198,13 +213,15 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
     """
     with get_session_with_shared_schema() as db_session:
         try:
-            # First check if there's an active mapping for this user and tenant
+            # Lock the user's mappings first to prevent race conditions.
+            # This ensures no concurrent request can modify this user's mappings.
             active_mapping = (
                 db_session.query(UserTenantMapping)
                 .filter(
                     UserTenantMapping.email == email,
                     UserTenantMapping.active == True,  # noqa: E712
                 )
+                .with_for_update()
                 .first()
             )
 
@@ -297,15 +314,40 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
 
 def get_tenant_count(tenant_id: str) -> int:
     """
-    Get the number of active users for this tenant
+    Get the number of active users for this tenant.
+
+    A user counts toward the seat count if:
+    1. They have an active mapping to this tenant (UserTenantMapping.active == True)
+    2. AND the User is active (User.is_active == True)
+
+    TODO: Exclude API key dummy users from seat counting. API keys create
+    users with emails like `__DANSWER_API_KEY_*` that should not count toward
+    seat limits. See: https://linear.app/onyx-app/issue/ENG-3518
     """
+    from onyx.db.models import User
+
+    # First get all emails with active mappings to this tenant
     with get_session_with_shared_schema() as db_session:
-        # Count the number of active users for this tenant
-        user_count = (
-            db_session.query(UserTenantMapping)
+        active_mapping_emails = (
+            db_session.query(UserTenantMapping.email)
             .filter(
                 UserTenantMapping.tenant_id == tenant_id,
                 UserTenantMapping.active == True,  # noqa: E712
+            )
+            .all()
+        )
+        emails = [email for (email,) in active_mapping_emails]
+
+    if not emails:
+        return 0
+
+    # Now count how many of those users are actually active in the tenant's User table
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        user_count = (
+            db_session.query(User)
+            .filter(
+                User.email.in_(emails),  # type: ignore
+                User.is_active == True,  # type: ignore  # noqa: E712
             )
             .count()
         )

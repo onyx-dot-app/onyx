@@ -20,6 +20,7 @@ from google.oauth2.credentials import Credentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.email_utils import send_email
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
@@ -28,7 +29,7 @@ from onyx.background.celery.tasks.pruning.tasks import (
     try_creating_prune_generator_task,
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.app_configs import DISABLE_AUTH
+from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
 from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
@@ -125,6 +126,7 @@ from onyx.server.documents.models import ConnectorFileInfo
 from onyx.server.documents.models import ConnectorFilesResponse
 from onyx.server.documents.models import ConnectorIndexingStatusLite
 from onyx.server.documents.models import ConnectorIndexingStatusLiteResponse
+from onyx.server.documents.models import ConnectorRequestSubmission
 from onyx.server.documents.models import ConnectorSnapshot
 from onyx.server.documents.models import ConnectorStatus
 from onyx.server.documents.models import ConnectorUpdateRequest
@@ -344,7 +346,7 @@ def delete_google_service_account_key(
 @router.put("/admin/connector/google-drive/service-account-credential")
 def upsert_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     """Special API which allows the creation of a credential for a service account.
@@ -371,7 +373,7 @@ def upsert_service_account_credential(
 @router.put("/admin/connector/gmail/service-account-credential")
 def upsert_gmail_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     """Special API which allows the creation of a credential for a service account.
@@ -1001,7 +1003,7 @@ def get_connector_indexing_status(
         (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
     ]
 
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user and user.role == UserRole.ADMIN:
         # For Admin users, we already got all the cc pair in editable_cc_pairs
         # its not needed to get them again
         (
@@ -1176,7 +1178,7 @@ def get_connector_indexing_status(
     # Track admin page visit for analytics
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
+        distinct_id=user.email,
         event=MilestoneRecordType.VISITED_ADMIN_PAGE,
     )
 
@@ -1391,7 +1393,7 @@ def create_connector_from_model(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email,
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
 
@@ -1470,7 +1472,7 @@ def create_connector_with_mock_credential(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email,
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
         return response
@@ -1721,7 +1723,7 @@ def get_connectors(
 
 @router.get("/indexed-sources", tags=PUBLIC_API_TAGS)
 def get_indexed_sources(
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> IndexedSourcesResponse:
     sources = sorted(
@@ -1756,6 +1758,86 @@ def get_connector_by_id(
         ],
         time_created=connector.time_created,
         time_updated=connector.time_updated,
+    )
+
+
+@router.post("/connector-request")
+def submit_connector_request(
+    request_data: ConnectorRequestSubmission,
+    user: User | None = Depends(current_user),
+) -> StatusResponse:
+    """
+    Submit a connector request for Cloud deployments.
+    Tracks via PostHog telemetry and sends email to hello@onyx.app.
+    """
+    tenant_id = get_current_tenant_id()
+    connector_name = request_data.connector_name.strip()
+
+    if not connector_name:
+        raise HTTPException(status_code=400, detail="Connector name cannot be empty")
+
+    # Get user identifier for telemetry
+    user_email = user.email if user else None
+    distinct_id = user_email or tenant_id
+
+    # Track connector request via PostHog telemetry (Cloud only)
+    from shared_configs.configs import MULTI_TENANT
+
+    if MULTI_TENANT:
+        mt_cloud_telemetry(
+            tenant_id=tenant_id,
+            distinct_id=distinct_id,
+            event=MilestoneRecordType.REQUESTED_CONNECTOR,
+            properties={
+                "connector_name": connector_name,
+                "user_email": user_email,
+            },
+        )
+
+    # Send email notification (if email is configured)
+    if EMAIL_CONFIGURED:
+        try:
+            subject = "Onyx Craft Connector Request"
+            email_body_text = f"""A new connector request has been submitted:
+
+Connector Name: {connector_name}
+User Email: {user_email or 'Not provided (anonymous user)'}
+Tenant ID: {tenant_id}
+"""
+            email_body_html = f"""<html>
+<body>
+<p>A new connector request has been submitted:</p>
+<ul>
+<li><strong>Connector Name:</strong> {connector_name}</li>
+<li><strong>User Email:</strong> {user_email or 'Not provided (anonymous user)'}</li>
+<li><strong>Tenant ID:</strong> {tenant_id}</li>
+</ul>
+</body>
+</html>"""
+
+            send_email(
+                user_email="hello@onyx.app",
+                subject=subject,
+                html_body=email_body_html,
+                text_body=email_body_text,
+            )
+            logger.info(
+                f"Connector request email sent to hello@onyx.app for connector: {connector_name}"
+            )
+        except Exception as e:
+            # Log error but don't fail the request if email fails
+            logger.error(
+                f"Failed to send connector request email for {connector_name}: {e}"
+            )
+
+    logger.info(
+        f"Connector request submitted: {connector_name} by user {user_email or 'anonymous'} "
+        f"(tenant: {tenant_id})"
+    )
+
+    return StatusResponse(
+        success=True,
+        message="Connector request submitted successfully. We'll prioritize popular requests!",
     )
 
 

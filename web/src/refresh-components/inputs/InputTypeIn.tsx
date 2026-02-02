@@ -127,7 +127,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
     return (
       <div
         className={cn(
-          "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 relative",
+          "flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full",
           wrapperClasses[variant],
           className
         )}
@@ -164,13 +164,14 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
           {...props}
         />
 
-        {showClearButton && value && !disabled && !isReadOnly && (
+        {showClearButton && !disabled && !isReadOnly && (
           <IconButton
             icon={SvgX}
             disabled={disabled}
             onClick={noProp(handleClear)}
             type="button"
             internal
+            className={value ? "" : "invisible"}
           />
         )}
 

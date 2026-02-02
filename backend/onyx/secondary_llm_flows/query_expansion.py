@@ -12,6 +12,8 @@ from onyx.prompts.search_prompts import REPHRASE_CONTEXT_PROMPT
 from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT
 from onyx.prompts.search_prompts import SEMANTIC_QUERY_REPHRASE_USER_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_span_output
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -128,10 +130,13 @@ def semantic_query_rephrase(
     )
     messages.append(final_user_msg)
 
-    # Call LLM and return result
-    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-
-    final_query = response.choice.message.content
+    # Call LLM and return result with Braintrust tracing
+    with llm_generation_span(
+        llm=llm, flow="semantic_query_rephrase", input_messages=messages
+    ) as span_generation:
+        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
+        final_query = response.choice.message.content
+        record_llm_span_output(span_generation, final_query, response.usage)
 
     if not final_query:
         # It's ok if some other queries fail, this one is likely the best one
@@ -205,9 +210,13 @@ def keyword_query_expansion(
     )
     messages.append(final_user_msg)
 
-    # Call LLM and return result
-    response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-    content = response.choice.message.content
+    # Call LLM and return result with Braintrust tracing
+    with llm_generation_span(
+        llm=llm, flow="keyword_query_expansion", input_messages=messages
+    ) as span_generation:
+        response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
+        content = response.choice.message.content
+        record_llm_span_output(span_generation, content, response.usage)
 
     # Parse the response - each line is a separate keyword query
     if not content:

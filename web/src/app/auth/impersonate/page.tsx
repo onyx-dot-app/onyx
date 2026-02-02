@@ -2,7 +2,7 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Formik, Form, FormikHelpers } from "formik";
@@ -27,7 +27,7 @@ export default function ImpersonatePage() {
   }
 
   if (!isCloudSuperuser) {
-    redirect("/chat" as Route);
+    redirect("/app" as Route);
   }
 
   const handleImpersonate = async (
@@ -54,7 +54,7 @@ export default function ImpersonatePage() {
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
-        router.push("/chat" as Route);
+        router.push("/app" as Route);
       }
     } catch (error) {
       setPopup({

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import AgentCard from "@/refresh-components/AgentCard";
-import { useUser } from "@/components/user/UserProvider";
+import AgentCard from "@/sections/cards/AgentCard";
+import { useUser } from "@/providers/UserProvider";
 import { checkUserOwnsAssistant as checkUserOwnsAgent } from "@/lib/agents";
 import { useAgents } from "@/hooks/useAgents";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -22,7 +22,7 @@ import {
   OPEN_URL_TOOL_NAME,
   WEB_SEARCH_TOOL_ID,
   SYSTEM_TOOL_ICONS,
-} from "@/app/chat/components/tools/constants";
+} from "@/app/app/components/tools/constants";
 import {
   SvgActions,
   SvgCheck,
@@ -429,7 +429,7 @@ export default function AgentsNavigationPage() {
         description="Customize AI behavior and knowledge for you and your team’s use cases."
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
-            <Button href="/chat/agents/create" leftIcon={SvgPlus}>
+            <Button href="/app/agents/create" leftIcon={SvgPlus}>
               New Agent
             </Button>
           </div>

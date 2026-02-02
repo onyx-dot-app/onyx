@@ -125,6 +125,10 @@ export interface PasswordInputTypeInProps
     "type" | "rightSection" | "leftSearchIcon" | "variant"
   > {
   /**
+   * Ref to the input element.
+   */
+  ref?: React.Ref<HTMLInputElement>;
+  /**
    * Whether the input is disabled.
    */
   disabled?: boolean;
@@ -154,23 +158,18 @@ export interface PasswordInputTypeInProps
  * - When hidden, the toggle icon uses internal style (muted)
  * - Optional `isNonRevealable` prop to disable reveal (for stored backend values)
  */
-const PasswordInputTypeIn = React.forwardRef<
-  HTMLInputElement,
-  PasswordInputTypeInProps
->(function PasswordInputTypeIn(
-  {
-    isNonRevealable = false,
-    value,
-    onChange,
-    onFocus,
-    onBlur,
-    disabled,
-    error,
-    showClearButton = false,
-    ...props
-  },
-  ref
-) {
+export default function PasswordInputTypeIn({
+  ref,
+  isNonRevealable = false,
+  value,
+  onChange,
+  onFocus,
+  onBlur,
+  disabled,
+  error,
+  showClearButton = false,
+  ...props
+}: PasswordInputTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [isFocused, setIsFocused] = React.useState(false);
 
@@ -284,6 +283,7 @@ const PasswordInputTypeIn = React.forwardRef<
       variant={disabled ? "disabled" : error ? "error" : undefined}
       showClearButton={showClearButton}
       autoComplete="off"
+      data-ph-no-capture
       rightSection={
         showToggleButton ? (
           <IconButton
@@ -303,6 +303,4 @@ const PasswordInputTypeIn = React.forwardRef<
       {...props}
     />
   );
-});
-
-export default PasswordInputTypeIn;
+}

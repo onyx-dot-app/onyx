@@ -1,17 +1,11 @@
 import type { IconProps } from "@opal/types";
 
-const OnyxLogo = ({
-  width = 24,
-  height = 24,
-  className,
-  ...props
-}: IconProps) => (
+const SvgOnyxLogo = ({ size, ...props }: IconProps) => (
   <svg
-    width={width}
-    height={height}
+    width={size}
+    height={size}
     viewBox="0 0 56 56"
     xmlns="http://www.w3.org/2000/svg"
-    className={className}
     stroke="currentColor"
     {...props}
   >
@@ -23,4 +17,4 @@ const OnyxLogo = ({
     />
   </svg>
 );
-export default OnyxLogo;
+export default SvgOnyxLogo;

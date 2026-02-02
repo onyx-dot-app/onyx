@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import { getIconForAction } from "@/app/chat/services/actionUtils";
+import { getIconForAction } from "@/app/app/services/actionUtils";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -11,7 +11,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -32,7 +32,7 @@ export interface ActionItemProps {
   onForceToggle: () => void;
   onSourceManagementOpen?: () => void;
   hasNoConnectors?: boolean;
-  hasNoDocumentSets?: boolean;
+  hasNoKnowledgeSources?: boolean;
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
   onClose?: () => void;
@@ -55,7 +55,7 @@ export default function ActionLineItem({
   onForceToggle,
   onSourceManagementOpen,
   hasNoConnectors = false,
-  hasNoDocumentSets = false,
+  hasNoKnowledgeSources = false,
   toolAuthStatus,
   onOAuthAuthenticate,
   onClose,
@@ -77,10 +77,10 @@ export default function ActionLineItem({
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
     hasNoConnectors;
 
-  const isSearchToolWithNoDocumentSets =
+  const isSearchToolWithNoKnowledgeSources =
     !currentProjectId &&
     tool?.in_code_tool_id === SEARCH_TOOL_ID &&
-    hasNoDocumentSets;
+    hasNoKnowledgeSources;
 
   const isSearchToolAndNotInProject =
     tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
@@ -94,8 +94,8 @@ export default function ActionLineItem({
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
-  const tooltipText = isSearchToolWithNoDocumentSets
-    ? "No connector sources are available. Contact your admin to add a knowledge source to this agent."
+  const tooltipText = isSearchToolWithNoKnowledgeSources
+    ? "No knowledge sources are available. Contact your admin to add a knowledge source to this agent."
     : isUnavailable
       ? unavailableReason
       : tool?.description;
@@ -105,7 +105,10 @@ export default function ActionLineItem({
       <div data-testid={`tool-option-${toolName}`}>
         <LineItem
           onClick={() => {
-            if (isSearchToolWithNoConnectors || isSearchToolWithNoDocumentSets)
+            if (
+              isSearchToolWithNoConnectors ||
+              isSearchToolWithNoKnowledgeSources
+            )
               return;
             if (isUnavailable) {
               if (isForced) onForceToggle();
@@ -121,7 +124,7 @@ export default function ActionLineItem({
           strikethrough={
             disabled ||
             isSearchToolWithNoConnectors ||
-            isSearchToolWithNoDocumentSets ||
+            isSearchToolWithNoKnowledgeSources ||
             isUnavailable
           }
           icon={Icon}
@@ -161,6 +164,7 @@ export default function ActionLineItem({
                   tooltip={disabled ? "Enable" : "Disable"}
                 />
               )}
+
               {isUnavailable && showAdminConfigure && adminConfigureHref && (
                 <IconButton
                   icon={SvgSettings}
@@ -172,6 +176,7 @@ export default function ActionLineItem({
                   tooltip={adminConfigureTooltip}
                 />
               )}
+
               {/* Source count for internal search - show when some but not all sources selected AND tool is pinned */}
               {shouldShowSourceCount && (
                 <span className="relative flex items-center whitespace-nowrap">
@@ -192,8 +197,9 @@ export default function ActionLineItem({
                   </span>
                 </span>
               )}
+
               {isSearchToolAndNotInProject &&
-                !isSearchToolWithNoDocumentSets && (
+                !isSearchToolWithNoKnowledgeSources && (
                   <IconButton
                     icon={
                       isSearchToolWithNoConnectors

@@ -1,5 +1,4 @@
 export enum AuthType {
-  DISABLED = "disabled",
   BASIC = "basic",
   GOOGLE_OAUTH = "google_oauth",
   OIDC = "oidc",
@@ -7,9 +6,9 @@ export enum AuthType {
   CLOUD = "cloud",
 }
 
-export const HOST_URL = process.env.WEB_DOMAIN || "http://127.0.0.1:3000";
+export const HOST_URL = process.env.WEB_DOMAIN || "http://localhost:3000";
 
-export const INTERNAL_URL = process.env.INTERNAL_URL || "http://127.0.0.1:8080";
+export const INTERNAL_URL = process.env.INTERNAL_URL || "http://localhost:8080";
 
 // Documentation URLs
 export const DOCS_BASE_URL = "https://docs.onyx.app";
@@ -21,7 +20,7 @@ export const MCP_INTERNAL_URL =
 // NOTE: this should ONLY be used on the server-side (including middleware).
 // The AUTH_TYPE environment variable is set in the backend and shared with Next.js
 export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
-  AuthType.DISABLED) as AuthType;
+  AuthType.BASIC) as AuthType;
 
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
@@ -39,12 +38,6 @@ export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 
 export const LOGOUT_DISABLED =
   process.env.NEXT_PUBLIC_DISABLE_LOGOUT?.toLowerCase() === "true";
-
-// Default sidebar open is true if the environment variable is not set
-export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
-  process.env.NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN?.toLowerCase() === "false"
-    ? false
-    : true;
 
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
@@ -86,15 +79,9 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
-export const NEXT_PUBLIC_ENABLE_CHROME_EXTENSION =
-  process.env.NEXT_PUBLIC_ENABLE_CHROME_EXTENSION?.toLowerCase() === "true";
-
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
-
-export const NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY =
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
 // Restrict markdown links to safe protocols
 export const ALLOWED_URL_PROTOCOLS = ["http:", "https:", "mailto:"] as const;

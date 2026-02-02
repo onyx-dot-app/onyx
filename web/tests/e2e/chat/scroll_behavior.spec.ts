@@ -13,8 +13,20 @@ async function setAutoScroll(page: Page, enabled: boolean) {
   // Wait for dialog to appear
   await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
-  // Find the auto-scroll switch by aria-label
-  const autoScrollSwitch = page.getByLabel("Auto-scroll");
+  // Navigate to Chat Preferences tab
+  await page
+    .locator('a[href="/app/settings/chat-preferences"]')
+    .click({ force: true });
+
+  // Find the auto-scroll switch by locating the label text and then finding
+  // the switch within the same container
+  const autoScrollSwitch = page
+    .locator("label")
+    .filter({ hasText: "Chat Auto-scroll" })
+    .locator('button[role="switch"]');
+
+  await autoScrollSwitch.waitFor({ state: "visible" });
+
   const isCurrentlyChecked =
     (await autoScrollSwitch.getAttribute("data-state")) === "checked";
 
@@ -25,9 +37,7 @@ async function setAutoScroll(page: Page, enabled: boolean) {
     await expect(autoScrollSwitch).toHaveAttribute("data-state", expectedState);
   }
 
-  // Close settings panel
-  await page.keyboard.press("Escape");
-  await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+  await page.locator('a[href="/app"]').click({ force: true });
 }
 
 /**
@@ -45,7 +55,7 @@ test.describe("Chat Scroll Behavior", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
-    await page.goto("/chat");
+    await page.goto("/app");
     const nameInput = page.getByPlaceholder("Your name");
     await nameInput.waitFor();
     await nameInput.fill("Playwright Tester");

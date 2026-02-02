@@ -49,7 +49,7 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_document_set import RedisDocumentSet
@@ -70,6 +70,8 @@ logger = setup_logger()
 
 # celery auto associates tasks created inside another task,
 # which bloats the result metadata considerably. trail=False prevents this.
+# TODO(andrei): Rename all these kinds of functions from *vespa* to a more
+# generic *document_index*.
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
     ignore_result=True,
@@ -465,13 +467,17 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
     try:
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
-            doc_index = get_default_document_index(
+            # This flow is for updates so we get all indices.
+            document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
                 secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
             )
 
-            retry_index = RetryDocumentIndex(doc_index)
+            retry_document_indices: list[RetryDocumentIndex] = [
+                RetryDocumentIndex(document_index)
+                for document_index in document_indices
+            ]
 
             doc = get_document(document_id, db_session)
             if not doc:
@@ -500,14 +506,18 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                     # aggregated_boost_factor=doc.aggregated_boost_factor,
                 )
 
-                # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
-                retry_index.update_single(
-                    document_id,
-                    tenant_id=tenant_id,
-                    chunk_count=doc.chunk_count,
-                    fields=fields,
-                    user_fields=None,
-                )
+                for retry_document_index in retry_document_indices:
+                    # TODO(andrei): Previously there was a comment here saying
+                    # it was ok if a doc did not exist in the document index. I
+                    # don't agree with that claim, so keep an eye on this task
+                    # to see if this raises.
+                    retry_document_index.update_single(
+                        document_id,
+                        tenant_id=tenant_id,
+                        chunk_count=doc.chunk_count,
+                        fields=fields,
+                        user_fields=None,
+                    )
 
                 # update db last. Worst case = we crash right before this and
                 # the sync might repeat again later

@@ -27,7 +27,7 @@ const sharedConfig = {
     "\\.(jpg|jpeg|png|gif|svg|woff|woff2|ttf|eot)$":
       "<rootDir>/tests/setup/fileMock.js",
     // Mock specific components that have complex dependencies
-    "^@/components/user/UserProvider$":
+    "^@/providers/UserProvider$":
       "<rootDir>/tests/setup/mocks/components/UserProvider.tsx",
     // Path aliases (must come after specific mocks)
     "^@/(.*)$": "<rootDir>/src/$1",
@@ -140,6 +140,7 @@ module.exports = {
         "**/src/**/codeUtils.test.ts",
         "**/src/lib/**/*.test.ts",
         "**/src/app/**/services/*.test.ts",
+        "**/src/app/**/utils/*.test.ts",
         "**/src/refresh-components/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],

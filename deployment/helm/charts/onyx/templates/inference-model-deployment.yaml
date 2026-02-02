@@ -47,7 +47,7 @@ spec:
       - name: model-server-inference
         image: "{{ .Values.inferenceCapability.image.repository }}:{{ .Values.inferenceCapability.image.tag | default .Values.global.version }}"
         imagePullPolicy: {{ .Values.global.pullPolicy }}
-        command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.inferenceCapability.containerPorts.server }}" ]
+        command: [ "uvicorn", "model_server.main:app", "--host", "{{ .Values.global.host }}", "--port", "{{ .Values.inferenceCapability.containerPorts.server }}" ]
         ports:
         - name: model-server
           containerPort: {{ .Values.inferenceCapability.containerPorts.server }}

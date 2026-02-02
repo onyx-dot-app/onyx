@@ -19,6 +19,7 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.interfaces import LLM
+from onyx.natural_language_processing.english_stopwords import strip_stopwords
 from onyx.secondary_llm_flows.source_filter import extract_source_filter
 from onyx.secondary_llm_flows.time_filter import extract_time_filter
 from onyx.utils.logger import setup_logger
@@ -35,7 +36,7 @@ logger = setup_logger()
 @log_function_time(print_only=True)
 def _build_index_filters(
     user_provided_filters: BaseFilters | None,
-    user: User | None,  # Used for ACLs
+    user: User,  # Used for ACLs, anonymous users only see public docs
     project_id: int | None,
     user_file_ids: list[UUID] | None,
     persona_document_sets: list[str] | None,
@@ -45,6 +46,9 @@ def _build_index_filters(
     query: str | None = None,
     llm: LLM | None = None,
     bypass_acl: bool = False,
+    # Assistant knowledge filters
+    attached_document_ids: list[str] | None = None,
+    hierarchy_node_ids: list[int] | None = None,
 ) -> IndexFilters:
     if auto_detect_filters and (llm is None or query is None):
         raise RuntimeError("LLM and query are required for auto detect filters")
@@ -112,6 +116,9 @@ def _build_index_filters(
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
+        # Assistant knowledge filters
+        attached_document_ids=attached_document_ids,
+        hierarchy_node_ids=hierarchy_node_ids,
     )
 
     return final_filters
@@ -241,8 +248,8 @@ def search_pipeline(
     # Document index to search over
     # Note that federated sources will also be used (not related to this arg)
     document_index: DocumentIndex,
-    # Used for ACLs and federated search
-    user: User | None,
+    # Used for ACLs and federated search, anonymous users only see public docs
+    user: User,
     # Used for default filters and settings
     persona: Persona | None,
     db_session: Session,
@@ -264,6 +271,18 @@ def search_pipeline(
         persona.search_start_date if persona else None
     )
 
+    # Extract assistant knowledge filters from persona
+    attached_document_ids: list[str] | None = (
+        [doc.id for doc in persona.attached_documents]
+        if persona and persona.attached_documents
+        else None
+    )
+    hierarchy_node_ids: list[int] | None = (
+        [node.id for node in persona.hierarchy_nodes]
+        if persona and persona.hierarchy_nodes
+        else None
+    )
+
     filters = _build_index_filters(
         user_provided_filters=chunk_search_request.user_selected_filters,
         user=user,
@@ -276,14 +295,20 @@ def search_pipeline(
         query=chunk_search_request.query,
         llm=llm,
         bypass_acl=chunk_search_request.bypass_acl,
+        attached_document_ids=attached_document_ids,
+        hierarchy_node_ids=hierarchy_node_ids,
     )
+
+    query_keywords = strip_stopwords(chunk_search_request.query)
 
     query_request = ChunkIndexRequest(
         query=chunk_search_request.query,
         hybrid_alpha=chunk_search_request.hybrid_alpha,
         recency_bias_multiplier=chunk_search_request.recency_bias_multiplier,
-        query_keywords=chunk_search_request.query_keywords,
+        query_keywords=query_keywords,
         filters=filters,
+        limit=chunk_search_request.limit,
+        offset=chunk_search_request.offset,
     )
 
     retrieved_chunks = search_chunks(

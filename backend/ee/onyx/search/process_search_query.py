@@ -17,7 +17,8 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
 from onyx.db.models import User
-from onyx.document_index.factory import get_current_primary_default_document_index
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
@@ -40,13 +41,15 @@ def _run_single_search(
     query: str,
     filters: BaseFilters | None,
     document_index: DocumentIndex,
-    user: User | None,
+    user: User,
     db_session: Session,
+    num_hits: int | None = None,
 ) -> list[InferenceChunk]:
     """Execute a single search query and return chunks."""
     chunk_search_request = ChunkSearchRequest(
         query=query,
         user_selected_filters=filters,
+        limit=num_hits,
     )
 
     return search_pipeline(
@@ -60,7 +63,7 @@ def _run_single_search(
 
 def stream_search_query(
     request: SendSearchQueryRequest,
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> Generator[
     SearchQueriesPacket | SearchDocsPacket | LLMSelectedDocsPacket | SearchErrorPacket,
@@ -72,7 +75,9 @@ def stream_search_query(
     Used by both streaming and non-streaming endpoints.
     """
     # Get document index
-    document_index = get_current_primary_default_document_index(db_session)
+    search_settings = get_current_search_settings(db_session)
+    # This flow is for search so we do not get all indices.
+    document_index = get_default_document_index(search_settings, None)
 
     # Determine queries to execute
     original_query = request.search_query
@@ -96,8 +101,7 @@ def stream_search_query(
     # Build list of all executed queries for tracking
     all_executed_queries = [original_query] + keyword_expansions
 
-    # TODO remove this check, user should not be None
-    if user is not None:
+    if not user.is_anonymous:
         create_search_query(
             db_session=db_session,
             user_id=user.id,
@@ -114,6 +118,7 @@ def stream_search_query(
             document_index=document_index,
             user=user,
             db_session=db_session,
+            num_hits=request.num_hits,
         )
     else:
         # Multiple queries - run in parallel and merge with RRF
@@ -121,7 +126,14 @@ def stream_search_query(
         search_functions = [
             (
                 _run_single_search,
-                (query, request.filters, document_index, user, db_session),
+                (
+                    query,
+                    request.filters,
+                    document_index,
+                    user,
+                    db_session,
+                    request.num_hits,
+                ),
             )
             for query in all_executed_queries
         ]
@@ -167,6 +179,9 @@ def stream_search_query(
 
     # Merge chunks into sections
     sections = merge_individual_chunks(chunks)
+
+    # Truncate to the requested number of hits
+    sections = sections[: request.num_hits]
 
     # Apply LLM document selection if requested
     # num_docs_fed_to_llm_selection specifies how many sections to feed to the LLM for selection

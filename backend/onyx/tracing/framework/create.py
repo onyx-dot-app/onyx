@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from collections.abc import Mapping
 from collections.abc import Sequence
+from contextlib import contextmanager
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -62,6 +64,33 @@ def trace(
         metadata=metadata,
         disabled=disabled,
     )
+
+
+@contextmanager
+def ensure_trace(
+    workflow_name: str,
+    trace_id: str | None = None,
+    group_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    disabled: bool = False,
+) -> Iterator[Trace | None]:
+    """
+    Ensure a trace exists. If a trace is already active, reuse it.
+    Otherwise, create a new trace for the duration of the context.
+    """
+    current_trace = get_trace_provider().get_current_trace()
+    if current_trace:
+        yield current_trace
+        return
+
+    with trace(
+        workflow_name=workflow_name,
+        trace_id=trace_id,
+        group_id=group_id,
+        metadata=metadata,
+        disabled=disabled,
+    ) as created_trace:
+        yield created_trace
 
 
 def get_current_trace() -> Trace | None:

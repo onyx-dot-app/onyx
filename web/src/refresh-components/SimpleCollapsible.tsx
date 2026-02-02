@@ -1,40 +1,39 @@
 /**
  * SimpleCollapsible - A collapsible container component
  *
- * Provides an expandable/collapsible section with a trigger and content area.
+ * Provides an expandable/collapsible section with a header and content area.
  * Supports both controlled and uncontrolled modes.
  *
  * @example
  * ```tsx
  * import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
  *
- * // Basic usage with header
- * <SimpleCollapsible
- *   trigger={
- *     <SimpleCollapsible.Header
- *       title="Section Title"
- *       description="Optional description"
- *     />
- *   }
- * >
- *   <div className="p-4">
- *     Content goes here
- *   </div>
- * </SimpleCollapsible>
- *
- * // With custom trigger
- * <SimpleCollapsible trigger={<CustomHeader />}>
- *   <div>Content</div>
+ * // Basic usage
+ * <SimpleCollapsible>
+ *   <SimpleCollapsible.Header
+ *     title="Section Title"
+ *     description="Optional description"
+ *   />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content goes here</div>
+ *   </SimpleCollapsible.Content>
  * </SimpleCollapsible>
  *
  * // Controlled state
  * const [open, setOpen] = useState(true);
- * <SimpleCollapsible
- *   trigger={<SimpleCollapsible.Header title="Controlled Section" />}
- *   open={open}
- *   onOpenChange={setOpen}
- * >
- *   <div>Content</div>
+ * <SimpleCollapsible open={open} onOpenChange={setOpen}>
+ *   <SimpleCollapsible.Header title="Controlled Section" />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content</div>
+ *   </SimpleCollapsible.Content>
+ * </SimpleCollapsible>
+ *
+ * // Default closed
+ * <SimpleCollapsible defaultOpen={false}>
+ *   <SimpleCollapsible.Header title="Initially Closed" />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content</div>
+ *   </SimpleCollapsible.Content>
  * </SimpleCollapsible>
  * ```
  */
@@ -49,90 +48,80 @@ import {
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgFold, SvgExpand } from "@opal/icons";
+import { WithoutStyles } from "@/types";
+
+// Context for sharing state between compound components
+interface SimpleCollapsibleContextValue {
+  open: boolean;
+}
+const SimpleCollapsibleContext =
+  React.createContext<SimpleCollapsibleContextValue | null>(null);
+function useSimpleCollapsible() {
+  const context = React.useContext(SimpleCollapsibleContext);
+  if (!context) {
+    throw new Error(
+      "SimpleCollapsible compound components must be used within SimpleCollapsible"
+    );
+  }
+  return context;
+}
 
 /**
  * SimpleCollapsible Root Component
  *
- * A collapsible container with a trigger and expandable content area.
+ * A collapsible container with a header and expandable content area.
  * Built on Radix UI Collapsible primitives.
  *
  * @example
  * ```tsx
- * <SimpleCollapsible
- *   trigger={
- *     <SimpleCollapsible.Header
- *       title="Settings"
- *       description="Configure your preferences"
- *     />
- *   }
- * >
- *   <div className="p-4">
- *     {/* Content *\/}
- *   </div>
- * </SimpleCollapsible>
- *
- * // With custom trigger
- * <SimpleCollapsible trigger={<CustomHeader />}>
- *   <div>Content</div>
+ * <SimpleCollapsible>
+ *   <SimpleCollapsible.Header title="Settings" description="Configure your preferences" />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content here</div>
+ *   </SimpleCollapsible.Content>
  * </SimpleCollapsible>
  *
  * // Controlled state
- * <SimpleCollapsible
- *   trigger={<SimpleCollapsible.Header title="Controlled" />}
- *   open={isOpen}
- *   onOpenChange={setIsOpen}
- * >
- *   <div>Content</div>
+ * <SimpleCollapsible open={isOpen} onOpenChange={setIsOpen}>
+ *   <SimpleCollapsible.Header title="Controlled" />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content</div>
+ *   </SimpleCollapsible.Content>
  * </SimpleCollapsible>
  *
  * // Default closed
- * <SimpleCollapsible
- *   trigger={<SimpleCollapsible.Header title="Initially Closed" />}
- *   defaultOpen={false}
- * >
- *   <div>Content</div>
+ * <SimpleCollapsible defaultOpen={false}>
+ *   <SimpleCollapsible.Header title="Initially Closed" />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content</div>
+ *   </SimpleCollapsible.Content>
  * </SimpleCollapsible>
  * ```
  */
 interface SimpleCollapsibleRootProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
-  /** The trigger element that toggles the collapsible (required) */
-  trigger: React.ReactNode;
-  /** The content to display inside the collapsible area */
-  children?: React.ReactNode;
+  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   /** Controlled open state - when provided, component becomes controlled */
   open?: boolean;
   /** Default open state for uncontrolled mode (defaults to true) */
   defaultOpen?: boolean;
   /** Callback fired when the open state changes */
   onOpenChange?: (open: boolean) => void;
-  /** Additional CSS classes to apply to the content container */
-  contentClassName?: string;
 }
-const SimpleCollapsibleRoot = React.forwardRef<
-  HTMLDivElement,
-  SimpleCollapsibleRootProps
->(
+const Root = React.forwardRef<HTMLDivElement, SimpleCollapsibleRootProps>(
   (
     {
-      trigger,
       children,
       open: controlledOpen,
       defaultOpen = true,
       onOpenChange,
-      contentClassName,
-      className,
       ...props
     },
     ref
   ) => {
-    const { ref: boundingRef, inside } = useBoundingBox();
     const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
 
-    // Determine if controlled or uncontrolled
     const isControlled = controlledOpen !== undefined;
     const open = isControlled ? controlledOpen : internalOpen;
 
@@ -147,38 +136,21 @@ const SimpleCollapsibleRoot = React.forwardRef<
     );
 
     return (
-      <Collapsible
-        open={open}
-        onOpenChange={handleOpenChange}
-        className={className}
-        {...props}
-      >
-        <CollapsibleTrigger asChild>
-          <div>
-            <div
-              ref={boundingRef}
-              className="flex flex-row items-center justify-between gap-4 cursor-pointer select-none"
-            >
-              {trigger}
-              <IconButton
-                icon={open ? SvgFold : SvgExpand}
-                internal
-                transient={inside}
-                tooltip={open ? "Fold" : "Expand"}
-              />
-            </div>
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div ref={ref} className={cn("pt-4", contentClassName)}>
-            {children}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      <SimpleCollapsibleContext.Provider value={{ open }}>
+        <Collapsible
+          ref={ref}
+          open={open}
+          onOpenChange={handleOpenChange}
+          className="flex flex-col flex-1 self-stretch"
+          {...props}
+        >
+          {children}
+        </Collapsible>
+      </SimpleCollapsibleContext.Provider>
     );
   }
 );
-SimpleCollapsibleRoot.displayName = "SimpleCollapsible";
+Root.displayName = "SimpleCollapsible";
 
 /**
  * SimpleCollapsible Header Component
@@ -188,53 +160,97 @@ SimpleCollapsibleRoot.displayName = "SimpleCollapsible";
  *
  * @example
  * ```tsx
- * <SimpleCollapsible
- *   trigger={
- *     <SimpleCollapsible.Header
- *       title="Advanced Settings"
- *       description="Configure advanced options"
- *     />
- *   }
- * >
- *   <div>Content</div>
+ * <SimpleCollapsible>
+ *   <SimpleCollapsible.Header
+ *     title="Advanced Settings"
+ *     description="Configure advanced options"
+ *   />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content</div>
+ *   </SimpleCollapsible.Content>
  * </SimpleCollapsible>
  *
  * // Title only
- * <SimpleCollapsible
- *   trigger={<SimpleCollapsible.Header title="Quick Settings" />}
- * >
- *   <div>Content</div>
+ * <SimpleCollapsible>
+ *   <SimpleCollapsible.Header title="Quick Settings" />
+ *   <SimpleCollapsible.Content>
+ *     <div>Content</div>
+ *   </SimpleCollapsible.Content>
  * </SimpleCollapsible>
  * ```
  */
 interface SimpleCollapsibleHeaderProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   /** The main heading text displayed in emphasized style */
   title: string;
   /** Optional secondary description text displayed below the title */
   description?: string;
 }
-const SimpleCollapsibleHeader = React.forwardRef<
+const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
+  ({ title, description, ...props }, ref) => {
+    const { open } = useSimpleCollapsible();
+    const { ref: boundingRef, inside } = useBoundingBox();
+
+    return (
+      <CollapsibleTrigger asChild>
+        <div
+          ref={ref}
+          className="flex flex-row items-center justify-between gap-4 cursor-pointer select-none"
+          {...props}
+        >
+          <div ref={boundingRef} className="flex flex-col w-full">
+            <Text as="p" mainContentEmphasis>
+              {title}
+            </Text>
+            {description && (
+              <Text as="p" secondaryBody text03>
+                {description}
+              </Text>
+            )}
+          </div>
+          <IconButton
+            icon={open ? SvgFold : SvgExpand}
+            internal
+            transient={inside}
+            tooltip={open ? "Fold" : "Expand"}
+          />
+        </div>
+      </CollapsibleTrigger>
+    );
+  }
+);
+Header.displayName = "SimpleCollapsible.Header";
+
+/**
+ * SimpleCollapsible Content Component
+ *
+ * Container for the collapsible content area.
+ *
+ * @example
+ * ```tsx
+ * <SimpleCollapsible>
+ *   <SimpleCollapsible.Header title="Settings" />
+ *   <SimpleCollapsible.Content>
+ *     <div>Your content here</div>
+ *   </SimpleCollapsible.Content>
+ * </SimpleCollapsible>
+ * ```
+ */
+const Content = React.forwardRef<
   HTMLDivElement,
-  SimpleCollapsibleHeaderProps
->(({ title, description, className, ...props }, ref) => {
+  WithoutStyles<React.HTMLAttributes<HTMLDivElement>>
+>(({ children, ...props }, ref) => {
   return (
-    <div ref={ref} className={cn("flex flex-col w-full", className)} {...props}>
-      <Text as="p" mainContentEmphasis>
-        {title}
-      </Text>
-      {description && (
-        <Text as="p" secondaryBody text03>
-          {description}
-        </Text>
-      )}
-    </div>
+    <CollapsibleContent>
+      <div ref={ref} className="pt-4" {...props}>
+        {children}
+      </div>
+    </CollapsibleContent>
   );
 });
-SimpleCollapsibleHeader.displayName = "SimpleCollapsibleHeader";
+Content.displayName = "SimpleCollapsible.Content";
 
-export default Object.assign(SimpleCollapsibleRoot, {
-  Header: SimpleCollapsibleHeader,
+export default Object.assign(Root, {
+  Header,
+  Content,
 });
-
-export { type SimpleCollapsibleRootProps, type SimpleCollapsibleHeaderProps };

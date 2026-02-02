@@ -19,9 +19,11 @@ export interface PageProps {
 export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
-  const nextUrl = Array.isArray(searchParams?.next)
-    ? searchParams?.next[0]
-    : searchParams?.next || null;
+  const autoRedirectToSignupDisabled =
+    searchParams?.autoRedirectToSignup === "false";
+  const nextUrl: string | null = Array.isArray(searchParams?.next)
+    ? searchParams?.next[0] ?? null
+    : searchParams?.next ?? null;
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -37,9 +39,15 @@ export default async function Page(props: PageProps) {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-  // simply take the user to the home page if Auth is disabled
-  if (authTypeMetadata?.authType === AuthType.DISABLED) {
-    return redirect("/chat");
+  // if there are no users, redirect to signup page for initial setup
+  // (only for auth types that support self-service signup)
+  if (
+    authTypeMetadata &&
+    !authTypeMetadata.hasUsers &&
+    !autoRedirectToSignupDisabled &&
+    authTypeMetadata.authType === AuthType.BASIC
+  ) {
+    return redirect("/auth/signup");
   }
 
   // if user is already logged in, take them to the main app page
@@ -56,14 +64,22 @@ export default async function Page(props: PageProps) {
 
     // Add a query parameter to indicate this is a redirect from login
     // This will help prevent redirect loops
-    return redirect("/chat?from=login");
+    return redirect("/app?from=login");
   }
 
   // get where to send the user to authenticate
   let authUrl: string | null = null;
   if (authTypeMetadata) {
     try {
-      authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl!);
+      // For BASIC auth with OAuth enabled, fetch the OAuth URL
+      if (
+        authTypeMetadata.authType === AuthType.BASIC &&
+        authTypeMetadata.oauthEnabled
+      ) {
+        authUrl = await getAuthUrlSS(AuthType.GOOGLE_OAUTH, nextUrl);
+      } else {
+        authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl);
+      }
     } catch (e) {
       console.log(`Some fetch failed for the login page - ${e}`);
     }
@@ -94,7 +110,7 @@ export default async function Page(props: PageProps) {
         <LoginPage
           authUrl={authUrl}
           authTypeMetadata={authTypeMetadata}
-          nextUrl={nextUrl!}
+          nextUrl={nextUrl}
           hidePageRedirect={true}
         />
       </AuthFlowContainer>

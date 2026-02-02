@@ -28,9 +28,9 @@ from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_glob
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
-def _check_token_rate_limits(user: User | None) -> None:
-    if user is None:
-        # Unauthenticated users are only rate limited by global settings
+def _check_token_rate_limits(user: User) -> None:
+    # Anonymous users are only rate limited by global settings
+    if user.is_anonymous:
         _user_is_rate_limited_by_global()
 
     elif is_api_key_email_address(user.email):

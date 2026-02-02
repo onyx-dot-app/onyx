@@ -308,6 +308,18 @@ def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
     db_session.commit()
 
 
+def mark_cc_pair_as_hierarchy_fetched(db_session: Session, cc_pair_id: int) -> None:
+    stmt = select(ConnectorCredentialPair).where(
+        ConnectorCredentialPair.id == cc_pair_id
+    )
+    cc_pair = db_session.scalar(stmt)
+    if cc_pair is None:
+        raise ValueError(f"No cc_pair with ID: {cc_pair_id}")
+
+    cc_pair.last_time_hierarchy_fetch = datetime.now(timezone.utc)
+    db_session.commit()
+
+
 def mark_cc_pair_as_permissions_synced(
     db_session: Session, cc_pair_id: int, start_time: datetime | None
 ) -> None:

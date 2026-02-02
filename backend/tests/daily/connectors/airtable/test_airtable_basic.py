@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 
@@ -206,7 +207,9 @@ def test_airtable_connector_basic(
         }
     )
     doc_batch_generator = connector.load_from_state()
-    doc_batch = next(doc_batch_generator)
+    doc_batch = [
+        doc for doc in next(doc_batch_generator) if not isinstance(doc, HierarchyNode)
+    ]
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
 
@@ -269,7 +272,9 @@ def test_airtable_connector_all_metadata(
         }
     )
     doc_batch_generator = connector.load_from_state()
-    doc_batch = next(doc_batch_generator)
+    doc_batch = [
+        doc for doc in next(doc_batch_generator) if not isinstance(doc, HierarchyNode)
+    ]
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
 
@@ -326,7 +331,9 @@ def test_airtable_connector_with_share_and_view(
         }
     )
     doc_batch_generator = connector.load_from_state()
-    doc_batch = next(doc_batch_generator)
+    doc_batch = [
+        doc for doc in next(doc_batch_generator) if not isinstance(doc, HierarchyNode)
+    ]
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
 

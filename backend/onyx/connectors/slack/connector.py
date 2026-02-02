@@ -52,6 +52,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.slack.access import get_channel_access
@@ -234,6 +235,8 @@ def thread_to_doc(
         "\n", " "
     )
 
+    channel_name = channel["name"]
+
     return Document(
         id=_build_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
         sections=[
@@ -247,7 +250,14 @@ def thread_to_doc(
         semantic_identifier=doc_sem_id,
         doc_updated_at=get_latest_message_time(thread),
         primary_owners=valid_experts,
-        metadata={"Channel": channel["name"]},
+        doc_metadata={
+            "hierarchy": {
+                "source_path": [channel_name],
+                "channel_name": channel_name,
+                "channel_id": channel_id,
+            }
+        },
+        metadata={"Channel": channel_name},
         external_access=channel_access,
     )
 
@@ -492,7 +502,7 @@ def _get_all_doc_ids(
         )
 
         for message_batch in channel_message_batches:
-            slim_doc_batch: list[SlimDocument] = []
+            slim_doc_batch: list[SlimDocument | HierarchyNode] = []
             for message in message_batch:
                 filter_reason = msg_filter_func(message)
                 if filter_reason:

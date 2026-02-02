@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 
 import boto3
 import httpx
@@ -69,6 +70,7 @@ from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -76,16 +78,85 @@ admin_router = APIRouter(prefix="/admin/llm")
 basic_router = APIRouter(prefix="/llm")
 
 
-def _mask_provider_api_key(provider_view: LLMProviderView) -> None:
+def _mask_string(value: str) -> str:
+    """Mask a string, showing first 4 and last 4 characters."""
+    if len(value) <= 8:
+        return "****"
+    return value[:4] + "****" + value[-4:]
+
+
+# Keys in custom_config that contain sensitive credentials
+_SENSITIVE_CONFIG_KEYS = {
+    "vertex_credentials",
+    "aws_secret_access_key",
+    "aws_access_key_id",
+    "aws_bearer_token_bedrock",
+    "private_key",
+    "api_key",
+    "secret",
+    "password",
+    "token",
+    "credential",
+}
+
+
+def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
+    """Mask sensitive credentials in provider view including api_key and custom_config."""
+    # Mask the API key
     if provider_view.api_key:
-        provider_view.api_key = (
-            provider_view.api_key[:4] + "****" + provider_view.api_key[-4:]
+        provider_view.api_key = _mask_string(provider_view.api_key)
+
+    # Mask sensitive values in custom_config
+    if provider_view.custom_config:
+        masked_config: dict[str, Any] = {}
+        for key, value in provider_view.custom_config.items():
+            # Check if key matches any sensitive pattern (case-insensitive)
+            key_lower = key.lower()
+            is_sensitive = any(
+                sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS
+            )
+            if is_sensitive and isinstance(value, str) and value:
+                masked_config[key] = _mask_string(value)
+            else:
+                masked_config[key] = value
+        provider_view.custom_config = masked_config
+
+
+def _validate_llm_provider_change(
+    existing_api_base: str | None,
+    existing_custom_config: dict[str, str] | None,
+    new_api_base: str | None,
+    new_custom_config: dict[str, str] | None,
+    api_key_changed: bool,
+) -> None:
+    """Validate that api_base and custom_config changes are safe.
+
+    When using a stored API key (api_key_changed=False), we must ensure api_base and
+    custom_config match the stored values.
+
+    Only enforced in MULTI_TENANT mode.
+
+    Raises:
+        HTTPException: If api_base or custom_config changed without changing API key
+    """
+    if not MULTI_TENANT or api_key_changed:
+        return
+
+    api_base_changed = new_api_base != existing_api_base
+    custom_config_changed = (
+        new_custom_config and new_custom_config != existing_custom_config
+    )
+
+    if api_base_changed or custom_config_changed:
+        raise HTTPException(
+            status_code=400,
+            detail="API base and/or custom config cannot be changed without changing the API key",
         )
 
 
 @admin_router.get("/built-in/options")
 def fetch_llm_options(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> list[WellKnownLLMProviderDescriptor]:
     return fetch_available_well_known_llms()
 
@@ -93,7 +164,7 @@ def fetch_llm_options(
 @admin_router.get("/built-in/options/{provider_name}")
 def fetch_llm_provider_options(
     provider_name: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> WellKnownLLMProviderDescriptor:
     well_known_llms = fetch_available_well_known_llms()
     for well_known_llm in well_known_llms:
@@ -105,7 +176,7 @@ def fetch_llm_provider_options(
 @admin_router.post("/test")
 def test_llm_configuration(
     test_llm_request: TestLLMRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     """Test LLM configuration settings"""
@@ -113,6 +184,7 @@ def test_llm_configuration(
     # the api key is sanitized if we are testing a provider already in the system
 
     test_api_key = test_llm_request.api_key
+    test_custom_config = test_llm_request.custom_config
     if test_llm_request.name:
         # NOTE: we are querying by name. we probably should be querying by an invariant id, but
         # as it turns out the name is not editable in the UI and other code also keys off name,
@@ -122,7 +194,16 @@ def test_llm_configuration(
         )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
+            _validate_llm_provider_change(
+                existing_api_base=existing_provider.api_base,
+                existing_custom_config=existing_provider.custom_config,
+                new_api_base=test_llm_request.api_base,
+                new_custom_config=test_llm_request.custom_config,
+                api_key_changed=False,
+            )
             test_api_key = existing_provider.api_key
+        if existing_provider and not test_llm_request.custom_config_changed:
+            test_custom_config = existing_provider.custom_config
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -134,7 +215,7 @@ def test_llm_configuration(
         api_key=test_api_key,
         api_base=test_llm_request.api_base,
         api_version=test_llm_request.api_version,
-        custom_config=test_llm_request.custom_config,
+        custom_config=test_custom_config,
         deployment_name=test_llm_request.deployment_name,
         max_input_tokens=max_input_tokens,
     )
@@ -147,7 +228,7 @@ def test_llm_configuration(
 
 @admin_router.post("/test/default")
 def test_default_provider(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> None:
     try:
         llm = get_default_llm()
@@ -163,7 +244,7 @@ def test_default_provider(
 @admin_router.get("/provider")
 def list_llm_providers(
     include_image_gen: bool = Query(False),
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
@@ -181,7 +262,7 @@ def list_llm_providers(
             f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
         )
 
-        _mask_provider_api_key(full_llm_provider)
+        _mask_provider_credentials(full_llm_provider)
         llm_provider_list.append(full_llm_provider)
 
     end_time = datetime.now(timezone.utc)
@@ -198,7 +279,7 @@ def put_llm_provider(
         False,
         description="True if creating a new one, False if updating an existing provider",
     ),
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
@@ -216,6 +297,16 @@ def put_llm_provider(
         raise HTTPException(
             status_code=400,
             detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
+        )
+
+    # SSRF Protection: Validate api_base and custom_config match stored values
+    if existing_provider:
+        _validate_llm_provider_change(
+            existing_api_base=existing_provider.api_base,
+            existing_custom_config=existing_provider.custom_config,
+            new_api_base=llm_provider_upsert_request.api_base,
+            new_custom_config=llm_provider_upsert_request.custom_config,
+            api_key_changed=llm_provider_upsert_request.api_key_changed,
         )
 
     persona_ids = llm_provider_upsert_request.personas
@@ -255,6 +346,8 @@ def put_llm_provider(
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
         llm_provider_upsert_request.api_key = existing_provider.api_key
+    if existing_provider and not llm_provider_upsert_request.custom_config_changed:
+        llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
@@ -286,6 +379,7 @@ def put_llm_provider(
                     # Refresh result with synced models
                     result = LLMProviderView.from_model(updated_provider)
 
+        _mask_provider_credentials(result)
         return result
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
@@ -295,7 +389,7 @@ def put_llm_provider(
 @admin_router.delete("/provider/{provider_id}")
 def delete_llm_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -307,7 +401,7 @@ def delete_llm_provider(
 @admin_router.post("/provider/{provider_id}/default")
 def set_provider_as_default(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_provider(provider_id=provider_id, db_session=db_session)
@@ -319,7 +413,7 @@ def set_provider_as_default_vision(
     vision_model: str | None = Query(
         None, description="The default vision model to use"
     ),
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_vision_provider(
@@ -329,7 +423,7 @@ def set_provider_as_default_vision(
 
 @admin_router.get("/auto-config")
 def get_auto_config(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> dict:
     """Get the current Auto mode configuration from GitHub.
 
@@ -347,7 +441,7 @@ def get_auto_config(
 
 @admin_router.get("/vision-providers")
 def get_vision_capable_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
@@ -371,7 +465,7 @@ def get_vision_capable_providers(
         # Only include providers with at least one vision-capable model
         if vision_models:
             provider_view = LLMProviderView.from_model(provider)
-            _mask_provider_api_key(provider_view)
+            _mask_provider_credentials(provider_view)
 
             vision_providers.append(
                 VisionProviderResponse(
@@ -393,7 +487,7 @@ def get_vision_capable_providers(
 
 @basic_router.get("/provider")
 def list_llm_provider_basics(
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
     """Get LLM providers accessible to the current user.
@@ -409,27 +503,21 @@ def list_llm_provider_basics(
     logger.debug("Starting to fetch user-accessible LLM providers")
 
     all_providers = fetch_existing_llm_providers(db_session)
-    user_group_ids = fetch_user_group_ids(db_session, user) if user else set()
-    is_admin = user and user.role == UserRole.ADMIN
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
 
     accessible_providers = []
 
     for provider in all_providers:
-        # Include all public providers
-        if provider.is_public:
-            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-            continue
-
-        # Include restricted providers user has access to via groups
-        if is_admin:
-            # Admins see all providers
-            accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-        elif provider.groups:
-            # User must be in at least one of the provider's groups
-            if user_group_ids.intersection({g.id for g in provider.groups}):
-                accessible_providers.append(LLMProviderDescriptor.from_model(provider))
-        elif not provider.personas:
-            # No restrictions = accessible
+        # Use centralized access control logic with persona=None since we're
+        # listing providers without a specific persona context. This correctly:
+        # - Includes all public providers
+        # - Includes providers user can access via group membership
+        # - Excludes persona-only restricted providers (requires specific persona)
+        # - Excludes non-public providers with no restrictions (admin-only)
+        if can_user_access_llm_provider(
+            provider, user_group_ids, persona=None, is_admin=is_admin
+        ):
             accessible_providers.append(LLMProviderDescriptor.from_model(provider))
 
     end_time = datetime.now(timezone.utc)
@@ -443,7 +531,7 @@ def list_llm_provider_basics(
 
 def get_valid_model_names_for_persona(
     persona_id: int,
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> list[str]:
     """Get all valid model names that a user can access for this persona.
@@ -456,7 +544,7 @@ def get_valid_model_names_for_persona(
     if not persona:
         return []
 
-    is_admin = user is not None and user.role == UserRole.ADMIN
+    is_admin = user.role == UserRole.ADMIN
     all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
@@ -477,7 +565,7 @@ def get_valid_model_names_for_persona(
 @basic_router.get("/persona/{persona_id}/providers")
 def list_llm_providers_for_persona(
     persona_id: int,
-    user: User | None = Depends(current_chat_accessible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
     """Get LLM providers for a specific persona.
@@ -503,7 +591,7 @@ def list_llm_providers_for_persona(
             detail="You don't have access to this assistant",
         )
 
-    is_admin = user is not None and user.role == UserRole.ADMIN
+    is_admin = user.role == UserRole.ADMIN
     all_providers = fetch_existing_llm_providers(db_session)
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
@@ -529,7 +617,7 @@ def list_llm_providers_for_persona(
 
 @admin_router.get("/provider-contextual-cost")
 def get_provider_contextual_cost(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMCost]:
     """
@@ -574,7 +662,7 @@ def get_provider_contextual_cost(
 @admin_router.post("/bedrock/available-models")
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[BedrockFinalModelResponse]:
     """Fetch available Bedrock models for a specific region and credentials.
@@ -585,8 +673,13 @@ def get_bedrock_available_models(
     try:
         # Precedence: bearer → keys → IAM
         if request.aws_bearer_token_bedrock:
-            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = request.aws_bearer_token_bedrock
-            session = boto3.Session(region_name=request.aws_region_name)
+            try:
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = (
+                    request.aws_bearer_token_bedrock
+                )
+                session = boto3.Session(region_name=request.aws_region_name)
+            finally:
+                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
                 aws_access_key_id=request.aws_access_key_id,
@@ -693,9 +786,6 @@ def get_bedrock_available_models(
                 )
             )
 
-        # Unset the environment variable
-        os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
-
         # Sync new models to DB if provider_name is specified
         if request.provider_name:
             try:
@@ -754,7 +844,7 @@ def _get_ollama_available_model_names(api_base: str) -> set[str]:
 @admin_router.post("/ollama/available-models")
 def get_ollama_available_models(
     request: OllamaModelsRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[OllamaFinalModelResponse]:
     """Fetch the list of available models from an Ollama server."""
@@ -880,7 +970,7 @@ def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
 @admin_router.post("/openrouter/available-models")
 def get_openrouter_available_models(
     request: OpenRouterModelsRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[OpenRouterFinalModelResponse]:
     """Fetch available models from OpenRouter `/models` endpoint.

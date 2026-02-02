@@ -41,6 +41,11 @@ alphanum_regex = re.compile(r"[^a-z0-9]+")
 rem_email_regex = re.compile(r"(?<=\S)@([a-z0-9-]+)\.([a-z]{2,6})$")
 
 
+def _ngrams(sequence: str, n: int) -> list[tuple[str, ...]]:
+    """Generate n-grams from a sequence."""
+    return [tuple(sequence[i : i + n]) for i in range(len(sequence) - n + 1)]
+
+
 def _clean_name(entity_name: str) -> str:
     """
     Clean an entity string by removing non-alphanumeric characters and email addresses.
@@ -58,8 +63,6 @@ def _normalize_one_entity(
     attributes: dict[str, str],
     allowed_docs_temp_view_name: str | None = None,
 ) -> str | None:
-    from nltk import ngrams  # type: ignore
-
     """
     Matches a single entity to the best matching entity of the same type.
     """
@@ -150,16 +153,16 @@ def _normalize_one_entity(
 
     # step 2: do a weighted ngram analysis and damerau levenshtein distance to rerank
     n1, n2, n3 = (
-        set(ngrams(cleaned_entity, 1)),
-        set(ngrams(cleaned_entity, 2)),
-        set(ngrams(cleaned_entity, 3)),
+        set(_ngrams(cleaned_entity, 1)),
+        set(_ngrams(cleaned_entity, 2)),
+        set(_ngrams(cleaned_entity, 3)),
     )
     for i, (candidate_id_name, candidate_name, _) in enumerate(candidates):
         cleaned_candidate = _clean_name(candidate_name)
         h_n1, h_n2, h_n3 = (
-            set(ngrams(cleaned_candidate, 1)),
-            set(ngrams(cleaned_candidate, 2)),
-            set(ngrams(cleaned_candidate, 3)),
+            set(_ngrams(cleaned_candidate, 1)),
+            set(_ngrams(cleaned_candidate, 2)),
+            set(_ngrams(cleaned_candidate, 3)),
         )
 
         # compute ngram overlap, renormalize scores if the names are too short for larger ngrams

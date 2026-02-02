@@ -28,6 +28,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.teams.models import Message
@@ -301,7 +302,7 @@ class TeamsConnector(
                     start=start,
                 )
 
-                slim_doc_buffer = []
+                slim_doc_buffer: list[SlimDocument | HierarchyNode] = []
 
                 for message in messages:
                     slim_doc_buffer.append(
@@ -814,7 +815,7 @@ def _collect_documents_for_channel(
 
 
 if __name__ == "__main__":
-    from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
+    from tests.daily.connectors.utils import load_all_from_connector
 
     app_id = os.environ["TEAMS_APPLICATION_ID"]
     dir_id = os.environ["TEAMS_DIRECTORY_ID"]
@@ -836,9 +837,9 @@ if __name__ == "__main__":
     for slim_doc in teams_connector.retrieve_all_slim_docs_perm_sync():
         ...
 
-    for doc in load_everything_from_checkpoint_connector(
+    for doc in load_all_from_connector(
         connector=teams_connector,
         start=0.0,
         end=datetime.now(tz=timezone.utc).timestamp(),
-    ):
+    ).documents:
         print(doc)

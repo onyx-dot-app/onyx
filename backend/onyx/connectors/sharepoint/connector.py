@@ -51,6 +51,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import ExternalAccess
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -1146,7 +1147,7 @@ class SharepointConnector(
         site_descriptors = self.site_descriptors or self.fetch_sites()
 
         # goes over all urls, converts them into SlimDocument objects and then yields them in batches
-        doc_batch: list[SlimDocument] = []
+        doc_batch: list[SlimDocument | HierarchyNode] = []
         for site_descriptor in site_descriptors:
             ctx: ClientContext | None = None
 
@@ -1708,7 +1709,9 @@ if __name__ == "__main__":
 
     # Run the connector
     while checkpoint.has_more:
-        for doc_batch, failure, next_checkpoint in runner.run(checkpoint):
+        for doc_batch, hierarchy_node_batch, failure, next_checkpoint in runner.run(
+            checkpoint
+        ):
             if doc_batch:
                 print(f"Retrieved batch of {len(doc_batch)} documents")
                 for doc in doc_batch:

@@ -8,6 +8,7 @@ from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import make_paginated_slack_api_call
 from onyx.connectors.slack.connector import SlackConnector
@@ -111,6 +112,9 @@ def _get_slack_document_access(
 
     for doc_metadata_batch in slim_doc_generator:
         for doc_metadata in doc_metadata_batch:
+            if isinstance(doc_metadata, HierarchyNode):
+                # TODO: handle hierarchynodes during sync
+                continue
             if doc_metadata.external_access is None:
                 raise ValueError(
                     f"No external access for document {doc_metadata.id}. "

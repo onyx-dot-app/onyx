@@ -1295,22 +1295,22 @@ test.describe("MCP OAuth flows", () => {
     logStep("Tools auto-fetched and enabled via UI");
 
     const assistantEditorUrl =
-      "http://localhost:3000/chat/agents/create?admin=true";
+      "http://localhost:3000/app/agents/create?admin=true";
     let assistantPageLoaded = false;
     for (let attempt = 0; attempt < 2 && !assistantPageLoaded; attempt++) {
       await page.goto(assistantEditorUrl);
       try {
-        await page.waitForURL("**/chat/agents/create**", {
+        await page.waitForURL("**/app/agents/create**", {
           timeout: 15000,
         });
         assistantPageLoaded = true;
       } catch (error) {
         const currentUrl = page.url();
-        if (currentUrl.includes("/chat/agents/create")) {
+        if (currentUrl.includes("/app/agents/create")) {
           assistantPageLoaded = true;
           break;
         }
-        if (currentUrl.includes("/chat?from=login")) {
+        if (currentUrl.includes("/app?from=login")) {
           await loginAs(page, "admin");
           await verifySessionUser(
             page,
@@ -1321,13 +1321,13 @@ test.describe("MCP OAuth flows", () => {
         }
         await logPageStateWithTag(
           page,
-          "Timed out waiting for /chat/agents/create"
+          "Timed out waiting for /app/agents/create"
         );
         throw error;
       }
     }
     if (!assistantPageLoaded) {
-      throw new Error("Unable to navigate to /chat/agents/create");
+      throw new Error("Unable to navigate to /app/agents/create");
     }
     logStep("Assistant editor loaded");
 
@@ -1346,7 +1346,7 @@ test.describe("MCP OAuth flows", () => {
       (url) => {
         const href = typeof url === "string" ? url : url.toString();
         return (
-          /\/chat\?assistantId=\d+/.test(href) ||
+          /\/app\?assistantId=\d+/.test(href) ||
           href.includes("/admin/assistants")
         );
       },
@@ -1354,7 +1354,7 @@ test.describe("MCP OAuth flows", () => {
     );
 
     let assistantId: number | null = null;
-    if (/\/chat\?assistantId=\d+/.test(page.url())) {
+    if (/\/app\?assistantId=\d+/.test(page.url())) {
       const chatUrl = new URL(page.url());
       const assistantIdParam = chatUrl.searchParams.get("assistantId");
       if (!assistantIdParam) {
@@ -1370,8 +1370,8 @@ test.describe("MCP OAuth flows", () => {
         assistantName
       );
       assistantId = assistantRecord.id;
-      await page.goto(`/chat?assistantId=${assistantId}`);
-      await page.waitForURL(/\/chat\?assistantId=\d+/, { timeout: 20000 });
+      await page.goto(`/app?assistantId=${assistantId}`);
+      await page.waitForURL(/\/app\?assistantId=\d+/, { timeout: 20000 });
     }
     if (assistantId === null) {
       throw new Error("Assistant ID could not be determined");
@@ -1390,7 +1390,7 @@ test.describe("MCP OAuth flows", () => {
     await reauthenticateFromChat(
       page,
       serverName,
-      `/chat?assistantId=${assistantId}`
+      `/app?assistantId=${assistantId}`
     );
     await ensureServerVisibleInActions(page, serverName);
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
@@ -1580,8 +1580,8 @@ test.describe("MCP OAuth flows", () => {
 
       logStep("Tools auto-fetched and enabled via UI");
 
-      await page.goto("/chat/agents/create?admin=true");
-      await page.waitForURL("**/chat/agents/create**", { timeout: 15000 });
+      await page.goto("/app/agents/create?admin=true");
+      await page.waitForURL("**/app/agents/create**", { timeout: 15000 });
       logStep("Assistant editor loaded (curator)");
 
       await page.locator('input[name="name"]').fill(assistantName);
@@ -1599,7 +1599,7 @@ test.describe("MCP OAuth flows", () => {
         (url) => {
           const href = typeof url === "string" ? url : url.toString();
           return (
-            /\/chat\?assistantId=\d+/.test(href) ||
+            /\/app\?assistantId=\d+/.test(href) ||
             href.includes("/admin/assistants")
           );
         },
@@ -1607,7 +1607,7 @@ test.describe("MCP OAuth flows", () => {
       );
 
       let assistantId: number | null = null;
-      if (/\/chat\?assistantId=\d+/.test(page.url())) {
+      if (/\/app\?assistantId=\d+/.test(page.url())) {
         const chatUrl = new URL(page.url());
         const assistantIdParam = chatUrl.searchParams.get("assistantId");
         if (!assistantIdParam) {
@@ -1623,10 +1623,8 @@ test.describe("MCP OAuth flows", () => {
           assistantName
         );
         assistantId = assistantRecord.id;
-        await page.goto(
-          `http://localhost:3000/chat?assistantId=${assistantId}`
-        );
-        await page.waitForURL(/\/chat\?assistantId=\d+/, { timeout: 20000 });
+        await page.goto(`http://localhost:3000/app?assistantId=${assistantId}`);
+        await page.waitForURL(/\/app\?assistantId=\d+/, { timeout: 20000 });
       }
       if (assistantId === null) {
         throw new Error("Assistant ID could not be determined");
@@ -1645,7 +1643,7 @@ test.describe("MCP OAuth flows", () => {
       await reauthenticateFromChat(
         page,
         serverName,
-        `/chat?assistantId=${assistantId}`
+        `/app?assistantId=${assistantId}`
       );
       await ensureServerVisibleInActions(page, serverName);
       await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.curator);
@@ -1720,7 +1718,7 @@ test.describe("MCP OAuth flows", () => {
     const serverName = adminArtifacts!.serverName;
     const toolName = adminArtifacts!.toolName;
 
-    await page.goto(`/chat?assistantId=${assistantId}`, {
+    await page.goto(`/app?assistantId=${assistantId}`, {
       waitUntil: "load",
     });
     await ensureServerVisibleInActions(page, serverName);
@@ -1748,7 +1746,7 @@ test.describe("MCP OAuth flows", () => {
     await serverLineItem.click();
     await navPromise;
     await completeOauthFlow(page, {
-      expectReturnPathContains: `/chat?assistantId=${assistantId}`,
+      expectReturnPathContains: `/app?assistantId=${assistantId}`,
     });
     logStep("Completed user OAuth reauthentication");
 

@@ -5,8 +5,8 @@ from onyx.db.models import Memory
 from onyx.db.models import User
 
 
-def get_memories(user: User | None, db_session: Session) -> list[str]:
-    if user is None:
+def get_memories(user: User, db_session: Session) -> list[str]:
+    if not user.use_memories:
         return []
 
     user_info = [

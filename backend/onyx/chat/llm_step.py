@@ -14,6 +14,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
@@ -432,7 +433,7 @@ def translate_history_to_llm_format(
 
     for idx, msg in enumerate(history):
         # if the message is being added to the history
-        if msg.message_type in [
+        if PROMPT_CACHE_CHAT_HISTORY and msg.message_type in [
             MessageType.SYSTEM,
             MessageType.USER,
             MessageType.ASSISTANT,
@@ -676,9 +677,8 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = 0
 
-    # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
-        logger.info(
+        logger.debug(
             f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
         )
 
@@ -859,6 +859,11 @@ def run_llm_step_pkt_generator(
                                     ),
                                     obj=result,
                                 )
+                                # Track emitted citation for saving
+                                if state_container:
+                                    state_container.add_emitted_citation(
+                                        result.citation_number
+                                    )
                     else:
                         # When citation_processor is None, use delta.content directly without modification
                         accumulated_answer += delta.content
@@ -985,6 +990,9 @@ def run_llm_step_pkt_generator(
                     ),
                     obj=result,
                 )
+                # Track emitted citation for saving
+                if state_container:
+                    state_container.add_emitted_citation(result.citation_number)
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)

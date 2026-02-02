@@ -31,6 +31,10 @@ interface PersonaUpsertRequest {
   label_ids: number[] | null;
   user_file_ids: string[] | null;
   replace_base_system_prompt: boolean;
+  // Hierarchy nodes (folders, spaces, channels) for scoped search
+  hierarchy_node_ids: number[];
+  // Individual documents for scoped search
+  document_ids: string[];
 }
 
 export interface PersonaUpsertParameters {
@@ -57,6 +61,10 @@ export interface PersonaUpsertParameters {
   is_default_persona: boolean;
   label_ids: number[] | null;
   user_file_ids: string[];
+  // Hierarchy nodes (folders, spaces, channels) for scoped search
+  hierarchy_node_ids?: number[];
+  // Individual documents for scoped search
+  document_ids?: string[];
 }
 
 function buildPersonaUpsertRequest({
@@ -74,6 +82,8 @@ function buildPersonaUpsertRequest({
   remove_image,
   search_start_date,
   user_file_ids,
+  hierarchy_node_ids,
+  document_ids,
   icon_name,
   uploaded_image_id,
   is_default_persona,
@@ -111,6 +121,8 @@ function buildPersonaUpsertRequest({
     label_ids: label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
     replace_base_system_prompt,
+    hierarchy_node_ids: hierarchy_node_ids ?? [],
+    document_ids: document_ids ?? [],
   };
 }
 

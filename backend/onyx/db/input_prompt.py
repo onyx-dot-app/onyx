@@ -3,11 +3,11 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.constants import AuthType
 from onyx.db.models import InputPrompt
 from onyx.db.models import InputPrompt__User
 from onyx.db.models import User
@@ -18,45 +18,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def insert_input_prompt_if_not_exists(
-    user: User | None,
-    input_prompt_id: int | None,
-    prompt: str,
-    content: str,
-    active: bool,
-    is_public: bool,
-    db_session: Session,
-    commit: bool = True,
-) -> InputPrompt:
-    if input_prompt_id is not None:
-        input_prompt = (
-            db_session.query(InputPrompt).filter_by(id=input_prompt_id).first()
-        )
-    else:
-        query = db_session.query(InputPrompt).filter(InputPrompt.prompt == prompt)
-        if user:
-            query = query.filter(InputPrompt.user_id == user.id)
-        else:
-            query = query.filter(InputPrompt.user_id.is_(None))
-        input_prompt = query.first()
-
-    if input_prompt is None:
-        input_prompt = InputPrompt(
-            id=input_prompt_id,
-            prompt=prompt,
-            content=content,
-            active=active,
-            is_public=is_public or user is None,
-            user_id=user.id if user else None,
-        )
-        db_session.add(input_prompt)
-
-    if commit:
-        db_session.commit()
-
-    return input_prompt
-
-
 def insert_input_prompt(
     prompt: str,
     content: str,
@@ -64,21 +25,46 @@ def insert_input_prompt(
     user: User | None,
     db_session: Session,
 ) -> InputPrompt:
-    input_prompt = InputPrompt(
+    user_id = user.id if user else None
+
+    # Use atomic INSERT ... ON CONFLICT DO NOTHING with RETURNING
+    # to avoid race conditions with the uniqueness check
+    stmt = pg_insert(InputPrompt).values(
         prompt=prompt,
         content=content,
         active=True,
         is_public=is_public,
-        user_id=user.id if user is not None else None,
+        user_id=user_id,
     )
-    db_session.add(input_prompt)
-    db_session.commit()
 
+    # Use the appropriate constraint based on whether this is a user-owned or public prompt
+    if user_id is not None:
+        stmt = stmt.on_conflict_do_nothing(constraint="uq_inputprompt_prompt_user_id")
+    else:
+        # Partial unique indexes cannot be targeted by constraint name;
+        # must use index_elements + index_where
+        stmt = stmt.on_conflict_do_nothing(
+            index_elements=[InputPrompt.prompt],
+            index_where=InputPrompt.user_id.is_(None),
+        )
+
+    stmt = stmt.returning(InputPrompt)
+
+    result = db_session.execute(stmt)
+    input_prompt = result.scalar_one_or_none()
+
+    if input_prompt is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        )
+
+    db_session.commit()
     return input_prompt
 
 
 def update_input_prompt(
-    user: User | None,
+    user: User,
     input_prompt_id: int,
     prompt: str,
     content: str,
@@ -98,23 +84,32 @@ def update_input_prompt(
     input_prompt.content = content
     input_prompt.active = active
 
-    db_session.commit()
+    try:
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"A prompt shortcut with the name '{prompt}' already exists",
+        )
+
     return input_prompt
 
 
-def validate_user_prompt_authorization(
-    user: User | None, input_prompt: InputPrompt
-) -> bool:
+def validate_user_prompt_authorization(user: User, input_prompt: InputPrompt) -> bool:
     prompt = InputPromptSnapshot.from_model(input_prompt=input_prompt)
 
-    if prompt.user_id is not None:
-        if user is None:
-            return False
+    # Public prompts cannot be modified via the user API (only admins via admin endpoints)
+    if prompt.is_public or prompt.user_id is None:
+        return False
 
-        user_details = UserInfo.from_model(user)
-        if str(user_details.id) != str(prompt.user_id):
-            return False
-    return True
+    # Anonymous users cannot modify user-owned prompts
+    if user.is_anonymous:
+        return False
+
+    # User must own the prompt
+    user_details = UserInfo.from_model(user)
+    return str(user_details.id) == str(prompt.user_id)
 
 
 def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> None:
@@ -133,7 +128,7 @@ def remove_public_input_prompt(input_prompt_id: int, db_session: Session) -> Non
 
 
 def remove_input_prompt(
-    user: User | None,
+    user: User,
     input_prompt_id: int,
     db_session: Session,
     delete_public: bool = False,
@@ -193,7 +188,6 @@ def fetch_input_prompts_by_user(
     """
     Returns all prompts belonging to the user or public prompts,
     excluding those the user has specifically disabled.
-    Also, if `user_id` is None and AUTH_TYPE is DISABLED, then all prompts are returned.
     """
 
     query = select(InputPrompt)
@@ -223,15 +217,12 @@ def fetch_input_prompts_by_user(
             query = query.where(InputPrompt.user_id == user_id)
 
     else:
-        # user_id is None
-        if AUTH_TYPE == AuthType.DISABLED:
-            # If auth is disabled, return all prompts
-            query = query.where(True)  # type: ignore
-        elif include_public:
-            # Anonymous usage
+        # user_id is None - anonymous usage
+        if include_public:
             query = query.where(InputPrompt.is_public)
-
-        # Default to returning all prompts
+        else:
+            # No user and not requesting public prompts - return nothing
+            return []
 
     if active is not None:
         query = query.where(InputPrompt.active == active)

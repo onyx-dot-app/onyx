@@ -9,7 +9,7 @@ import {
   AGGREGATOR_PROVIDERS,
 } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -352,7 +352,6 @@ export default function LLMPopover({
           selected={isSelected}
           description={description}
           onClick={() => handleSelectModel(option)}
-          icon={() => null}
           rightChildren={
             isSelected ? (
               <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />

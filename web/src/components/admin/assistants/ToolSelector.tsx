@@ -18,7 +18,7 @@ import {
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
-} from "@/app/chat/components/tools/constants";
+} from "@/app/app/components/tools/constants";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Info } from "lucide-react";
 

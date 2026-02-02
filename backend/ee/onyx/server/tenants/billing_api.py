@@ -1,3 +1,24 @@
+"""Billing API endpoints for cloud multi-tenant deployments.
+
+DEPRECATED: These /tenants/* billing endpoints are being replaced by /admin/billing/*
+which provides a unified API for both self-hosted and cloud deployments.
+
+TODO(ENG-3533): Migrate frontend to use /admin/billing/* endpoints and remove this file.
+https://linear.app/onyx-app/issue/ENG-3533/migrate-tenantsbilling-adminbilling
+
+Current endpoints to migrate:
+- GET  /tenants/billing-information     -> GET  /admin/billing/information
+- POST /tenants/create-customer-portal-session -> POST /admin/billing/portal-session
+- POST /tenants/create-subscription-session    -> POST /admin/billing/checkout-session
+- GET  /tenants/stripe-publishable-key  -> (keep as-is, shared endpoint)
+
+Note: /tenants/product-gating/* endpoints are control-plane-to-data-plane calls
+and are NOT part of this migration - they stay here.
+"""
+
+import asyncio
+
+import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -12,11 +33,14 @@ from ee.onyx.server.tenants.models import CreateSubscriptionSessionRequest
 from ee.onyx.server.tenants.models import ProductGatingFullSyncRequest
 from ee.onyx.server.tenants.models import ProductGatingRequest
 from ee.onyx.server.tenants.models import ProductGatingResponse
+from ee.onyx.server.tenants.models import StripePublishableKeyResponse
 from ee.onyx.server.tenants.models import SubscriptionSessionResponse
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.product_gating import overwrite_full_gated_set
 from ee.onyx.server.tenants.product_gating import store_product_gating
 from onyx.auth.users import User
+from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
+from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -25,6 +49,10 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/tenants")
+
+# Cache for Stripe publishable key to avoid hitting S3 on every request
+_stripe_publishable_key_cache: str | None = None
+_stripe_key_lock = asyncio.Lock()
 
 
 @router.post("/product-gating")
@@ -80,11 +108,7 @@ async def billing_information(
 async def create_customer_portal_session(
     _: User = Depends(current_admin_user),
 ) -> dict:
-    """
-    Create a Stripe customer portal session via the control plane.
-    NOTE: This is currently only used for multi-tenant (cloud) deployments.
-    Self-hosted proxy endpoints will be added in a future phase.
-    """
+    """Create a Stripe customer portal session via the control plane."""
     tenant_id = get_current_tenant_id()
     return_url = f"{WEB_DOMAIN}/admin/billing"
 
@@ -113,3 +137,67 @@ async def create_subscription_session(
     except Exception as e:
         logger.exception("Failed to create subscription session")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stripe-publishable-key")
+async def get_stripe_publishable_key() -> StripePublishableKeyResponse:
+    """
+    Fetch the Stripe publishable key.
+    Priority: env var override (for testing) > S3 bucket (production).
+    This endpoint is public (no auth required) since publishable keys are safe to expose.
+    The key is cached in memory to avoid hitting S3 on every request.
+    """
+    global _stripe_publishable_key_cache
+
+    # Fast path: return cached value without lock
+    if _stripe_publishable_key_cache:
+        return StripePublishableKeyResponse(
+            publishable_key=_stripe_publishable_key_cache
+        )
+
+    # Use lock to prevent concurrent S3 requests
+    async with _stripe_key_lock:
+        # Double-check after acquiring lock (another request may have populated cache)
+        if _stripe_publishable_key_cache:
+            return StripePublishableKeyResponse(
+                publishable_key=_stripe_publishable_key_cache
+            )
+
+        # Check for env var override first (for local testing with pk_test_* keys)
+        if STRIPE_PUBLISHABLE_KEY_OVERRIDE:
+            key = STRIPE_PUBLISHABLE_KEY_OVERRIDE.strip()
+            if not key.startswith("pk_"):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Invalid Stripe publishable key format",
+                )
+            _stripe_publishable_key_cache = key
+            return StripePublishableKeyResponse(publishable_key=key)
+
+        # Fall back to S3 bucket
+        if not STRIPE_PUBLISHABLE_KEY_URL:
+            raise HTTPException(
+                status_code=500,
+                detail="Stripe publishable key is not configured",
+            )
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(STRIPE_PUBLISHABLE_KEY_URL)
+                response.raise_for_status()
+                key = response.text.strip()
+
+                # Validate key format
+                if not key.startswith("pk_"):
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Invalid Stripe publishable key format",
+                    )
+
+                _stripe_publishable_key_cache = key
+                return StripePublishableKeyResponse(publishable_key=key)
+        except httpx.HTTPError:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to fetch Stripe publishable key",
+            )

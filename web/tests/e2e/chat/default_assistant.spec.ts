@@ -26,7 +26,7 @@ test.describe("Default Assistant Tests", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    await adminPage.goto("http://localhost:3000/chat");
+    await adminPage.goto("http://localhost:3000/app");
     await adminPage.waitForLoadState("networkidle");
 
     const apiClient = new OnyxApiClient(adminPage);
@@ -48,7 +48,7 @@ test.describe("Default Assistant Tests", () => {
         storageState: "admin_auth.json",
       });
       const adminPage = await adminContext.newPage();
-      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
       const apiClient = new OnyxApiClient(adminPage);
@@ -64,7 +64,7 @@ test.describe("Default Assistant Tests", () => {
     await loginAsRandomUser(page);
 
     // Navigate to the chat page
-    await page.goto("/chat");
+    await page.goto("/app");
     await page.waitForLoadState("networkidle");
   });
 
@@ -304,7 +304,7 @@ test.describe("Default Assistant Tests", () => {
         storageState: "admin_auth.json",
       });
       const adminPage = await adminContext.newPage();
-      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
       const apiClient = new OnyxApiClient(adminPage);
@@ -326,7 +326,7 @@ test.describe("Default Assistant Tests", () => {
           storageState: "admin_auth.json",
         });
         const adminPage = await adminContext.newPage();
-        await adminPage.goto("http://localhost:3000/chat");
+        await adminPage.goto("http://localhost:3000/app");
         await adminPage.waitForLoadState("networkidle");
 
         const apiClient = new OnyxApiClient(adminPage);
@@ -351,7 +351,7 @@ test.describe("Default Assistant Tests", () => {
       // Note: Image generation config is already created by beforeAll
       await page.context().clearCookies();
       await loginAs(page, "admin");
-      await page.goto("/chat");
+      await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
       const apiClient = new OnyxApiClient(page);
@@ -409,7 +409,7 @@ test.describe("Default Assistant Tests", () => {
       console.log(`[test] Enabled tools via API: ${uniqueToolIds}`);
 
       // Go back to chat
-      await page.goto("/chat");
+      await page.goto("/app");
       await page.waitForLoadState("networkidle");
       // Wait for tools to be picked up
       await page.waitForTimeout(2000);
@@ -540,7 +540,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    await adminPage.goto("http://localhost:3000/chat");
+    await adminPage.goto("http://localhost:3000/app");
     await adminPage.waitForLoadState("networkidle");
 
     const apiClient = new OnyxApiClient(adminPage);
@@ -562,7 +562,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
         storageState: "admin_auth.json",
       });
       const adminPage = await adminContext.newPage();
-      await adminPage.goto("http://localhost:3000/chat");
+      await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
       const apiClient = new OnyxApiClient(adminPage);
@@ -578,22 +578,14 @@ test.describe("End-to-End Default Assistant Flow", () => {
     await loginAsRandomUser(page);
 
     // Navigate to the chat page
-    await page.goto("/chat");
+    await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
     // Verify greeting message appears
-    const greetingElement = await page.waitForSelector(
-      '[data-testid="onyx-logo"]',
-      { timeout: 5000 }
-    );
-    expect(greetingElement).toBeTruthy();
+    await expect(page.locator('[data-testid="onyx-logo"]')).toBeVisible();
 
     // Verify Onyx logo is displayed
-    const logoElement = await page.waitForSelector(
-      '[data-testid="onyx-logo"]',
-      { timeout: 5000 }
-    );
-    expect(logoElement).toBeTruthy();
+    await expect(page.locator('[data-testid="onyx-logo"]')).toBeVisible();
 
     // Send a message using the chat input
     await sendMessage(page, "Hello, can you help me?");
@@ -608,10 +600,6 @@ test.describe("End-to-End Default Assistant Flow", () => {
     await startNewChat(page);
 
     // Verify we're back to default assistant with greeting
-    const newGreeting = await page.waitForSelector(
-      '[data-testid="onyx-logo"]',
-      { timeout: 5000 }
-    );
-    expect(newGreeting).toBeTruthy();
+    await expect(page.locator('[data-testid="onyx-logo"]')).toBeVisible();
   });
 });

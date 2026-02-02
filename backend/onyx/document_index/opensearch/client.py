@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -20,11 +21,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
 # opensearch. By default it emits INFO-level logs for every request.
-# TODO(andrei): I don't think this is working as intended, I still see spam in
-# logs. The module name is probably wrong or opensearchpy initializes a logger
-# dynamically along with an instance of a client class. Look at the constructor
-# for OpenSearch.
-opensearch_logger = logging.getLogger("opensearchpy")
+# The opensearch-py library uses "opensearch" as the logger name for HTTP
+# requests (see opensearchpy/connection/base.py)
+opensearch_logger = logging.getLogger("opensearch")
 opensearch_logger.setLevel(logging.WARNING)
 
 
@@ -225,19 +224,23 @@ class OpenSearchClient:
         # TODO(andrei): Implement this.
         raise NotImplementedError
 
-    def index_document(self, document: DocumentChunk) -> None:
+    def index_document(
+        self, document: DocumentChunk, update_if_exists: bool = False
+    ) -> None:
         """Indexes a document.
-
-        Indexing will fail if a document with the same ID already exists.
 
         Args:
             document: The document to index. In Onyx this is a chunk of a
                 document, OpenSearch simply refers to this as a document as
                 well.
+            update_if_exists: Whether to update the document if it already
+                exists. If False, will raise an exception if the document
+                already exists. Defaults to False.
 
         Raises:
             Exception: There was an error indexing the document. This includes
-                the case where a document with the same ID already exists.
+                the case where a document with the same ID already exists if
+                update_if_exists is False.
         """
         document_chunk_id: str = get_opensearch_doc_chunk_id(
             document_id=document.document_id,
@@ -247,9 +250,14 @@ class OpenSearchClient:
         body: dict[str, Any] = document.model_dump(exclude_none=True)
         # client.create will raise if a doc with the same ID exists.
         # client.index does not do this.
-        result = self._client.create(
-            index=self._index_name, id=document_chunk_id, body=body
-        )
+        if update_if_exists:
+            result = self._client.index(
+                index=self._index_name, id=document_chunk_id, body=body
+            )
+        else:
+            result = self._client.create(
+                index=self._index_name, id=document_chunk_id, body=body
+            )
         result_id = result.get("_id", "")
         # Sanity check.
         if result_id != document_chunk_id:
@@ -263,10 +271,12 @@ class OpenSearchClient:
             case "created":
                 return
             case "updated":
-                raise RuntimeError(
-                    f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
-                    "This indicates that a document chunk with that ID already exists, which is not expected."
-                )
+                if not update_if_exists:
+                    raise RuntimeError(
+                        f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
+                        "This indicates that a document chunk with that ID already exists, which is not expected."
+                    )
+                return
             case _:
                 raise RuntimeError(
                     f'Unknown OpenSearch indexing result: "{result_string}".'
@@ -558,6 +568,36 @@ class OpenSearchClient:
         """
         self._client.indices.refresh(index=self._index_name)
 
+    def set_cluster_auto_create_index_setting(self, enabled: bool) -> bool:
+        """Sets the cluster auto create index setting.
+
+        By default, when you index a document to a non-existent index,
+        OpenSearch will automatically create the index. This behavior is
+        undesirable so this function exposes the ability to disable it.
+
+        See
+        https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index/#updating-cluster-settings-using-the-api
+
+        Args:
+            enabled: Whether to enable the auto create index setting.
+
+        Returns:
+            True if the setting was updated successfully, False otherwise. Does
+                not raise.
+        """
+        try:
+            body = {"persistent": {"action.auto_create_index": enabled}}
+            response = self._client.cluster.put_settings(body=body)
+            if response.get("acknowledged", False):
+                logger.info(f"Successfully set action.auto_create_index to {enabled}.")
+                return True
+            else:
+                logger.error(f"Failed to update setting: {response}.")
+                return False
+        except Exception:
+            logger.exception("Error setting auto_create_index.")
+            return False
+
     def ping(self) -> bool:
         """Pings the OpenSearch cluster.
 
@@ -568,6 +608,9 @@ class OpenSearchClient:
 
     def close(self) -> None:
         """Closes the client.
+
+        TODO(andrei): Can we have some way to auto close when the client no
+        longer has any references?
 
         Raises:
             Exception: There was an error closing the client.
@@ -596,3 +639,55 @@ class OpenSearchClient:
             )
         hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
         return hits_second_layer
+
+
+def wait_for_opensearch_with_timeout(
+    wait_interval_s: int = 5,
+    wait_limit_s: int = 60,
+    client: OpenSearchClient | None = None,
+) -> bool:
+    """Waits for OpenSearch to become ready subject to a timeout.
+
+    Will create a new dummy client if no client is provided. Will close this
+    client at the end of the function. Will not close the client if it was
+    supplied.
+
+    Args:
+        wait_interval_s: The interval in seconds to wait between checks.
+            Defaults to 5.
+        wait_limit_s: The total timeout in seconds to wait for OpenSearch to
+            become ready. Defaults to 60.
+        client: The OpenSearch client to use for pinging. If None, a new dummy
+            client will be created. Defaults to None.
+
+    Returns:
+        True if OpenSearch is ready, False otherwise.
+    """
+    made_client = False
+    try:
+        if client is None:
+            # NOTE: index_name does not matter because we are only using this object
+            # to ping.
+            # TODO(andrei): Make this better.
+            client = OpenSearchClient(index_name="")
+            made_client = True
+        time_start = time.monotonic()
+        while True:
+            if client.ping():
+                logger.info("[OpenSearch] Readiness probe succeeded. Continuing...")
+                return True
+            time_elapsed = time.monotonic() - time_start
+            if time_elapsed > wait_limit_s:
+                logger.info(
+                    f"[OpenSearch] Readiness probe did not succeed within the timeout "
+                    f"({wait_limit_s} seconds)."
+                )
+                return False
+            logger.info(
+                f"[OpenSearch] Readiness probe ongoing. elapsed={time_elapsed:.1f} timeout={wait_limit_s:.1f}"
+            )
+            time.sleep(wait_interval_s)
+    finally:
+        if made_client:
+            assert client is not None
+            client.close()

@@ -19,6 +19,7 @@ enable_error_code = ["possibly-undefined"]
 strict_equality = true
 exclude = [
   "^generated/.*",
+  "^\\.venv/",
 ]
 
 [[tool.mypy.overrides]]
@@ -32,6 +33,11 @@ disable_error_code = ["var-annotated"]
 [[tool.mypy.overrides]]
 module = "generated.*"
 follow_imports = "silent"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "transformers.*"
+follow_imports = "skip"
 ignore_errors = true
 
 [tool.ruff]

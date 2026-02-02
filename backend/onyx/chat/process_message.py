@@ -42,7 +42,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import CitationDocInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_chat_session_by_id
@@ -83,7 +82,6 @@ from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
-from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import (
@@ -294,7 +292,7 @@ def _get_project_search_availability(
 
 def handle_stream_message_objects(
     new_msg_req: SendMessageRequest,
-    user: User | None,
+    user: User,
     db_session: Session,
     # if specified, uses the last user message and does not create a new user message based
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a
@@ -318,12 +316,11 @@ def handle_stream_message_objects(
     chat_session: ChatSession | None = None
     redis_client: Redis | None = None
 
-    user_id = user.id if user is not None else None
-    llm_user_identifier = (
-        user.email
-        if user is not None and getattr(user, "email", None)
-        else (str(user_id) if user_id else "anonymous_user")
-    )
+    user_id = user.id
+    if user.is_anonymous:
+        llm_user_identifier = "anonymous_user"
+    else:
+        llm_user_identifier = user.email or str(user_id)
     try:
         if not new_msg_req.chat_session_id:
             if not new_msg_req.chat_session_info:
@@ -350,15 +347,10 @@ def handle_stream_message_objects(
             user_id=llm_user_identifier, session_id=str(chat_session.id)
         )
 
-        # permanent "log" store, used primarily for debugging
-        long_term_logger = LongTermLogger(
-            metadata={"user_id": str(user_id), "chat_session_id": str(chat_session.id)}
-        )
-
         # Milestone tracking, most devs using the API don't need to understand this
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email if not user.is_anonymous else tenant_id,
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
@@ -368,7 +360,7 @@ def handle_stream_message_objects(
             attribute="event_telemetry",
             fallback=noop_fallback,
         )(
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email if not user.is_anonymous else tenant_id,
             event="user_message_sent",
             properties={
                 "origin": new_msg_req.origin.value,
@@ -385,7 +377,6 @@ def handle_stream_message_objects(
             user=user,
             llm_override=new_msg_req.llm_override or chat_session.llm_override,
             additional_headers=litellm_additional_headers,
-            long_term_logger=long_term_logger,
         )
         token_counter = get_llm_token_counter(llm)
 
@@ -744,33 +735,22 @@ def llm_loop_completion_handle(
         else:
             final_answer = "The generation was stopped by the user."
 
-    # Build citation_docs_info from accumulated citations in state container
-    citation_docs_info: list[CitationDocInfo] = []
-    seen_citation_nums: set[int] = set()
-    for citation_num, search_doc in state_container.citation_to_doc.items():
-        if citation_num not in seen_citation_nums:
-            seen_citation_nums.add(citation_num)
-            citation_docs_info.append(
-                CitationDocInfo(
-                    search_doc=search_doc,
-                    citation_number=citation_num,
-                )
-            )
-
     save_chat_turn(
         message_text=final_answer,
         reasoning_tokens=state_container.reasoning_tokens,
-        citation_docs_info=citation_docs_info,
+        citation_to_doc=state_container.citation_to_doc,
         tool_calls=state_container.tool_calls,
+        all_search_docs=state_container.get_all_search_docs(),
         db_session=db_session,
         assistant_message=assistant_message,
         is_clarification=state_container.is_clarification,
+        emitted_citations=state_container.get_emitted_citations(),
     )
 
 
 def stream_chat_message_objects(
     new_msg_req: CreateChatMessageRequest,
-    user: User | None,
+    user: User,
     db_session: Session,
     # if specified, uses the last user message and does not create a new user message based
     # on the `new_msg_req.message`. Currently, requires a state where the last message is a

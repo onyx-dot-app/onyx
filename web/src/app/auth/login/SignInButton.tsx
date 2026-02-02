@@ -26,8 +26,10 @@ export default function SignInButton({
     button = "Continue with SAML SSO";
   }
 
-  const url = new URL(authorizeUrl);
-  const finalAuthorizeUrl = url.toString();
+  const finalAuthorizeUrl = new URL(
+    authorizeUrl,
+    window.location.origin
+  ).toString();
 
   if (!button) {
     throw new Error(`Unhandled authType: ${authType}`);
