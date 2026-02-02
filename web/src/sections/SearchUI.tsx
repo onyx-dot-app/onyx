@@ -16,7 +16,6 @@ import { Section } from "@/layouts/general-layouts";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import FilterButton from "@/refresh-components/buttons/FilterButton";
-import { useAppMode } from "@/providers/AppModeProvider";
 
 // ============================================================================
 // Types
@@ -88,7 +87,6 @@ export default function SearchUI({
   const [timeFilterOpen, setTimeFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
-  const { setAppMode } = useAppMode();
 
   // Build the combined server-side filters from current state
   const buildFilters = (
@@ -106,8 +104,6 @@ export default function SearchUI({
     };
   };
 
-  useEffect(() => setAppMode("search"), [setAppMode]);
-
   // Reset source filter when results change
   useEffect(() => {
     setSelectedSources([]);
@@ -117,35 +113,6 @@ export default function SearchUI({
 
   // Create a set for fast lookup of LLM-selected docs
   const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
-
-  // Extract unique owners from results
-  const uniqueOwners = useMemo(() => {
-    const owners = new Set<string>();
-    for (const doc of results) {
-      if (doc.primary_owners) {
-        for (const owner of doc.primary_owners) {
-          owners.add(owner);
-        }
-      }
-    }
-    return Array.from(owners).sort();
-  }, [results]);
-
-  // Extract unique tags from results
-  const uniqueTags = useMemo(() => {
-    const tags = new Set<string>();
-    for (const doc of results) {
-      if (doc.metadata?.tags) {
-        const docTags = Array.isArray(doc.metadata.tags)
-          ? doc.metadata.tags
-          : [doc.metadata.tags];
-        for (const tag of docTags) {
-          tags.add(tag);
-        }
-      }
-    }
-    return Array.from(tags).sort();
-  }, [results]);
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
