@@ -69,7 +69,11 @@ from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_t
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
+    SSEKeepalive,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
@@ -478,8 +482,10 @@ class SessionManager:
                     tenant_id=tenant_id,
                     llm_config=llm_config,
                 )
-                sandbox.status = sandbox_info.status
-                self._db_session.flush()
+                # Use update function to also set heartbeat when transitioning to RUNNING
+                update_sandbox_status__no_commit(
+                    self._db_session, sandbox_id, sandbox_info.status
+                )
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
@@ -491,8 +497,9 @@ class SessionManager:
                     self._sandbox_manager.terminate(sandbox_id)
 
                     # Mark as terminated and re-provision
-                    sandbox.status = SandboxStatus.TERMINATED
-                    self._db_session.flush()
+                    update_sandbox_status__no_commit(
+                        self._db_session, sandbox_id, SandboxStatus.TERMINATED
+                    )
 
                     logger.info(
                         f"Re-provisioning sandbox {sandbox_id} for user {user_id}"
@@ -503,8 +510,10 @@ class SessionManager:
                         tenant_id=tenant_id,
                         llm_config=llm_config,
                     )
-                    sandbox.status = sandbox_info.status
-                    self._db_session.flush()
+                    # Use update function to also set heartbeat when transitioning to RUNNING
+                    update_sandbox_status__no_commit(
+                        self._db_session, sandbox_id, sandbox_info.status
+                    )
                 else:
                     logger.info(
                         f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
@@ -536,9 +545,10 @@ class SessionManager:
                 llm_config=llm_config,
             )
 
-            # Update sandbox record with status from provisioning
-            sandbox.status = sandbox_info.status
-            self._db_session.flush()
+            # Update sandbox status (also refreshes heartbeat when transitioning to RUNNING)
+            update_sandbox_status__no_commit(
+                self._db_session, sandbox_id, sandbox_info.status
+            )
 
         # Set up session workspace within the sandbox
         logger.info(
@@ -1238,6 +1248,14 @@ class SessionManager:
             for acp_event in self._sandbox_manager.send_message(
                 sandbox_id, session_id, user_message_content
             ):
+                # Handle SSE keepalive - send comment to keep connection alive
+                if isinstance(acp_event, SSEKeepalive):
+                    # SSE comments start with : and are ignored by EventSource
+                    # but keep the HTTP connection alive
+                    packet_logger.log_sse_emit("keepalive", session_id)
+                    yield ": keepalive\n\n"
+                    continue
+
                 # Check if we need to finalize pending chunks before processing
                 event_type = self._get_event_type(acp_event)
                 if state.should_finalize_chunks(event_type):
@@ -1338,6 +1356,7 @@ class SessionManager:
                                     db_session=self._db_session,
                                 )
 
+                    # Log full event to packet logger (can handle large payloads)
                     packet_logger.log("tool_call_progress", event_data)
                     packet_logger.log_sse_emit("tool_call_progress", session_id)
                     yield _serialize_acp_event(acp_event, "tool_call_progress")

@@ -57,6 +57,11 @@ class Settings(BaseModel):
     anonymous_user_enabled: bool | None = None
     deep_research_enabled: bool | None = None
 
+    # Enterprise features flag - set by license enforcement at runtime
+    # When LICENSE_ENFORCEMENT_ENABLED=true, this reflects license status
+    # When LICENSE_ENFORCEMENT_ENABLED=false, defaults to True (legacy behavior)
+    ee_features_enabled: bool = True
+
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None

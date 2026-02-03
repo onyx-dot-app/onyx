@@ -265,6 +265,14 @@ class RateLimitResponse(BaseModel):
     reset_timestamp: str | None = None
 
 
+# ===== Pre-Provisioned Session Check Models =====
+class PreProvisionedCheckResponse(BaseModel):
+    """Response for checking if a pre-provisioned session is still valid (empty)."""
+
+    valid: bool  # True if session exists and has no messages
+    session_id: str | None = None  # Session ID if valid, None otherwise
+
+
 # ===== Build Connector Models =====
 class BuildConnectorStatus(str, Enum):
     """Status of a build connector."""

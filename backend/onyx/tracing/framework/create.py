@@ -176,6 +176,7 @@ def function_span(
 def generation_span(
     input: Sequence[Mapping[str, Any]] | None = None,
     output: Sequence[Mapping[str, Any]] | None = None,
+    reasoning: str | None = None,
     model: str | None = None,
     model_config: Mapping[str, Any] | None = None,
     usage: dict[str, Any] | None = None,
@@ -195,6 +196,7 @@ def generation_span(
     Args:
         input: The sequence of input messages sent to the model.
         output: The sequence of output messages received from the model.
+        reasoning: The reasoning/thinking content from reasoning models (e.g., Claude extended thinking).
         model: The model identifier used for the generation.
         model_config: The model configuration (hyperparameters) used.
         usage: A dictionary of usage information (input tokens, output tokens, etc.).
@@ -213,6 +215,7 @@ def generation_span(
         span_data=GenerationSpanData(
             input=input,
             output=output,
+            reasoning=reasoning,
             model=model,
             model_config=model_config,
             usage=usage,

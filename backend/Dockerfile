@@ -149,6 +149,11 @@ RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
         ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
     fi
 
+# Set Craft template paths to the in-image locations
+# These match the paths where setup_craft_templates.sh creates the templates
+ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
+ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
+
 # Put logo in assets
 COPY --chown=onyx:onyx ./assets /app/assets
 

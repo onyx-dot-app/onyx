@@ -285,3 +285,9 @@ class HierarchyNodeType(str, PyEnum):
 
     # Slack
     CHANNEL = "channel"
+
+
+class LLMModelFlowType(str, PyEnum):
+    CHAT = "chat"
+    VISION = "vision"
+    EMBEDDINGS = "embeddings"
