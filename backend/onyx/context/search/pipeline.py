@@ -308,6 +308,7 @@ def search_pipeline(
         query_keywords=query_keywords,
         filters=filters,
         limit=chunk_search_request.limit,
+        offset=chunk_search_request.offset,
     )
 
     retrieved_chunks = search_chunks(
