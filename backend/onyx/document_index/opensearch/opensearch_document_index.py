@@ -5,6 +5,7 @@ import httpx
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
@@ -417,7 +418,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         query: str,
         query_embedding: Embedding,
         filters: IndexFilters,
-        num_to_retrieve: int,
+        num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
     ) -> list[InferenceChunk]:
         return self._real_index.hybrid_retrieval(
@@ -433,7 +434,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
     def random_retrieval(
         self,
         filters: IndexFilters,
-        num_to_retrieve: int = 100,
+        num_to_retrieve: int = 10,
     ) -> list[InferenceChunk]:
         return self._real_index.random_retrieval(
             filters=filters,
@@ -802,7 +803,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def random_retrieval(
         self,
         filters: IndexFilters,
-        num_to_retrieve: int = 100,
+        num_to_retrieve: int = 10,
         dirty: bool | None = None,
     ) -> list[InferenceChunk]:
         logger.debug(

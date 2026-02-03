@@ -389,7 +389,7 @@ class RandomCapable(abc.ABC):
         self,
         # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
         filters: IndexFilters,
-        num_to_retrieve: int = 100,
+        num_to_retrieve: int = 10,
         dirty: bool | None = None,
     ) -> list[InferenceChunk]:
         """Retrieves random chunks matching the filters.

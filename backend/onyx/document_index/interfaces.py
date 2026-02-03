@@ -5,6 +5,7 @@ from typing import Any
 
 from onyx.access.models import DocumentAccess
 from onyx.access.models import ExternalAccess
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -398,7 +399,7 @@ class AdminCapable(abc.ABC):
         query: str,
         query_embedding: Embedding,
         filters: IndexFilters,
-        num_to_retrieve: int,
+        num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
     ) -> list[InferenceChunk]:
         """

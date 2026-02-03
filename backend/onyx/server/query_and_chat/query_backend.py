@@ -56,9 +56,9 @@ def admin_search(
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)
     else:
-        get_query_embedding(query, db_session)
+        query_embedding = get_query_embedding(query, db_session)
         matching_chunks = document_index.admin_retrieval(
-            query=query, filters=final_filters
+            query=query, query_embedding=query_embedding, filters=final_filters
         )
 
     documents = SearchDoc.from_chunks_or_sections(matching_chunks)
