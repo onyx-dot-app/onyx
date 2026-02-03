@@ -345,7 +345,7 @@ const MemoizedBuildSidebarInner = memo(
     // limit=0 indicates unlimited (local/self-hosted mode), so hide the count
     const sessionsTitle = useMemo(() => {
       if (isEnabled && limits && limits.limit > 0) {
-        return `Sessions (${limits.messagesUsed}/${limits.limit})`;
+        return `Total Messages (${limits.messagesUsed}/${limits.limit})`;
       }
       return "Sessions";
     }, [isEnabled, limits]);
