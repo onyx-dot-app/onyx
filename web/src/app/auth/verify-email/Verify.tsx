@@ -39,10 +39,12 @@ export default function Verify({ user }: VerifyProps) {
     });
 
     if (response.ok) {
-      // Use window.location.href to force a full page reload,
-      // ensuring app re-initializes with the new state (including
-      // server-side provider values)
-      window.location.href = firstUser ? "/app?new_team=true" : "/app";
+      // Redirect to login page instead of /app so user can log in
+      // from any browser (not dependent on the original signup session)
+      const loginUrl = firstUser
+        ? "/auth/login?verified=true&first_user=true"
+        : "/auth/login?verified=true";
+      window.location.href = loginUrl;
     } else {
       const errorDetail = (await response.json()).detail;
       setError(
