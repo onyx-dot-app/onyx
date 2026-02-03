@@ -43,6 +43,8 @@ from kubernetes.stream.ws_client import WSClient  # type: ignore
 from pydantic import ValidationError
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
+from onyx.server.features.build.configs import ACP_MESSAGE_TIMEOUT
+from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -56,9 +58,6 @@ DEFAULT_CLIENT_INFO = {
     "title": "Onyx Sandbox Agent Client (K8s Exec)",
     "version": "1.0.0",
 }
-
-# SSE keepalive interval - yield keepalive if no events for this many seconds
-SSE_KEEPALIVE_INTERVAL = 15.0
 
 
 @dataclass
@@ -404,17 +403,21 @@ class ACPExecClient:
     def send_message(
         self,
         message: str,
-        timeout: float = 300.0,
+        timeout: float | None = None,
     ) -> Generator[ACPEvent, None, None]:
         """Send a message and stream response events.
 
         Args:
             message: The message content to send
-            timeout: Maximum time to wait for complete response
+            timeout: Maximum time to wait for complete response (defaults to ACP_MESSAGE_TIMEOUT env var)
 
         Yields:
             Typed ACP schema event objects
         """
+        # Use env var default if timeout not specified
+        if timeout is None:
+            timeout = ACP_MESSAGE_TIMEOUT
+
         if self._state.current_session is None:
             raise RuntimeError("No active session. Call start() first.")
 
