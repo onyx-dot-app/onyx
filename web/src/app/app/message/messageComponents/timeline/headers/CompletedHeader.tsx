@@ -4,6 +4,7 @@ import Button from "@/refresh-components/buttons/Button";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import { formatDurationSeconds } from "@/lib/time";
+import { noProp } from "@/lib/utils";
 
 export interface CompletedHeaderProps {
   totalSteps: number;
@@ -48,7 +49,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
         (isExpanded ? (
           <IconButton
             tertiary
-            onClick={onToggle}
+            onClick={noProp(onToggle)}
             icon={SvgFold}
             aria-label="Collapse timeline"
             aria-expanded={true}
@@ -56,7 +57,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
         ) : (
           <Button
             tertiary
-            onClick={onToggle}
+            onClick={noProp(onToggle)}
             rightIcon={SvgExpand}
             aria-label="Expand timeline"
             aria-expanded={false}
