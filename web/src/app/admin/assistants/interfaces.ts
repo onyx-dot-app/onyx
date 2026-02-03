@@ -20,6 +20,7 @@ export interface AttachedDocumentSnapshot {
   parent_id: number | null;
   last_modified: string | null;
   last_synced: string | null;
+  source: ValidSources | null;
 }
 
 export interface StarterMessageBase {
