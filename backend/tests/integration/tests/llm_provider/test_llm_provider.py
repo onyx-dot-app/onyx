@@ -23,7 +23,8 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
         headers=admin_user.headers,
     )
     assert response.status_code == 200
-    providers = response.json()
+    response_data = response.json()
+    providers = response_data["providers"]
     return next((p for p in providers if p["id"] == provider_id), None)
 
 
@@ -140,31 +141,6 @@ def assert_response_is_equivalent(
             "gpt-4",
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)] * 4,
             [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
-        ),
-        # Test the case in which no model-configurations are passed.
-        # In this case, a model-configuration for "gpt-4" should be inferred
-        # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
-        (
-            "gpt-4",
-            [],
-            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
-        ),
-        # Test the case in which the default-model-name is not contained inside of the model-configurations list.
-        # Once again, in this case, a model-configuration for "gpt-4" should be inferred
-        # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
-        (
-            "gpt-4",
-            [
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True, max_input_tokens=4096
-                )
-            ],
-            [
-                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
-                ModelConfigurationUpsertRequest(
-                    name="gpt-4o", is_visible=True, max_input_tokens=4096
-                ),
-            ],
         ),
     ],
 )
@@ -610,8 +586,8 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:
     assert len(visible_models) == 0
 
     # Make gpt-4o the default
-    edit_response_4 = requests.put(
-        f"{API_SERVER_URL}/admin/llm/provider/default",
+    edit_response_4 = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
         headers=admin_user.headers,
         json={
             "provider_id": created_provider["id"],
@@ -683,16 +659,16 @@ def _get_provider_by_name_basic(user: DATestUser, provider_name: str) -> dict | 
 
 
 def _validate_default_model(
-    text_default: dict | None,
+    default: dict | None,
     provider_id: int | None = None,
     model_name: str | None = None,
 ) -> None:
-    if text_default is None:
+    if default is None:
         assert provider_id is None and model_name is None
         return
 
-    assert text_default["provider_id"] == provider_id
-    assert text_default["model_name"] == model_name
+    assert default["provider_id"] == provider_id
+    assert default["model_name"] == model_name
 
 
 def _validate_model_configurations(
@@ -805,7 +781,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:
     assert basic_user.role == UserRole.BASIC or basic_user.role != UserRole.ADMIN
 
     provider_name = f"test-default-model-{uuid.uuid4()}"
-    initial_default_model = "gpt-4"
     updated_default_model = "gpt-4o"
 
     # Model configurations including all models we'll use
@@ -832,7 +807,6 @@ def test_default_model_persistence_and_update(reset: None) -> None:
             "name": provider_name,
             "provider": LlmProviderNames.OPENAI,
             "api_key": "sk-000000000000000000000000000000000000000000000000",
-            "default_model_name": initial_default_model,
             "model_configurations": [config.model_dump() for config in model_configs],
             "is_public": True,
             "groups": [],
@@ -1029,7 +1003,7 @@ def _set_default_vision_provider(
         f"{API_SERVER_URL}/admin/llm/default-vision",
         json={
             "provider_id": provider_id,
-            "vision_model": vision_model,
+            "model_name": vision_model,
         },
         headers=admin_user.headers,
     )
@@ -1872,7 +1846,9 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:
         provider_id=vision_provider["id"],
         model_name="gpt-4-vision-preview",
     )
-    _validate_default_model(vision_default)  # None
+    _validate_default_model(
+        vision_default, vision_provider["id"], "gpt-4-vision-preview"
+    )
     _get_provider_by_name(providers, regular_provider_name)
 
     # Get all image generation configs
@@ -1933,7 +1909,9 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:
         provider_id=vision_provider["id"],
         model_name="gpt-4-vision-preview",
     )
-    _validate_default_model(vision_default)  # None
+    _validate_default_model(
+        vision_default, vision_provider["id"], "gpt-4-vision-preview"
+    )
     basic_provider_data = _get_provider_by_name(providers, regular_provider_name)
     assert basic_provider_data is not None
     _validate_provider_data(

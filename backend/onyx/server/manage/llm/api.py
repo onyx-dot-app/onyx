@@ -283,9 +283,17 @@ def list_llm_providers(
             model_name=model_config.name,
         )
 
+    default_vision_model = None
+    if model_config := fetch_default_vision_model(db_session):
+        default_vision_model = DefaultModel(
+            provider_id=model_config.llm_provider.id,
+            model_name=model_config.name,
+        )
+
     return LLMProviderResponse[LLMProviderView].from_models(
         providers=llm_provider_list,
         default_text=default_model,
+        default_vision=default_vision_model,
     )
 
 
@@ -499,7 +507,7 @@ def get_vision_capable_providers(
 def list_llm_provider_basics(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderDescriptor]:
+) -> LLMProviderResponse[LLMProviderDescriptor]:
     """Get LLM providers accessible to the current user.
 
     Returns:
@@ -538,7 +546,25 @@ def list_llm_provider_basics(
         f"Completed fetching {len(accessible_providers)} user-accessible providers in {duration:.2f} seconds"
     )
 
-    return accessible_providers
+    default_model = None
+    if model_config := fetch_default_llm_model(db_session):
+        default_model = DefaultModel(
+            provider_id=model_config.llm_provider.id,
+            model_name=model_config.name,
+        )
+
+    default_vision_model = None
+    if model_config := fetch_default_vision_model(db_session):
+        default_vision_model = DefaultModel(
+            provider_id=model_config.llm_provider.id,
+            model_name=model_config.name,
+        )
+
+    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+        providers=accessible_providers,
+        default_text=default_model,
+        default_vision=default_vision_model,
+    )
 
 
 def get_valid_model_names_for_persona(
