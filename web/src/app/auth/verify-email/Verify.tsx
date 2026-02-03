@@ -1,7 +1,7 @@
 "use client";
 
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
@@ -15,7 +15,6 @@ export interface VerifyProps {
 
 export default function Verify({ user }: VerifyProps) {
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   const [error, setError] = useState("");
 
@@ -56,7 +55,7 @@ export default function Verify({ user }: VerifyProps) {
         `Failed to verify your email - ${errorDetail}. Please try requesting a new verification email.`
       );
     }
-  }, [searchParams, router]);
+  }, [searchParams]);
 
   useEffect(() => {
     verify();

@@ -29,8 +29,9 @@ export default function LoginPage({
 }: LoginPageProps) {
   useSendAuthRequiredMessage();
 
-  // If user came from email verification as first user, ensure they go to new team flow
-  const effectiveNextUrl = isFirstUser ? "/app?new_team=true" : nextUrl;
+  // Honor any existing nextUrl; only default to new team flow for first users with no nextUrl
+  const effectiveNextUrl =
+    nextUrl ?? (isFirstUser ? "/app?new_team=true" : null);
 
   return (
     <div className="flex flex-col w-full justify-center">
