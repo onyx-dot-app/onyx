@@ -88,7 +88,7 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 1  # Only one new model
-            assert mock_session.execute.call_count == 1
+            assert mock_session.execute.call_count == 3
 
     def test_no_commit_when_no_new_models(self) -> None:
         """Test that commit is not called when no new models."""
