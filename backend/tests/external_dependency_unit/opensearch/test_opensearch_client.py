@@ -296,7 +296,7 @@ class TestOpenSearchClient:
 
         # Under test and postcondition.
         # Should not raise.
-        test_client.index_document(document=doc)
+        test_client.index_document(document=doc, tenant_state=tenant_state)
 
     def test_index_duplicate_document(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
@@ -319,12 +319,12 @@ class TestOpenSearchClient:
         )
 
         # Index once - should succeed.
-        test_client.index_document(document=doc)
+        test_client.index_document(document=doc, tenant_state=tenant_state)
 
         # Under test and postcondition.
         # Index again - should raise.
         with pytest.raises(Exception, match="already exists"):
-            test_client.index_document(document=doc)
+            test_client.index_document(document=doc, tenant_state=tenant_state)
 
     def test_get_document(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
@@ -348,10 +348,11 @@ class TestOpenSearchClient:
             # this test we'll deliberately lose some precision.
             last_updated=datetime.now(timezone.utc).replace(microsecond=0),
         )
-        test_client.index_document(document=original_doc)
+        test_client.index_document(document=original_doc, tenant_state=tenant_state)
 
         # Under test.
         doc_chunk_id = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
             document_id=original_doc.document_id,
             chunk_index=original_doc.chunk_index,
             max_chunk_size=original_doc.max_chunk_size,
@@ -398,10 +399,11 @@ class TestOpenSearchClient:
             content="Content to delete",
             tenant_state=tenant_state,
         )
-        test_client.index_document(document=doc)
+        test_client.index_document(document=doc, tenant_state=tenant_state)
 
         # Under test.
         doc_chunk_id = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
             document_id=doc.document_id,
             chunk_index=doc.chunk_index,
             max_chunk_size=doc.max_chunk_size,
@@ -468,7 +470,7 @@ class TestOpenSearchClient:
         ]
 
         for doc in docs_to_delete + docs_to_keep:
-            test_client.index_document(document=doc)
+            test_client.index_document(document=doc, tenant_state=tenant_state)
         test_client.refresh_index()
 
         query_body = DocumentQuery.delete_from_document_id_query(
@@ -532,10 +534,11 @@ class TestOpenSearchClient:
             tenant_state=tenant_state,
             hidden=False,
         )
-        test_client.index_document(document=doc)
+        test_client.index_document(document=doc, tenant_state=tenant_state)
 
         # Under test.
         doc_chunk_id = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
             document_id=doc.document_id,
             chunk_index=doc.chunk_index,
             max_chunk_size=doc.max_chunk_size,
@@ -621,7 +624,7 @@ class TestOpenSearchClient:
             ),
         }
         for doc in docs.values():
-            test_client.index_document(document=doc)
+            test_client.index_document(document=doc, tenant_state=tenant_state)
 
         # Refresh index to make documents searchable.
         test_client.refresh_index()
@@ -776,7 +779,7 @@ class TestOpenSearchClient:
             ),
         }
         for doc in docs.values():
-            test_client.index_document(document=doc)
+            test_client.index_document(document=doc, tenant_state=doc.tenant_id)
 
         # Refresh index to make documents searchable.
         test_client.refresh_index()
@@ -899,7 +902,7 @@ class TestOpenSearchClient:
             ),
         ]
         for doc in docs:
-            test_client.index_document(document=doc)
+            test_client.index_document(document=doc, tenant_state=tenant_x)
 
         # Refresh index to make documents searchable.
         test_client.refresh_index()
@@ -971,12 +974,11 @@ class TestOpenSearchClient:
         settings = DocumentSchema.get_index_settings()
         test_client.create_index(mappings=mappings, settings=settings)
 
-        # Index chunks for different doc IDs for different tenants.
-        # NOTE: Since get_opensearch_doc_chunk_id doesn't include tenant_id yet,
-        # we use different document IDs to avoid ID conflicts.
+        # Although very unlikely in practice, let's use the same doc ID just to
+        # make sure that doesn't break the index.
         tenant_x_chunks = [
             _create_test_document_chunk(
-                document_id="doc-tenant-x",
+                document_id="doc",
                 chunk_index=i,
                 content=f"Tenant A Chunk {i}",
                 tenant_state=tenant_x,
@@ -986,7 +988,7 @@ class TestOpenSearchClient:
 
         tenant_y_chunks = [
             _create_test_document_chunk(
-                document_id="doc-tenant-y",
+                document_id="doc",
                 chunk_index=i,
                 content=f"Tenant B Chunk {i}",
                 tenant_state=tenant_y,
@@ -995,12 +997,12 @@ class TestOpenSearchClient:
         ]
 
         for chunk in tenant_x_chunks + tenant_y_chunks:
-            test_client.index_document(document=chunk)
+            test_client.index_document(document=chunk, tenant_state=chunk.tenant_id)
         test_client.refresh_index()
 
         # Build deletion query for tenant-x only.
         query_body = DocumentQuery.delete_from_document_id_query(
-            document_id="doc-tenant-x",
+            document_id="doc",
             tenant_state=tenant_x,
         )
 
@@ -1014,7 +1016,7 @@ class TestOpenSearchClient:
         # Verify tenant-x chunks are deleted.
         test_client.refresh_index()
         verify_query_x = DocumentQuery.get_from_document_id_query(
-            document_id="doc-tenant-x",
+            document_id="doc",
             tenant_state=tenant_x,
             index_filters=IndexFilters(access_control_list=None, tenant_id=None),
             include_hidden=False,
@@ -1028,7 +1030,7 @@ class TestOpenSearchClient:
 
         # Verify tenant-y chunks still exist.
         verify_query_y = DocumentQuery.get_from_document_id_query(
-            document_id="doc-tenant-y",
+            document_id="doc",
             tenant_state=tenant_y,
             index_filters=IndexFilters(access_control_list=None, tenant_id=None),
             include_hidden=False,
@@ -1041,6 +1043,7 @@ class TestOpenSearchClient:
         assert len(remaining_y_ids) == 2
         expected_y_ids = {
             get_opensearch_doc_chunk_id(
+                tenant_state=tenant_y,
                 document_id=chunk.document_id,
                 chunk_index=chunk.chunk_index,
                 max_chunk_size=chunk.max_chunk_size,
@@ -1112,7 +1115,7 @@ class TestOpenSearchClient:
         ]
 
         for chunk in doc1_chunks + doc2_chunks:
-            test_client.index_document(document=chunk)
+            test_client.index_document(document=chunk, tenant_state=tenant_state)
         test_client.refresh_index()
 
         # Build query for doc-1.
@@ -1134,6 +1137,7 @@ class TestOpenSearchClient:
         assert len(chunk_ids) == 3
         expected_ids = {
             get_opensearch_doc_chunk_id(
+                tenant_state=tenant_state,
                 document_id=chunk.document_id,
                 chunk_index=chunk.chunk_index,
                 max_chunk_size=chunk.max_chunk_size,
@@ -1190,7 +1194,7 @@ class TestOpenSearchClient:
             ),
         }
         for doc in docs.values():
-            test_client.index_document(document=doc)
+            test_client.index_document(document=doc, tenant_state=tenant_state)
 
         # Refresh index to make documents searchable.
         test_client.refresh_index()
@@ -1264,7 +1268,7 @@ class TestOpenSearchClient:
             ),
         ]
         for doc in docs:
-            test_client.index_document(document=doc)
+            test_client.index_document(document=doc, tenant_state=tenant_state)
 
         # Refresh index to make documents searchable.
         test_client.refresh_index()

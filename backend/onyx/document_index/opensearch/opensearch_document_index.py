@@ -554,7 +554,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             )
             # TODO(andrei): After our client supports batch indexing, use that
             # here.
-            self._os_client.index_document(opensearch_document_chunk)
+            self._os_client.index_document(
+                document=opensearch_document_chunk, tenant_state=self._tenant_state
+            )
 
             if document_insertion_record is not None:
                 # Only add records once per doc. This object is not None only if
@@ -679,7 +681,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
                 for chunk_index in range(doc_chunk_count):
                     document_chunk_id = get_opensearch_doc_chunk_id(
-                        document_id=doc_id, chunk_index=chunk_index
+                        tenant_state=self._tenant_state,
+                        document_id=doc_id,
+                        chunk_index=chunk_index,
                     )
                     self._os_client.update_document(
                         document_chunk_id=document_chunk_id,
@@ -803,4 +807,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # Do not raise if the document already exists, just update. This is
             # because the document may already have been indexed during the
             # OpenSearch transition period.
-            self._os_client.index_document(chunk, update_if_exists=True)
+            self._os_client.index_document(
+                document=chunk, tenant_state=self._tenant_state, update_if_exists=True
+            )
