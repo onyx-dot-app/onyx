@@ -1,5 +1,8 @@
 import useSWR from "swr";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  LLMProviderDescriptor,
+  LLMProviderResponse,
+} from "@/app/admin/configuration/llm/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export function useLLMProviders(personaId?: number) {
@@ -12,17 +15,17 @@ export function useLLMProviders(personaId?: number) {
       ? `/api/llm/persona/${personaId}/providers`
       : "/api/llm/provider";
 
-  const { data, error, mutate } = useSWR<LLMProviderDescriptor[] | undefined>(
-    url,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false, // Cache aggressively for performance
-      dedupingInterval: 60000, // Dedupe requests within 1 minute
-    }
-  );
+  const { data, error, mutate } = useSWR<
+    LLMProviderResponse<LLMProviderDescriptor> | undefined
+  >(url, errorHandlingFetcher, {
+    revalidateOnFocus: false, // Cache aggressively for performance
+    dedupingInterval: 60000, // Dedupe requests within 1 minute
+  });
 
   return {
-    llmProviders: data,
+    llmProviders: data?.providers,
+    defaultText: data?.default_text,
+    defaultVision: data?.default_vision,
     isLoading: !error && !data,
     error,
     refetch: mutate,

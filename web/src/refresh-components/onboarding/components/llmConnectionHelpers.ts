@@ -93,15 +93,7 @@ export const testApiKeyHelper = async (
       ...(formValues?.custom_config ?? {}),
       ...(customConfigOverride ?? {}),
     },
-    default_model_name: modelName ?? formValues?.default_model_name ?? "",
-    model_configurations: [
-      ...(formValues.model_configurations || []).map(
-        (model: ModelConfiguration) => ({
-          name: model.name,
-          is_visible: true,
-        })
-      ),
-    ],
+    model: modelName ?? formValues?.default_model_name ?? "",
   };
 
   return await submitLlmTestRequest(

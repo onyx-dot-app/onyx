@@ -47,20 +47,16 @@ export interface LLMProvider {
   api_base: string | null;
   api_version: string | null;
   custom_config: { [key: string]: string } | null;
-  default_model_name: string;
   is_public: boolean;
   is_auto_mode: boolean;
   groups: number[];
   personas: number[];
   deployment_name: string | null;
-  default_vision_model: string | null;
-  is_default_vision_provider: boolean | null;
   model_configurations: ModelConfiguration[];
 }
 
 export interface LLMProviderView extends LLMProvider {
   id: number;
-  is_default_provider: boolean | null;
 }
 
 export interface VisionProvider extends LLMProviderView {
@@ -71,14 +67,20 @@ export interface LLMProviderDescriptor {
   name: string;
   provider: string;
   provider_display_name?: string;
-  default_model_name: string;
-  is_default_provider: boolean | null;
-  is_default_vision_provider?: boolean | null;
-  default_vision_model?: string | null;
-  is_public?: boolean;
-  groups?: number[];
-  personas?: number[];
   model_configurations: ModelConfiguration[];
+}
+
+export interface DefaultModel {
+  provider_id: number;
+  model_name: string;
+}
+
+export interface LLMProviderResponse<
+  T extends LLMProviderView | LLMProviderDescriptor,
+> {
+  providers: T[];
+  default_text: DefaultModel | null;
+  default_vision: DefaultModel | null;
 }
 
 export interface OllamaModelResponse {

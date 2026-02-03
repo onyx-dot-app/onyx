@@ -67,7 +67,7 @@ test.describe("First user onboarding flow", () => {
       }
     );
 
-    await page.route("**/api/admin/llm/provider/*/default", async (route) => {
+    await page.route("**/api/admin/llm/default", async (route) => {
       if (route.request().method() === "POST") {
         await route.fulfill({
           status: 200,

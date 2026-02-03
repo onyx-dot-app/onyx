@@ -24,17 +24,15 @@ export function useVisionProviders(setPopup: SetPopup) {
     setError(null);
     try {
       const data = await fetchVisionProviders();
-      setVisionProviders(data);
+      setVisionProviders(data.providers);
 
       // Find the default vision provider and set it
-      const defaultProvider = data.find(
-        (provider) => provider.is_default_vision_provider
+      const defaultProvider = data.providers.find(
+        (provider) => provider.id === data.default_vision?.provider_id
       );
 
       if (defaultProvider) {
-        const modelToUse =
-          defaultProvider.default_vision_model ||
-          defaultProvider.default_model_name;
+        const modelToUse = data.default_vision?.model_name;
 
         if (modelToUse && defaultProvider.vision_models.includes(modelToUse)) {
           setVisionLLM(

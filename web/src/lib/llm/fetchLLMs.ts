@@ -1,4 +1,7 @@
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  LLMProviderDescriptor,
+  LLMProviderResponse,
+} from "@/app/admin/configuration/llm/interfaces";
 import { fetchSS } from "../utilsSS";
 
 export async function fetchLLMProvidersSS() {
@@ -8,7 +11,7 @@ export async function fetchLLMProvidersSS() {
   }
   const response = await fetchSS("/llm/provider");
   if (response.ok) {
-    return (await response.json()) as LLMProviderDescriptor[];
+    return (await response.json()) as LLMProviderResponse<LLMProviderDescriptor>;
   }
-  return [];
+  return { providers: [], default_text: null, default_vision: null };
 }
