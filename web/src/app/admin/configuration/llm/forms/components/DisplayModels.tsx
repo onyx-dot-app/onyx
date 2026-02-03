@@ -2,14 +2,17 @@ import { ModelConfiguration, SimpleKnownModel } from "../../interfaces";
 import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
 
+import Button from "@/refresh-components/buttons/Button";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
+import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { FieldLabel } from "@/components/Field";
+import { Section } from "@/layouts/general-layouts";
 
 interface AutoModeToggleProps {
   isAutoMode: boolean;
-  onToggle: () => void;
+  onToggle: (nextValue: boolean) => void;
 }
 
 function AutoModeToggle({ isAutoMode, onToggle }: AutoModeToggleProps) {
@@ -24,25 +27,7 @@ function AutoModeToggle({ isAutoMode, onToggle }: AutoModeToggleProps) {
           released. Recommended for most teams.
         </Text>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={isAutoMode}
-        className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full",
-          "border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-          isAutoMode ? "bg-action-link-05" : "bg-background-neutral-03"
-        )}
-        onClick={onToggle}
-      >
-        <span
-          className={cn(
-            "pointer-events-none inline-block h-5 w-5 transform rounded-full",
-            "bg-white shadow ring-0 transition duration-200 ease-in-out",
-            isAutoMode ? "translate-x-5" : "translate-x-0"
-          )}
-        />
-      </button>
+      <Switch checked={isAutoMode} onCheckedChange={onToggle} />
     </div>
   );
 }
@@ -118,20 +103,47 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     formikProps.setFieldValue("default_model_name", modelName);
   };
 
-  const handleToggleAutoMode = () => {
-    formikProps.setFieldValue("is_auto_mode", !isAutoMode);
+  const handleToggleAutoMode = (nextIsAutoMode: boolean) => {
+    formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     formikProps.setFieldValue(
       "selected_model_names",
       modelConfigurations.filter((m) => m.is_visible).map((m) => m.name)
     );
     formikProps.setFieldValue(
       "default_model_name",
-      recommendedDefaultModel?.name ?? ""
+      recommendedDefaultModel?.name ?? null
     );
   };
 
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
+  const selectedModelSet = new Set(selectedModels);
+  const allModelNames = modelConfigurations.map((model) => model.name);
+  const areAllModelsSelected =
+    allModelNames.length > 0 &&
+    allModelNames.every((modelName) => selectedModelSet.has(modelName));
+  const areSomeModelsSelected = selectedModels.length > 0;
+
+  const handleSelectAllModels = () => {
+    formikProps.setFieldValue("selected_model_names", allModelNames);
+
+    const currentDefault = defaultModel ?? "";
+    const hasValidDefault =
+      currentDefault.length > 0 && allModelNames.includes(currentDefault);
+
+    if (!hasValidDefault && allModelNames.length > 0) {
+      const nextDefault =
+        recommendedDefaultModel &&
+        allModelNames.includes(recommendedDefaultModel.name)
+          ? recommendedDefaultModel.name
+          : allModelNames[0];
+      formikProps.setFieldValue("default_model_name", nextDefault);
+    }
+  };
+  const handleClearAllModels = () => {
+    formikProps.setFieldValue("selected_model_names", []);
+    formikProps.setFieldValue("default_model_name", null);
+  };
 
   if (modelConfigurations.length === 0) {
     return (
@@ -156,6 +168,72 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   return (
     <div className="flex flex-col gap-3">
       <DisplayModelHeader />
+      {!isAutoMode && modelConfigurations.length > 0 && (
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="center"
+          height="auto"
+          gap={0.5}
+        >
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            height="auto"
+            width="fit"
+            gap={0.5}
+          >
+            <Checkbox
+              checked={areAllModelsSelected}
+              indeterminate={areSomeModelsSelected && !areAllModelsSelected}
+              onCheckedChange={() =>
+                areAllModelsSelected
+                  ? handleClearAllModels()
+                  : handleSelectAllModels()
+              }
+              aria-label="Select all models"
+            />
+            <Button
+              main
+              internal
+              className="p-0 h-auto rounded-none"
+              onClick={() =>
+                areAllModelsSelected
+                  ? handleClearAllModels()
+                  : handleSelectAllModels()
+              }
+            >
+              <Text
+                as="span"
+                secondaryBody
+                className={cn(
+                  "text-xs",
+                  areSomeModelsSelected ? "text-text-03" : "text-text-02"
+                )}
+              >
+                Select all models
+              </Text>
+            </Button>
+          </Section>
+          {areSomeModelsSelected && (
+            <Button
+              main
+              internal
+              className="p-0 h-auto rounded-none"
+              onClick={handleClearAllModels}
+            >
+              <Text
+                as="span"
+                secondaryBody
+                className="text-xs text-action-link-05 hover:text-action-link-06"
+              >
+                Clear all ({selectedModels.length})
+              </Text>
+            </Button>
+          )}
+        </Section>
+      )}
       <div className="border border-border-01 rounded-lg p-3">
         {shouldShowAutoUpdateToggle && (
           <AutoModeToggle
@@ -270,22 +348,33 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                         {modelConfiguration.name}
                       </Text>
                     </div>
-                    <button
+                    <Button
+                      main
+                      internal
                       type="button"
                       disabled={!isSelected}
                       onClick={() => handleSetDefault(modelConfiguration.name)}
-                      className={`text-xs px-2 py-0.5 rounded transition-all duration-200 ease-in-out ${
+                      className={cn(
+                        "px-2 py-0.5 rounded transition-all duration-200 ease-in-out",
                         isSelected
                           ? "opacity-100 translate-x-0"
-                          : "opacity-0 translate-x-2 pointer-events-none"
-                      } ${
+                          : "opacity-0 translate-x-2 pointer-events-none",
                         isDefault
-                          ? "bg-action-link-05 text-text-inverse font-medium scale-100"
-                          : "bg-background-neutral-02 text-text-03 hover:bg-background-neutral-03 scale-95 hover:scale-100"
-                      }`}
+                          ? "bg-action-link-05 font-medium scale-100"
+                          : "bg-background-neutral-02 hover:bg-background-neutral-03 scale-95 hover:scale-100"
+                      )}
                     >
-                      {isDefault ? "Default" : "Set as default"}
-                    </button>
+                      <Text
+                        as="span"
+                        secondaryBody
+                        className={cn(
+                          "text-xs",
+                          isDefault ? "text-text-inverse" : "text-text-03"
+                        )}
+                      >
+                        {isDefault ? "Default" : "Set as default"}
+                      </Text>
+                    </Button>
                   </div>
                 );
               })}
