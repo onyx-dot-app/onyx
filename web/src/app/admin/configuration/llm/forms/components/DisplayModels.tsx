@@ -1,7 +1,6 @@
 import { ModelConfiguration, SimpleKnownModel } from "../../interfaces";
 import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
-import { useMemo } from "react";
 
 import Button from "@/refresh-components/buttons/Button";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
@@ -9,6 +8,7 @@ import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { FieldLabel } from "@/components/Field";
+import { Section } from "@/layouts/general-layouts";
 
 interface AutoModeToggleProps {
   isAutoMode: boolean;
@@ -117,14 +117,8 @@ export function DisplayModels<T extends BaseLLMFormValues>({
 
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
-  const selectedModelSet = useMemo(
-    () => new Set(selectedModels),
-    [selectedModels]
-  );
-  const allModelNames = useMemo(
-    () => modelConfigurations.map((model) => model.name),
-    [modelConfigurations]
-  );
+  const selectedModelSet = new Set(selectedModels);
+  const allModelNames = modelConfigurations.map((model) => model.name);
   const areAllModelsSelected =
     allModelNames.length > 0 &&
     allModelNames.every((modelName) => selectedModelSet.has(modelName));
@@ -175,8 +169,21 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     <div className="flex flex-col gap-3">
       <DisplayModelHeader />
       {!isAutoMode && modelConfigurations.length > 0 && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="center"
+          height="auto"
+          gap={0.5}
+        >
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            height="auto"
+            width="fit"
+            gap={0.5}
+          >
             <Checkbox
               checked={areAllModelsSelected}
               indeterminate={areSomeModelsSelected && !areAllModelsSelected}
@@ -208,7 +215,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                 Select all models
               </Text>
             </Button>
-          </div>
+          </Section>
           {areSomeModelsSelected && (
             <Button
               main
@@ -225,7 +232,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
               </Text>
             </Button>
           )}
-        </div>
+        </Section>
       )}
       <div className="border border-border-01 rounded-lg p-3">
         {shouldShowAutoUpdateToggle && (
