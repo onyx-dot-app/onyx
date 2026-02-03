@@ -295,20 +295,6 @@ class Updatable(abc.ABC):
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
-        """
-        Updates some set of chunks. The document and fields to update are specified in the update
-        requests. Each update request in the list applies its changes to a list of document ids.
-        None values mean that the field does not need an update.
-
-        Parameters:
-        - update_requests: for a list of document ids in the update request, apply the same updates
-                to all of the documents with those ids. This is for bulk handling efficiency. Many
-                updates are done at the connector level which have many documents for the connector
-        """
-        raise NotImplementedError
-
 
 class IdRetrievalCapable(abc.ABC):
     """
@@ -410,6 +396,7 @@ class AdminCapable(abc.ABC):
     def admin_retrieval(
         self,
         query: str,
+        query_embedding: Embedding,
         filters: IndexFilters,
         num_to_retrieve: int,
         offset: int = 0,

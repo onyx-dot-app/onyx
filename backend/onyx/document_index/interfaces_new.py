@@ -318,6 +318,7 @@ class IdRetrievalCapable(abc.ABC):
         # TODO(andrei): This is temporary, we will not expose this in the long
         # run.
         batch_retrieval: bool = False,
+        # TODO(andrei): Add a param for whether to retrieve hidden docs.
     ) -> list[InferenceChunk]:
         """Fetches chunk(s) based on document ID.
 
@@ -347,6 +348,7 @@ class HybridCapable(abc.ABC):
         self,
         query: str,
         query_embedding: Embedding,
+        # TODO(andrei): This param is not great design, get rid of it.
         final_keywords: list[str] | None,
         query_type: QueryType,
         # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
@@ -380,8 +382,6 @@ class HybridCapable(abc.ABC):
 class RandomCapable(abc.ABC):
     """
     Class must implement random document retrieval.
-
-    This currently is just used for porting the documents to a secondary index.
     """
 
     @abc.abstractmethod

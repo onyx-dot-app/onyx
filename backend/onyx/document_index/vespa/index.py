@@ -39,7 +39,6 @@ from onyx.document_index.interfaces import (
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
-from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
@@ -648,9 +647,6 @@ class VespaIndex(DocumentIndex):
             time.monotonic() - update_start,
         )
 
-    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
-        raise NotImplementedError
-
     def update_single(
         self,
         doc_id: str,
@@ -665,9 +661,10 @@ class VespaIndex(DocumentIndex):
         Handle other exceptions if you wish to implement retry behavior
         """
         if fields is None and user_fields is None:
-            raise ValueError(
-                f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
+            logger.warning(
+                f"Tried to update document {doc_id} with no updated fields or user fields."
             )
+            return
 
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
@@ -814,6 +811,7 @@ class VespaIndex(DocumentIndex):
     def admin_retrieval(
         self,
         query: str,
+        query_embedding: Embedding,
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
