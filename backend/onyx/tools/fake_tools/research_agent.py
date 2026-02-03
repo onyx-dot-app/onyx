@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from typing import Any
 from typing import cast
@@ -73,9 +74,11 @@ logger = setup_logger()
 
 
 RESEARCH_CYCLE_CAP = 3
-# 15 minute timeout per research agent
-RESEARCH_AGENT_TIMEOUT_SECONDS = 15 * 60
-RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 15 minutes"
+# 30 minute timeout per research agent
+RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
+RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
+# 12 minute timeout before forcing intermediate report generation
+RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 # May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
 MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 10000
 
@@ -90,6 +93,8 @@ def generate_intermediate_report(
     emitter: Emitter,
     placement: Placement,
 ) -> str:
+    # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
+    # research tasks. This is also model / inference provider dependent.
     with function_span("generate_intermediate_report") as span:
         span.span_data.input = (
             f"research_topic={research_topic}, history_length={len(history)}"
@@ -212,6 +217,9 @@ def run_research_agent_call(
     with function_span("research_agent") as span:
         span.span_data.input = str(research_agent_call.tool_args)
         try:
+            # Track start time for timeout-based forced report generation
+            start_time = time.monotonic()
+
             # Used to track citations while keeping original citation markers in intermediate reports.
             # KEEP_MARKERS preserves citation markers like [1], [2] in the text unchanged
             # while tracking which documents were cited via get_seen_citations().
@@ -246,6 +254,15 @@ def run_research_agent_call(
             citation_mapping: dict[int, str] = {}
             most_recent_reasoning: str | None = None
             while research_cycle_count <= RESEARCH_CYCLE_CAP:
+                # Check if we've exceeded the time limit - if so, skip LLM and generate report
+                elapsed_seconds = time.monotonic() - start_time
+                if elapsed_seconds > RESEARCH_AGENT_FORCE_REPORT_SECONDS:
+                    logger.info(
+                        f"Research agent exceeded {RESEARCH_AGENT_FORCE_REPORT_SECONDS}s "
+                        f"(elapsed: {elapsed_seconds:.1f}s), forcing intermediate report generation"
+                    )
+                    break
+
                 if research_cycle_count == RESEARCH_CYCLE_CAP:
                     # For the last cycle, do not use any more searches, only reason or generate a report
                     current_tools = [
@@ -345,6 +362,11 @@ def run_research_agent_call(
                     custom_token_processor=custom_processor,
                     use_existing_tab_index=True,
                     is_deep_research=True,
+                    # In case the model is tripped up by the long context and gets into an endless loop of
+                    # things like null tokens, we set a max token limit here. The call will likely not be valid
+                    # in these situations but it at least allows a chance of recovery. None of the tool calls should
+                    # be this long.
+                    max_tokens=1000,
                 )
                 if has_reasoned:
                     reasoning_cycles += 1
@@ -692,3 +714,91 @@ def run_research_agent_calls(
         intermediate_reports=updated_answers,
         citation_mapping=updated_citation_mapping,
     )
+
+
+if __name__ == "__main__":
+    from queue import Queue
+    from uuid import uuid4
+
+    from onyx.chat.chat_state import ChatStateContainer
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    from onyx.db.engine.sql_engine import SqlEngine
+    from onyx.db.models import User
+    from onyx.db.persona import get_default_behavior_persona
+    from onyx.llm.factory import get_default_llm
+    from onyx.llm.factory import get_llm_token_counter
+    from onyx.llm.utils import model_is_reasoning_model
+    from onyx.server.query_and_chat.placement import Placement
+    from onyx.tools.models import ToolCallKickoff
+    from onyx.tools.tool_constructor import construct_tools
+
+    # === CONFIGURE YOUR RESEARCH PROMPT HERE ===
+    RESEARCH_PROMPT = "Your test research task."
+
+    SqlEngine.set_app_name("research_agent_script")
+    SqlEngine.init_engine(pool_size=5, max_overflow=5)
+
+    with get_session_with_current_tenant() as db_session:
+        llm = get_default_llm()
+        token_counter = get_llm_token_counter(llm)
+        is_reasoning = model_is_reasoning_model(
+            llm.config.model_name, llm.config.model_provider
+        )
+
+        persona = get_default_behavior_persona(db_session)
+        if persona is None:
+            raise ValueError("No default persona found")
+
+        user = db_session.query(User).first()
+        if user is None:
+            raise ValueError("No users found in database. Please create a user first.")
+
+        bus: Queue[Packet] = Queue()
+        emitter = Emitter(bus)
+        state_container = ChatStateContainer()
+
+        tool_dict = construct_tools(
+            persona=persona,
+            db_session=db_session,
+            emitter=emitter,
+            user=user,
+            llm=llm,
+        )
+        tools = [
+            tool
+            for tool_list in tool_dict.values()
+            for tool in tool_list
+            if tool.name != "generate_image"
+        ]
+
+        logger.info(f"Running research agent with prompt: {RESEARCH_PROMPT}")
+        logger.info(f"LLM: {llm.config.model_provider}/{llm.config.model_name}")
+        logger.info(f"Tools: {[t.name for t in tools]}")
+
+        result = run_research_agent_call(
+            research_agent_call=ToolCallKickoff(
+                tool_name="research_agent",
+                tool_args={RESEARCH_AGENT_TASK_KEY: RESEARCH_PROMPT},
+                tool_call_id=str(uuid4()),
+                placement=Placement(turn_index=0, tab_index=0),
+            ),
+            parent_tool_call_id=str(uuid4()),
+            tools=tools,
+            emitter=emitter,
+            state_container=state_container,
+            llm=llm,
+            is_reasoning_model=is_reasoning,
+            token_counter=token_counter,
+            user_identity=None,
+        )
+
+        if result is None:
+            logger.error("Research agent returned no result")
+        else:
+            print("\n" + "=" * 80)
+            print("RESEARCH AGENT RESULT")
+            print("=" * 80)
+            print(result.intermediate_report)
+            print("=" * 80)
+            print(f"Citations: {result.citation_mapping}")
+            print(f"Total packets emitted: {bus.qsize()}")
