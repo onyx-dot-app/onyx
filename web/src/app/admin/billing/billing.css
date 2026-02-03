@@ -1,0 +1,182 @@
+/**
+ * Billing page styles
+ *
+ * This file contains custom styles for billing components that cannot be achieved
+ * with built-in component props. Prefer using component props over custom CSS.
+ */
+
+/* -----------------------------------------------------------------------------
+ * Plan Card
+ * -------------------------------------------------------------------------- */
+
+.plan-card-button button,
+.plan-card-button a {
+  width: 100%;
+}
+
+.plan-card-current-badge {
+  width: 100%;
+  background: var(--background-tint-01);
+  border: 1px solid var(--border-01);
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  text-align: center;
+}
+
+.plan-card-features-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition:
+    max-height 0.25s ease-out,
+    opacity 0.2s ease-out;
+  background: var(--background-tint-01);
+  flex: 1;
+}
+
+.plan-card-features-container[data-hidden="true"] {
+  max-height: 0;
+  opacity: 0;
+  flex: 0;
+}
+
+.plan-card-features-container[data-hidden="false"] {
+  max-height: none;
+  opacity: 1;
+}
+
+.plan-card-feature-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0.125rem;
+  flex-shrink: 0;
+}
+
+/* -----------------------------------------------------------------------------
+ * Other Billing Components
+ * -------------------------------------------------------------------------- */
+
+.billing-payment-card {
+  min-width: 17.5rem;
+  flex: 1;
+}
+
+.billing-license-input {
+  font-family: var(--font-mono);
+}
+
+.billing-error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+  color: var(--status-error-05);
+}
+
+.billing-content-area {
+  background: var(--background-tint-01);
+}
+
+.billing-success-message {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--status-success-01);
+  border: 1px solid var(--status-success-02);
+  border-radius: 0.5rem;
+  color: var(--status-success-05);
+}
+
+/* -----------------------------------------------------------------------------
+ * Checkout View
+ * -------------------------------------------------------------------------- */
+
+.billing-option {
+  width: 14rem;
+  min-width: 10rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-01);
+  background: var(--background-neutral-00);
+  text-align: left;
+  transition: border-color 0.15s ease;
+  cursor: pointer;
+}
+
+.billing-option:hover {
+  border-color: var(--border-02);
+}
+
+.billing-option[data-selected="true"] {
+  border-color: var(--action-link-05);
+  background: var(--action-link-01);
+}
+
+.billing-option-title {
+  color: var(--text-04);
+}
+
+.billing-option-price {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.billing-option[data-selected="true"] .billing-option-title {
+  color: var(--action-link-05);
+}
+
+.billing-option-badge {
+  color: var(--action-link-05);
+}
+
+.billing-option-check {
+  width: 1rem;
+  height: 1rem;
+  stroke: var(--action-link-05);
+}
+
+.billing-error-text {
+  color: var(--status-error-05);
+}
+
+.billing-payment-section {
+  padding-top: 1rem;
+  width: 100%;
+}
+
+/* -----------------------------------------------------------------------------
+ * View Transition Animations
+ * -------------------------------------------------------------------------- */
+
+@keyframes billing-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.billing-view-enter {
+  animation: billing-fade-in 0.25s ease-out;
+}
+
+.billing-view-expand {
+  animation: billing-fade-in 0.25s ease-out;
+}
+
+.billing-view-collapse {
+  animation: billing-fade-in 0.25s ease-out;
+}
+
+.billing-card-enter {
+  animation: billing-fade-in 0.25s ease-out;
+}
