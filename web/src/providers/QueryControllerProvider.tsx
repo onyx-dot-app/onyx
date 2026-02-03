@@ -243,7 +243,13 @@ export function QueryControllerProvider({
         onChat(submitQuery);
       }
     },
-    [appMode, appFocus, performClassification, performSearch]
+    [
+      appMode,
+      appFocus,
+      performClassification,
+      performSearch,
+      isPaidEnterpriseFeaturesEnabled,
+    ]
   );
 
   /**
