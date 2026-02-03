@@ -126,13 +126,14 @@ def find_summary_for_branch(
     chat_session_id = chat_history[0].chat_session_id
 
     # Query all summaries for this session (typically few), then filter in Python.
+    # Order by time_sent descending to get the most recent summary first.
     summaries = (
         db_session.query(ChatMessage)
         .filter(
             ChatMessage.chat_session_id == chat_session_id,
             ChatMessage.last_summarized_message_id.isnot(None),
         )
-        .order_by(ChatMessage.last_summarized_message_id.desc())
+        .order_by(ChatMessage.time_sent.desc())
         .all()
     )
     # Optimization to avoid using IN clause for large histories
@@ -159,12 +160,13 @@ def get_messages_to_summarize(
     Returns:
         SummaryContent with older_messages to summarize and recent_messages to keep
     """
-    # TODO: This comparison assumes message IDs are sequential integers.
-    # If IDs are ever refactored to UUIDs, use timestamps instead.
-    # Filter to messages after the existing summary's cutoff
+    # Filter to messages after the existing summary's cutoff using timestamp
     if existing_summary and existing_summary.last_summarized_message_id:
         cutoff_id = existing_summary.last_summarized_message_id
-        messages = [m for m in chat_history if m.id > cutoff_id]
+        last_summarized_msg = next(m for m in chat_history if m.id == cutoff_id)
+        messages = [
+            m for m in chat_history if m.time_sent > last_summarized_msg.time_sent
+        ]
     else:
         messages = list(chat_history)
 
