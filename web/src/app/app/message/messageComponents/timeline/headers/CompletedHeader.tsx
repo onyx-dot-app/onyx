@@ -39,32 +39,22 @@ export const CompletedHeader = React.memo(function CompletedHeader({
     <div
       role="button"
       onClick={onToggle}
-      className="flex items-center justify-between w-full hover:bg-background-tint-00 transition-colors duration-200 rounded-12 p-1"
+      className="flex items-center justify-between w-full rounded-12 p-1"
     >
       <Text as="p" mainUiAction text03>
         {isExpanded ? durationText : imageText ?? durationText}
       </Text>
-      {collapsible &&
-        totalSteps > 0 &&
-        (isExpanded ? (
-          <IconButton
-            tertiary
-            onClick={noProp(onToggle)}
-            icon={SvgFold}
-            aria-label="Collapse timeline"
-            aria-expanded={true}
-          />
-        ) : (
-          <Button
-            tertiary
-            onClick={noProp(onToggle)}
-            rightIcon={SvgExpand}
-            aria-label="Expand timeline"
-            aria-expanded={false}
-          >
-            {totalSteps} {totalSteps === 1 ? "step" : "steps"}
-          </Button>
-        ))}
+      {collapsible && totalSteps > 0 && (
+        <Button
+          tertiary
+          onClick={noProp(onToggle)}
+          rightIcon={SvgExpand}
+          aria-label="Expand timeline"
+          aria-expanded={false}
+        >
+          {totalSteps} {totalSteps === 1 ? "step" : "steps"}
+        </Button>
+      )}
     </div>
   );
 });

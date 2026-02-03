@@ -22,7 +22,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
     <div
       role="button"
       onClick={onToggle}
-      className="flex items-center justify-between w-full hover:bg-background-tint-00 transition-colors duration-200 rounded-12 p-1"
+      className="flex items-center justify-between w-full rounded-12 p-1"
     >
       <Text as="p" mainUiAction text03>
         Interrupted Thinking
