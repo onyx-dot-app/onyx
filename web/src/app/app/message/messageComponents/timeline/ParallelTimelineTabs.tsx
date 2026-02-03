@@ -127,17 +127,24 @@ export function ParallelTimelineTabs({
           onMouseLeave={() => setIsHover(false)}
         >
           {/* Left column: Icon + connector line */}
-          <div className="flex flex-col items-center w-9 pt-2">
+          <div className="flex flex-col items-center w-9">
+            {/* Top connector line */}
             <div
-              className={cn(
-                "size-5 flex items-center justify-center text-text-02",
-                isHover &&
-                  "text-text-inverted-05 bg-background-neutral-inverted-00 rounded-full"
-              )}
-            >
-              <SvgBranch className="w-3 h-3" />
+              className={cn("w-px h-2 bg-border-01", isHover && "bg-border-04")}
+            />
+            {/* Icon row - h-8 to align with tabs header */}
+            <div className="h-8 flex items-center justify-center shrink-0">
+              <div
+                className={cn(
+                  "size-5 flex items-center justify-center text-text-02",
+                  isHover &&
+                    "text-text-inverted-05 bg-background-neutral-inverted-00 rounded-full"
+                )}
+              >
+                <SvgBranch className="size-3" />
+              </div>
             </div>
-            {/* Connector line */}
+            {/* Bottom connector line */}
             <div
               className={cn(
                 "w-px flex-1 bg-border-01",
@@ -149,10 +156,12 @@ export function ParallelTimelineTabs({
           {/* Right column: Tabs + collapse button */}
           <div
             className={cn(
-              "w-full pl-1 bg-background-tint-00",
+              "flex-1 flex flex-col pl-1 bg-background-tint-00",
               isHover && "bg-background-tint-02"
             )}
           >
+            {/* Top spacer to match icon column */}
+            <div className="h-2" />
             <Tabs.List
               variant="pill"
               enableScrollArrows

@@ -2,6 +2,7 @@ import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
+import { noProp } from "@/lib/utils";
 
 export interface StoppedHeaderProps {
   totalSteps: number;
@@ -29,7 +30,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
       {collapsible && totalSteps > 0 && (
         <Button
           tertiary
-          onClick={onToggle}
+          onClick={noProp(onToggle)}
           rightIcon={isExpanded ? SvgFold : SvgExpand}
           aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
           aria-expanded={isExpanded}
