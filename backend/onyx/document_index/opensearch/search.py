@@ -335,12 +335,12 @@ class DocumentQuery:
         """Returns a final search query that gets document chunks randomly.
 
         Args:
-            tenant_state (TenantState): _description_
-            index_filters (IndexFilters): _description_
-            num_to_retrieve (int): _description_
+            tenant_state: Tenant state containing the tenant ID.
+            index_filters: Filters for the random search query.
+            num_to_retrieve: Number of document chunks to retrieve.
 
         Returns:
-            dict[str, Any]: _description_
+            A dictionary representing the final random search query.
         """
         search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
