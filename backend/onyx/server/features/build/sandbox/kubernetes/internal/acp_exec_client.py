@@ -403,7 +403,7 @@ class ACPExecClient:
     def send_message(
         self,
         message: str,
-        timeout: float | None = None,
+        timeout: float = ACP_MESSAGE_TIMEOUT,
     ) -> Generator[ACPEvent, None, None]:
         """Send a message and stream response events.
 
@@ -414,10 +414,6 @@ class ACPExecClient:
         Yields:
             Typed ACP schema event objects
         """
-        # Use env var default if timeout not specified
-        if timeout is None:
-            timeout = ACP_MESSAGE_TIMEOUT
-
         if self._state.current_session is None:
             raise RuntimeError("No active session. Call start() first.")
 
