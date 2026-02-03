@@ -261,9 +261,6 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         tenant_id = get_current_tenant_id()
         self._real_index = OpenSearchDocumentIndex(
             index_name=index_name,
-            # TODO(andrei): Sus. Do not plug this into production until all
-            # instances where tenant ID is passed into a method call get
-            # refactored to passing this data in on class init.
             tenant_state=TenantState(tenant_id=tenant_id, multitenant=multitenant),
         )
 
