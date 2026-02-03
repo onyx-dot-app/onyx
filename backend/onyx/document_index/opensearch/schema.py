@@ -19,6 +19,7 @@ from onyx.document_index.opensearch.constants import M
 from onyx.document_index.opensearch.string_filtering import (
     filter_and_validate_document_id,
 )
+from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -54,21 +55,27 @@ ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME = "ancestor_hierarchy_node_ids"
 
 
 def get_opensearch_doc_chunk_id(
-    document_id: str, chunk_index: int, max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
+    tenant_state: TenantState,
+    document_id: str,
+    chunk_index: int,
+    max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE,
 ) -> str:
     """
     Returns a unique identifier for the chunk.
 
     This will be the string used to identify the chunk in OpenSearch. Any direct
     chunk queries should use this function.
-
-    TODO(andrei): Add source type to this.
-    TODO(andrei): Add tenant ID to this.
     """
     sanitized_document_id = filter_and_validate_document_id(document_id)
     opensearch_doc_chunk_id = (
         f"{sanitized_document_id}__{max_chunk_size}__{chunk_index}"
     )
+    if tenant_state.multitenant:
+        # Use tenant ID because in multitenant mode each tenant has its own
+        # Documents table, so there is a very small chance that doc IDs are not
+        # actually unique across all tenants.
+        short_tenant_id = get_tenant_id_short_string(tenant_state.tenant_id)
+        opensearch_doc_chunk_id = f"{short_tenant_id}__{opensearch_doc_chunk_id}"
     # Do one more validation to ensure we haven't exceeded the max length.
     opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)
     return opensearch_doc_chunk_id
