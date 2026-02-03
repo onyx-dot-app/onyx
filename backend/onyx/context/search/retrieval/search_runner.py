@@ -69,6 +69,7 @@ def _embed_and_search(
             if hybrid_alpha <= 0.3
             else QueryExpansionType.SEMANTIC
         ),
+        offset=query_request.offset or 0,
     )
 
     return top_chunks
