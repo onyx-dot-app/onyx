@@ -397,7 +397,7 @@ class RandomCapable(abc.ABC):
         Args:
             filters: Filters for things like permissions, source type, time,
                 etc.
-            num_to_retrieve: Number of chunks to retrieve. Defaults to 100.
+            num_to_retrieve: Number of chunks to retrieve. Defaults to 10.
             dirty: If set, retrieve chunks whose "dirty" flag matches this
                 argument. If None, there is no restriction on retrieved chunks
                 with respect to that flag. A chunk is considered dirty if there
