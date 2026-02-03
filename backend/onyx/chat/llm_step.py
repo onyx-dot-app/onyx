@@ -498,14 +498,31 @@ def translate_history_to_llm_format(
                 messages.append(user_msg_text)
 
         elif msg.message_type == MessageType.ASSISTANT:
+            # Handle ASSISTANT messages with tool_calls field (new OpenAI parallel format)
+            tool_calls_list: list[ToolCall] | None = None
+            if msg.tool_calls:
+                tool_calls_list = [
+                    ToolCall(
+                        id=tc.tool_call_id,
+                        type="function",
+                        function=FunctionCall(
+                            name=tc.tool_name,
+                            arguments=json.dumps(tc.tool_arguments),
+                        ),
+                    )
+                    for tc in msg.tool_calls
+                ]
+
             assistant_msg = AssistantMessage(
                 role="assistant",
                 content=msg.message or None,
-                tool_calls=None,
+                tool_calls=tool_calls_list,
             )
             messages.append(assistant_msg)
 
         elif msg.message_type == MessageType.TOOL_CALL:
+            # DEPRECATED: Keep this handling for backwards compatibility with existing sessions
+            # New code should use ASSISTANT messages with tool_calls field instead
             # Tool calls are represented as Assistant Messages with tool_calls field
             # Try to reconstruct tool call structure if we have tool_call_id
             tool_calls: list[ToolCall] = []

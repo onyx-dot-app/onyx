@@ -305,8 +305,8 @@ class MessageType(str, Enum):
     # System message is always constructed on the fly, not saved
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
-    ASSISTANT = "assistant"  # AIMessage
-    TOOL_CALL = "tool_call"
+    ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
+    TOOL_CALL = "tool_call"  # DEPRECATED: Use ASSISTANT with tool_calls field instead
     TOOL_CALL_RESPONSE = "tool_call_response"
 
 
