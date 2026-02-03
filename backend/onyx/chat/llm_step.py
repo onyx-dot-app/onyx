@@ -914,6 +914,10 @@ def run_llm_step_pkt_generator(
             )
             span_generation.span_data.output = [assistant_msg_no_tools.model_dump()]
 
+        # Record reasoning content for tracing (extended thinking from reasoning models)
+        if accumulated_reasoning:
+            span_generation.span_data.reasoning = accumulated_reasoning
+
     # This may happen if the custom token processor is used to modify other packets into reasoning
     # Then there won't necessarily be anything else to come after the reasoning tokens
     if reasoning_start:

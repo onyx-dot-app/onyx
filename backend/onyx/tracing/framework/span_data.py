@@ -96,6 +96,7 @@ class GenerationSpanData(SpanData):
     __slots__ = (
         "input",
         "output",
+        "reasoning",
         "model",
         "model_config",
         "usage",
@@ -106,6 +107,7 @@ class GenerationSpanData(SpanData):
         self,
         input: Sequence[Mapping[str, Any]] | None = None,
         output: Sequence[Mapping[str, Any]] | None = None,
+        reasoning: str | None = None,
         model: str | None = None,
         model_config: Mapping[str, Any] | None = None,
         usage: dict[str, Any] | None = None,
@@ -113,6 +115,7 @@ class GenerationSpanData(SpanData):
     ):
         self.input = input
         self.output = output
+        self.reasoning = reasoning
         self.model = model
         self.model_config = model_config
         self.usage = usage
@@ -127,6 +130,7 @@ class GenerationSpanData(SpanData):
             "type": self.type,
             "input": self.input,
             "output": self.output,
+            "reasoning": self.reasoning,
             "model": self.model,
             "model_config": self.model_config,
             "usage": self.usage,
