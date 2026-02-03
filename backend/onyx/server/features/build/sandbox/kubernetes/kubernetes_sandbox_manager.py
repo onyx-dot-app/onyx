@@ -834,13 +834,13 @@ done
                 if e.status == 409:
                     # Pod was created by another concurrent request
                     # Check if it's healthy and reuse it
-                    logger.info(
-                        f"Pod {pod_name} already exists (409 conflict), "
+                    logger.warning(
+                        f"Pod {pod_name} already exists (409 conflict, this shouldn't normally happen), "
                         "checking if it's healthy..."
                     )
                     if self._pod_exists_and_healthy(pod_name):
-                        logger.info(
-                            f"Pod {pod_name} created by concurrent request, reusing"
+                        logger.warning(
+                            f"During provisioning, discovered that pod {pod_name} already exists. Reusing"
                         )
                         # Continue to ensure service exists and wait for ready
                     else:
@@ -864,7 +864,9 @@ done
             except ApiException as e:
                 if e.status != 409:  # Ignore AlreadyExists
                     raise
-                logger.debug(f"Service {service_name} already exists, reusing")
+                logger.warning(
+                    f"During provisioning, discovered that service {service_name} already exists. Reusing"
+                )
 
             # 3. Wait for pod to be ready
             logger.info(f"Waiting for pod {pod_name} to become ready...")
