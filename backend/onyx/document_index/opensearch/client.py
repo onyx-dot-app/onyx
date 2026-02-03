@@ -12,6 +12,7 @@ from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
@@ -228,7 +229,10 @@ class OpenSearchClient:
         raise NotImplementedError
 
     def index_document(
-        self, document: DocumentChunk, update_if_exists: bool = False
+        self,
+        document: DocumentChunk,
+        tenant_state: TenantState,
+        update_if_exists: bool = False,
     ) -> None:
         """Indexes a document.
 
@@ -236,6 +240,7 @@ class OpenSearchClient:
             document: The document to index. In Onyx this is a chunk of a
                 document, OpenSearch simply refers to this as a document as
                 well.
+            tenant_state: The tenant state of the caller.
             update_if_exists: Whether to update the document if it already
                 exists. If False, will raise an exception if the document
                 already exists. Defaults to False.
@@ -246,6 +251,7 @@ class OpenSearchClient:
                 update_if_exists is False.
         """
         document_chunk_id: str = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
             document_id=document.document_id,
             chunk_index=document.chunk_index,
             max_chunk_size=document.max_chunk_size,
