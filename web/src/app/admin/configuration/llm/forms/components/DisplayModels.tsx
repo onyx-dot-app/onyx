@@ -3,14 +3,16 @@ import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
 import { useMemo } from "react";
 
+import Button from "@/refresh-components/buttons/Button";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
+import Switch from "@/refresh-components/inputs/Switch";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { FieldLabel } from "@/components/Field";
 
 interface AutoModeToggleProps {
   isAutoMode: boolean;
-  onToggle: () => void;
+  onToggle: (nextValue: boolean) => void;
 }
 
 function AutoModeToggle({ isAutoMode, onToggle }: AutoModeToggleProps) {
@@ -25,25 +27,7 @@ function AutoModeToggle({ isAutoMode, onToggle }: AutoModeToggleProps) {
           released. Recommended for most teams.
         </Text>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={isAutoMode}
-        className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full",
-          "border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-          isAutoMode ? "bg-action-link-05" : "bg-background-neutral-03"
-        )}
-        onClick={onToggle}
-      >
-        <span
-          className={cn(
-            "pointer-events-none inline-block h-5 w-5 transform rounded-full",
-            "bg-white shadow ring-0 transition duration-200 ease-in-out",
-            isAutoMode ? "translate-x-5" : "translate-x-0"
-          )}
-        />
-      </button>
+      <Switch checked={isAutoMode} onCheckedChange={onToggle} />
     </div>
   );
 }
@@ -119,15 +103,15 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     formikProps.setFieldValue("default_model_name", modelName);
   };
 
-  const handleToggleAutoMode = () => {
-    formikProps.setFieldValue("is_auto_mode", !isAutoMode);
+  const handleToggleAutoMode = (nextIsAutoMode: boolean) => {
+    formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     formikProps.setFieldValue(
       "selected_model_names",
       modelConfigurations.filter((m) => m.is_visible).map((m) => m.name)
     );
     formikProps.setFieldValue(
       "default_model_name",
-      recommendedDefaultModel?.name ?? ""
+      recommendedDefaultModel?.name ?? null
     );
   };
 
@@ -159,7 +143,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
         allModelNames.includes(recommendedDefaultModel.name)
           ? recommendedDefaultModel.name
           : allModelNames[0];
-      formikProps.setFieldValue("default_model_name", nextDefault ?? null);
+      formikProps.setFieldValue("default_model_name", nextDefault);
     }
   };
   const handleClearAllModels = () => {
@@ -196,34 +180,50 @@ export function DisplayModels<T extends BaseLLMFormValues>({
             <Checkbox
               checked={areAllModelsSelected}
               indeterminate={areSomeModelsSelected && !areAllModelsSelected}
-              onCheckedChange={(checked) =>
-                checked ? handleSelectAllModels() : handleClearAllModels()
+              onCheckedChange={() =>
+                areAllModelsSelected
+                  ? handleClearAllModels()
+                  : handleSelectAllModels()
               }
               aria-label="Select all models"
             />
-            <button
-              type="button"
-              className={cn(
-                "text-xs font-medium text-text-03 hover:text-text-05",
-                !areSomeModelsSelected && "text-text-02 hover:text-text-02"
-              )}
+            <Button
+              main
+              internal
+              className="p-0 h-auto rounded-none"
               onClick={() =>
                 areAllModelsSelected
                   ? handleClearAllModels()
                   : handleSelectAllModels()
               }
             >
-              Select all models
-            </button>
+              <Text
+                as="span"
+                secondaryBody
+                className={cn(
+                  "text-xs",
+                  areSomeModelsSelected ? "text-text-03" : "text-text-02"
+                )}
+              >
+                Select all models
+              </Text>
+            </Button>
           </div>
           {areSomeModelsSelected && (
-            <button
-              type="button"
-              className="text-xs font-medium text-action-link-05 hover:text-action-link-06"
+            <Button
+              main
+              internal
+              className="p-0 h-auto rounded-none"
               onClick={handleClearAllModels}
             >
-              Clear all ({selectedModels.length})
-            </button>
+              <Text
+                as="span"
+                secondaryBody
+                className="text-xs text-action-link-05 hover:text-action-link-06"
+              >
+                Clear all ({selectedModels.length})
+              </Text>
+            </Button>
           )}
         </div>
       )}
@@ -341,22 +341,33 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                         {modelConfiguration.name}
                       </Text>
                     </div>
-                    <button
+                    <Button
+                      main
+                      internal
                       type="button"
                       disabled={!isSelected}
                       onClick={() => handleSetDefault(modelConfiguration.name)}
-                      className={`text-xs px-2 py-0.5 rounded transition-all duration-200 ease-in-out ${
+                      className={cn(
+                        "px-2 py-0.5 rounded transition-all duration-200 ease-in-out",
                         isSelected
                           ? "opacity-100 translate-x-0"
-                          : "opacity-0 translate-x-2 pointer-events-none"
-                      } ${
+                          : "opacity-0 translate-x-2 pointer-events-none",
                         isDefault
-                          ? "bg-action-link-05 text-text-inverse font-medium scale-100"
-                          : "bg-background-neutral-02 text-text-03 hover:bg-background-neutral-03 scale-95 hover:scale-100"
-                      }`}
+                          ? "bg-action-link-05 font-medium scale-100"
+                          : "bg-background-neutral-02 hover:bg-background-neutral-03 scale-95 hover:scale-100"
+                      )}
                     >
-                      {isDefault ? "Default" : "Set as default"}
-                    </button>
+                      <Text
+                        as="span"
+                        secondaryBody
+                        className={cn(
+                          "text-xs",
+                          isDefault ? "text-text-inverse" : "text-text-03"
+                        )}
+                      >
+                        {isDefault ? "Default" : "Set as default"}
+                      </Text>
+                    </Button>
                   </div>
                 );
               })}
