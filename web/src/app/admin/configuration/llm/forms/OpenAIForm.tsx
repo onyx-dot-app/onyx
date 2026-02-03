@@ -21,6 +21,7 @@ const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
 export function OpenAIForm({
   existingLlmProvider,
+  defaultLlmModel,
   shouldMarkAsDefault,
 }: LLMProviderFormProps) {
   return (

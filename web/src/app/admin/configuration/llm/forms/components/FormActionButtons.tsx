@@ -2,13 +2,14 @@ import { LoadingAnimation } from "@/components/Loading";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgTrash } from "@opal/icons";
-import { LLMProviderView } from "../../interfaces";
+import { DefaultModel, LLMProviderView } from "../../interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
 
 interface FormActionButtonsProps {
   isTesting: boolean;
   testError: string;
   existingLlmProvider?: LLMProviderView;
+  defaultModel?: DefaultModel;
   mutate: (key: string) => void;
   onClose: () => void;
   isFormValid: boolean;
@@ -18,6 +19,7 @@ export function FormActionButtons({
   isTesting,
   testError,
   existingLlmProvider,
+  defaultModel,
   mutate,
   onClose,
   isFormValid,
@@ -39,10 +41,11 @@ export function FormActionButtons({
     }
 
     // If the deleted provider was the default, set the first remaining provider as default
-    if (existingLlmProvider.is_default_provider) {
+    if (defaultModel?.provider_id === existingLlmProvider.id) {
       const remainingProvidersResponse = await fetch(LLM_PROVIDERS_ADMIN_URL);
       if (remainingProvidersResponse.ok) {
-        const remainingProviders = await remainingProvidersResponse.json();
+        const remainingProvidersJson = await remainingProvidersResponse.json();
+        const remainingProviders = remainingProvidersJson.providers;
 
         if (remainingProviders.length > 0) {
           const setDefaultResponse = await fetch(

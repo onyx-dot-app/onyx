@@ -6,7 +6,7 @@ import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
 import Title from "@/components/ui/title";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { LLMProviderView } from "./interfaces";
+import { LLMProviderResponse, LLMProviderView } from "./interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { OpenAIForm } from "./forms/OpenAIForm";
 import { AnthropicForm } from "./forms/AnthropicForm";
@@ -19,15 +19,17 @@ import { getFormForExistingProvider } from "./forms/getForm";
 import { CustomForm } from "./forms/CustomForm";
 
 export function LLMConfiguration() {
-  const { data: existingLlmProviders } = useSWR<LLMProviderView[]>(
-    LLM_PROVIDERS_ADMIN_URL,
-    errorHandlingFetcher
-  );
+  const { data: existingLLMProvidersResponse } = useSWR<
+    LLMProviderResponse<LLMProviderView>
+  >(LLM_PROVIDERS_ADMIN_URL, errorHandlingFetcher);
 
-  if (!existingLlmProviders) {
+  if (!existingLLMProvidersResponse) {
     return <ThreeDotsLoader />;
   }
 
+  const existingLlmProviders = existingLLMProvidersResponse.providers;
+  const defaultProviderId =
+    existingLLMProvidersResponse.default_text?.provider_id;
   const isFirstProvider = existingLlmProviders.length === 0;
 
   return (
@@ -45,13 +47,18 @@ export function LLMConfiguration() {
           <div className="flex flex-col gap-y-4">
             {[...existingLlmProviders]
               .sort((a, b) => {
-                if (a.is_default_provider && !b.is_default_provider) return -1;
-                if (!a.is_default_provider && b.is_default_provider) return 1;
+                if (a.id === defaultProviderId && b.id !== defaultProviderId)
+                  return -1;
+                if (a.id !== defaultProviderId && b.id === defaultProviderId)
+                  return 1;
                 return 0;
               })
               .map((llmProvider) => (
                 <div key={llmProvider.id}>
-                  {getFormForExistingProvider(llmProvider)}
+                  {getFormForExistingProvider(
+                    llmProvider,
+                    existingLLMProvidersResponse.default_text ?? undefined
+                  )}
                 </div>
               ))}
           </div>

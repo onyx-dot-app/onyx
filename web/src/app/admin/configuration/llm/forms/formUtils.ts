@@ -197,7 +197,6 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
 
   const finalValues = {
     ...rest,
-    default_model_name: finalDefaultModelName,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),
     custom_config_changed: customConfigChanged,
@@ -264,9 +263,13 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   if (shouldMarkAsDefault) {
     const newLlmProvider = (await response.json()) as LLMProviderView;
     const setDefaultResponse = await fetch(
-      `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
+      `${LLM_PROVIDERS_ADMIN_URL}/default`,
       {
         method: "POST",
+        body: JSON.stringify({
+          provider_id: newLlmProvider.id,
+          model_name: finalDefaultModelName,
+        }),
       }
     );
     if (!setDefaultResponse.ok) {

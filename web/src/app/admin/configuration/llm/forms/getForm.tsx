@@ -1,4 +1,4 @@
-import { LLMProviderName, LLMProviderView } from "../interfaces";
+import { DefaultModel, LLMProviderName, LLMProviderView } from "../interfaces";
 import { AnthropicForm } from "./AnthropicForm";
 import { OpenAIForm } from "./OpenAIForm";
 import { OllamaForm } from "./OllamaForm";
@@ -17,7 +17,10 @@ export function detectIfRealOpenAIProvider(provider: LLMProviderView) {
   );
 }
 
-export const getFormForExistingProvider = (provider: LLMProviderView) => {
+export const getFormForExistingProvider = (
+  provider: LLMProviderView,
+  defaultLlmModel?: DefaultModel
+) => {
   switch (provider.provider) {
     case LLMProviderName.OPENAI:
       // "openai" as a provider name can be used for litellm proxy / any OpenAI-compatible provider

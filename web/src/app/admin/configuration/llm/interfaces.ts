@@ -64,6 +64,7 @@ export interface VisionProvider extends LLMProviderView {
 }
 
 export interface LLMProviderDescriptor {
+  id: number;
   name: string;
   provider: string;
   provider_display_name?: string;
@@ -106,6 +107,7 @@ export interface BedrockModelResponse {
 
 export interface LLMProviderFormProps {
   existingLlmProvider?: LLMProviderView;
+  defaultLlmModel?: DefaultModel;
   shouldMarkAsDefault?: boolean;
 }
 
