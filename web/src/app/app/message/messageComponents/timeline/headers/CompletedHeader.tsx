@@ -1,7 +1,6 @@
 import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import { formatDurationSeconds } from "@/lib/time";
 import { noProp } from "@/lib/utils";
@@ -48,9 +47,9 @@ export const CompletedHeader = React.memo(function CompletedHeader({
         <Button
           tertiary
           onClick={noProp(onToggle)}
-          rightIcon={SvgExpand}
+          rightIcon={isExpanded ? SvgFold : SvgExpand}
           aria-label="Expand timeline"
-          aria-expanded={false}
+          aria-expanded={isExpanded}
         >
           {totalSteps} {totalSteps === 1 ? "step" : "steps"}
         </Button>
