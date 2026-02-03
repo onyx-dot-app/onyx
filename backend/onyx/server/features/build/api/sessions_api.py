@@ -117,47 +117,35 @@ def create_session(
 
     try:
         session_manager = SessionManager(db_session)
+        build_session = session_manager.get_or_create_empty_session(
+            user.id,
+            user_work_area=(
+                request.user_work_area if request.demo_data_enabled else None
+            ),
+            user_level=request.user_level if request.demo_data_enabled else None,
+            llm_provider_type=request.llm_provider_type,
+            llm_model_name=request.llm_model_name,
+            demo_data_enabled=request.demo_data_enabled,
+        )
+        db_session.commit()
 
-        try:
-            # Only pass user_work_area and user_level if demo data is enabled
-            # This prevents org_info directory creation when demo data is disabled
-            build_session = session_manager.get_or_create_empty_session(
-                user.id,
-                user_work_area=(
-                    request.user_work_area if request.demo_data_enabled else None
-                ),
-                user_level=request.user_level if request.demo_data_enabled else None,
-                llm_provider_type=request.llm_provider_type,
-                llm_model_name=request.llm_model_name,
-                demo_data_enabled=request.demo_data_enabled,
-            )
-            db_session.commit()
-        except ValueError as e:
-            # Max concurrent sandboxes reached or other validation error
-            logger.exception("Sandbox provisioning failed")
-            db_session.rollback()
-            raise HTTPException(status_code=429, detail=str(e))
-        except Exception as e:
-            # Sandbox provisioning failed - rollback to remove any uncommitted records
-            db_session.rollback()
-            logger.error(f"Sandbox provisioning failed: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Sandbox provisioning failed: {e}",
-            )
-
-        # Get the user's sandbox to include in response
         sandbox = get_sandbox_by_user_id(db_session, user.id)
         base_response = SessionResponse.from_model(build_session, sandbox)
-        # Session was just created, so it's loaded in the sandbox
         return DetailedSessionResponse.from_session_response(
             base_response, session_loaded_in_sandbox=True
         )
+    except ValueError as e:
+        logger.exception("Session creation failed")
+        db_session.rollback()
+        raise HTTPException(status_code=429, detail=str(e))
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Session creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
     finally:
         try:
             lock.release()
         except Exception:
-            # Lock may have expired or been released already
             pass
 
 
