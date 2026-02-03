@@ -369,8 +369,6 @@ class HybridCapable(abc.ABC):
             filters: Filters for things like permissions, source type, time,
                 etc.
             num_to_retrieve: Number of highest matching chunks to return.
-            offset: Number of highest matching chunks to initially skip (kind of
-                like pagination). Defaults to 0.
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.

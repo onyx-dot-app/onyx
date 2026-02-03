@@ -828,7 +828,6 @@ class VespaIndex(DocumentIndex):
             "yql": yql,
             "query": query,
             "hits": num_to_retrieve,
-            "offset": 0,
             "ranking.profile": "admin_search",
             "timeout": VESPA_TIMEOUT,
         }

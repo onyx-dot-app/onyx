@@ -371,7 +371,6 @@ class HybridCapable(abc.ABC):
         - time_decay_multiplier: how much to decay the document scores as they age. Some queries
                 based on the persona settings, will have this be a 2x or 3x of the default
         - num_to_retrieve: number of highest matching chunks to return
-        - offset: number of highest matching chunks to skip (kind of like pagination)
 
         Returns:
             best matching chunks based on weighted sum of keyword and vector/semantic search scores
@@ -407,7 +406,6 @@ class AdminCapable(abc.ABC):
         - query: unmodified user query. Though in this flow probably unmodified is best
         - filters: standard filter object
         - num_to_retrieve: number of highest matching chunks to return
-        - offset: number of highest matching chunks to skip (kind of like pagination)
 
         Returns:
             list of best matching chunks for the explorer page query
