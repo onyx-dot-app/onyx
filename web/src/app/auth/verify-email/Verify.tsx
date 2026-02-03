@@ -22,7 +22,7 @@ export default function Verify({ user }: VerifyProps) {
   const verify = useCallback(async () => {
     const token = searchParams?.get("token");
     const firstUser =
-      searchParams?.get("first_user") && NEXT_PUBLIC_CLOUD_ENABLED;
+      searchParams?.get("first_user") === "true" && NEXT_PUBLIC_CLOUD_ENABLED;
     if (!token) {
       setError(
         "Missing verification token. Try requesting a new verification email."
@@ -46,7 +46,12 @@ export default function Verify({ user }: VerifyProps) {
         : "/auth/login?verified=true";
       window.location.href = loginUrl;
     } else {
-      const errorDetail = (await response.json()).detail;
+      let errorDetail = "unknown error";
+      try {
+        errorDetail = (await response.json()).detail;
+      } catch {
+        // Response may not be JSON
+      }
       setError(
         `Failed to verify your email - ${errorDetail}. Please try requesting a new verification email.`
       );
