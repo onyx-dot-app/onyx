@@ -269,6 +269,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
         case "Enter": {
           e.preventDefault();
+          e.stopPropagation();
           if (highlightedValue) {
             const entry = itemCallbacks.current.get(highlightedValue);
             entry?.callback();
