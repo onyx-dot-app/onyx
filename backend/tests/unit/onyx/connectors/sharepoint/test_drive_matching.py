@@ -40,6 +40,7 @@ class _FakeDrive:
     def __init__(self, name: str, items: Sequence[Any]) -> None:
         self.name = name
         self.root = _FakeFolder(items)
+        self.web_url = f"https://example.sharepoint.com/sites/sample/{name}"
 
 
 class _FakeDrivesCollection:
@@ -96,9 +97,10 @@ def test_fetch_driveitems_matches_international_drive_names(
     results = connector._fetch_driveitems(site_descriptor=site_descriptor)
 
     assert len(results) == 1
-    drive_item, returned_drive_name = results[0]
+    drive_item, returned_drive_name, drive_web_url = results[0]
     assert drive_item is item
     assert returned_drive_name == requested_drive_name
+    assert drive_web_url is not None
 
 
 @pytest.mark.parametrize(
@@ -120,13 +122,14 @@ def test_get_drive_items_for_drive_name_matches_map(
         folder_path=None,
     )
 
-    results = connector._get_drive_items_for_drive_name(
+    results, drive_web_url = connector._get_drive_items_for_drive_name(
         site_descriptor=site_descriptor,
         drive_name=requested_drive_name,
     )
 
     assert len(results) == 1
     assert results[0] is item
+    assert drive_web_url is not None
 
 
 def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -142,14 +145,18 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         drive_name: str,
         start: datetime | None,
         end: datetime | None,
-    ) -> list[SimpleNamespace]:
+    ) -> tuple[list[SimpleNamespace], str | None]:
         assert drive_name == "Documents"
-        return [
-            SimpleNamespace(
-                name="sample.pdf",
-                web_url="https://example.sharepoint.com/sites/sample/sample.pdf",
-            )
-        ]
+        return (
+            [
+                SimpleNamespace(
+                    name="sample.pdf",
+                    web_url="https://example.sharepoint.com/sites/sample/sample.pdf",
+                    parent_reference=SimpleNamespace(path=None),
+                )
+            ],
+            "https://example.sharepoint.com/sites/sample/Documents",
+        )
 
     def fake_convert(
         driveitem: SimpleNamespace,
@@ -157,6 +164,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         ctx: Any,
         graph_client: Any,
         include_permissions: bool,
+        parent_hierarchy_raw_node_id: str | None = None,
     ) -> SimpleNamespace:
         captured_drive_names.append(drive_name)
         return SimpleNamespace(sections=["content"])
@@ -189,12 +197,20 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         include_permissions=False,
     )
 
-    documents: list[Any] = []
+    all_yielded: list[Any] = []
     try:
         while True:
-            documents.append(next(generator))
+            all_yielded.append(next(generator))
     except StopIteration:
         pass
 
+    # Filter out hierarchy nodes (which are also yielded now)
+    from onyx.connectors.models import HierarchyNode
+
+    documents = [item for item in all_yielded if not isinstance(item, HierarchyNode)]
+    hierarchy_nodes = [item for item in all_yielded if isinstance(item, HierarchyNode)]
+
     assert len(documents) == 1
     assert captured_drive_names == [SHARED_DOCUMENTS_MAP["Documents"]]
+    # Verify a drive hierarchy node was yielded
+    assert len(hierarchy_nodes) >= 1
