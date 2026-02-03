@@ -1,4 +1,3 @@
-import json
 import os
 from enum import Enum
 from pathlib import Path
@@ -87,9 +86,9 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 # Container image for sandbox pods
-# Should include Next.js template and opencode CLI
+# Should include Next.js template, opencode CLI, and demo_data zip
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.0"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.1"
 )
 
 # S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)
@@ -111,20 +110,25 @@ SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
 # ============================================================================
+# SSE Streaming Configuration
+# ============================================================================
+
+# SSE keepalive interval in seconds - send keepalive comment if no events
+SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
+
+# ============================================================================
+# ACP (Agent Communication Protocol) Configuration
+# ============================================================================
+
+# Timeout for ACP message processing in seconds
+# This is the maximum time to wait for a complete response from the agent
+ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
+
+# ============================================================================
 # Rate Limiting Configuration
 # ============================================================================
 
 # Base rate limit for paid/subscribed users (messages per week)
 # Free users always get 5 messages total (not configurable)
+# Per-user overrides are managed via PostHog feature flag "craft-has-usage-limits"
 CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
-
-# Per-user rate limit overrides (JSON map of email -> limit)
-# Example: {"admin@example.com": 100, "power-user@example.com": 50}
-# Users in this map get their specified limit instead of the default
-_user_limit_overrides_str = os.environ.get("CRAFT_USER_RATE_LIMIT_OVERRIDES", "{}")
-try:
-    CRAFT_USER_RATE_LIMIT_OVERRIDES: dict[str, int] = json.loads(
-        _user_limit_overrides_str
-    )
-except json.JSONDecodeError:
-    CRAFT_USER_RATE_LIMIT_OVERRIDES = {}

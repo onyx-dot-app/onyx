@@ -21,8 +21,8 @@ export interface StepContainerProps {
   onToggle?: () => void;
   /** Whether collapse control is shown */
   collapsible?: boolean;
-  /** Collapse button shown only when renderer supports compact mode */
-  supportsCompact?: boolean;
+  /** Collapse button shown only when renderer supports collapsible mode */
+  supportsCollapsible?: boolean;
   /** Additional class names */
   className?: string;
   /** Last step (no bottom connector) */
@@ -31,6 +31,12 @@ export interface StepContainerProps {
   isFirstStep?: boolean;
   /** Hide header (single-step timelines) */
   hideHeader?: boolean;
+  /** Hover state from parent */
+  isHover?: boolean;
+  /** Custom icon to show when collapsed (defaults to SvgExpand) */
+  collapsedIcon?: FunctionComponent<IconProps>;
+  /** Remove right padding (for reasoning content) */
+  noPaddingRight?: boolean;
 }
 
 /** Visual wrapper for timeline steps - icon, connector line, header, and content */
@@ -42,50 +48,70 @@ export function StepContainer({
   isExpanded = true,
   onToggle,
   collapsible = true,
-  supportsCompact = false,
+  supportsCollapsible = false,
   isLastStep = false,
   isFirstStep = false,
   className,
   hideHeader = false,
+  isHover = false,
+  collapsedIcon: CollapsedIconComponent,
+  noPaddingRight = false,
 }: StepContainerProps) {
-  const showCollapseControls = collapsible && supportsCompact && onToggle;
+  const showCollapseControls = collapsible && supportsCollapsible && onToggle;
 
   return (
     <div className={cn("flex w-full", className)}>
       <div
-        className={cn("flex flex-col items-center w-9", isFirstStep && "pt-2")}
+        className={cn(
+          "flex flex-col items-center w-9",
+          isFirstStep && "pt-0.5",
+          !isFirstStep && "pt-1.5"
+        )}
       >
         {/* Icon */}
         {!hideHeader && StepIconComponent && (
-          <div className="py-1">
-            <StepIconComponent className="size-4 stroke-text-02" />
+          <div className="flex py-1 h-8 items-center justify-center">
+            <StepIconComponent
+              className={cn(
+                "size-3 stroke-text-02",
+                isHover && "stroke-text-04"
+              )}
+            />
           </div>
         )}
 
         {/* Connector line */}
-        {!isLastStep && <div className="w-px flex-1 bg-border-01" />}
+        {!isLastStep && (
+          <div
+            className={cn(
+              "w-px h-full bg-border-01",
+              isHover && "bg-border-04"
+            )}
+          />
+        )}
       </div>
 
       <div
         className={cn(
-          "w-full bg-background-tint-00",
-          isLastStep && "rounded-b-12"
+          "w-full bg-background-tint-00 transition-colors duration-200",
+          isLastStep && "rounded-b-12",
+          isHover && "bg-background-tint-02"
         )}
       >
-        {!hideHeader && (
-          <div className="flex items-center justify-between px-2">
-            {header && (
-              <Text as="p" mainUiMuted text03>
-                {header}
-              </Text>
-            )}
+        {!hideHeader && header && (
+          <div className="flex items-center justify-between pl-2 pr-1 h-8">
+            <Text as="p" mainUiMuted text04>
+              {header}
+            </Text>
 
             {showCollapseControls &&
               (buttonTitle ? (
                 <Button
                   tertiary
                   onClick={onToggle}
-                  rightIcon={isExpanded ? SvgFold : SvgExpand}
+                  rightIcon={
+                    isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
+                  }
                 >
                   {buttonTitle}
                 </Button>
@@ -93,13 +119,17 @@ export function StepContainer({
                 <IconButton
                   tertiary
                   onClick={onToggle}
-                  icon={isExpanded ? SvgFold : SvgExpand}
+                  icon={
+                    isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
+                  }
                 />
               ))}
           </div>
         )}
 
-        <div className="px-2 pb-2">{children}</div>
+        <div className={cn("pl-2 pb-2", !noPaddingRight && "pr-8")}>
+          {children}
+        </div>
       </div>
     </div>
   );

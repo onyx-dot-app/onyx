@@ -15,6 +15,7 @@ from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.dr_mock_tools import (
@@ -394,17 +395,26 @@ def run_research_agent_call(
                 elif special_tool_calls.think_tool_call:
                     think_tool_call = special_tool_calls.think_tool_call
                     tool_call_message = think_tool_call.to_msg_str()
+                    tool_call_token_count = token_counter(tool_call_message)
 
                     with function_span("think_tool") as think_span:
                         think_span.span_data.input = str(think_tool_call.tool_args)
-                        think_tool_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=token_counter(tool_call_message),
-                            message_type=MessageType.TOOL_CALL,
+
+                        # Create ASSISTANT message with tool_calls (OpenAI parallel format)
+                        think_tool_simple = ToolCallSimple(
                             tool_call_id=think_tool_call.tool_call_id,
+                            tool_name=think_tool_call.tool_name,
+                            tool_arguments=think_tool_call.tool_args,
+                            token_count=tool_call_token_count,
+                        )
+                        think_assistant_msg = ChatMessageSimple(
+                            message="",
+                            token_count=tool_call_token_count,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=[think_tool_simple],
                             image_files=None,
                         )
-                        msg_history.append(think_tool_msg)
+                        msg_history.append(think_assistant_msg)
 
                         think_tool_response_msg = ChatMessageSimple(
                             message=THINK_TOOL_RESPONSE_MESSAGE,
@@ -448,7 +458,7 @@ def run_research_agent_call(
 
                     if tool_calls and not tool_responses:
                         failure_messages = create_tool_call_failure_messages(
-                            tool_calls[0], token_counter
+                            tool_calls, token_counter
                         )
                         msg_history.extend(failure_messages)
 
@@ -457,20 +467,50 @@ def run_research_agent_call(
                         llm_cycle_count += 1
                         continue
 
-                    for tool_response in tool_responses:
-                        # Extract tool_call from the response (set by run_tool_calls)
-                        if tool_response.tool_call is None:
-                            raise ValueError(
-                                "Tool response missing tool_call reference"
+                    # Filter to only responses with valid tool_call references
+                    valid_tool_responses = [
+                        tr for tr in tool_responses if tr.tool_call is not None
+                    ]
+
+                    # Build ONE ASSISTANT message with all tool calls (OpenAI parallel format)
+                    if valid_tool_responses:
+                        tool_calls_simple: list[ToolCallSimple] = []
+                        for tool_response in valid_tool_responses:
+                            tc = tool_response.tool_call
+                            assert tc is not None  # Already filtered above
+                            tool_call_message = tc.to_msg_str()
+                            tool_call_token_count = token_counter(tool_call_message)
+                            tool_calls_simple.append(
+                                ToolCallSimple(
+                                    tool_call_id=tc.tool_call_id,
+                                    tool_name=tc.tool_name,
+                                    tool_arguments=tc.tool_args,
+                                    token_count=tool_call_token_count,
+                                )
                             )
 
-                        tool_call = tool_response.tool_call
-                        tab_index = tool_call.placement.tab_index
+                        total_tool_call_tokens = sum(
+                            tc.token_count for tc in tool_calls_simple
+                        )
+                        assistant_with_tools = ChatMessageSimple(
+                            message="",
+                            token_count=total_tool_call_tokens,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=tool_calls_simple,
+                            image_files=None,
+                        )
+                        msg_history.append(assistant_with_tools)
 
-                        tool = tools_by_name.get(tool_call.tool_name)
+                    # Now add tool call info and TOOL_CALL_RESPONSE messages for each
+                    for tool_response in valid_tool_responses:
+                        tc = tool_response.tool_call
+                        assert tc is not None  # Already filtered above
+                        tool_call_tab_index = tc.placement.tab_index
+
+                        tool = tools_by_name.get(tc.tool_name)
                         if not tool:
                             raise ValueError(
-                                f"Tool '{tool_call.tool_name}' not found in tools list"
+                                f"Tool '{tc.tool_name}' not found in tools list"
                             )
 
                         search_docs = None
@@ -485,10 +525,7 @@ def run_research_agent_call(
 
                             # This is used for the Open URL reminder in the next cycle
                             # only do this if the web search tool yielded results
-                            if (
-                                search_docs
-                                and tool_call.tool_name == WebSearchTool.NAME
-                            ):
+                            if search_docs and tc.tool_name == WebSearchTool.NAME:
                                 just_ran_web_search = True
 
                         # Makes sure the citation processor is updated with all the possible docs
@@ -506,31 +543,18 @@ def run_research_agent_call(
                             # This is implied by the parent tool call's turn index and the depth
                             # of the tree traversal.
                             turn_index=llm_cycle_count + reasoning_cycles,
-                            tab_index=tab_index,
-                            tool_name=tool_call.tool_name,
-                            tool_call_id=tool_call.tool_call_id,
+                            tab_index=tool_call_tab_index,
+                            tool_name=tc.tool_name,
+                            tool_call_id=tc.tool_call_id,
                             tool_id=tool.id,
                             reasoning_tokens=llm_step_result.reasoning
                             or most_recent_reasoning,
-                            tool_call_arguments=tool_call.tool_args,
+                            tool_call_arguments=tc.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
                             search_docs=displayed_docs or search_docs,
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)
-
-                        # Store tool call with function name and arguments in separate layers
-                        tool_call_message = tool_call.to_msg_str()
-                        tool_call_token_count = token_counter(tool_call_message)
-
-                        tool_call_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=tool_call_token_count,
-                            message_type=MessageType.TOOL_CALL,
-                            tool_call_id=tool_call.tool_call_id,
-                            image_files=None,
-                        )
-                        msg_history.append(tool_call_msg)
 
                         tool_response_message = tool_response.llm_facing_response
                         tool_response_token_count = token_counter(tool_response_message)
@@ -539,7 +563,7 @@ def run_research_agent_call(
                             message=tool_response_message,
                             token_count=tool_response_token_count,
                             message_type=MessageType.TOOL_CALL_RESPONSE,
-                            tool_call_id=tool_call.tool_call_id,
+                            tool_call_id=tc.tool_call_id,
                             image_files=None,
                         )
                         msg_history.append(tool_response_msg)

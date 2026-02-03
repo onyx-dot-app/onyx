@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useContext } from "react";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
-import { SettingsContext } from "../settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import Link from "next/link";
 import type { Route } from "next";
 import Cookies from "js-cookie";

@@ -503,6 +503,7 @@ class GoogleDriveConnector(
         seen_hierarchy_node_raw_ids: ThreadSafeSet[str],
         fully_walked_hierarchy_node_raw_ids: ThreadSafeSet[str],
         permission_sync_context: PermissionSyncContext | None = None,
+        add_prefix: bool = False,
     ) -> list[HierarchyNode]:
         """
         Get all NEW ancestor hierarchy nodes for a batch of files.
@@ -526,6 +527,8 @@ class GoogleDriveConnector(
                 succeeded (modified in place)
             permission_sync_context: If provided, permissions will be fetched for hierarchy nodes.
                 Contains google_domain and primary_admin_email needed for permission syncing.
+            add_prefix: When True, prefix group IDs with source type (for indexing path).
+                       When False (default), leave unprefixed (for permission sync path).
 
         Returns:
             List of HierarchyNode objects for new ancestors (ordered parent-first)
@@ -586,7 +589,10 @@ class GoogleDriveConnector(
                 # only one will add to ancestors_to_add (the one that wins check_and_add).
                 if permission_sync_context:
                     external_access = get_external_access_for_folder(
-                        folder, permission_sync_context.google_domain, service
+                        folder,
+                        permission_sync_context.google_domain,
+                        service,
+                        add_prefix,
                     )
                 else:
                     external_access = _public_access()
@@ -639,12 +645,50 @@ class GoogleDriveConnector(
     def _get_folder_metadata(
         self, folder_id: str, retriever_email: str, field_type: DriveFileFieldType
     ) -> GoogleDriveFileType | None:
-        """Fetch metadata for a folder by ID."""
-        for email in [retriever_email, self.primary_admin_email]:
+        """
+        Fetch metadata for a folder by ID.
+
+        Important: When a user has access to a shared folder but NOT its parent,
+        the Google Drive API returns the folder metadata WITHOUT the parent info.
+        To handle this, if the retriever gets a folder without parents, we also
+        try with admin who may have better access and can see the parent chain.
+        """
+        best_folder: GoogleDriveFileType | None = None
+
+        # Use a set to deduplicate if retriever_email == primary_admin_email
+        for email in {retriever_email, self.primary_admin_email}:
             service = get_drive_service(self.creds, email)
             folder = get_folder_metadata(service, folder_id, field_type)
-            if folder:
+
+            if not folder:
+                logger.debug(f"Failed to fetch folder {folder_id} using {email}")
+                continue
+
+            logger.debug(f"Successfully fetched folder {folder_id} using {email}")
+
+            # If this folder has parents, use it
+            if folder.get("parents"):
                 return folder
+
+            # Folder has no parents - could be a root OR user lacks access to parent
+            # Keep this as a fallback but try admin to see if they can see parents
+            if best_folder is None:
+                best_folder = folder
+                logger.debug(
+                    f"Folder {folder_id} has no parents when fetched by {email}, "
+                    f"will try admin to check for parent access"
+                )
+
+        if best_folder:
+            logger.debug(
+                f"Successfully fetched folder {folder_id} but no parents found"
+            )
+            return best_folder
+
+        logger.debug(
+            f"All attempts failed to fetch folder {folder_id} "
+            f"(tried {retriever_email} and {self.primary_admin_email})"
+        )
         return None
 
     def get_all_drive_ids(self) -> set[str]:
@@ -1488,6 +1532,7 @@ class GoogleDriveConnector(
                     seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
                     fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
                     permission_sync_context=permission_sync_context,
+                    add_prefix=True,  # Indexing path - prefix here
                 )
                 if new_ancestors:
                     logger.debug(

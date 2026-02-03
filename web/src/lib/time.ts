@@ -78,6 +78,20 @@ export function humanReadableFormat(dateString: string): string {
   return formatter.format(date);
 }
 
+/**
+ * Format a date as "Jan 15, 2025" (short month name).
+ */
+export function humanReadableFormatShort(date: string | Date | null): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return formatter.format(d);
+}
+
 export function humanReadableFormatWithTime(datetimeString: string): string {
   // Create a Date object from the dateString
   const date = new Date(datetimeString);
@@ -141,4 +155,14 @@ export function getSecondsUntilExpiration(
       secondsUntilOIDCExpiration ?? Infinity
     )
   );
+}
+
+export function formatDurationSeconds(seconds: number): string {
+  const totalSeconds = Math.round(seconds);
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }

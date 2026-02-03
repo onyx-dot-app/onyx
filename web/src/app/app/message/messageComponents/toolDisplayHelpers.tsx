@@ -1,16 +1,5 @@
 import { JSX } from "react";
-import {
-  FiCircle,
-  FiCode,
-  FiGlobe,
-  FiImage,
-  FiLink,
-  FiList,
-  FiSearch,
-  FiTool,
-  FiUsers,
-  FiXCircle,
-} from "react-icons/fi";
+import { FiCircle, FiList, FiTool, FiXCircle } from "react-icons/fi";
 import { BrainIcon } from "@/components/icons/icons";
 
 import {
@@ -18,7 +7,16 @@ import {
   PacketType,
   SearchToolPacket,
 } from "@/app/app/services/streamingModels";
-import { constructCurrentSearchState } from "./renderers/SearchToolRenderer";
+import { constructCurrentSearchState } from "./timeline/renderers/search/searchStateUtils";
+import {
+  SvgGlobe,
+  SvgSearchMenu,
+  SvgTerminal,
+  SvgLink,
+  SvgImage,
+  SvgUser,
+  SvgCircle,
+} from "@opal/icons";
 
 /**
  * Check if a packet group contains an ERROR packet (tool failed)
@@ -119,54 +117,26 @@ export function getToolIcon(packets: Packet[]): JSX.Element {
         packets as SearchToolPacket[]
       );
       return searchState.isInternetSearch ? (
-        <FiGlobe className="w-3.5 h-3.5" />
+        <SvgGlobe className="w-3.5 h-3.5" />
       ) : (
-        <FiSearch className="w-3.5 h-3.5" />
+        <SvgSearchMenu className="w-3.5 h-3.5" />
       );
     }
     case PacketType.PYTHON_TOOL_START:
-      return <FiCode className="w-3.5 h-3.5" />;
+      return <SvgTerminal className="w-3.5 h-3.5" />;
     case PacketType.FETCH_TOOL_START:
-      return <FiLink className="w-3.5 h-3.5" />;
+      return <SvgLink className="w-3.5 h-3.5" />;
     case PacketType.CUSTOM_TOOL_START:
       return <FiTool className="w-3.5 h-3.5" />;
     case PacketType.IMAGE_GENERATION_TOOL_START:
-      return <FiImage className="w-3.5 h-3.5" />;
+      return <SvgImage className="w-3.5 h-3.5" />;
     case PacketType.DEEP_RESEARCH_PLAN_START:
       return <FiList className="w-3.5 h-3.5" />;
     case PacketType.RESEARCH_AGENT_START:
-      return <FiUsers className="w-3.5 h-3.5" />;
+      return <SvgUser className="w-3.5 h-3.5" />;
     case PacketType.REASONING_START:
       return <BrainIcon className="w-3.5 h-3.5" />;
     default:
-      return <FiCircle className="w-3.5 h-3.5" />;
-  }
-}
-
-/**
- * Get tool icon by tool name string.
- * Used when we have pre-computed tool names (e.g., from packet processor).
- */
-export function getToolIconByName(name: string): JSX.Element {
-  switch (name) {
-    case "Web Search":
-      return <FiGlobe className="w-3.5 h-3.5" />;
-    case "Internal Search":
-      return <FiSearch className="w-3.5 h-3.5" />;
-    case "Code Interpreter":
-      return <FiCode className="w-3.5 h-3.5" />;
-    case "Open URLs":
-      return <FiLink className="w-3.5 h-3.5" />;
-    case "Generate Image":
-      return <FiImage className="w-3.5 h-3.5" />;
-    case "Generate plan":
-      return <FiList className="w-3.5 h-3.5" />;
-    case "Research agent":
-      return <FiUsers className="w-3.5 h-3.5" />;
-    case "Thinking":
-      return <BrainIcon className="w-3.5 h-3.5" />;
-    default:
-      // Custom tools or unknown
-      return <FiTool className="w-3.5 h-3.5" />;
+      return <SvgCircle className="w-3.5 h-3.5" />;
   }
 }

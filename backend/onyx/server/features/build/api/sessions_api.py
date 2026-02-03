@@ -8,11 +8,13 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import BuildMessage
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
@@ -20,6 +22,7 @@ from onyx.server.features.build.api.models import DetailedSessionResponse
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import GenerateSuggestionsRequest
 from onyx.server.features.build.api.models import GenerateSuggestionsResponse
+from onyx.server.features.build.api.models import PreProvisionedCheckResponse
 from onyx.server.features.build.api.models import SessionCreateRequest
 from onyx.server.features.build.api.models import SessionListResponse
 from onyx.server.features.build.api.models import SessionNameGenerateResponse
@@ -159,6 +162,41 @@ def get_session_details(
     return DetailedSessionResponse.from_session_response(
         base_response, session_loaded_in_sandbox=session_loaded
     )
+
+
+@router.get(
+    "/{session_id}/pre-provisioned-check", response_model=PreProvisionedCheckResponse
+)
+def check_pre_provisioned_session(
+    session_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> PreProvisionedCheckResponse:
+    """
+    Check if a pre-provisioned session is still valid (empty).
+
+    Used by the frontend to poll and detect when another tab has used
+    the session. A session is considered valid if it has no messages yet.
+
+    Returns:
+        - valid=True, session_id=<id> if the session is still empty
+        - valid=False, session_id=None if the session has messages or doesn't exist
+    """
+    session = get_build_session(session_id, user.id, db_session)
+
+    if session is None:
+        return PreProvisionedCheckResponse(valid=False, session_id=None)
+
+    # Check if session is still empty (no messages = pre-provisioned)
+    has_messages = db_session.query(
+        exists().where(BuildMessage.session_id == session_id)
+    ).scalar()
+
+    if not has_messages:
+        return PreProvisionedCheckResponse(valid=True, session_id=str(session_id))
+
+    # Session has messages - it's no longer a valid pre-provisioned session
+    return PreProvisionedCheckResponse(valid=False, session_id=None)
 
 
 @router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)

@@ -1,4 +1,4 @@
-import React, { JSX } from "react";
+import React, { JSX, memo } from "react";
 import {
   ChatPacket,
   Packet,
@@ -11,16 +11,19 @@ import {
   MessageRenderer,
   RenderType,
   RendererResult,
+  RendererOutput,
 } from "./interfaces";
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
-import { PythonToolRenderer } from "./renderers/PythonToolRenderer";
-import { ReasoningRenderer } from "./renderers/ReasoningRenderer";
+import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer";
+import { ReasoningRenderer } from "./timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
-import { FetchToolRenderer } from "./renderers/FetchToolRenderer";
-import { DeepResearchPlanRenderer } from "./renderers/DeepResearchPlanRenderer";
-import { ResearchAgentRenderer } from "./renderers/ResearchAgentRenderer";
-import { SearchToolRenderer } from "./renderers/SearchToolRenderer";
+import { FetchToolRenderer } from "./timeline/renderers/fetch/FetchToolRenderer";
+import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/DeepResearchPlanRenderer";
+import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
+import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
+import { InternalSearchToolRenderer } from "./timeline/renderers/search/InternalSearchToolRenderer";
+import { SearchToolStart } from "../../services/streamingModels";
 
 // Different types of chat packets using discriminated unions
 export interface GroupedPackets {
@@ -35,8 +38,14 @@ function isChatPacket(packet: Packet): packet is ChatPacket {
   );
 }
 
-function isSearchToolPacket(packet: Packet) {
-  return packet.obj.type === PacketType.SEARCH_TOOL_START;
+function isWebSearchPacket(packet: Packet): boolean {
+  if (packet.obj.type !== PacketType.SEARCH_TOOL_START) return false;
+  return (packet.obj as SearchToolStart).is_internet_search === true;
+}
+
+function isInternalSearchPacket(packet: Packet): boolean {
+  if (packet.obj.type !== PacketType.SEARCH_TOOL_START) return false;
+  return (packet.obj as SearchToolStart).is_internet_search !== true;
 }
 
 function isImageToolPacket(packet: Packet) {
@@ -101,8 +110,11 @@ export function findRenderer(
   }
 
   // Standard tool checks
-  if (groupedPackets.packets.some((packet) => isSearchToolPacket(packet))) {
-    return SearchToolRenderer;
+  if (groupedPackets.packets.some((packet) => isWebSearchPacket(packet))) {
+    return WebSearchToolRenderer;
+  }
+  if (groupedPackets.packets.some((packet) => isInternalSearchPacket(packet))) {
+    return InternalSearchToolRenderer;
   }
   if (groupedPackets.packets.some((packet) => isImageToolPacket(packet))) {
     return ImageToolRenderer;
@@ -122,8 +134,36 @@ export function findRenderer(
   return null;
 }
 
+// Props interface for RendererComponent
+interface RendererComponentProps {
+  packets: Packet[];
+  chatState: FullChatState;
+  onComplete: () => void;
+  animate: boolean;
+  stopPacketSeen: boolean;
+  stopReason?: StopReason;
+  useShortRenderer?: boolean;
+  children: (result: RendererOutput) => JSX.Element;
+}
+
+// Custom comparison to prevent unnecessary re-renders
+function areRendererPropsEqual(
+  prev: RendererComponentProps,
+  next: RendererComponentProps
+): boolean {
+  return (
+    prev.packets === next.packets &&
+    prev.stopPacketSeen === next.stopPacketSeen &&
+    prev.stopReason === next.stopReason &&
+    prev.animate === next.animate &&
+    prev.useShortRenderer === next.useShortRenderer &&
+    prev.chatState.assistant?.id === next.chatState.assistant?.id
+    // Skip: onComplete, children (function refs), chatState (memoized upstream)
+  );
+}
+
 // React component wrapper that directly uses renderer components
-export function RendererComponent({
+export const RendererComponent = memo(function RendererComponent({
   packets,
   chatState,
   onComplete,
@@ -132,21 +172,12 @@ export function RendererComponent({
   stopReason,
   useShortRenderer = false,
   children,
-}: {
-  packets: Packet[];
-  chatState: FullChatState;
-  onComplete: () => void;
-  animate: boolean;
-  stopPacketSeen: boolean;
-  stopReason?: StopReason;
-  useShortRenderer?: boolean;
-  children: (result: RendererResult) => JSX.Element;
-}) {
+}: RendererComponentProps) {
   const RendererFn = findRenderer({ packets });
   const renderType = useShortRenderer ? RenderType.HIGHLIGHT : RenderType.FULL;
 
   if (!RendererFn) {
-    return children({ icon: null, status: null, content: <></> });
+    return children([{ icon: null, status: null, content: <></> }]);
   }
 
   return (
@@ -159,7 +190,7 @@ export function RendererComponent({
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
     >
-      {children}
+      {(results: RendererOutput) => children(results)}
     </RendererFn>
   );
-}
+}, areRendererPropsEqual);

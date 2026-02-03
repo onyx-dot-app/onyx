@@ -6,7 +6,7 @@ import type { Route } from "next";
 import { Dialog } from "@headlessui/react";
 import Button from "@/refresh-components/buttons/Button";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useUser } from "../user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "../context/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import {

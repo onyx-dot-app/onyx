@@ -1,7 +1,8 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
@@ -18,11 +19,11 @@ import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
-import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useChatController } from "@/app/app/hooks/useChatController";
-import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
-import { useAssistantController } from "@/app/app/hooks/useAssistantController";
+import { useProjectsContext } from "@/providers/ProjectsContext";
+import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import useChatController from "@/hooks/useChatController";
+import useChatSessionController from "@/hooks/useChatSessionController";
+import useAgentController from "@/hooks/useAgentController";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -33,11 +34,10 @@ import MessageList from "@/components/chat/MessageList";
 import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
-import * as AppLayouts from "@/layouts/app-layouts";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
 import Spacer from "@/refresh-components/Spacer";
-import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import {
   SvgUser,
@@ -45,10 +45,7 @@ import {
   SvgExternalLink,
   SvgAlertTriangle,
 } from "@opal/icons";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import TextView from "@/components/chat/TextView";
@@ -109,7 +106,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
-    useAssistantController({
+    useAgentController({
       selectedChatSession: undefined,
       onAssistantSelect: () => {},
     });
@@ -158,11 +155,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     }
   }, []);
 
-  // Chat background - shared with ChatPage
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+  // Chat background from context
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
@@ -316,7 +310,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
       style={
         !isSidePanel && hasBackground
-          ? { backgroundImage: `url(${chatBackground.url})` }
+          ? { backgroundImage: `url(${appBackgroundUrl})` }
           : undefined
       }
     >
@@ -409,7 +403,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             >
               <div
                 className={cn(
-                  "w-[min(50rem,100%)] flex flex-col px-4",
+                  "w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4",
                   hasMessages && "pointer-events-auto"
                 )}
               >
@@ -439,7 +433,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             </div>
             {!hasMessages && <div className="flex-1 w-full" />}
-            <AppLayouts.Footer />
           </div>
         )}
       </Dropzone>

@@ -56,3 +56,7 @@ USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (
 # Chat History Compression
 # Trigger compression when history exceeds this ratio of available context window
 COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0.75"))
+
+SKIP_DEEP_RESEARCH_CLARIFICATION = (
+    os.environ.get("SKIP_DEEP_RESEARCH_CLARIFICATION", "false").lower() == "true"
+)

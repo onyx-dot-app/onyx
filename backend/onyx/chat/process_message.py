@@ -4,6 +4,7 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
+import time
 import traceback
 from collections.abc import Callable
 from uuid import UUID
@@ -87,7 +88,6 @@ from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
-from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import (
@@ -317,6 +317,7 @@ def handle_stream_message_objects(
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
+    processing_start_time = time.monotonic()
 
     llm: LLM | None = None
     chat_session: ChatSession | None = None
@@ -353,11 +354,6 @@ def handle_stream_message_objects(
             user_id=llm_user_identifier, session_id=str(chat_session.id)
         )
 
-        # permanent "log" store, used primarily for debugging
-        long_term_logger = LongTermLogger(
-            metadata={"user_id": str(user_id), "chat_session_id": str(chat_session.id)}
-        )
-
         # Milestone tracking, most devs using the API don't need to understand this
         mt_cloud_telemetry(
             tenant_id=tenant_id,
@@ -388,7 +384,6 @@ def handle_stream_message_objects(
             user=user,
             llm_override=new_msg_req.llm_override or chat_session.llm_override,
             additional_headers=litellm_additional_headers,
-            long_term_logger=long_term_logger,
         )
         token_counter = get_llm_token_counter(llm)
 
@@ -624,6 +619,7 @@ def handle_stream_message_objects(
                 assistant_message=assistant_response,
                 llm=llm,
                 reserved_tokens=reserved_token_count,
+                processing_start_time=processing_start_time,
             )
 
         # Run the LLM loop with explicit wrapper for stop signal handling
@@ -745,6 +741,7 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
+    processing_start_time: float | None = None,
 ) -> None:
     chat_session_id = assistant_message.chat_session_id
 
@@ -778,6 +775,7 @@ def llm_loop_completion_handle(
         assistant_message=assistant_message,
         is_clarification=state_container.is_clarification,
         emitted_citations=state_container.get_emitted_citations(),
+        pre_answer_processing_time=state_container.get_pre_answer_processing_time(),
     )
 
     # Check if compression is needed after saving the message

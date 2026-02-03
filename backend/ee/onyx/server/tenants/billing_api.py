@@ -114,7 +114,7 @@ async def create_customer_portal_session(
 
     try:
         portal_url = fetch_customer_portal_session(tenant_id, return_url)
-        return {"url": portal_url}
+        return {"stripe_customer_portal_url": portal_url}
     except Exception as e:
         logger.exception("Failed to create customer portal session")
         raise HTTPException(status_code=500, detail=str(e))

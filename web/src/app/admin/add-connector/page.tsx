@@ -28,7 +28,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
@@ -266,7 +266,7 @@ export default function Page() {
         value={rawSearchTerm} // keep the input bound to immediate state
         onChange={(event) => setSearchTerm(event.target.value)}
         onKeyDown={handleKeyPress}
-        className="w-96"
+        className="w-96 flex-none"
       />
 
       {dedupedPopular.length > 0 && (

@@ -1,186 +1,91 @@
-import json
+"""
+LiteLLM Monkey Patches
+
+This module addresses the following issues in LiteLLM:
+
+Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
+
+1. Ollama Streaming Reasoning Content (_patch_ollama_chunk_parser):
+   - LiteLLM's chunk_parser doesn't properly handle reasoning content in streaming
+     responses from Ollama
+   - Processes native "thinking" field from Ollama responses
+   - Also handles <think>...</think> tags in content for models that use that format
+   - Tracks reasoning state to properly separate thinking from regular content
+   STATUS: STILL NEEDED - LiteLLM has a bug where it only yields thinking content on
+           the first two chunks, then stops (lines 504-510). Our patch correctly yields
+           ALL thinking chunks. The upstream logic sets finished_reasoning_content=True
+           on the second chunk instead of when regular content starts.
+
+2. OpenAI Responses API Parallel Tool Calls (_patch_openai_responses_parallel_tool_calls):
+   - LiteLLM's translate_responses_chunk_to_openai_stream hardcodes index=0 for all tool calls
+   - This breaks parallel tool calls where multiple functions are called simultaneously
+   - The OpenAI Responses API provides output_index in streaming events to track which
+     tool call each event belongs to
+   STATUS: STILL NEEDED - LiteLLM hardcodes index=0 in translate_responses_chunk_to_openai_stream
+           for response.output_item.added (line 962), response.function_call_arguments.delta
+           (line 989), and response.output_item.done (line 1033). Our patch uses output_index
+           from the event to properly track parallel tool calls.
+
+3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
+   - LiteLLM's transform_response doesn't properly concatenate multiple reasoning
+     summary parts in non-streaming responses
+   - Multiple ReasoningSummaryItem objects should be joined with newlines
+   STATUS: STILL NEEDED - LiteLLM's _convert_response_output_to_choices (lines 366-370)
+           only keeps the LAST summary item text, discarding earlier parts. Our patch
+           concatenates all summary texts with double newlines.
+
+4. Azure Responses API Fake Streaming (_patch_azure_responses_should_fake_stream):
+   - LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
+     not in its database, which buffers the entire response before yielding
+   - This causes poor time-to-first-token for Azure custom model deployments
+   - Azure's Responses API supports native streaming, so we force real streaming
+   STATUS: STILL NEEDED - AzureOpenAIResponsesAPIConfig does NOT override should_fake_stream,
+           so it inherits from OpenAIResponsesAPIConfig which returns True for models not
+           in litellm.utils.supports_native_streaming(). Custom Azure deployments will
+           still use fake streaming without this patch.
+
+# Note: 5 and 6 are to supress a warning and may fix usage info but is not strictly required for the app to run
+5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
+   - LiteLLM uses model_construct as a fallback in multiple places when
+     ResponsesAPIResponse validation fails
+   - This bypasses the usage validator, allowing chat completion format usage
+     (completion_tokens, prompt_tokens) to be stored instead of Responses API format
+     (input_tokens, output_tokens)
+   - When model_dump() is later called, Pydantic emits a serialization warning
+   STATUS: STILL NEEDED - Multiple files use model_construct which bypasses validation:
+           openai/responses/transformation.py, chatgpt/responses/transformation.py,
+           manus/responses/transformation.py, volcengine/responses/transformation.py,
+           and handler.py. Our patch wraps ResponsesAPIResponse.model_construct itself
+           to transform usage in all code paths.
+
+6. Logging Usage Transformation Warning (_patch_logging_assembled_streaming_response):
+   - LiteLLM's _get_assembled_streaming_response in litellm_logging.py transforms
+     ResponseAPIUsage to chat completion format and sets it as a dict on the
+     ResponsesAPIResponse.usage field
+   - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
+     to emit a serialization warning when model_dump() is called later
+   STATUS: STILL NEEDED - litellm_core_utils/litellm_logging.py lines 3185-3199 set
+           usage as a dict with chat completion format instead of keeping it as
+           ResponseAPIUsage. Our patch creates a deep copy before modification.
+"""
+
 import time
 import uuid
 from typing import Any
 from typing import cast
-from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Tuple
-from typing import TypedDict
-from typing import Union
 
-from litellm import AllMessageValues
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
 )
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
-from litellm.litellm_core_utils.prompt_templates.common_utils import (
-    convert_content_list_to_str,
-)
-
-try:
-    from litellm.litellm_core_utils.prompt_templates.common_utils import (
-        extract_images_from_message,
-    )
-except ImportError:
-    extract_images_from_message = None  # type: ignore[assignment]
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
-from litellm.llms.ollama.chat.transformation import OllamaChatConfig
 from litellm.llms.ollama.common_utils import OllamaError
-
-try:
-    from litellm.types.llms.ollama import OllamaChatCompletionMessage
-except ImportError:
-
-    class OllamaChatCompletionMessage(TypedDict, total=False):  # type: ignore[no-redef]
-        """Fallback for LiteLLM versions where this TypedDict was removed."""
-
-        role: str
-        content: Optional[str]
-        images: Optional[List[Any]]
-        thinking: Optional[str]
-        tool_calls: Optional[List["OllamaToolCall"]]
-
-
-from litellm.types.llms.ollama import OllamaToolCall
-from litellm.types.llms.ollama import OllamaToolCallFunction
-from litellm.types.llms.openai import ChatCompletionAssistantToolCall
 from litellm.types.utils import ChatCompletionUsageBlock
-from litellm.types.utils import GenericStreamingChunk
 from litellm.types.utils import ModelResponseStream
-from litellm.utils import verbose_logger
-from pydantic import BaseModel
-
-
-if extract_images_from_message is None:
-
-    def extract_images_from_message(
-        message: AllMessageValues,
-    ) -> Optional[List[Any]]:
-        """Fallback for LiteLLM versions that dropped extract_images_from_message."""
-
-        images: List[Any] = []
-        content = message.get("content")
-        if not isinstance(content, list):
-            return None
-
-        for item in content:
-            if not isinstance(item, Dict):
-                continue
-
-            item_type = item.get("type")
-            if item_type == "image_url":
-                image_url = item.get("image_url")
-                if isinstance(image_url, dict):
-                    if image_url.get("url"):
-                        images.append(image_url)
-                elif image_url:
-                    images.append(image_url)
-            elif item_type in {"input_image", "image"}:
-                image_value = item.get("image")
-                if image_value:
-                    images.append(image_value)
-
-        return images or None
-
-
-def _patch_ollama_transform_request() -> None:
-    """
-    Patches OllamaChatConfig.transform_request to handle reasoning content
-    and tool calls properly for Ollama chat completions.
-    """
-    if (
-        getattr(OllamaChatConfig.transform_request, "__name__", "")
-        == "_patched_transform_request"
-    ):
-        return
-
-    def _patched_transform_request(
-        self: Any,
-        model: str,
-        messages: List[AllMessageValues],
-        optional_params: dict,
-        litellm_params: dict,
-        headers: dict,
-    ) -> dict:
-        stream = optional_params.pop("stream", False)
-        format = optional_params.pop("format", None)
-        keep_alive = optional_params.pop("keep_alive", None)
-        think = optional_params.pop("think", None)
-        function_name = optional_params.pop("function_name", None)
-        litellm_params["function_name"] = function_name
-        tools = optional_params.pop("tools", None)
-
-        new_messages = []
-        for m in messages:
-            if isinstance(
-                m, BaseModel
-            ):  # avoid message serialization issues - https://github.com/BerriAI/litellm/issues/5319
-                m = m.model_dump(exclude_none=True)
-            tool_calls = m.get("tool_calls")
-            new_tools: List[OllamaToolCall] = []
-            if tool_calls is not None and isinstance(tool_calls, list):
-                for tool in tool_calls:
-                    typed_tool = ChatCompletionAssistantToolCall(**tool)  # type: ignore[typeddict-item]
-                    if typed_tool["type"] == "function":
-                        arguments = {}
-                        if "arguments" in typed_tool["function"]:
-                            arguments = json.loads(typed_tool["function"]["arguments"])
-                        ollama_tool_call = OllamaToolCall(
-                            function=OllamaToolCallFunction(
-                                name=typed_tool["function"].get("name") or "",
-                                arguments=arguments,
-                            )
-                        )
-                        new_tools.append(ollama_tool_call)
-                cast(dict, m)["tool_calls"] = new_tools
-            reasoning_content, parsed_content = _extract_reasoning_content(
-                cast(dict, m)
-            )
-            content_str = convert_content_list_to_str(cast(AllMessageValues, m))
-            images = extract_images_from_message(cast(AllMessageValues, m))
-
-            ollama_message = OllamaChatCompletionMessage(
-                role=cast(str, m.get("role")),
-            )
-            if reasoning_content is not None:
-                ollama_message["thinking"] = reasoning_content
-            if content_str is not None:
-                ollama_message["content"] = content_str
-            if images is not None:
-                ollama_message["images"] = images
-            if new_tools:
-                ollama_message["tool_calls"] = new_tools
-
-            new_messages.append(ollama_message)
-
-            # Load Config
-        config = self.get_config()
-        for k, v in config.items():
-            if k not in optional_params:
-                optional_params[k] = v
-
-        data = {
-            "model": model,
-            "messages": new_messages,
-            "options": optional_params,
-            "stream": stream,
-        }
-        if format is not None:
-            data["format"] = format
-        if tools is not None:
-            data["tools"] = tools
-        if keep_alive is not None:
-            data["keep_alive"] = keep_alive
-        if think is not None:
-            data["think"] = think
-
-        return data
-
-    OllamaChatConfig.transform_request = _patched_transform_request  # type: ignore[method-assign]
 
 
 def _patch_ollama_chunk_parser() -> None:
@@ -315,10 +220,20 @@ def _patch_ollama_chunk_parser() -> None:
     OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser  # type: ignore[method-assign]
 
 
-def _patch_openai_responses_chunk_parser() -> None:
+def _patch_openai_responses_parallel_tool_calls() -> None:
     """
-    Patches OpenAiResponsesToChatCompletionStreamIterator.chunk_parser to properly
-    handle OpenAI Responses API streaming format and convert it to chat completion format.
+    Patches OpenAiResponsesToChatCompletionStreamIterator to properly handle:
+    1. Parallel tool calls by using output_index from streaming events
+    2. Reasoning summary sections by inserting newlines between different summary indices
+
+    LiteLLM's implementation hardcodes index=0 for all tool calls, breaking parallel tool calls.
+    The OpenAI Responses API provides output_index in each event to track which tool call
+    the event belongs to.
+
+    STATUS: STILL NEEDED - LiteLLM hardcodes index=0 in translate_responses_chunk_to_openai_stream
+            for response.output_item.added (line 962), response.function_call_arguments.delta
+            (line 989), and response.output_item.done (line 1033). Our patch uses output_index
+            from the event to properly track parallel tool calls.
     """
     if (
         getattr(
@@ -326,88 +241,105 @@ def _patch_openai_responses_chunk_parser() -> None:
             "__name__",
             "",
         )
-        == "_patched_openai_responses_chunk_parser"
+        == "_patched_responses_chunk_parser"
     ):
         return
 
-    def _patched_openai_responses_chunk_parser(
+    def _patched_responses_chunk_parser(
         self: Any, chunk: dict
-    ) -> Union["GenericStreamingChunk", "ModelResponseStream"]:
-        # Transform responses API streaming chunk to chat completion format
-        from litellm.types.llms.openai import ChatCompletionToolCallFunctionChunk
+    ) -> "ModelResponseStream":
+        from pydantic import BaseModel
+
+        from litellm.types.llms.openai import (
+            ChatCompletionToolCallFunctionChunk,
+            ResponsesAPIStreamEvents,
+        )
         from litellm.types.utils import (
             ChatCompletionToolCallChunk,
-            GenericStreamingChunk,
+            Delta,
+            ModelResponseStream,
+            StreamingChoices,
         )
 
         parsed_chunk = chunk
         if not parsed_chunk:
             raise ValueError("Chat provider: Empty parsed_chunk")
+
+        if isinstance(parsed_chunk, BaseModel):
+            parsed_chunk = parsed_chunk.model_dump()
         if not isinstance(parsed_chunk, dict):
             raise ValueError(f"Chat provider: Invalid chunk type {type(parsed_chunk)}")
-        # Handle different event types from responses API
 
         event_type = parsed_chunk.get("type")
-        # Allow enum-like event types
-        if hasattr(event_type, "value"):
-            event_type = getattr(event_type, "value")
-        verbose_logger.debug(f"Chat provider: Processing event type: {event_type}")
+        if isinstance(event_type, ResponsesAPIStreamEvents):
+            event_type = event_type.value
 
-        output_index = parsed_chunk.get("output_index", 0) or 0
+        # Get the output_index for proper parallel tool call tracking
+        output_index = parsed_chunk.get("output_index", 0)
 
-        if event_type == "response.created":
-            # Initial response creation event
-            verbose_logger.debug(f"Chat provider: response.created -> {chunk}")
-            return GenericStreamingChunk(
-                text="", tool_use=None, is_finished=False, finish_reason="", usage=None
-            )
-
-        elif event_type == "response.output_item.added":
-            # New output item added
+        if event_type == "response.output_item.added":
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
-                # Track that we've received tool calls via streaming
-                self._has_streamed_tool_calls = True
-                return GenericStreamingChunk(
-                    text="",
-                    tool_use=ChatCompletionToolCallChunk(
-                        id=output_item.get("call_id"),
-                        index=output_index,
-                        type="function",
-                        function=ChatCompletionToolCallFunctionChunk(
-                            name=output_item.get("name", None),
-                            arguments=parsed_chunk.get("arguments", ""),
-                        ),
-                    ),
-                    is_finished=False,
-                    finish_reason="",
-                    usage=None,
+                provider_specific_fields = output_item.get("provider_specific_fields")
+                if provider_specific_fields and not isinstance(
+                    provider_specific_fields, dict
+                ):
+                    provider_specific_fields = (
+                        dict(provider_specific_fields)
+                        if hasattr(provider_specific_fields, "__dict__")
+                        else {}
+                    )
+
+                function_chunk = ChatCompletionToolCallFunctionChunk(
+                    name=output_item.get("name", None),
+                    arguments=parsed_chunk.get("arguments", ""),
                 )
-            elif output_item.get("type") == "message":
-                pass
-            elif output_item.get("type") == "reasoning":
-                pass
-            else:
-                raise ValueError(f"Chat provider: Invalid output_item  {output_item}")
+                if provider_specific_fields:
+                    function_chunk["provider_specific_fields"] = (
+                        provider_specific_fields
+                    )
+
+                tool_call_chunk = ChatCompletionToolCallChunk(
+                    id=output_item.get("call_id"),
+                    index=output_index,  # Use output_index for parallel tool calls
+                    type="function",
+                    function=function_chunk,
+                )
+                if provider_specific_fields:
+                    tool_call_chunk.provider_specific_fields = provider_specific_fields  # type: ignore
+
+                return ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(tool_calls=[tool_call_chunk]),
+                            finish_reason=None,
+                        )
+                    ]
+                )
 
         elif event_type == "response.function_call_arguments.delta":
             content_part: Optional[str] = parsed_chunk.get("delta", None)
             if content_part:
-                # Track that we've received tool calls via streaming
-                self._has_streamed_tool_calls = True
-                return GenericStreamingChunk(
-                    text="",
-                    tool_use=ChatCompletionToolCallChunk(
-                        id=None,
-                        index=output_index,
-                        type="function",
-                        function=ChatCompletionToolCallFunctionChunk(
-                            name=None, arguments=content_part
-                        ),
-                    ),
-                    is_finished=False,
-                    finish_reason="",
-                    usage=None,
+                return ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(
+                                tool_calls=[
+                                    ChatCompletionToolCallChunk(
+                                        id=None,
+                                        index=output_index,  # Use output_index for parallel tool calls
+                                        type="function",
+                                        function=ChatCompletionToolCallFunctionChunk(
+                                            name=None, arguments=content_part
+                                        ),
+                                    )
+                                ]
+                            ),
+                            finish_reason=None,
+                        )
+                    ]
                 )
             else:
                 raise ValueError(
@@ -415,58 +347,50 @@ def _patch_openai_responses_chunk_parser() -> None:
                 )
 
         elif event_type == "response.output_item.done":
-            # New output item added
             output_item = parsed_chunk.get("item", {})
             if output_item.get("type") == "function_call":
-                # Don't set is_finished=True here - for parallel tool calls,
-                # more tool calls may follow. Wait for response.completed.
-                return GenericStreamingChunk(
-                    text="",
-                    tool_use=ChatCompletionToolCallChunk(
-                        id=output_item.get("call_id"),
-                        index=output_index,
-                        type="function",
-                        function=ChatCompletionToolCallFunctionChunk(
-                            name=parsed_chunk.get("name", None),
-                            arguments="",  # responses API sends everything again, we don't
-                        ),
-                    ),
-                    is_finished=False,
-                    finish_reason="",
-                    usage=None,
-                )
-            elif output_item.get("type") == "message":
-                return GenericStreamingChunk(
-                    finish_reason="stop", is_finished=True, usage=None, text=""
-                )
-            elif output_item.get("type") == "reasoning":
-                pass
-            else:
-                raise ValueError(f"Chat provider: Invalid output_item  {output_item}")
+                provider_specific_fields = output_item.get("provider_specific_fields")
+                if provider_specific_fields and not isinstance(
+                    provider_specific_fields, dict
+                ):
+                    provider_specific_fields = (
+                        dict(provider_specific_fields)
+                        if hasattr(provider_specific_fields, "__dict__")
+                        else {}
+                    )
 
-        elif event_type == "response.output_text.delta":
-            # Content part added to output
-            content_part = parsed_chunk.get("delta", None)
-            if content_part is not None:
-                return GenericStreamingChunk(
-                    text=content_part,
-                    tool_use=None,
-                    is_finished=False,
-                    finish_reason="",
-                    usage=None,
+                function_chunk = ChatCompletionToolCallFunctionChunk(
+                    name=output_item.get("name", None),
+                    arguments="",  # responses API sends everything again, we don't need it
                 )
-            else:
-                raise ValueError(f"Chat provider: Invalid text delta {parsed_chunk}")
+                if provider_specific_fields:
+                    function_chunk["provider_specific_fields"] = (
+                        provider_specific_fields
+                    )
+
+                tool_call_chunk = ChatCompletionToolCallChunk(
+                    id=output_item.get("call_id"),
+                    index=output_index,  # Use output_index for parallel tool calls
+                    type="function",
+                    function=function_chunk,
+                )
+                if provider_specific_fields:
+                    tool_call_chunk.provider_specific_fields = provider_specific_fields  # type: ignore
+
+                return ModelResponseStream(
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            delta=Delta(tool_calls=[tool_call_chunk]),
+                            finish_reason="tool_calls",
+                        )
+                    ]
+                )
 
         elif event_type == "response.reasoning_summary_text.delta":
+            # Handle reasoning summary with newlines between sections
             content_part = parsed_chunk.get("delta", None)
             if content_part:
-                from litellm.types.utils import (
-                    Delta,
-                    ModelResponseStream,
-                    StreamingChoices,
-                )
-
                 summary_index = parsed_chunk.get("summary_index", 0)
 
                 # Track the last summary index to insert newlines between parts
@@ -490,90 +414,13 @@ def _patch_openai_responses_chunk_parser() -> None:
                     ]
                 )
 
-        elif event_type == "response.completed":
-            # Final event signaling all output items (including parallel tool calls) are done
-            # Check if we already received tool calls via streaming events
-            # There is an issue where OpenAI (not via Azure) will give back the tool calls streamed out as tokens
-            # But on Azure, it's only given out all at once. OpenAI also happens to give back the tool calls in the
-            # response.completed event so we need to throw it out here or there are duplicate tool calls.
-            has_streamed_tool_calls = getattr(self, "_has_streamed_tool_calls", False)
-
-            response_data = parsed_chunk.get("response", {})
-            output_items = response_data.get("output", [])
-
-            # Check if there are function_call items in the output
-            has_function_calls = any(
-                isinstance(item, dict) and item.get("type") == "function_call"
-                for item in output_items
-            )
-
-            if has_function_calls and not has_streamed_tool_calls:
-                # Azure's Responses API returns all tool calls in response.completed
-                # without streaming them incrementally. Extract them here.
-                from litellm.types.utils import (
-                    Delta,
-                    ModelResponseStream,
-                    StreamingChoices,
-                )
-
-                tool_calls = []
-                for idx, item in enumerate(output_items):
-                    if isinstance(item, dict) and item.get("type") == "function_call":
-                        tool_calls.append(
-                            ChatCompletionToolCallChunk(
-                                id=item.get("call_id"),
-                                index=idx,
-                                type="function",
-                                function=ChatCompletionToolCallFunctionChunk(
-                                    name=item.get("name"),
-                                    arguments=item.get("arguments", ""),
-                                ),
-                            )
-                        )
-
-                return ModelResponseStream(
-                    choices=[
-                        StreamingChoices(
-                            index=0,
-                            delta=Delta(tool_calls=tool_calls),
-                            finish_reason="tool_calls",
-                        )
-                    ]
-                )
-            elif has_function_calls:
-                # Tool calls were already streamed, just signal completion
-                return GenericStreamingChunk(
-                    text="",
-                    tool_use=None,
-                    is_finished=True,
-                    finish_reason="tool_calls",
-                    usage=None,
-                )
-            else:
-                return GenericStreamingChunk(
-                    text="",
-                    tool_use=None,
-                    is_finished=True,
-                    finish_reason="stop",
-                    usage=None,
-                )
-
-        else:
-            pass
-
-        # For any unhandled event types, create a minimal valid chunk or skip
-        verbose_logger.debug(
-            f"Chat provider: Unhandled event type '{event_type}', creating empty chunk"
-        )
-        # Return a minimal valid chunk for unknown events
-        return GenericStreamingChunk(
-            text="", tool_use=None, is_finished=False, finish_reason="", usage=None
+        # For all other event types, use the original static method
+        return OpenAiResponsesToChatCompletionStreamIterator.translate_responses_chunk_to_openai_stream(
+            parsed_chunk
         )
 
-    _patched_openai_responses_chunk_parser.__name__ = (
-        "_patched_openai_responses_chunk_parser"
-    )
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_openai_responses_chunk_parser  # type: ignore
+    _patched_responses_chunk_parser.__name__ = "_patched_responses_chunk_parser"
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = _patched_responses_chunk_parser  # type: ignore[method-assign]
 
 
 def _patch_openai_responses_transform_response() -> None:
@@ -716,34 +563,168 @@ def _patch_azure_responses_should_fake_stream() -> None:
     AzureOpenAIResponsesAPIConfig.should_fake_stream = _patched_should_fake_stream  # type: ignore[method-assign]
 
 
+def _patch_responses_api_usage_format() -> None:
+    """
+    Patches ResponsesAPIResponse.model_construct to properly transform usage data
+    from chat completion format to Responses API format.
+
+    LiteLLM uses model_construct as a fallback in multiple places when ResponsesAPIResponse
+    validation fails. This bypasses the usage validator, allowing usage data in chat
+    completion format (completion_tokens, prompt_tokens) to be stored instead of Responses
+    API format (input_tokens, output_tokens), causing Pydantic serialization warnings.
+
+    This patch wraps model_construct to transform usage before construction, ensuring
+    the correct type regardless of which code path calls model_construct.
+
+    Affected locations in LiteLLM:
+    - litellm/llms/openai/responses/transformation.py (lines 183, 563)
+    - litellm/llms/chatgpt/responses/transformation.py (line 153)
+    - litellm/llms/manus/responses/transformation.py (lines 243, 334)
+    - litellm/llms/volcengine/responses/transformation.py (line 280)
+    - litellm/completion_extras/litellm_responses_transformation/handler.py (line 51)
+    """
+    from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
+
+    original_model_construct = ResponsesAPIResponse.model_construct
+
+    if getattr(original_model_construct, "_is_patched", False):
+        return
+
+    @classmethod  # type: ignore[misc]
+    def _patched_model_construct(
+        cls: Any,
+        _fields_set: Optional[set[str]] = None,
+        **values: Any,
+    ) -> "ResponsesAPIResponse":
+        """
+        Patched model_construct that ensures usage is a ResponseAPIUsage object.
+        """
+        # Transform usage if present and not already the correct type
+        if "usage" in values and values["usage"] is not None:
+            usage = values["usage"]
+            if not isinstance(usage, ResponseAPIUsage):
+                if isinstance(usage, dict):
+                    values = dict(values)  # Don't mutate original
+                    # Check if it's in chat completion format
+                    if "prompt_tokens" in usage or "completion_tokens" in usage:
+                        # Transform from chat completion format
+                        values["usage"] = ResponseAPIUsage(
+                            input_tokens=usage.get("prompt_tokens", 0),
+                            output_tokens=usage.get("completion_tokens", 0),
+                            total_tokens=usage.get("total_tokens", 0),
+                        )
+                    elif "input_tokens" in usage or "output_tokens" in usage:
+                        # Already in Responses API format, just convert to proper type
+                        values["usage"] = ResponseAPIUsage(
+                            input_tokens=usage.get("input_tokens", 0),
+                            output_tokens=usage.get("output_tokens", 0),
+                            total_tokens=usage.get("total_tokens", 0),
+                        )
+
+        # Call original model_construct (need to call it as unbound method)
+        return original_model_construct.__func__(cls, _fields_set, **values)  # type: ignore[attr-defined]
+
+    _patched_model_construct._is_patched = True  # type: ignore[attr-defined]
+    ResponsesAPIResponse.model_construct = _patched_model_construct  # type: ignore[method-assign, assignment]
+
+
+def _patch_logging_assembled_streaming_response() -> None:
+    """
+    Patches LiteLLMLoggingObj._get_assembled_streaming_response to create a deep copy
+    of the ResponsesAPIResponse before modifying its usage field.
+
+    The original code transforms usage to chat completion format and sets it as a dict
+    directly on the ResponsesAPIResponse.usage field. This mutates the original object,
+    causing Pydantic serialization warnings when model_dump() is called later because
+    the usage field contains a dict instead of the expected ResponseAPIUsage type.
+
+    This patch creates a copy of the response before modification, preserving the
+    original object with its proper ResponseAPIUsage type.
+    """
+    from litellm import LiteLLMLoggingObj
+    from litellm.responses.utils import ResponseAPILoggingUtils
+    from litellm.types.llms.openai import (
+        ResponseAPIUsage,
+        ResponseCompletedEvent,
+        ResponsesAPIResponse,
+    )
+    from litellm.types.utils import ModelResponse, TextCompletionResponse
+
+    original_method = LiteLLMLoggingObj._get_assembled_streaming_response
+
+    if getattr(original_method, "_is_patched", False):
+        return
+
+    def _patched_get_assembled_streaming_response(
+        self: Any,
+        result: Any,
+        start_time: Any,
+        end_time: Any,
+        is_async: bool,
+        streaming_chunks: List[Any],
+    ) -> Any:
+        """
+        Patched version that creates a copy before modifying usage.
+
+        The original LiteLLM code transforms usage to chat completion format and
+        sets it directly as a dict, which causes Pydantic serialization warnings.
+        This patch uses model_construct to rebuild the response with the transformed
+        usage, ensuring proper typing.
+        """
+        if isinstance(result, ModelResponse):
+            return result
+        elif isinstance(result, TextCompletionResponse):
+            return result
+        elif isinstance(result, ResponseCompletedEvent):
+            # Get the original response data
+            original_response = result.response
+            response_data = original_response.model_dump()
+
+            # Transform usage if present
+            if isinstance(original_response.usage, ResponseAPIUsage):
+                transformed_usage = (
+                    ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
+                        original_response.usage
+                    )
+                )
+                # Put the transformed usage (in chat completion format) into response_data
+                # Our patched model_construct will convert it back to ResponseAPIUsage
+                response_data["usage"] = (
+                    transformed_usage.model_dump()
+                    if hasattr(transformed_usage, "model_dump")
+                    else dict(transformed_usage)
+                )
+
+            # Rebuild using model_construct - our patch ensures usage is properly typed
+            response_copy = ResponsesAPIResponse.model_construct(**response_data)
+
+            # Copy hidden params
+            if hasattr(original_response, "_hidden_params"):
+                response_copy._hidden_params = dict(original_response._hidden_params)
+
+            return response_copy
+        else:
+            return None
+
+    _patched_get_assembled_streaming_response._is_patched = True  # type: ignore[attr-defined]
+    LiteLLMLoggingObj._get_assembled_streaming_response = _patched_get_assembled_streaming_response  # type: ignore[method-assign]
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
 
     This includes:
-    - Patching OllamaChatConfig.transform_request for reasoning content support
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
-    - Patching OpenAiResponsesToChatCompletionStreamIterator.chunk_parser for OpenAI Responses API
+    - Patching translate_responses_chunk_to_openai_stream for parallel tool calls
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
     - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
+    - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
+    - Patching LiteLLMLoggingObj._get_assembled_streaming_response to avoid mutating original response
     """
-    _patch_ollama_transform_request()
     _patch_ollama_chunk_parser()
-    _patch_openai_responses_chunk_parser()
+    _patch_openai_responses_parallel_tool_calls()
     _patch_openai_responses_transform_response()
     _patch_azure_responses_should_fake_stream()
-
-
-def _extract_reasoning_content(message: dict) -> Tuple[Optional[str], Optional[str]]:
-    from litellm.litellm_core_utils.prompt_templates.common_utils import (
-        _parse_content_for_reasoning,
-    )
-
-    message_content = message.get("content")
-    if "reasoning_content" in message:
-        return message["reasoning_content"], message["content"]
-    elif "reasoning" in message:
-        return message["reasoning"], message["content"]
-    elif isinstance(message_content, str):
-        return _parse_content_for_reasoning(message_content)
-    return None, message_content
+    _patch_responses_api_usage_format()
+    _patch_logging_assembled_streaming_response()

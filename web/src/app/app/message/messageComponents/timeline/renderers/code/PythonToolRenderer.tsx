@@ -177,23 +177,27 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
   // FULL mode: render content directly
   if (renderType === RenderType.FULL) {
-    return children({
-      icon: SvgTerminal,
-      status,
-      content,
-      supportsCompact: true,
-    });
+    return children([
+      {
+        icon: SvgTerminal,
+        status,
+        content,
+        supportsCollapsible: true,
+      },
+    ]);
   }
 
   // Compact mode: wrap content in FadeDiv
-  return children({
-    icon: SvgTerminal,
-    status,
-    supportsCompact: true,
-    content: (
-      <FadingEdgeContainer direction="bottom" className="h-24">
-        {content}
-      </FadingEdgeContainer>
-    ),
-  });
+  return children([
+    {
+      icon: SvgTerminal,
+      status,
+      supportsCollapsible: true,
+      content: (
+        <FadingEdgeContainer direction="bottom" className="h-24">
+          {content}
+        </FadingEdgeContainer>
+      ),
+    },
+  ]);
 };

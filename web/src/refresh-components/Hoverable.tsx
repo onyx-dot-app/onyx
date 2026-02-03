@@ -4,30 +4,31 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { Route } from "next";
 import { WithoutStyles } from "@/types";
-import {
-  heightClassmap,
-  Length,
-  widthClassmap,
-} from "@/layouts/general-layouts";
+import { SvgChevronDownSmall } from "@opal/icons";
 
+type ButtonHeightVariants = "standard" | "compact" | "full";
 type HoverableVariants = "primary" | "secondary" | "tertiary";
+
+const buttonHeightVariants = {
+  standard: "h-[2.25rem]",
+  compact: "h-[1.75rem]",
+  full: "h-full",
+} as const;
 
 interface HoverableContainerProps
   extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
   border?: boolean;
-  rounded?: string;
-  padding?: number;
-  height?: Length;
-  width?: Length;
+  reducedRounding?: boolean;
+  noPadding?: boolean;
+  heightVariant?: ButtonHeightVariants;
   ref?: React.Ref<HTMLDivElement>;
 }
 
 function HoverableContainer({
   border,
-  rounded = "rounded-08",
-  padding = 0.5,
-  height = "full",
-  width = "full",
+  reducedRounding,
+  noPadding,
+  heightVariant = "standard",
   ref,
   ...props
 }: HoverableContainerProps) {
@@ -47,23 +48,75 @@ function HoverableContainer({
       {...rest}
       className={cn(
         border && "border",
-        rounded,
-        widthClassmap[width],
-        heightClassmap[height],
+        reducedRounding ? "rounded-08" : "rounded-12",
+        !noPadding && "p-2",
+        buttonHeightVariants[heightVariant],
         slotClassName
       )}
-      style={{
-        ...slotStyle,
-        padding: `${padding}rem`,
-      }}
+      style={slotStyle}
     />
+  );
+}
+
+/**
+ * ChevronHoverableContainer
+ *
+ * Like HoverableContainer, but renders a chevron-down icon on the right that
+ * rotates 180° when "open".
+ *
+ * Open state is resolved in order:
+ * 1. Explicit `open` prop
+ * 2. Radix `data-state` attribute (injected through the Slot chain by
+ *    Popover.Trigger → Hoverable asChild → this component)
+ *
+ * @example
+ * ```tsx
+ * <Popover>
+ *   <Popover.Trigger asChild>
+ *     <Hoverable asChild>
+ *       <ChevronHoverableContainer>
+ *         <LineItemLayout icon={SvgIcon} title="Option" variant="secondary" center />
+ *       </ChevronHoverableContainer>
+ *     </Hoverable>
+ *   </Popover.Trigger>
+ *   <Popover.Content>…</Popover.Content>
+ * </Popover>
+ * ```
+ */
+interface ChevronHoverableContainerProps extends HoverableContainerProps {
+  /** Explicit open state. When omitted, falls back to Radix `data-state`. */
+  open?: boolean;
+}
+
+function ChevronHoverableContainer({
+  open,
+  children,
+  ...containerProps
+}: ChevronHoverableContainerProps) {
+  // Derive open state: explicit prop → Radix data-state (injected via Slot chain)
+  const dataState = (containerProps as Record<string, unknown>)[
+    "data-state"
+  ] as string | undefined;
+  const isOpen = open ?? dataState === "open";
+
+  return (
+    <HoverableContainer {...containerProps}>
+      <div className="flex flex-row items-center gap-2">
+        <div className="flex-1 min-w-0">{children}</div>
+        <SvgChevronDownSmall
+          className={cn(
+            "shrink-0 transition-transform duration-200",
+            isOpen && "-rotate-180"
+          )}
+          size={14}
+        />
+      </div>
+    </HoverableContainer>
   );
 }
 
 export interface HoverableProps
   extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
-  /** Content to be wrapped with hover behavior */
-  children: React.ReactNode;
   /**
    * When true, the child element becomes the interactive element.
    * The child can define its own `data-pressed` attribute.
@@ -79,6 +132,8 @@ export interface HoverableProps
    */
   group?: string;
   nonInteractive?: boolean;
+  /** When true, forces the pressed visual state (same as `data-pressed="true"`). */
+  transient?: boolean;
   /** Controls background color styling on the hoverable element. */
   variant?: HoverableVariants;
 }
@@ -129,25 +184,27 @@ export interface HoverableProps
  * - Active/pressed states apply a slightly stronger tint
  * - Use `data-pressed="true"` on the child (with `asChild`) to show pressed state
  */
-export default function Hoverable({
+function Hoverable({
   children,
   asChild,
   href,
   ref,
   group,
   nonInteractive,
+  transient,
   variant = "primary",
   ...props
 }: HoverableProps) {
   const classes = cn(
     "hoverable",
-    `hoverable--${variant}`,
-    nonInteractive && "cursor-default",
+    !props.onClick && !href && "cursor-default",
     group
   );
-  const dataAttrs = nonInteractive
-    ? { "data-non-interactive": "true" as const }
-    : {};
+  const dataAttrs = {
+    "data-variant": variant,
+    ...(nonInteractive && { "data-non-interactive": "true" as const }),
+    ...(transient && { "data-pressed": "true" as const }),
+  };
 
   // asChild: merge props onto child element
   if (asChild) {
@@ -187,4 +244,4 @@ export default function Hoverable({
   );
 }
 
-export { HoverableContainer };
+export { Hoverable, HoverableContainer, ChevronHoverableContainer };

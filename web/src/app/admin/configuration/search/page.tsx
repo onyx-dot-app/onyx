@@ -15,7 +15,7 @@ import {
 import { SavedSearchSettings } from "@/app/admin/embeddings/interfaces";
 import UpgradingPage from "./UpgradingPage";
 import { useContext } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import CardSection from "@/components/admin/CardSection";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";

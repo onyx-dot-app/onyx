@@ -44,8 +44,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.tools.models import TOOL_CALL_MSG_ARGUMENTS
-from onyx.tools.models import TOOL_CALL_MSG_FUNC_NAME
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
@@ -498,65 +496,26 @@ def translate_history_to_llm_format(
                 messages.append(user_msg_text)
 
         elif msg.message_type == MessageType.ASSISTANT:
+            tool_calls_list: list[ToolCall] | None = None
+            if msg.tool_calls:
+                tool_calls_list = [
+                    ToolCall(
+                        id=tc.tool_call_id,
+                        type="function",
+                        function=FunctionCall(
+                            name=tc.tool_name,
+                            arguments=json.dumps(tc.tool_arguments),
+                        ),
+                    )
+                    for tc in msg.tool_calls
+                ]
+
             assistant_msg = AssistantMessage(
                 role="assistant",
                 content=msg.message or None,
-                tool_calls=None,
+                tool_calls=tool_calls_list,
             )
             messages.append(assistant_msg)
-
-        elif msg.message_type == MessageType.TOOL_CALL:
-            # Tool calls are represented as Assistant Messages with tool_calls field
-            # Try to reconstruct tool call structure if we have tool_call_id
-            tool_calls: list[ToolCall] = []
-            if msg.tool_call_id:
-                try:
-                    # Parse the message content (which should contain function_name and arguments)
-                    tool_call_data = json.loads(msg.message) if msg.message else {}
-
-                    if (
-                        isinstance(tool_call_data, dict)
-                        and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
-                    ):
-                        function_name = tool_call_data.get(
-                            TOOL_CALL_MSG_FUNC_NAME, "unknown"
-                        )
-                        raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
-                    else:
-                        function_name = "unknown"
-                        raw_args = (
-                            tool_call_data if isinstance(tool_call_data, dict) else {}
-                        )
-
-                    # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
-                    # If `raw_args` is accidentally a JSON string literal of an object
-                    # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
-                    # would produce a quoted JSON literal and break Anthropic tool parsing.
-                    tool_args = _parse_tool_args_to_dict(raw_args)
-
-                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
-                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
-                    tool_call = ToolCall(
-                        id=msg.tool_call_id,
-                        type="function",
-                        function=FunctionCall(
-                            name=function_name,
-                            arguments=json.dumps(tool_args) if tool_args else "{}",
-                        ),
-                    )
-                    tool_calls.append(tool_call)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to parse tool call data for tool_call_id {msg.tool_call_id}: {e}. "
-                        "Including as content-only message."
-                    )
-
-            assistant_msg_with_tool = AssistantMessage(
-                role="assistant",
-                content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
-                tool_calls=tool_calls or None,
-            )
-            messages.append(assistant_msg_with_tool)
 
         elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
             if not msg.tool_call_id:
@@ -622,6 +581,7 @@ def run_llm_step_pkt_generator(
     # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    pre_answer_processing_time: float | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -677,9 +637,8 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = 0
 
-    # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
-        logger.info(
+        logger.debug(
             f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
         )
 
@@ -822,6 +781,12 @@ def run_llm_step_pkt_generator(
                         reasoning_start = False
 
                     if not answer_start:
+                        # Store pre-answer processing time in state container for save_chat
+                        if state_container and pre_answer_processing_time is not None:
+                            state_container.set_pre_answer_processing_time(
+                                pre_answer_processing_time
+                            )
+
                         yield Packet(
                             placement=Placement(
                                 turn_index=turn_index,
@@ -830,6 +795,7 @@ def run_llm_step_pkt_generator(
                             ),
                             obj=AgentResponseStart(
                                 final_documents=final_documents,
+                                pre_answer_processing_seconds=pre_answer_processing_time,
                             ),
                         )
                         answer_start = True
@@ -1038,6 +1004,7 @@ def run_llm_step(
     max_tokens: int | None = None,
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    pre_answer_processing_time: float | None = None,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -1059,6 +1026,7 @@ def run_llm_step(
         max_tokens=max_tokens,
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
+        pre_answer_processing_time=pre_answer_processing_time,
     )
 
     while True:

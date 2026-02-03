@@ -150,6 +150,15 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: model-server
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
   podSecurityContext: {}
   securityContext:
     privileged: true
@@ -178,7 +187,7 @@ indexCapability:
   deploymentLabels:
     app: indexing-model-server
   podLabels:
-    app: indexing-model-server
+    scope: onyx-backend
   indexingOnly: "True"
   podAnnotations: {}
   containerPorts:
@@ -195,6 +204,15 @@ indexCapability:
     limits:
       cpu: 6000m
       memory: 6Gi
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: model-server
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
   podSecurityContext: {}
   securityContext:
     privileged: true
@@ -291,7 +309,7 @@ webserver:
     app: web-server
   podAnnotations: {}
   podLabels:
-    app: web-server
+    scope: onyx-frontend
   podSecurityContext:
     {}
     # fsGroup: 2000
@@ -320,6 +338,16 @@ webserver:
     limits:
       cpu: 1000m
       memory: 1Gi
+
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /api/health
+  #     port: http
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
 
   autoscaling:
     enabled: false
@@ -370,7 +398,6 @@ api:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: api-server
 
   containerPorts:
     server: 8080
@@ -401,6 +428,16 @@ api:
     limits:
       cpu: 1000m
       memory: 3Gi
+
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: api-server-port
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
 
   autoscaling:
     enabled: false
@@ -481,7 +518,6 @@ celery_beat:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-beat
   deploymentLabels:
     app: celery-beat
   resources:
@@ -516,7 +552,6 @@ celery_worker_heavy:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-heavy
   deploymentLabels:
     app: celery-worker-heavy
   resources:
@@ -551,7 +586,6 @@ celery_worker_docprocessing:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-docprocessing
   deploymentLabels:
     app: celery-worker-docprocessing
   resources:
@@ -586,7 +620,6 @@ celery_worker_light:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-light
   deploymentLabels:
     app: celery-worker-light
   resources:
@@ -621,7 +654,6 @@ celery_worker_monitoring:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-monitoring
   deploymentLabels:
     app: celery-worker-monitoring
   resources:
@@ -656,7 +688,6 @@ celery_worker_primary:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-primary
   deploymentLabels:
     app: celery-worker-primary
   resources:
@@ -691,7 +722,6 @@ celery_worker_user_file_processing:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-user-file-processing
   deploymentLabels:
     app: celery-worker-user-file-processing
   resources:
@@ -725,7 +755,6 @@ discordbot:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: discord-bot
   deploymentLabels:
     app: discord-bot
   podSecurityContext:
@@ -754,7 +783,6 @@ slackbot:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: slack-bot
   deploymentLabels:
     app: slack-bot
   podSecurityContext:
@@ -786,7 +814,6 @@ mcpServer:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend
-    app: mcp-server
   deploymentLabels:
     app: mcp-server
   containerPorts:
@@ -840,7 +867,6 @@ celery_worker_docfetching:
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-docfetching
   deploymentLabels:
     app: celery-worker-docfetching
   resources:

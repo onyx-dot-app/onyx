@@ -15,7 +15,7 @@ import {
   removeChatSessionFromProject,
   createProject as createProjectService,
 } from "@/app/app/projects/projectsService";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";

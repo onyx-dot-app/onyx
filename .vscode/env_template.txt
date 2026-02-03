@@ -12,7 +12,7 @@ DEV_MODE=true
 
 # Always keep these on for Dev.
 # Logs model prompts, reasoning, and answer to stdout.
-LOG_ONYX_MODEL_INTERACTIONS=True
+LOG_ONYX_MODEL_INTERACTIONS=False
 # More verbose logging
 LOG_LEVEL=debug
 

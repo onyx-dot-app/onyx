@@ -77,9 +77,39 @@ def _test_confluence_connector_basic(
     confluence_connector: ConfluenceConnector, expect_attachments: bool = True
 ) -> None:
     confluence_connector.set_allow_images(False)
-    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
+    result = load_all_from_connector(confluence_connector, 0, time.time())
+    doc_batch = result.documents
+    hierarchy_nodes = result.hierarchy_nodes
 
     assert len(doc_batch) == (3 if expect_attachments else 2)
+
+    # Hierarchy structure:
+    # - Space "DailyConne" (root)
+    #   - Page "DailyConnectorTestSpace Home" (has attachments, so becomes hierarchy node)
+    #     - Attachment "small-file.txt"
+    #   - Page "Page Within A Page" (no children/attachments, not a hierarchy node)
+    expected_hierarchy_count = 2 if expect_attachments else 1
+    assert len(hierarchy_nodes) == expected_hierarchy_count, (
+        f"Expected {expected_hierarchy_count} hierarchy nodes but got {len(hierarchy_nodes)}. "
+        f"Nodes: {[(n.raw_node_id, n.node_type, n.display_name) for n in hierarchy_nodes]}"
+    )
+
+    # Verify hierarchy node structure
+    space_node = next(
+        (n for n in hierarchy_nodes if n.node_type.value == "space"), None
+    )
+    assert space_node is not None, "Space hierarchy node not found"
+    assert space_node.raw_node_id == "DailyConne"
+    assert space_node.display_name == "DailyConnectorTestSpace"
+    assert space_node.raw_parent_id is None  # Space is root
+
+    if expect_attachments:
+        home_page_node = next(
+            (n for n in hierarchy_nodes if n.node_type.value == "page"), None
+        )
+        assert home_page_node is not None, "Home page hierarchy node not found"
+        assert home_page_node.display_name == "DailyConnectorTestSpace Home"
+        assert home_page_node.raw_parent_id == "DailyConne"  # Parent is the space
 
     page_within_a_page_doc: Document | None = None
     page_doc: Document | None = None
@@ -154,10 +184,22 @@ def test_confluence_connector_skip_images(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
 ) -> None:
     confluence_connector.set_allow_images(False)
-    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
+    result = load_all_from_connector(confluence_connector, 0, time.time())
+    doc_batch = result.documents
+    hierarchy_nodes = result.hierarchy_nodes
 
     assert len(doc_batch) == 8
     assert sum(len(doc.sections) for doc in doc_batch) == 8
+
+    # Hierarchy structure for MI space (when images are skipped):
+    # - Space "MI" (Many Images)
+    #   - Page "Many Images" (home page, has children)
+    #     - Page "Image formats" (has children - the image pages)
+    # Note: Image pages themselves don't become hierarchy nodes since images are skipped
+    assert len(hierarchy_nodes) == 3, (
+        f"Expected 3 hierarchy nodes but got {len(hierarchy_nodes)}. "
+        f"Nodes: {[(n.raw_node_id, n.node_type, n.display_name) for n in hierarchy_nodes]}"
+    )
 
 
 def mock_process_image_attachment(
@@ -189,7 +231,22 @@ def test_confluence_connector_allow_images(
 ) -> None:
     confluence_connector.set_allow_images(True)
 
-    doc_batch = load_all_from_connector(confluence_connector, 0, time.time()).documents
+    result = load_all_from_connector(confluence_connector, 0, time.time())
+    doc_batch = result.documents
+    hierarchy_nodes = result.hierarchy_nodes
 
     assert len(doc_batch) == 12
     assert sum(len(doc.sections) for doc in doc_batch) == 12
+
+    # Hierarchy structure for MI space (when images are allowed):
+    # - Space "MI" (Many Images)
+    #   - Page "Many Images" (home page)
+    #     - Page "Image formats" (has children)
+    #     - Page "Dunder Mifflin Org Chart" (has image attachments)
+    #     - Page "List of Joey's Favorite Objects" (has image attachments)
+    #     - Page "Content" (has image attachments)
+    # Pages with image attachments become hierarchy nodes because attachments reference them
+    assert len(hierarchy_nodes) == 6, (
+        f"Expected 6 hierarchy nodes but got {len(hierarchy_nodes)}. "
+        f"Nodes: {[(n.raw_node_id, n.node_type, n.display_name) for n in hierarchy_nodes]}"
+    )

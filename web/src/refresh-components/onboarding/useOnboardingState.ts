@@ -9,7 +9,7 @@ import {
 } from "./types";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { updateUserPersonalization } from "@/lib/userSettings";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
 

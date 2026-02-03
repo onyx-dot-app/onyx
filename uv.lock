@@ -3457,14 +3457,12 @@ wheels = [
 
 [[package]]
 name = "litellm"
-version = "1.80.11"
+version = "1.81.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "click" },
     { name = "fastuuid" },
-    { name = "grpcio", version = "1.67.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
-    { name = "grpcio", version = "1.76.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "httpx" },
     { name = "importlib-metadata" },
     { name = "jinja2" },
@@ -3475,9 +3473,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "tokenizers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/55/47/be6cd7b356418ca8bef3b843507940ce77b76ef2dfe515f2b4ba9b461ff0/litellm-1.80.11.tar.gz", hash = "sha256:c9fc63e7acb6360363238fe291bcff1488c59ff66020416d8376c0ee56414a19", size = 13189510, upload-time = "2025-12-22T12:47:29.181Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/f3/194a2dca6cb3eddb89f4bc2920cf5e27542256af907c23be13c61fe7e021/litellm-1.81.6.tar.gz", hash = "sha256:f02b503dfb7d66d1c939f82e4db21aeec1d6e2ed1fe3f5cd02aaec3f792bc4ae", size = 13878107, upload-time = "2026-02-01T04:02:27.36Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/97/0b/9e637344f24f3fe0e8039cd2337389fe05e0d31f518bc3e0a5cdbe45784a/litellm-1.80.11-py3-none-any.whl", hash = "sha256:406283d66ead77dc7ff0e0b2559c80e9e497d8e7c2257efb1cb9210a20d09d54", size = 11456346, upload-time = "2025-12-22T12:47:26.469Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/05/3516cc7386b220d388aa0bd833308c677e94eceb82b2756dd95e06f6a13f/litellm-1.81.6-py3-none-any.whl", hash = "sha256:573206ba194d49a1691370ba33f781671609ac77c35347f8a0411d852cf6341a", size = 12224343, upload-time = "2026-02-01T04:02:23.704Z" },
 ]
 
 [[package]]
@@ -4838,7 +4836,7 @@ requires-dist = [
     { name = "langchainhub", marker = "extra == 'backend'", specifier = "==0.1.21" },
     { name = "langfuse", marker = "extra == 'backend'", specifier = "==3.10.0" },
     { name = "lazy-imports", marker = "extra == 'backend'", specifier = "==1.0.1" },
-    { name = "litellm", specifier = "==1.80.11" },
+    { name = "litellm", specifier = "==1.81.6" },
     { name = "lxml", marker = "extra == 'backend'", specifier = "==5.3.0" },
     { name = "mako", marker = "extra == 'backend'", specifier = "==1.2.4" },
     { name = "manygo", marker = "extra == 'dev'", specifier = "==0.2.0" },

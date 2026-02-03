@@ -1,44 +1,50 @@
 /* Hoverable - base (structural only, no color changes) */
 .hoverable {
-  @apply flex self-stretch cursor-pointer;
+  @apply flex self-stretch cursor-pointer select-none;
 }
 
 /* Primary: tint-00 base, hover → tint-02 */
-.hoverable--primary {
+.hoverable[data-variant="primary"] {
   @apply bg-background-tint-00 transition-colors;
 }
 
-.hoverable--primary:hover:not([data-non-interactive]) {
+.hoverable[data-variant="primary"]:hover:not([data-non-interactive]) {
   @apply bg-background-tint-02;
 }
 
-.hoverable--primary:active:not([data-non-interactive]),
-.hoverable--primary[data-pressed="true"]:not([data-non-interactive]) {
+.hoverable[data-variant="primary"]:active:not([data-non-interactive]),
+.hoverable[data-variant="primary"][data-pressed="true"]:not(
+    [data-non-interactive]
+  ) {
   @apply bg-background-tint-00;
 }
 
-.hoverable--secondary {
+.hoverable[data-variant="secondary"] {
   @apply bg-background-tint-01 transition-colors;
 }
 
-.hoverable--secondary:hover:not([data-non-interactive]) {
+.hoverable[data-variant="secondary"]:hover:not([data-non-interactive]) {
   @apply bg-background-tint-02;
 }
 
-.hoverable--secondary:active:not([data-non-interactive]),
-.hoverable--secondary[data-pressed="true"]:not([data-non-interactive]) {
+.hoverable[data-variant="secondary"]:active:not([data-non-interactive]),
+.hoverable[data-variant="secondary"][data-pressed="true"]:not(
+    [data-non-interactive]
+  ) {
   @apply bg-background-tint-00;
 }
 
-.hoverable--tertiary {
+.hoverable[data-variant="tertiary"] {
   @apply bg-background-tint-02 transition-colors;
 }
 
-.hoverable--tertiary:hover:not([data-non-interactive]) {
+.hoverable[data-variant="tertiary"]:hover:not([data-non-interactive]) {
   @apply bg-background-tint-03;
 }
 
-.hoverable--tertiary:active:not([data-non-interactive]),
-.hoverable--tertiary[data-pressed="true"]:not([data-non-interactive]) {
+.hoverable[data-variant="tertiary"]:active:not([data-non-interactive]),
+.hoverable[data-variant="tertiary"][data-pressed="true"]:not(
+    [data-non-interactive]
+  ) {
   @apply bg-background-tint-00;
 }
