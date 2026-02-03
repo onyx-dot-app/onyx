@@ -249,69 +249,59 @@ def upsert_llm_provider(
         # If its not already in the db, we need to generate an ID by flushing
         db_session.flush()
 
+    # Build a lookup of existing model configurations by name (single iteration)
+    existing_by_name = {
+        mc.name: mc for mc in existing_llm_provider.model_configurations
+    }
+
     models_to_exist = {
         mc.name for mc in llm_provider_upsert_request.model_configurations
     }
 
-    removed_model_configuration_ids = {
-        mc.id
-        for mc in existing_llm_provider.model_configurations
-        if mc.name not in models_to_exist
-    }
-
-    updated_model_configuration_names = {
-        mc.name: mc.id
-        for mc in existing_llm_provider.model_configurations
-        if mc.name in models_to_exist
-    }
-
-    new_model_names = models_to_exist - {
-        mc.name for mc in existing_llm_provider.model_configurations
-    }
-
     # Delete removed models
-    db_session.query(ModelConfiguration).filter(
-        ModelConfiguration.id.in_(removed_model_configuration_ids)
-    ).delete(synchronize_session="fetch")
-
-    db_session.flush()
+    removed_ids = [
+        mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
+    ]
+    if removed_ids:
+        db_session.query(ModelConfiguration).filter(
+            ModelConfiguration.id.in_(removed_ids)
+        ).delete(synchronize_session="fetch")
+        db_session.flush()
 
     # Import here to avoid circular imports
     from onyx.llm.utils import get_max_input_tokens
 
-    for model_configuration in llm_provider_upsert_request.model_configurations:
-        # If max_input_tokens is not provided, look it up from LiteLLM
-        max_input_tokens = model_configuration.max_input_tokens
+    for model_config in llm_provider_upsert_request.model_configurations:
+        max_input_tokens = model_config.max_input_tokens
         if max_input_tokens is None:
             max_input_tokens = get_max_input_tokens(
-                model_name=model_configuration.name,
+                model_name=model_config.name,
                 model_provider=llm_provider_upsert_request.provider,
             )
 
         supported_flows = [LLMModelFlowType.CHAT]
-        if model_configuration.supports_image_input:
+        if model_config.supports_image_input:
             supported_flows.append(LLMModelFlowType.VISION)
 
-        if model_configuration.name in new_model_names:
+        existing = existing_by_name.get(model_config.name)
+        if existing:
+            update_model_configuration__no_commit(
+                db_session=db_session,
+                model_configuration_id=existing.id,
+                supported_flows=supported_flows,
+                is_visible=model_config.is_visible,
+                max_input_tokens=max_input_tokens,
+                display_name=model_config.display_name,
+            )
+        else:
             insert_new_model_configuration__no_commit(
                 db_session=db_session,
                 llm_provider_id=existing_llm_provider.id,
-                model_name=model_configuration.name,
+                model_name=model_config.name,
                 supported_flows=supported_flows,
-                is_visible=model_configuration.is_visible,
+                is_visible=model_config.is_visible,
                 max_input_tokens=max_input_tokens,
-                display_name=model_configuration.display_name,
-            )
-        elif model_configuration.name in updated_model_configuration_names:
-            update_model_configuration__no_commit(
-                db_session=db_session,
-                model_configuration_id=updated_model_configuration_names[
-                    model_configuration.name
-                ],
-                supported_flows=supported_flows,
-                is_visible=model_configuration.is_visible,
-                max_input_tokens=max_input_tokens,
-                display_name=model_configuration.display_name,
+                display_name=model_config.display_name,
             )
 
     default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
