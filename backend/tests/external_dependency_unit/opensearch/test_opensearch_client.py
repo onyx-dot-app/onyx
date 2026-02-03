@@ -1373,9 +1373,9 @@ class TestOpenSearchClient:
         # Postcondition.
         assert len(results) == 3
         assert set(result.document_chunk.chunk_index for result in results) == set(
-            0, 1, 2
+            [0, 1, 2]
         )
         for result in results:
             # Note each result must be from doc 1, which is not hidden.
             expected_result = doc1_chunks[result.document_chunk.chunk_index]
-            assert result == expected_result
+            assert result.document_chunk == expected_result
