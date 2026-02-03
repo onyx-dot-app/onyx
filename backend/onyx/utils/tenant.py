@@ -11,5 +11,5 @@ def get_tenant_id_short_string(tenant_id: str) -> str:
         str: The first 8 characters of the tenant id after removing the prefix.
     """
     tenant_display = tenant_id.removeprefix(TENANT_ID_PREFIX)
-    short_tenant = tenant_display[:8] if len(tenant_display) > 8 else tenant_display
+    short_tenant = tenant_display[:8]
     return short_tenant
