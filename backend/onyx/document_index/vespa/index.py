@@ -773,7 +773,6 @@ class VespaIndex(DocumentIndex):
         time_decay_multiplier: float,
         num_to_retrieve: int,
         ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,
-        offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
         tenant_state = TenantState(
@@ -805,7 +804,6 @@ class VespaIndex(DocumentIndex):
             query_type,
             filters,
             num_to_retrieve,
-            offset,
         )
 
     def admin_retrieval(
@@ -814,7 +812,6 @@ class VespaIndex(DocumentIndex):
         query_embedding: Embedding,
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
         yql = (
@@ -831,7 +828,6 @@ class VespaIndex(DocumentIndex):
             "yql": yql,
             "query": query,
             "hits": num_to_retrieve,
-            "offset": 0,
             "ranking.profile": "admin_search",
             "timeout": VESPA_TIMEOUT,
         }
