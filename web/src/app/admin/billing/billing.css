@@ -9,18 +9,24 @@
  * Plan Card
  * -------------------------------------------------------------------------- */
 
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Let parent's align-items: stretch handle the height */
+  align-self: stretch;
+}
+
+/* Override Card's inner Section to grow and fill the card */
+.plan-card > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
 .plan-card-button button,
 .plan-card-button a {
   width: 100%;
-}
-
-.plan-card-current-badge {
-  width: 100%;
-  background: var(--background-tint-01);
-  border: 1px solid var(--border-01);
-  padding: 0.5rem;
-  border-radius: 0.75rem;
-  text-align: center;
 }
 
 .plan-card-features-container {
