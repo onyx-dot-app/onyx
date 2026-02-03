@@ -354,7 +354,6 @@ class HybridCapable(abc.ABC):
         # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
         filters: IndexFilters,
         num_to_retrieve: int,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         """Runs hybrid search and returns a list of inference chunks.
 

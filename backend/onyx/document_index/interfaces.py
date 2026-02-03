@@ -347,7 +347,6 @@ class HybridCapable(abc.ABC):
         time_decay_multiplier: float,
         num_to_retrieve: int,
         ranking_profile_type: QueryExpansionType,
-        offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
         """
@@ -400,7 +399,6 @@ class AdminCapable(abc.ABC):
         query_embedding: Embedding,
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         """
         Run the special search for the admin document explorer page

@@ -389,7 +389,6 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         time_decay_multiplier: float,
         num_to_retrieve: int,
         ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,
-        offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunk]:
         # Determine query type based on hybrid_alpha.
@@ -407,7 +406,6 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             query_type=query_type,
             filters=filters,
             num_to_retrieve=num_to_retrieve,
-            offset=offset,
         )
 
     def admin_retrieval(
@@ -416,7 +414,6 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         query_embedding: Embedding,
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         return self._real_index.hybrid_retrieval(
             query=query,
@@ -425,7 +422,6 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             query_type=QueryType.KEYWORD,
             filters=filters,
             num_to_retrieve=num_to_retrieve,
-            offset=offset,
         )
 
     def random_retrieval(
@@ -758,7 +754,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         logger.debug(
             f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
