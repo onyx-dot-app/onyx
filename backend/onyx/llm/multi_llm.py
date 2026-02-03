@@ -51,6 +51,7 @@ logger = setup_logger()
 
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper
+    from litellm import HTTPHandler
 
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
@@ -240,6 +241,7 @@ class LitellmLLM(LLM):
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
+        client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
@@ -347,6 +349,7 @@ class LitellmLLM(LLM):
             # does we allow it to clobber _api_key.
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
+
             response = litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
                 model=model,
@@ -360,6 +363,7 @@ class LitellmLLM(LLM):
                 temperature=temperature,
                 timeout=timeout_override or self._timeout,
                 max_tokens=max_tokens,
+                client=client,
                 **optional_kwargs,
                 **passthrough_kwargs,
             )
@@ -439,29 +443,46 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+        from litellm import HTTPHandler
         from onyx.llm.model_response import from_litellm_model_response_stream
 
-        response = cast(
-            LiteLLMCustomStreamWrapper,
-            self._completion(
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=True,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=True,
-                reasoning_effort=reasoning_effort,
-                user_identity=user_identity,
-            ),
-        )
+        # Create an isolated HTTP handler for this streaming request to avoid
+        # "Bad file descriptor" errors from connection pool conflicts when
+        # multiple threads stream concurrently (e.g., during deep research).
+        # Must use litellm's HTTPHandler wrapper, not raw httpx.Client, as
+        # litellm's response_api_handler checks for this specific type.
+        #
+        # Note: If callers abandon this generator without fully consuming it,
+        # client.close() in the finally block won't run until GC. This is
+        # acceptable because CPython's refcounting typically finalizes the
+        # generator promptly when it goes out of scope, and httpx connections
+        # have their own timeouts as a fallback.
+        client = HTTPHandler()
+        try:
+            response = cast(
+                LiteLLMCustomStreamWrapper,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=True,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
 
-        for chunk in response:
-            model_response = from_litellm_model_response_stream(chunk)
+            for chunk in response:
+                model_response = from_litellm_model_response_stream(chunk)
 
-            # Track LLM cost when usage info is available (typically in the last chunk)
-            if model_response.usage:
-                self._track_llm_cost(model_response.usage)
+                # Track LLM cost when usage info is available (typically in the last chunk)
+                if model_response.usage:
+                    self._track_llm_cost(model_response.usage)
 
-            yield model_response
+                yield model_response
+        finally:
+            client.close()
