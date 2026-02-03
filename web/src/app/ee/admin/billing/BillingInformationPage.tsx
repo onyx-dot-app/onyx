@@ -63,6 +63,7 @@ export default function BillingInformationPage() {
   const handleManageSubscription = async () => {
     try {
       const response = await createCustomerPortalSession();
+      console.log("response", response);
       if (!response.stripe_customer_portal_url) {
         throw new Error("No portal URL returned from the server");
       }

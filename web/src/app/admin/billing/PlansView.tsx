@@ -92,12 +92,13 @@ function PlanCard({
       gap={0}
       alignItems="stretch"
       aria-label={title + " plan card"}
+      className="plan-card"
     >
       <Section
         flexDirection="column"
         alignItems="stretch"
         padding={1}
-        height="full"
+        height="fit"
       >
         {/* Title */}
         <Section
@@ -133,11 +134,11 @@ function PlanCard({
         {/* Button */}
         <div className="plan-card-button">
           {isCurrentPlan ? (
-            <div className="plan-card-current-badge">
+            <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
                 Your Current Plan
               </Text>
-            </div>
+            </Button>
           ) : href ? (
             <Button
               main

@@ -10,12 +10,12 @@ import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
-import { MdOutlineCreditCard } from "react-icons/md";
 import {
   useBillingInformation,
   useLicense,
   hasActiveSubscription,
 } from "@/lib/billing";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
@@ -49,6 +49,7 @@ import {
   SvgZoomIn,
   SvgPaintBrush,
   SvgDiscordMono,
+  SvgWallet,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
@@ -156,7 +157,7 @@ const collections = (
     name: "Custom Assistants",
     items: custom_assistants_items(isCurator, enableEnterprise),
   },
-  ...(isCurator
+  ...(isCurator && enableEnterprise
     ? [
         {
           name: "User Management",
@@ -300,11 +301,10 @@ const collections = (
                 ]
               : []),
             // Always show billing/upgrade - community users need access to upgrade
-            // TODO: PR 6 will change this to /admin/billing to enable new UI
             {
               name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
-              icon: hasSubscription ? MdOutlineCreditCard : SvgArrowUpCircle,
-              link: "/ee/admin/billing",
+              icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
+              link: "/admin/billing",
             },
           ],
         },
@@ -313,14 +313,9 @@ const collections = (
 ];
 
 interface AdminSidebarProps {
-  // These props are passed down from a server component (Layout.tsx) that
-  // determines feature availability server-side. We don't calculate these
-  // directly in this client component to avoid:
-  // 1. Unnecessary API calls on the client-side
-  // 2. Security concerns - preventing end-users from tampering with
-  //    feature flags by making direct API calls
-  // 3. Performance - avoiding refetches when the data is already available
+  // Cloud flag is passed from server component (Layout.tsx) since it's a build-time constant
   enableCloudSS: boolean;
+  // Enterprise flag is also passed but we override it with runtime license check below
   enableEnterpriseSS: boolean;
 }
 
@@ -336,6 +331,11 @@ export default function AdminSidebar({
   const { data: billingData } = useBillingInformation();
   const { data: licenseData } = useLicense();
 
+  // Use runtime license check for enterprise features
+  // This checks settings.ee_features_enabled (set by backend based on license status)
+  // Falls back to build-time check if LICENSE_ENFORCEMENT_ENABLED=false
+  const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
+
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
 
@@ -349,7 +349,7 @@ export default function AdminSidebar({
   const items = collections(
     isCurator,
     enableCloudSS,
-    enableEnterpriseSS,
+    enableEnterprise,
     settings,
     kgExposed,
     customAnalyticsEnabled,
