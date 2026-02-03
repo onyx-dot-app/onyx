@@ -7,6 +7,7 @@ from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import ProjectFileMetadata
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 
@@ -22,6 +23,36 @@ def create_message(
         message=content,
         token_count=token_count,
         message_type=message_type,
+    )
+
+
+def create_assistant_with_tool_call(
+    tool_call_id: str, tool_name: str, token_count: int
+) -> ChatMessageSimple:
+    """Helper to create an ASSISTANT message with tool_calls for testing."""
+    tool_call = ToolCallSimple(
+        tool_call_id=tool_call_id,
+        tool_name=tool_name,
+        tool_arguments={},
+        token_count=token_count,
+    )
+    return ChatMessageSimple(
+        message="",
+        token_count=token_count,
+        message_type=MessageType.ASSISTANT,
+        tool_calls=[tool_call],
+    )
+
+
+def create_tool_response(
+    tool_call_id: str, content: str, token_count: int
+) -> ChatMessageSimple:
+    """Helper to create a TOOL_CALL_RESPONSE message for testing."""
+    return ChatMessageSimple(
+        message=content,
+        token_count=token_count,
+        message_type=MessageType.TOOL_CALL_RESPONSE,
+        tool_call_id=tool_call_id,
     )
 
 
@@ -176,16 +207,14 @@ class TestConstructMessageHistory:
         user_msg1 = create_message("First message", MessageType.USER, 5)
         assistant_msg1 = create_message("Response", MessageType.ASSISTANT, 5)
         user_msg2 = create_message("Search for X", MessageType.USER, 5)
-        tool_call = create_message("search(query='X')", MessageType.TOOL_CALL, 5)
-        tool_response = create_message(
-            "Search results...", MessageType.TOOL_CALL_RESPONSE, 10
-        )
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "search", 5)
+        tool_response = create_tool_response("tc_1", "Search results...", 10)
 
         simple_chat_history = [
             user_msg1,
             assistant_msg1,
             user_msg2,
-            tool_call,
+            assistant_with_tool,
             tool_response,
         ]
         project_files = create_project_files()
@@ -199,13 +228,13 @@ class TestConstructMessageHistory:
             available_tokens=1000,
         )
 
-        # Should have: system, user1, assistant1, user2, tool_call, tool_response
+        # Should have: system, user1, assistant1, user2, assistant_with_tool, tool_response
         assert len(result) == 6
         assert result[0] == system_prompt
         assert result[1] == user_msg1
         assert result[2] == assistant_msg1
         assert result[3] == user_msg2
-        assert result[4] == tool_call
+        assert result[4] == assistant_with_tool
         assert result[5] == tool_response
 
     def test_custom_agent_and_project_before_last_user_with_tools_after(self) -> None:
@@ -213,10 +242,10 @@ class TestConstructMessageHistory:
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 5)
         user_msg2 = create_message("Second", MessageType.USER, 5)
-        tool_call = create_message("tool_call", MessageType.TOOL_CALL, 5)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 5)
         custom_agent = create_message("Custom", MessageType.USER, 10)
 
-        simple_chat_history = [user_msg1, user_msg2, tool_call]
+        simple_chat_history = [user_msg1, user_msg2, assistant_with_tool]
         project_files = create_project_files(num_files=1, tokens_per_file=50)
 
         result = construct_message_history(
@@ -228,7 +257,7 @@ class TestConstructMessageHistory:
             available_tokens=1000,
         )
 
-        # Should have: system, user1, custom_agent, project_files, user2, tool_call
+        # Should have: system, user1, custom_agent, project_files, user2, assistant_with_tool
         assert len(result) == 6
         assert result[0] == system_prompt
         assert result[1] == user_msg1
@@ -236,7 +265,7 @@ class TestConstructMessageHistory:
         assert result[3].message_type == MessageType.USER  # Project files
         assert "documents" in result[3].message
         assert result[4] == user_msg2  # Last user message
-        assert result[5] == tool_call  # After last user message
+        assert result[5] == assistant_with_tool  # After last user message
 
     def test_project_images_attached_to_last_user_message(self) -> None:
         """Test that project images are attached to the last user message."""
@@ -344,12 +373,10 @@ class TestConstructMessageHistory:
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 30)
         user_msg2 = create_message("Second", MessageType.USER, 20)
-        tool_call = create_message("tool_call", MessageType.TOOL_CALL, 20)
-        tool_response = create_message(
-            "tool_response", MessageType.TOOL_CALL_RESPONSE, 20
-        )
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 20)
+        tool_response = create_tool_response("tc_1", "tool_response", 20)
 
-        simple_chat_history = [user_msg1, user_msg2, tool_call, tool_response]
+        simple_chat_history = [user_msg1, user_msg2, assistant_with_tool, tool_response]
         project_files = create_project_files()
 
         # Budget only allows last user message and messages after + system
@@ -363,12 +390,12 @@ class TestConstructMessageHistory:
             available_tokens=80,
         )
 
-        # Should have: system, user2, tool_call, tool_response
+        # Should have: system, user2, assistant_with_tool, tool_response
         # user1 should be truncated, but user2 and everything after preserved
         assert len(result) == 4
         assert result[0] == system_prompt
         assert result[1] == user_msg2  # user1 truncated
-        assert result[2] == tool_call
+        assert result[2] == assistant_with_tool
         assert result[3] == tool_response
 
     def test_empty_history(self) -> None:
@@ -400,9 +427,9 @@ class TestConstructMessageHistory:
         """Test that an error is raised when there's no user message in history."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         assistant_msg = create_message("Response", MessageType.ASSISTANT, 5)
-        tool_call = create_message("tool_call", MessageType.TOOL_CALL, 5)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 5)
 
-        simple_chat_history = [assistant_msg, tool_call]
+        simple_chat_history = [assistant_msg, assistant_with_tool]
         project_files = create_project_files()
 
         with pytest.raises(ValueError, match="No user message found"):
@@ -441,14 +468,14 @@ class TestConstructMessageHistory:
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
         user_msg1 = create_message("First", MessageType.USER, 10)
         user_msg2 = create_message("Second", MessageType.USER, 30)
-        tool_call = create_message("tool_call", MessageType.TOOL_CALL, 30)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "tool", 30)
 
-        simple_chat_history = [user_msg1, user_msg2, tool_call]
+        simple_chat_history = [user_msg1, user_msg2, assistant_with_tool]
         project_files = create_project_files()
 
         # Budget: 50 tokens
-        # Required: 10 (system) + 30 (user2) + 30 (tool_call) = 70 tokens
-        # After subtracting system: 40 tokens available, but need 60 for user2 + tool_call
+        # Required: 10 (system) + 30 (user2) + 30 (assistant_with_tool) = 70 tokens
+        # After subtracting system: 40 tokens available, but need 60 for user2 + assistant_with_tool
         with pytest.raises(
             ValueError, match="Not enough tokens to include the last user message"
         ):
@@ -469,8 +496,8 @@ class TestConstructMessageHistory:
         user_msg2 = create_message("Second", MessageType.USER, 10)
         assistant_msg2 = create_message("Response 2", MessageType.ASSISTANT, 10)
         user_msg3 = create_message("Third", MessageType.USER, 10)
-        tool_call = create_message("search()", MessageType.TOOL_CALL, 10)
-        tool_response = create_message("Results", MessageType.TOOL_CALL_RESPONSE, 10)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "search", 10)
+        tool_response = create_tool_response("tc_1", "Results", 10)
         custom_agent = create_message("Custom instructions", MessageType.USER, 15)
         reminder = create_message("Cite sources", MessageType.USER, 10)
 
@@ -480,7 +507,7 @@ class TestConstructMessageHistory:
             user_msg2,
             assistant_msg2,
             user_msg3,
-            tool_call,
+            assistant_with_tool,
             tool_response,
         ]
         project_files = create_project_files(num_files=2, tokens_per_file=20)
@@ -496,7 +523,7 @@ class TestConstructMessageHistory:
 
         # Expected order:
         # system, user1, assistant1, user2, assistant2,
-        # custom_agent, project_files, user3, tool_call, tool_response, reminder
+        # custom_agent, project_files, user3, assistant_with_tool, tool_response, reminder
         assert len(result) == 11
         assert result[0] == system_prompt
         assert result[1] == user_msg1
@@ -509,7 +536,7 @@ class TestConstructMessageHistory:
         )  # Project files before last user
         assert "documents" in result[6].message
         assert result[7] == user_msg3  # Last user message
-        assert result[8] == tool_call  # After last user
+        assert result[8] == assistant_with_tool  # After last user
         assert result[9] == tool_response  # After last user
         assert result[10] == reminder  # At the very end
 

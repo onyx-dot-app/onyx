@@ -1,4 +1,3 @@
-import json
 import re
 from collections.abc import Callable
 from typing import cast
@@ -12,6 +11,7 @@ from onyx.auth.users import is_user_admin
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import PersonaOverrideConfig
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
@@ -506,7 +506,9 @@ def convert_chat_history(
     """Convert ChatMessage history to ChatMessageSimple format.
 
     For user messages: includes attached files (images attached to message, text files as separate messages)
-    For assistant messages: includes tool calls followed by the assistant response
+    For assistant messages with tool calls: creates ONE ASSISTANT message with tool_calls array,
+        followed by N TOOL_CALL_RESPONSE messages (OpenAI parallel tool calling format)
+    For assistant messages without tool calls: creates a simple ASSISTANT message
     """
     simple_messages: list[ChatMessageSimple] = []
 
@@ -589,8 +591,10 @@ def convert_chat_history(
             )
 
         elif chat_message.message_type == MessageType.ASSISTANT:
-            # Add tool calls if present
-            # Tool calls should be ordered by turn_number, then by tool_id within each turn
+            # Handle tool calls if present using OpenAI parallel tool calling format:
+            # 1. Group tool calls by turn_number
+            # 2. For each turn: ONE ASSISTANT message with tool_calls array
+            # 3. Followed by N TOOL_CALL_RESPONSE messages (one per tool call)
             if chat_message.tool_calls:
                 # Group tool calls by turn number
                 tool_calls_by_turn: dict[int, list] = {}
@@ -605,38 +609,48 @@ def convert_chat_history(
                     # Sort by tool_id within the turn for consistent ordering
                     turn_tool_calls.sort(key=lambda tc: tc.tool_id)
 
-                    # Add each tool call as a separate message with the tool arguments
+                    # Build ToolCallSimple list for this turn
+                    tool_calls_simple: list[ToolCallSimple] = []
                     for tool_call in turn_tool_calls:
-                        # Create a message containing the tool call information
                         tool_name = tool_id_to_name_map.get(
                             tool_call.tool_id, "unknown"
                         )
-                        tool_call_data = {
-                            "function_name": tool_name,
-                            "arguments": tool_call.tool_call_arguments,
-                        }
-                        tool_call_message = json.dumps(tool_call_data)
-                        simple_messages.append(
-                            ChatMessageSimple(
-                                message=tool_call_message,
-                                token_count=tool_call.tool_call_tokens,
-                                message_type=MessageType.TOOL_CALL,
-                                image_files=None,
+                        tool_calls_simple.append(
+                            ToolCallSimple(
                                 tool_call_id=tool_call.tool_call_id,
+                                tool_name=tool_name,
+                                tool_arguments=tool_call.tool_call_arguments or {},
+                                token_count=tool_call.tool_call_tokens,
                             )
                         )
 
+                    # Create ONE ASSISTANT message with all tool calls for this turn
+                    total_tool_call_tokens = sum(
+                        tc.token_count for tc in tool_calls_simple
+                    )
+                    simple_messages.append(
+                        ChatMessageSimple(
+                            message="",  # No text content when making tool calls
+                            token_count=total_tool_call_tokens,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=tool_calls_simple,
+                            image_files=None,
+                        )
+                    )
+
+                    # Add TOOL_CALL_RESPONSE messages for each tool call in this turn
+                    for tool_call in turn_tool_calls:
                         simple_messages.append(
                             ChatMessageSimple(
                                 message=TOOL_CALL_RESPONSE_CROSS_MESSAGE,
                                 token_count=20,  # Tiny overestimate
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
-                                image_files=None,
                                 tool_call_id=tool_call.tool_call_id,
+                                image_files=None,
                             )
                         )
 
-            # Add the assistant message itself
+            # Add the assistant message itself (the final answer)
             simple_messages.append(
                 ChatMessageSimple(
                     message=chat_message.message,
@@ -697,35 +711,60 @@ def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> 
 
 
 def create_tool_call_failure_messages(
-    tool_call: ToolCallKickoff, token_counter: Callable[[str], int]
+    tool_calls: list[ToolCallKickoff], token_counter: Callable[[str], int]
 ) -> list[ChatMessageSimple]:
-    """Create ChatMessageSimple objects for a failed tool call.
+    """Create ChatMessageSimple objects for failed tool calls.
 
-    Creates two messages:
-    1. The tool call message itself
-    2. A failure response message indicating the tool call failed
+    Creates messages using OpenAI parallel tool calling format:
+    1. An ASSISTANT message with tool_calls field containing all failed tool calls
+    2. A TOOL_CALL_RESPONSE failure message for each tool call
 
     Args:
-        tool_call: The ToolCallKickoff object representing the failed tool call
+        tool_calls: List of ToolCallKickoff objects representing the failed tool calls
         token_counter: Function to count tokens in a message string
 
     Returns:
-        List containing two ChatMessageSimple objects: tool call message and failure response
+        List containing ChatMessageSimple objects: one assistant message with all tool calls
+        followed by a failure response for each tool call
     """
-    tool_call_msg = ChatMessageSimple(
-        message=tool_call.to_msg_str(),
-        token_count=token_counter(tool_call.to_msg_str()),
-        message_type=MessageType.TOOL_CALL,
-        tool_call_id=tool_call.tool_call_id,
+    if not tool_calls:
+        return []
+
+    # Create ToolCallSimple for each failed tool call
+    tool_calls_simple: list[ToolCallSimple] = []
+    for tool_call in tool_calls:
+        tool_call_token_count = token_counter(tool_call.to_msg_str())
+        tool_calls_simple.append(
+            ToolCallSimple(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                tool_arguments=tool_call.tool_args,
+                token_count=tool_call_token_count,
+            )
+        )
+
+    total_token_count = sum(tc.token_count for tc in tool_calls_simple)
+
+    # Create ONE ASSISTANT message with all tool_calls (OpenAI format)
+    assistant_msg = ChatMessageSimple(
+        message="",  # No text content when making tool calls
+        token_count=total_token_count,
+        message_type=MessageType.ASSISTANT,
+        tool_calls=tool_calls_simple,
         image_files=None,
     )
 
-    failure_response_msg = ChatMessageSimple(
-        message=TOOL_CALL_FAILURE_PROMPT,
-        token_count=token_counter(TOOL_CALL_FAILURE_PROMPT),
-        message_type=MessageType.TOOL_CALL_RESPONSE,
-        tool_call_id=tool_call.tool_call_id,
-        image_files=None,
-    )
+    messages: list[ChatMessageSimple] = [assistant_msg]
 
-    return [tool_call_msg, failure_response_msg]
+    # Create a TOOL_CALL_RESPONSE failure message for each tool call
+    for tool_call in tool_calls:
+        failure_response_msg = ChatMessageSimple(
+            message=TOOL_CALL_FAILURE_PROMPT,
+            token_count=50,  # Tiny overestimate
+            message_type=MessageType.TOOL_CALL_RESPONSE,
+            tool_call_id=tool_call.tool_call_id,
+            image_files=None,
+        )
+        messages.append(failure_response_msg)
+
+    return messages

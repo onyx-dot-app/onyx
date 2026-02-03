@@ -25,7 +25,10 @@ import { ValidSources, DocumentSetSummary } from "@/lib/types";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import { ProjectFile } from "@/app/app/projects/projectsService";
-import { AttachedDocumentSnapshot } from "@/app/admin/assistants/interfaces";
+import {
+  AttachedDocumentSnapshot,
+  HierarchyNodeSnapshot,
+} from "@/app/admin/assistants/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
@@ -44,6 +47,7 @@ interface KnowledgeSidebarProps {
   selectedSources: ValidSources[];
   selectedDocumentSetIds: number[];
   selectedFileIds: string[];
+  sourceSelectionCounts: Map<ValidSources, number>;
   onNavigateToRecent: () => void;
   onNavigateToDocumentSets: () => void;
   onNavigateToSource: (source: ValidSources) => void;
@@ -56,6 +60,7 @@ function KnowledgeSidebar({
   selectedSources,
   selectedDocumentSetIds,
   selectedFileIds,
+  sourceSelectionCounts,
   onNavigateToRecent,
   onNavigateToDocumentSets,
   onNavigateToSource,
@@ -68,6 +73,13 @@ function KnowledgeSidebar({
         selected={activeView === "recent"}
         emphasized={activeView === "recent" || selectedFileIds.length > 0}
         aria-label="knowledge-sidebar-files"
+        rightChildren={
+          selectedFileIds.length > 0 ? (
+            <Text mainUiAction className="text-action-link-05">
+              {selectedFileIds.length}
+            </Text>
+          ) : undefined
+        }
       >
         Your Files
       </LineItem>
@@ -81,6 +93,13 @@ function KnowledgeSidebar({
           activeView === "document-sets" || selectedDocumentSetIds.length > 0
         }
         aria-label="knowledge-sidebar-document-sets"
+        rightChildren={
+          selectedDocumentSetIds.length > 0 ? (
+            <Text mainUiAction className="text-action-link-05">
+              {selectedDocumentSetIds.length}
+            </Text>
+          ) : undefined
+        }
       >
         Document Set
       </LineItem>
@@ -92,6 +111,8 @@ function KnowledgeSidebar({
         const isSelected = selectedSources.includes(connectedSource.source);
         const isActive =
           activeView === "sources" && activeSource === connectedSource.source;
+        const selectionCount =
+          sourceSelectionCounts.get(connectedSource.source) ?? 0;
 
         return (
           <LineItem
@@ -99,8 +120,15 @@ function KnowledgeSidebar({
             icon={sourceMetadata.icon}
             onClick={() => onNavigateToSource(connectedSource.source)}
             selected={isActive}
-            emphasized={isActive || isSelected}
+            emphasized={isActive || isSelected || selectionCount > 0}
             aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
+            rightChildren={
+              selectionCount > 0 ? (
+                <Text mainUiAction className="text-action-link-05">
+                  {selectionCount}
+                </Text>
+              ) : undefined
+            }
           >
             {sourceMetadata.displayName}
           </LineItem>
@@ -331,6 +359,7 @@ interface SourcesTableContentProps {
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  onSelectionCountChange?: (source: ValidSources, count: number) => void;
 }
 
 function SourcesTableContent({
@@ -344,6 +373,7 @@ function SourcesTableContent({
   onDeselectAllDocuments,
   onDeselectAllFolders,
   initialAttachedDocuments,
+  onSelectionCountChange,
 }: SourcesTableContentProps) {
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch">
@@ -359,6 +389,7 @@ function SourcesTableContent({
         initialAttachedDocuments={initialAttachedDocuments}
         onDeselectAllDocuments={onDeselectAllDocuments}
         onDeselectAllFolders={onDeselectAllFolders}
+        onSelectionCountChange={onSelectionCountChange}
       />
     </GeneralLayouts.Section>
   );
@@ -476,6 +507,7 @@ interface KnowledgeTwoColumnViewProps {
   selectedFileIds: string[];
   selectedDocumentIds: string[];
   selectedFolderIds: number[];
+  sourceSelectionCounts: Map<ValidSources, number>;
   documentSets: DocumentSetSummary[];
   allRecentFiles: ProjectFile[];
   onNavigateToRecent: () => void;
@@ -493,6 +525,7 @@ interface KnowledgeTwoColumnViewProps {
   onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   hasProcessingFiles: boolean;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  onSelectionCountChange: (source: ValidSources, count: number) => void;
 }
 
 const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
@@ -504,6 +537,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   selectedFileIds,
   selectedDocumentIds,
   selectedFolderIds,
+  sourceSelectionCounts,
   documentSets,
   allRecentFiles,
   onNavigateToRecent,
@@ -521,6 +555,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   onUploadChange,
   hasProcessingFiles,
   initialAttachedDocuments,
+  onSelectionCountChange,
 }: KnowledgeTwoColumnViewProps) {
   return (
     <TableLayouts.TwoColumnLayout minHeight={18.75}>
@@ -531,6 +566,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
         selectedSources={selectedSources}
         selectedDocumentSetIds={selectedDocumentSetIds}
         selectedFileIds={selectedFileIds}
+        sourceSelectionCounts={sourceSelectionCounts}
         onNavigateToRecent={onNavigateToRecent}
         onNavigateToDocumentSets={onNavigateToDocumentSets}
         onNavigateToSource={onNavigateToSource}
@@ -556,6 +592,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
             onDeselectAllDocuments={onDeselectAllDocuments}
             onDeselectAllFolders={onDeselectAllFolders}
             initialAttachedDocuments={initialAttachedDocuments}
+            onSelectionCountChange={onSelectionCountChange}
           />
         )}
         {activeView === "recent" && (
@@ -584,6 +621,7 @@ interface KnowledgeAddViewProps {
   selectedDocumentSetIds: number[];
   selectedFileIds: string[];
   selectedSources: ValidSources[];
+  sourceSelectionCounts: Map<ValidSources, number>;
 }
 
 const KnowledgeAddView = memo(function KnowledgeAddView({
@@ -594,6 +632,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
   selectedDocumentSetIds,
   selectedFileIds,
   selectedSources,
+  sourceSelectionCounts,
 }: KnowledgeAddViewProps) {
   return (
     <GeneralLayouts.Section
@@ -615,6 +654,13 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
           onClick={onNavigateToDocumentSets}
           emphasized={selectedDocumentSetIds.length > 0}
           aria-label="knowledge-add-document-sets"
+          rightChildren={
+            selectedDocumentSetIds.length > 0 ? (
+              <Text mainUiAction className="text-action-link-05">
+                {selectedDocumentSetIds.length}
+              </Text>
+            ) : undefined
+          }
         >
           Document Sets
         </LineItem>
@@ -625,6 +671,13 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
           onClick={onNavigateToRecent}
           emphasized={selectedFileIds.length > 0}
           aria-label="knowledge-add-files"
+          rightChildren={
+            selectedFileIds.length > 0 ? (
+              <Text mainUiAction className="text-action-link-05">
+                {selectedFileIds.length}
+              </Text>
+            ) : undefined
+          }
         >
           Your Files
         </LineItem>
@@ -638,13 +691,22 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
           {connectedSources.map((connectedSource) => {
             const sourceMetadata = getSourceMetadata(connectedSource.source);
             const isSelected = selectedSources.includes(connectedSource.source);
+            const selectionCount =
+              sourceSelectionCounts.get(connectedSource.source) ?? 0;
             return (
               <LineItem
                 key={connectedSource.source}
                 icon={sourceMetadata.icon}
                 onClick={() => onNavigateToSource(connectedSource.source)}
-                emphasized={isSelected}
+                emphasized={isSelected || selectionCount > 0}
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
+                rightChildren={
+                  selectionCount > 0 ? (
+                    <Text mainUiAction className="text-action-link-05">
+                      {selectionCount}
+                    </Text>
+                  ) : undefined
+                }
               >
                 {sourceMetadata.displayName}
               </LineItem>
@@ -771,6 +833,8 @@ interface AgentKnowledgePaneProps {
   hasProcessingFiles: boolean;
   // Initial attached documents for existing agents (to populate selectedDocumentDetails)
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  // Initial hierarchy nodes for existing agents (to calculate per-source counts)
+  initialHierarchyNodes?: HierarchyNodeSnapshot[];
 }
 
 export default function AgentKnowledgePane({
@@ -792,6 +856,7 @@ export default function AgentKnowledgePane({
   onUploadChange,
   hasProcessingFiles,
   initialAttachedDocuments,
+  initialHierarchyNodes,
 }: AgentKnowledgePaneProps) {
   // View state
   const [view, setView] = useState<KnowledgeView>("main");
@@ -808,6 +873,50 @@ export default function AgentKnowledgePane({
       connectorCount: ccPairs.filter((p) => p.source === source).length,
     }));
   }, [ccPairs]);
+
+  // Track per-source selection counts
+  // Initialized from initialHierarchyNodes and initialAttachedDocuments
+  const [sourceSelectionCounts, setSourceSelectionCounts] = useState<
+    Map<ValidSources, number>
+  >(() => {
+    const counts = new Map<ValidSources, number>();
+
+    // Count folders from initialHierarchyNodes (which have source info)
+    if (initialHierarchyNodes) {
+      for (const node of initialHierarchyNodes) {
+        const current = counts.get(node.source) ?? 0;
+        counts.set(node.source, current + 1);
+      }
+    }
+
+    // Count documents from initialAttachedDocuments (which now include source)
+    if (initialAttachedDocuments) {
+      for (const doc of initialAttachedDocuments) {
+        if (doc.source) {
+          const current = counts.get(doc.source) ?? 0;
+          counts.set(doc.source, current + 1);
+        }
+      }
+    }
+
+    return counts;
+  });
+
+  // Handler for selection count changes from SourceHierarchyBrowser
+  const handleSelectionCountChange = useCallback(
+    (source: ValidSources, count: number) => {
+      setSourceSelectionCounts((prev) => {
+        const newCounts = new Map(prev);
+        if (count === 0) {
+          newCounts.delete(source);
+        } else {
+          newCounts.set(source, count);
+        }
+        return newCounts;
+      });
+    },
+    []
+  );
 
   // Check if any knowledge is selected
   const hasAnyKnowledge =
@@ -921,6 +1030,7 @@ export default function AgentKnowledgePane({
             selectedDocumentSetIds={selectedDocumentSetIds}
             selectedFileIds={selectedFileIds}
             selectedSources={selectedSources}
+            sourceSelectionCounts={sourceSelectionCounts}
           />
         );
 
@@ -937,6 +1047,7 @@ export default function AgentKnowledgePane({
             selectedFileIds={selectedFileIds}
             selectedDocumentIds={selectedDocumentIds}
             selectedFolderIds={selectedFolderIds}
+            sourceSelectionCounts={sourceSelectionCounts}
             documentSets={documentSets}
             allRecentFiles={allRecentFiles}
             onNavigateToRecent={handleNavigateToRecent}
@@ -954,6 +1065,7 @@ export default function AgentKnowledgePane({
             onUploadChange={onUploadChange}
             hasProcessingFiles={hasProcessingFiles}
             initialAttachedDocuments={initialAttachedDocuments}
+            onSelectionCountChange={handleSelectionCountChange}
           />
         );
 
@@ -970,6 +1082,7 @@ export default function AgentKnowledgePane({
     selectedFolderIds,
     selectedFileIds,
     selectedSources,
+    sourceSelectionCounts,
     documentSets,
     allRecentFiles,
     connectedSources,
@@ -990,6 +1103,7 @@ export default function AgentKnowledgePane({
     handleFolderToggle,
     handleDeselectAllDocuments,
     handleDeselectAllFolders,
+    handleSelectionCountChange,
   ]);
 
   return (

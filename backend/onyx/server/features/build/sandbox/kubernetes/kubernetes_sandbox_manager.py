@@ -1499,10 +1499,33 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             packet_logger.log_session_end(
                 session_id, success=True, events_count=events_count
             )
-        except Exception as e:
-            # Log failure
+        except GeneratorExit:
+            # Generator was closed by consumer (client disconnect, timeout, broken pipe)
+            # This is the most common failure mode for SSE streaming
             packet_logger.log_session_end(
-                session_id, success=False, error=str(e), events_count=events_count
+                session_id,
+                success=False,
+                error="GeneratorExit: Client disconnected or stream closed by consumer",
+                events_count=events_count,
+            )
+            raise
+        except Exception as e:
+            # Log failure from normal exceptions
+            packet_logger.log_session_end(
+                session_id,
+                success=False,
+                error=f"Exception: {str(e)}",
+                events_count=events_count,
+            )
+            raise
+        except BaseException as e:
+            # Log failure from other base exceptions (SystemExit, KeyboardInterrupt, etc.)
+            exception_type = type(e).__name__
+            packet_logger.log_session_end(
+                session_id,
+                success=False,
+                error=f"{exception_type}: {str(e) if str(e) else 'System-level interruption'}",
+                events_count=events_count,
             )
             raise
         finally:

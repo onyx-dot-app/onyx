@@ -131,6 +131,8 @@ export interface SourceHierarchyBrowserProps {
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  // Callback to report selection count changes for this source
+  onSelectionCountChange?: (source: ValidSources, count: number) => void;
 }
 
 export default function SourceHierarchyBrowser({
@@ -144,6 +146,7 @@ export default function SourceHierarchyBrowser({
   onDeselectAllDocuments,
   onDeselectAllFolders,
   initialAttachedDocuments,
+  onSelectionCountChange,
 }: SourceHierarchyBrowserProps) {
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
@@ -332,14 +335,22 @@ export default function SourceHierarchyBrowser({
     let result: HierarchyItem[];
 
     if (viewSelectedOnly) {
-      // In view selected mode, show ALL selected items from anywhere in the hierarchy
+      // In view selected mode, show selected items from THIS source only
+      // allNodes is already source-specific, so filtering against it gives us source-specific folders
       const selectedFolders: HierarchyItem[] = allNodes
         .filter((node) => selectedFolderIds.includes(node.id))
         .map((node) => ({ type: "folder" as const, data: node }));
 
+      // Create a set of node IDs from this source to filter documents
+      const nodeIdsInSource = new Set(allNodes.map((node) => node.id));
+
+      // Only include documents whose parent belongs to this source
       const selectedDocs: HierarchyItem[] = selectedDocumentIds
         .map((docId) => selectedDocumentDetails.get(docId))
         .filter((doc): doc is DocumentSummary => doc !== undefined)
+        .filter(
+          (doc) => doc.parent_id !== null && nodeIdsInSource.has(doc.parent_id)
+        )
         .map((doc) => ({ type: "document" as const, data: doc }));
 
       result = [...selectedFolders, ...selectedDocs];
@@ -367,9 +378,34 @@ export default function SourceHierarchyBrowser({
     selectedDocumentDetails,
   ]);
 
-  // Total selected count for footer
-  const totalSelectedCount =
-    selectedDocumentIds.length + selectedFolderIds.length;
+  // Count selected items for this source only
+  const currentSourceSelectedCount = useMemo(() => {
+    // Folders: count how many selectedFolderIds are in allNodes (source-specific)
+    const folderCount = allNodes.filter((node) =>
+      selectedFolderIds.includes(node.id)
+    ).length;
+
+    // Documents: count how many selected documents have parent in this source
+    const nodeIdsInSource = new Set(allNodes.map((node) => node.id));
+    const docCount = selectedDocumentIds.filter((docId) => {
+      const doc = selectedDocumentDetails.get(docId);
+      return (
+        doc && doc.parent_id !== null && nodeIdsInSource.has(doc.parent_id)
+      );
+    }).length;
+
+    return folderCount + docCount;
+  }, [
+    allNodes,
+    selectedFolderIds,
+    selectedDocumentIds,
+    selectedDocumentDetails,
+  ]);
+
+  // Report selection count changes to parent
+  useEffect(() => {
+    onSelectionCountChange?.(source, currentSourceSelectedCount);
+  }, [source, currentSourceSelectedCount, onSelectionCountChange]);
 
   // Header checkbox state: count how many visible items are selected
   const visibleSelectedCount = useMemo(() => {
@@ -738,8 +774,8 @@ export default function SourceHierarchyBrowser({
         )}
       </div>
 
-      {/* Table footer - only show when items are selected */}
-      {totalSelectedCount > 0 && (
+      {/* Table footer - only show when items are selected for this source */}
+      {currentSourceSelectedCount > 0 && (
         <>
           <Spacer rem={0.5} />
           <GeneralLayouts.Section
@@ -750,8 +786,8 @@ export default function SourceHierarchyBrowser({
             height="auto"
           >
             <Text text03 secondaryBody>
-              {totalSelectedCount} {totalSelectedCount === 1 ? "item" : "items"}{" "}
-              selected
+              {currentSourceSelectedCount}{" "}
+              {currentSourceSelectedCount === 1 ? "item" : "items"} selected
             </Text>
             <IconButton
               icon={SvgEye}

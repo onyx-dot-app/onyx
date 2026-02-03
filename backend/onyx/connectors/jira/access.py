@@ -15,6 +15,7 @@ from onyx.utils.variable_functionality import global_version
 def get_project_permissions(
     jira_client: JIRA,
     jira_project: str,
+    add_prefix: bool = False,
 ) -> ExternalAccess | None:
     """
     Fetch the project + issue level permissions / access-control.
@@ -23,6 +24,9 @@ def get_project_permissions(
     Args:
         jira_client: The JIRA client instance.
         jira_project: The JIRA project string.
+        add_prefix: When True, prefix group IDs with source type (for indexing path).
+                   When False (default), leave unprefixed (for permission sync path
+                   where upsert_document_external_perms handles prefixing).
 
     Returns:
         ExternalAccess object for the page. None if EE is not enabled or no restrictions found.
@@ -34,7 +38,7 @@ def get_project_permissions(
 
     ee_get_project_permissions = cast(
         Callable[
-            [JIRA, str],
+            [JIRA, str, bool],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -45,4 +49,5 @@ def get_project_permissions(
     return ee_get_project_permissions(
         jira_client,
         jira_project,
+        add_prefix,
     )

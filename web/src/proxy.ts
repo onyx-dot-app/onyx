@@ -50,7 +50,6 @@ const EE_ROUTES = [
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
   "/assistants/stats",
-  "/admin/billing",
 ];
 
 export async function proxy(request: NextRequest) {

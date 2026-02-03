@@ -150,6 +150,15 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: model-server
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
   podSecurityContext: {}
   securityContext:
     privileged: true
@@ -195,6 +204,15 @@ indexCapability:
     limits:
       cpu: 6000m
       memory: 6Gi
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: model-server
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
   podSecurityContext: {}
   securityContext:
     privileged: true
@@ -321,6 +339,16 @@ webserver:
       cpu: 1000m
       memory: 1Gi
 
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /api/health
+  #     port: http
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
+
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -400,6 +428,16 @@ api:
     limits:
       cpu: 1000m
       memory: 3Gi
+
+  # Optional health probes
+  # Example:
+  # readinessProbe:
+  #   httpGet:
+  #     path: /health
+  #     port: api-server-port
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
 
   autoscaling:
     enabled: false
