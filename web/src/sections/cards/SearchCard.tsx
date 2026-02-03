@@ -1,6 +1,6 @@
 "use client";
 
-import { SearchDocWithContent } from "@/lib/search/searchApi";
+import { SearchDocWithContent } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
@@ -11,7 +11,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Section } from "@/layouts/general-layouts";
 import { Hoverable, HoverableContainer } from "@/refresh-components/Hoverable";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { formatRelativeTime } from "@/lib/utils";
+import { timeAgo } from "@/lib/time";
 import { useMemo } from "react";
 
 export interface SearchResultCardProps {
@@ -92,7 +92,7 @@ export default function SearchCard({
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
                     <Text secondaryBody text02>
-                      {formatRelativeTime(document.updated_at)}
+                      {timeAgo(document.updated_at)}
                     </Text>
                   )}
               </Section>

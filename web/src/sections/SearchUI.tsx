@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BaseFilters } from "@/lib/search/searchApi";
-import { MinimalOnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
+import {
+  BaseFilters,
+  MinimalOnyxDocument,
+  SourceMetadata,
+} from "@/lib/search/interfaces";
 import SearchCard from "@/sections/cards/SearchCard";
 import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";

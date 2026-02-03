@@ -11,12 +11,11 @@ import {
 } from "react";
 import {
   BaseFilters,
-  classifyQuery,
   SearchDocWithContent,
-  searchDocuments,
   SearchFlowClassificationResponse,
   SearchFullResponse,
-} from "@/lib/search/searchApi";
+} from "@/lib/search/interfaces";
+import { classifyQuery, searchDocuments } from "@/lib/search/svc";
 import { useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
