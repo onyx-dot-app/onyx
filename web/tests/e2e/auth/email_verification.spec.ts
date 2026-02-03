@@ -7,6 +7,9 @@ import { test, expect } from "@chromatic-com/playwright";
 test("Login page shows verification success message after email verification", async ({
   page,
 }) => {
+  // Clear cookies so we hit the login page as an unauthenticated user
+  await page.context().clearCookies();
+
   // Navigate to login page with verified=true query param (simulating redirect from email verification)
   await page.goto("/auth/login?verified=true");
   await page.waitForLoadState("networkidle");
