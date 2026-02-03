@@ -214,8 +214,8 @@ def format_messages_for_summary(
             formatted.append(f"[assistant used tools: {', '.join(tool_names)}]")
             continue
 
-        # Skip standalone tool call/response messages - captured above
-        if msg.message_type in (MessageType.TOOL_CALL, MessageType.TOOL_CALL_RESPONSE):
+        # Skip tool call response messages - tool calls are captured above via assistant messages
+        if msg.message_type == MessageType.TOOL_CALL_RESPONSE:
             continue
 
         role = msg.message_type.value
