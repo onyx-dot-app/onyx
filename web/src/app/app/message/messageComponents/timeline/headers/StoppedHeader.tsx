@@ -18,7 +18,11 @@ export const StoppedHeader = React.memo(function StoppedHeader({
   onToggle,
 }: StoppedHeaderProps) {
   return (
-    <>
+    <div
+      role="button"
+      onClick={onToggle}
+      className="flex items-center justify-between w-full hover:bg-background-tint-00 transition-colors duration-200 rounded-12 p-1"
+    >
       <Text as="p" mainUiAction text03>
         Interrupted Thinking
       </Text>
@@ -33,6 +37,6 @@ export const StoppedHeader = React.memo(function StoppedHeader({
           {totalSteps} {totalSteps === 1 ? "step" : "steps"}
         </Button>
       )}
-    </>
+    </div>
   );
 });
