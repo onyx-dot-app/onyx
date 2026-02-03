@@ -53,6 +53,7 @@ class AttachedDocumentSnapshot(BaseModel):
     parent_id: int | None
     last_modified: datetime | None
     last_synced: datetime | None
+    source: DocumentSource | None
 
     @classmethod
     def from_model(cls, doc: Document) -> "AttachedDocumentSnapshot":
@@ -63,6 +64,9 @@ class AttachedDocumentSnapshot(BaseModel):
             parent_id=doc.parent_hierarchy_node_id,
             last_modified=doc.doc_updated_at,
             last_synced=doc.last_synced,
+            source=(
+                doc.parent_hierarchy_node.source if doc.parent_hierarchy_node else None
+            ),  # TODO(evan) we really should just store this in the document table directly
         )
 
 

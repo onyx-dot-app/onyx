@@ -1,3 +1,4 @@
+from unittest.mock import ANY
 from unittest.mock import patch
 
 import litellm
@@ -248,6 +249,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             max_tokens=None,
+            client=None,
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
@@ -402,6 +404,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             max_tokens=None,
+            client=ANY,  # HTTPHandler instance created per-stream
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,

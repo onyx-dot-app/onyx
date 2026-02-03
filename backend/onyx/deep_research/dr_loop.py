@@ -18,6 +18,7 @@ from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import MessageType
 from onyx.db.tools import get_tool_by_name
@@ -561,15 +562,23 @@ def run_deep_research_llm_loop(
                         span.span_data.input = str(think_tool_call.tool_args)
                         most_recent_reasoning = state_container.reasoning_tokens
                         tool_call_message = think_tool_call.to_msg_str()
+                        tool_call_token_count = token_counter(tool_call_message)
 
-                        think_tool_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=token_counter(tool_call_message),
-                            message_type=MessageType.TOOL_CALL,
+                        # Create ASSISTANT message with tool_calls (OpenAI parallel format)
+                        think_tool_simple = ToolCallSimple(
                             tool_call_id=think_tool_call.tool_call_id,
+                            tool_name=think_tool_call.tool_name,
+                            tool_arguments=think_tool_call.tool_args,
+                            token_count=tool_call_token_count,
+                        )
+                        think_assistant_msg = ChatMessageSimple(
+                            message="",
+                            token_count=tool_call_token_count,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=[think_tool_simple],
                             image_files=None,
                         )
-                        simple_chat_history.append(think_tool_msg)
+                        simple_chat_history.append(think_assistant_msg)
 
                         think_tool_response_msg = ChatMessageSimple(
                             message=THINK_TOOL_RESPONSE_MESSAGE,
@@ -647,6 +656,33 @@ def run_deep_research_llm_loop(
 
                     citation_mapping = research_results.citation_mapping
 
+                    # Build ONE ASSISTANT message with all tool calls (OpenAI parallel format)
+                    tool_calls_simple: list[ToolCallSimple] = []
+                    for current_tool_call in research_agent_calls:
+                        tool_call_message = current_tool_call.to_msg_str()
+                        tool_call_token_count = token_counter(tool_call_message)
+                        tool_calls_simple.append(
+                            ToolCallSimple(
+                                tool_call_id=current_tool_call.tool_call_id,
+                                tool_name=current_tool_call.tool_name,
+                                tool_arguments=current_tool_call.tool_args,
+                                token_count=tool_call_token_count,
+                            )
+                        )
+
+                    total_tool_call_tokens = sum(
+                        tc.token_count for tc in tool_calls_simple
+                    )
+                    assistant_with_tools = ChatMessageSimple(
+                        message="",
+                        token_count=total_tool_call_tokens,
+                        message_type=MessageType.ASSISTANT,
+                        tool_calls=tool_calls_simple,
+                        image_files=None,
+                    )
+                    simple_chat_history.append(assistant_with_tools)
+
+                    # Now add TOOL_CALL_RESPONSE messages and tool call info for each result
                     for tab_index, report in enumerate(
                         research_results.intermediate_reports
                     ):
@@ -679,18 +715,6 @@ def run_deep_research_llm_loop(
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)
-
-                        tool_call_message = current_tool_call.to_msg_str()
-                        tool_call_token_count = token_counter(tool_call_message)
-
-                        tool_call_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=tool_call_token_count,
-                            message_type=MessageType.TOOL_CALL,
-                            tool_call_id=current_tool_call.tool_call_id,
-                            image_files=None,
-                        )
-                        simple_chat_history.append(tool_call_msg)
 
                         tool_call_response_msg = ChatMessageSimple(
                             message=report,

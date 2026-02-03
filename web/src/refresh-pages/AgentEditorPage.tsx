@@ -1233,6 +1233,7 @@ export default function AgentEditorPage({
                         initialAttachedDocuments={
                           existingAgent?.attached_documents
                         }
+                        initialHierarchyNodes={existingAgent?.hierarchy_nodes}
                       />
 
                       <Separator noPadding />

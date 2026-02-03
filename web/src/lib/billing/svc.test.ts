@@ -6,7 +6,6 @@ import {
   createCheckoutSession,
   createCustomerPortalSession,
   updateSeatCount,
-  fetchLicense,
   refreshLicenseCache,
   uploadLicense,
 } from "./svc";
@@ -130,34 +129,6 @@ describe("billing actions", () => {
     });
   });
 
-  describe("fetchLicense (self-hosted only)", () => {
-    test("calls license fetch endpoint", async () => {
-      // Mock POST /api/license/fetch
-      fetchSpy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true, message: "License fetched" }),
-      } as Response);
-
-      const result = await fetchLicense();
-
-      expect(fetchSpy).toHaveBeenCalledWith("/api/license/fetch", {
-        method: "POST",
-      });
-
-      expect(result).toEqual({ success: true, message: "License fetched" });
-    });
-
-    test("throws error on failed response", async () => {
-      // Mock POST /api/license/fetch (error)
-      fetchSpy.mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ detail: "License not found" }),
-      } as Response);
-
-      await expect(fetchLicense()).rejects.toThrow("License not found");
-    });
-  });
-
   describe("refreshLicenseCache (self-hosted only)", () => {
     test("calls license refresh endpoint", async () => {
       // Mock POST /api/license/refresh
@@ -254,15 +225,6 @@ describe("billing actions (cloud mode)", () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/tenants/create-checkout-session",
       expect.any(Object)
-    );
-  });
-
-  test("fetchLicense throws error in cloud mode", async () => {
-    // Re-import with cloud mode
-    const { fetchLicense: cloudFetchLicense } = await import("./svc");
-
-    await expect(cloudFetchLicense()).rejects.toThrow(
-      "only available for self-hosted"
     );
   });
 

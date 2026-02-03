@@ -244,6 +244,7 @@ class TestUpdateSeats:
         assert "No license found" in exc_info.value.detail
 
     @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.get_used_seats")
     @patch("ee.onyx.server.billing.api.update_seat_service")
     @patch("ee.onyx.server.billing.api._get_tenant_id")
     @patch("ee.onyx.server.billing.api._get_license_data")
@@ -252,6 +253,7 @@ class TestUpdateSeats:
         mock_get_license: MagicMock,
         mock_get_tenant: MagicMock,
         mock_service: AsyncMock,
+        mock_get_used_seats: MagicMock,
     ) -> None:
         """Should update seats with valid license."""
         from ee.onyx.server.billing.api import update_seats
@@ -259,6 +261,7 @@ class TestUpdateSeats:
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
+        mock_get_used_seats.return_value = 5
         mock_service.return_value = SeatUpdateResponse(
             success=True,
             current_seats=15,
@@ -281,6 +284,7 @@ class TestUpdateSeats:
         )
 
     @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.get_used_seats")
     @patch("ee.onyx.server.billing.api.update_seat_service")
     @patch("ee.onyx.server.billing.api._get_tenant_id")
     @patch("ee.onyx.server.billing.api._get_license_data")
@@ -289,6 +293,7 @@ class TestUpdateSeats:
         mock_get_license: MagicMock,
         mock_get_tenant: MagicMock,
         mock_service: AsyncMock,
+        mock_get_used_seats: MagicMock,
     ) -> None:
         """Should convert BillingServiceError to HTTPException."""
         from fastapi import HTTPException
@@ -298,6 +303,7 @@ class TestUpdateSeats:
 
         mock_get_license.return_value = "license_blob"
         mock_get_tenant.return_value = None
+        mock_get_used_seats.return_value = 0
         mock_service.side_effect = BillingServiceError(
             "Cannot reduce below 10 seats", 400
         )
@@ -505,6 +511,7 @@ class TestCheckoutSessionWithSeats:
     """Tests for checkout session with seats parameter."""
 
     @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.api.get_used_seats")
     @patch("ee.onyx.server.billing.api.create_checkout_service")
     @patch("ee.onyx.server.billing.api._get_tenant_id")
     @patch("ee.onyx.server.billing.api._get_license_data")
@@ -513,6 +520,7 @@ class TestCheckoutSessionWithSeats:
         mock_get_license: MagicMock,
         mock_get_tenant: MagicMock,
         mock_service: AsyncMock,
+        mock_get_used_seats: MagicMock,
     ) -> None:
         """Should pass seats parameter to service."""
         from ee.onyx.server.billing.api import create_checkout_session
@@ -520,6 +528,7 @@ class TestCheckoutSessionWithSeats:
 
         mock_get_license.return_value = None
         mock_get_tenant.return_value = "tenant_123"
+        mock_get_used_seats.return_value = 5
         mock_service.return_value = CreateCheckoutSessionResponse(
             stripe_checkout_url="https://checkout.stripe.com/session"
         )
