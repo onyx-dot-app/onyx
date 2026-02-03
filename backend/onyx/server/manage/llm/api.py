@@ -607,7 +607,7 @@ def list_llm_providers_for_persona(
     persona_id: int,
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
-) -> list[LLMProviderDescriptor]:
+) -> LLMProviderResponse[LLMProviderDescriptor]:
     """Get LLM providers for a specific persona.
 
     Returns providers that the user can access when using this persona:
@@ -654,7 +654,11 @@ def list_llm_providers_for_persona(
         f"Completed fetching {len(llm_provider_list)} LLM providers for persona {persona_id} in {duration:.2f} seconds"
     )
 
-    return llm_provider_list
+    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+        providers=llm_provider_list,
+        default_text=None,
+        default_vision=None,
+    )
 
 
 @admin_router.get("/provider-contextual-cost")
