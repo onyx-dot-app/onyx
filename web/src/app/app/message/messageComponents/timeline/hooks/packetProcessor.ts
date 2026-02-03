@@ -29,7 +29,7 @@ export { parseToolKey };
 
 export interface ProcessorState {
   nodeId: number;
-  lastProcessedIndex: number;
+  nextPacketIndex: number;
 
   // Citations
   citations: StreamingCitation[];
@@ -79,7 +79,7 @@ export interface GroupedPacket {
 export function createInitialState(nodeId: number): ProcessorState {
   return {
     nodeId,
-    lastProcessedIndex: 0,
+    nextPacketIndex: 0,
     citations: [],
     seenCitationDocIds: new Set(),
     citationMap: {},
@@ -372,22 +372,22 @@ export function processPackets(
   rawPackets: Packet[]
 ): ProcessorState {
   // Handle reset (packets array shrunk - upstream replaced with shorter list)
-  if (state.lastProcessedIndex > rawPackets.length) {
+  if (state.nextPacketIndex > rawPackets.length) {
     state = createInitialState(state.nodeId);
   }
 
   // Track if we processed any new packets
-  const prevProcessedIndex = state.lastProcessedIndex;
+  const prevProcessedIndex = state.nextPacketIndex;
 
   // Process only new packets
-  for (let i = state.lastProcessedIndex; i < rawPackets.length; i++) {
+  for (let i = state.nextPacketIndex; i < rawPackets.length; i++) {
     const packet = rawPackets[i];
     if (packet) {
       processPacket(state, packet);
     }
   }
 
-  state.lastProcessedIndex = rawPackets.length;
+  state.nextPacketIndex = rawPackets.length;
 
   // Only rebuild result arrays if we processed new packets
   // This prevents creating new references when nothing changed
