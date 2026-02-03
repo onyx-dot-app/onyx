@@ -361,10 +361,16 @@ class DocumentQuery:
             "query": {
                 "function_score": {
                     "query": {"bool": {"filter": search_filters}},
+                    # See
+                    # https://docs.opensearch.org/latest/query-dsl/compound/function-score/#the-random-score-function
                     "random_score": {
+                        # We'll use a different seed per invocation.
                         "seed": random.randint(0, 1_000_000),
+                        # Some field which has a unique value per document
+                        # chunk.
                         "field": "_seq_no",
                     },
+                    # Replaces whatever score was computed in the query.
                     "boost_mode": "replace",
                 }
             },
