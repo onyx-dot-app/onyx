@@ -83,7 +83,11 @@ if _auth_type_str == "disabled":
         "Your existing data will be migrated automatically."
     )
     _auth_type_str = AuthType.BASIC.value
-AUTH_TYPE = AuthType(_auth_type_str)
+try:
+    AUTH_TYPE = AuthType(_auth_type_str)
+except ValueError:
+    logger.error(f"Invalid AUTH_TYPE: {_auth_type_str}. Defaulting to 'basic'.")
+    AUTH_TYPE = AuthType.BASIC
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
