@@ -57,6 +57,19 @@ DEFAULT_CLIENT_INFO = {
     "version": "1.0.0",
 }
 
+# SSE keepalive interval - yield keepalive if no events for this many seconds
+SSE_KEEPALIVE_INTERVAL = 15.0
+
+
+@dataclass
+class SSEKeepalive:
+    """Marker event to signal that an SSE keepalive should be sent.
+
+    This is yielded when no ACP events have been received for SSE_KEEPALIVE_INTERVAL
+    seconds, allowing the SSE stream to send a comment to keep the connection alive.
+    """
+
+
 # Union type for all possible events from send_message
 ACPEvent = (
     AgentMessageChunk
@@ -67,6 +80,7 @@ ACPEvent = (
     | CurrentModeUpdate
     | PromptResponse
     | Error
+    | SSEKeepalive
 )
 
 
@@ -429,6 +443,7 @@ class ACPExecClient:
 
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
+        last_event_time = time.time()  # Track time since last event for keepalive
         events_yielded = 0
 
         while True:
@@ -446,7 +461,20 @@ class ACPExecClient:
 
             try:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
+                last_event_time = time.time()  # Reset keepalive timer on event
             except Empty:
+                # Check if we need to send an SSE keepalive
+                idle_time = time.time() - last_event_time
+                if idle_time >= SSE_KEEPALIVE_INTERVAL:
+                    packet_logger.log_raw(
+                        "SSE-KEEPALIVE-YIELD",
+                        {
+                            "session_id": session_id,
+                            "idle_seconds": idle_time,
+                        },
+                    )
+                    yield SSEKeepalive()
+                    last_event_time = time.time()  # Reset after yielding keepalive
                 continue
 
             # Check for response to our prompt request

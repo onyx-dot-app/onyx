@@ -71,6 +71,9 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
+    SSEKeepalive,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
@@ -1239,6 +1242,14 @@ class SessionManager:
             for acp_event in self._sandbox_manager.send_message(
                 sandbox_id, session_id, user_message_content
             ):
+                # Handle SSE keepalive - send comment to keep connection alive
+                if isinstance(acp_event, SSEKeepalive):
+                    # SSE comments start with : and are ignored by EventSource
+                    # but keep the HTTP connection alive
+                    packet_logger.log_sse_emit("keepalive", session_id)
+                    yield ": keepalive\n\n"
+                    continue
+
                 # Check if we need to finalize pending chunks before processing
                 event_type = self._get_event_type(acp_event)
                 if state.should_finalize_chunks(event_type):
@@ -1349,6 +1360,7 @@ class SessionManager:
 
                     # Truncate rawInput.content if present and large
                     raw_input = sse_event_data.get("rawInput")
+                    truncated_raw_input = False
                     if raw_input and isinstance(raw_input, dict):
                         content = raw_input.get("content")
                         if (
@@ -1356,19 +1368,27 @@ class SessionManager:
                             and isinstance(content, str)
                             and len(content) > MAX_SSE_CONTENT_LENGTH
                         ):
-                            logger.debug(
-                                f"Truncating tool_call_progress content from {len(content)} to {MAX_SSE_CONTENT_LENGTH} chars"
-                            )
+                            truncated_raw_input = True
+                            original_len = len(content)
                             truncated = content[:MAX_SSE_CONTENT_LENGTH] + "..."
                             sse_event_data["rawInput"] = {
                                 **raw_input,
                                 "content": truncated,
                                 "_truncated": True,
-                                "_originalLength": len(content),
+                                "_originalLength": original_len,
                             }
+                            packet_logger.log_raw(
+                                "SSE-TRUNCATE-RAWINPUT",
+                                {
+                                    "original_len": original_len,
+                                    "truncated_len": len(truncated),
+                                    "session_id": str(session_id),
+                                },
+                            )
 
                     # Truncate rawOutput.content if present and large
                     raw_output = sse_event_data.get("rawOutput")
+                    truncated_raw_output = False
                     if raw_output and isinstance(raw_output, dict):
                         content = raw_output.get("content")
                         if (
@@ -1376,20 +1396,41 @@ class SessionManager:
                             and isinstance(content, str)
                             and len(content) > MAX_SSE_CONTENT_LENGTH
                         ):
-                            logger.debug(
-                                f"Truncating tool_call_progress content from {len(content)} to {MAX_SSE_CONTENT_LENGTH} chars"
-                            )
+                            truncated_raw_output = True
+                            original_len = len(content)
                             truncated = content[:MAX_SSE_CONTENT_LENGTH] + "..."
                             sse_event_data["rawOutput"] = {
                                 **raw_output,
                                 "content": truncated,
                                 "_truncated": True,
-                                "_originalLength": len(content),
+                                "_originalLength": original_len,
                             }
+                            packet_logger.log_raw(
+                                "SSE-TRUNCATE-RAWOUTPUT",
+                                {
+                                    "original_len": original_len,
+                                    "truncated_len": len(truncated),
+                                    "session_id": str(session_id),
+                                },
+                            )
 
                     # Yield sanitized event for SSE streaming
                     sse_event = ToolCallProgress.model_validate(sse_event_data)
-                    yield _serialize_acp_event(sse_event, "tool_call_progress")
+                    sse_payload = _serialize_acp_event(sse_event, "tool_call_progress")
+
+                    # Log final payload size to verify truncation worked
+                    if truncated_raw_input or truncated_raw_output:
+                        packet_logger.log_raw(
+                            "SSE-YIELD-AFTER-TRUNCATE",
+                            {
+                                "payload_bytes": len(sse_payload),
+                                "truncated_input": truncated_raw_input,
+                                "truncated_output": truncated_raw_output,
+                                "session_id": str(session_id),
+                            },
+                        )
+
+                    yield sse_payload
 
                 elif isinstance(acp_event, AgentPlanUpdate):
                     event_data = acp_event.model_dump(
