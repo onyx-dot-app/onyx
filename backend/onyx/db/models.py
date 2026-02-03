@@ -2385,9 +2385,13 @@ class ChatSession(Base):
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
-        "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
+        "ChatMessage",
+        back_populates="chat_session",
+        cascade="all, delete-orphan",
+        foreign_keys="ChatMessage.chat_session_id",
     )
     persona: Mapped["Persona"] = relationship("Persona")
 
@@ -2421,6 +2425,13 @@ class ChatMessage(Base):
         ForeignKey("chat_message.id"), nullable=True
     )
 
+    # Only set on summary messages - the ID of the last message included in this summary
+    # Used for chat history compression
+    last_summarized_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # What does this message contain
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
@@ -2451,7 +2462,11 @@ class ChatMessage(Base):
     )
 
     # Relationships
-    chat_session: Mapped[ChatSession] = relationship("ChatSession")
+    chat_session: Mapped[ChatSession] = relationship(
+        "ChatSession",
+        back_populates="messages",
+        foreign_keys=[chat_session_id],
+    )
 
     chat_message_feedbacks: Mapped[list["ChatMessageFeedback"]] = relationship(
         "ChatMessageFeedback",
