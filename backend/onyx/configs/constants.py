@@ -306,7 +306,6 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
-    TOOL_CALL = "tool_call"  # DEPRECATED: Use ASSISTANT with tool_calls field instead
     TOOL_CALL_RESPONSE = "tool_call_response"
 
 
