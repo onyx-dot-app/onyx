@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
@@ -102,10 +103,12 @@ export function useBuildSessionController({
         setCurrentSession(null);
       }
 
-      // Reset trigger state when transitioning FROM a session TO new build
-      // This ensures we can re-provision when returning to the new build page
+      // Reset state when transitioning FROM a session TO new build
+      // This ensures we fetch fresh pre-provisioned status from backend
       if (prevExistingSessionId !== null) {
         setControllerTriggered(null);
+        // Clear pre-provisioned state to force a fresh check from backend
+        useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
       }
 
       // Trigger pre-provisioning if conditions are met
@@ -280,6 +283,10 @@ export function useBuildSessionController({
   const navigateToNewBuild = useCallback(() => {
     router.push(CRAFT_PATH);
   }, [router]);
+
+  // Poll to verify pre-provisioned session is still valid (multi-tab support)
+  // Only poll on welcome page (existingSessionId === null) - no point polling on session pages
+  usePreProvisionPolling({ enabled: existingSessionId === null });
 
   return {
     currentSessionId,
