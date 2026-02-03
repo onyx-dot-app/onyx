@@ -49,8 +49,8 @@ export default function Verify({ user }: VerifyProps) {
       let errorDetail = "unknown error";
       try {
         errorDetail = (await response.json()).detail;
-      } catch {
-        // Response may not be JSON
+      } catch (e) {
+        console.error("Failed to parse verification error response:", e);
       }
       setError(
         `Failed to verify your email - ${errorDetail}. Please try requesting a new verification email.`
