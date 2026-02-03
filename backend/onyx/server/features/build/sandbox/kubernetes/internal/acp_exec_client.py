@@ -43,6 +43,8 @@ from kubernetes.stream.ws_client import WSClient  # type: ignore
 from pydantic import ValidationError
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
+from onyx.server.features.build.configs import ACP_MESSAGE_TIMEOUT
+from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -57,6 +59,20 @@ DEFAULT_CLIENT_INFO = {
     "version": "1.0.0",
 }
 
+
+@dataclass
+class SSEKeepalive:
+    """Marker event to signal that an SSE keepalive should be sent.
+
+    This is yielded when no ACP events have been received for SSE_KEEPALIVE_INTERVAL
+    seconds, allowing the SSE stream to send a comment to keep the connection alive.
+
+    Note: This is an internal event type - it's consumed by session/manager.py and
+    converted to an SSE comment before leaving that layer. It should not be exposed
+    to external consumers.
+    """
+
+
 # Union type for all possible events from send_message
 ACPEvent = (
     AgentMessageChunk
@@ -67,6 +83,7 @@ ACPEvent = (
     | CurrentModeUpdate
     | PromptResponse
     | Error
+    | SSEKeepalive
 )
 
 
@@ -390,13 +407,13 @@ class ACPExecClient:
     def send_message(
         self,
         message: str,
-        timeout: float = 300.0,
+        timeout: float = ACP_MESSAGE_TIMEOUT,
     ) -> Generator[ACPEvent, None, None]:
         """Send a message and stream response events.
 
         Args:
             message: The message content to send
-            timeout: Maximum time to wait for complete response
+            timeout: Maximum time to wait for complete response (defaults to ACP_MESSAGE_TIMEOUT env var)
 
         Yields:
             Typed ACP schema event objects
@@ -429,6 +446,7 @@ class ACPExecClient:
 
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
+        last_event_time = time.time()  # Track time since last event for keepalive
         events_yielded = 0
 
         while True:
@@ -446,7 +464,20 @@ class ACPExecClient:
 
             try:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
+                last_event_time = time.time()  # Reset keepalive timer on event
             except Empty:
+                # Check if we need to send an SSE keepalive
+                idle_time = time.time() - last_event_time
+                if idle_time >= SSE_KEEPALIVE_INTERVAL:
+                    packet_logger.log_raw(
+                        "SSE-KEEPALIVE-YIELD",
+                        {
+                            "session_id": session_id,
+                            "idle_seconds": idle_time,
+                        },
+                    )
+                    yield SSEKeepalive()
+                    last_event_time = time.time()  # Reset after yielding keepalive
                 continue
 
             # Check for response to our prompt request
@@ -539,6 +570,8 @@ class ACPExecClient:
             return "prompt_response"
         elif isinstance(event, Error):
             return "error"
+        elif isinstance(event, SSEKeepalive):
+            return "sse_keepalive"
         return "unknown"
 
     def _process_session_update(
