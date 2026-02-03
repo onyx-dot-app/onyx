@@ -377,17 +377,6 @@ export const ResearchAgentRenderer: MessageRenderer<
           />
         </StepContainer>
       )}
-
-      {/* Done indicator - hidden in compact mode when active content */}
-      {isComplete && !isLastStep && !showOnlyReport && !showOnlyTools && (
-        <StepContainer
-          stepIcon={SvgCheckCircle}
-          header="Done"
-          isLastStep={!stopPacketSeen && isLastStep}
-          isFirstStep={false}
-          isHover={isHover}
-        />
-      )}
     </div>
   );
 
