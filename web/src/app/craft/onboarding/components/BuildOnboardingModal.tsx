@@ -271,8 +271,12 @@ export default function BuildOnboardingModal({
       if (!llmProviders || llmProviders.length === 0) {
         const newProvider = await response.json();
         if (newProvider?.id) {
-          await fetch(`${LLM_PROVIDERS_ADMIN_URL}/${newProvider.id}/default`, {
+          await fetch(`${LLM_PROVIDERS_ADMIN_URL}/default`, {
             method: "POST",
+            body: JSON.stringify({
+              provider_id: newProvider.id,
+              model_name: selectedModel,
+            }),
           });
         }
       }

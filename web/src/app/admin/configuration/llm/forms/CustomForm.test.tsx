@@ -326,9 +326,13 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     // Verify set as default API was called
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/admin/llm/provider/5/default",
+        "/api/admin/llm/provider/default",
         expect.objectContaining({
           method: "POST",
+          body: JSON.stringify({
+            provider_id: 5,
+            model_name: "gpt-4",
+          }),
         })
       );
     });

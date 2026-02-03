@@ -17,7 +17,7 @@ def test_bedrock_llm_configuration(client: TestClient) -> None:
     # Prepare the test request payload
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
-        "default_model_name": _DEFAULT_BEDROCK_MODEL,
+        "model": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,
@@ -26,7 +26,6 @@ def test_bedrock_llm_configuration(client: TestClient) -> None:
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         },
-        "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
         "api_key_changed": True,
     }
 
@@ -43,7 +42,7 @@ def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
     # Prepare the test request payload with invalid credentials
     test_request: dict[str, Any] = {
         "provider": LlmProviderNames.BEDROCK,
-        "default_model_name": _DEFAULT_BEDROCK_MODEL,
+        "model": _DEFAULT_BEDROCK_MODEL,
         "api_key": None,
         "api_base": None,
         "api_version": None,
@@ -52,7 +51,6 @@ def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
             "AWS_ACCESS_KEY_ID": "invalid_access_key_id",
             "AWS_SECRET_ACCESS_KEY": "invalid_secret_access_key",
         },
-        "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
         "api_key_changed": True,
     }
 

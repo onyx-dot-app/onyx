@@ -500,7 +500,7 @@ def test_upload_with_custom_config_then_change(
                 LLMTestRequest(
                     name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
+                    model=default_model_name,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name=default_model_name, is_visible=True
@@ -539,7 +539,7 @@ def test_upload_with_custom_config_then_change(
                 LLMTestRequest(
                     name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
+                    model=default_model_name,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name=default_model_name, is_visible=True

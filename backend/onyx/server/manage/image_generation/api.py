@@ -93,7 +93,6 @@ def _build_llm_provider_request(
             api_key=source_provider.api_key,  # Only this from source
             api_base=api_base,  # From request
             api_version=api_version,  # From request
-            default_model_name=model_name,
             deployment_name=deployment_name,  # From request
             is_public=True,
             groups=[],
@@ -132,7 +131,6 @@ def _build_llm_provider_request(
         api_key=api_key,
         api_base=api_base,
         api_version=api_version,
-        default_model_name=model_name,
         deployment_name=deployment_name,
         is_public=True,
         groups=[],
@@ -164,7 +162,6 @@ def _create_image_gen_llm_provider__no_commit(
         api_key=provider_request.api_key,
         api_base=provider_request.api_base,
         api_version=provider_request.api_version,
-        default_model_name=provider_request.default_model_name,
         deployment_name=provider_request.deployment_name,
         is_public=provider_request.is_public,
         custom_config=provider_request.custom_config,
