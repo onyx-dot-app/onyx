@@ -352,8 +352,12 @@ export default function ChatSearchCommandMenu({
                 </CommandMenu.Action>
               )}
 
-            {/* No more results separator - shown when no chats/projects to display */}
-            {displayedChats.length === 0 && displayedProjects.length === 0 && (
+            {/* No more results separator - shown when no results for the active filter */}
+            {((activeFilter === "chats" && displayedChats.length === 0) ||
+              (activeFilter === "projects" && displayedProjects.length === 0) ||
+              (activeFilter === "all" &&
+                displayedChats.length === 0 &&
+                displayedProjects.length === 0)) && (
               <TextSeparator text="No more results" className="mt-auto mb-2" />
             )}
           </CommandMenu.List>
