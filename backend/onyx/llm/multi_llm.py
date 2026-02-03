@@ -451,6 +451,12 @@ class LitellmLLM(LLM):
         # multiple threads stream concurrently (e.g., during deep research).
         # Must use litellm's HTTPHandler wrapper, not raw httpx.Client, as
         # litellm's response_api_handler checks for this specific type.
+        #
+        # Note: If callers abandon this generator without fully consuming it,
+        # client.close() in the finally block won't run until GC. This is
+        # acceptable because CPython's refcounting typically finalizes the
+        # generator promptly when it goes out of scope, and httpx connections
+        # have their own timeouts as a fallback.
         client = HTTPHandler()
         try:
             response = cast(
