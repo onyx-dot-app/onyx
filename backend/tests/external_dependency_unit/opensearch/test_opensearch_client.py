@@ -1016,7 +1016,7 @@ class TestOpenSearchClient:
         # Verify tenant-x chunks are deleted.
         test_client.refresh_index()
         verify_query_x = DocumentQuery.get_from_document_id_query(
-            document_id="doc-tenant-x",
+            document_id="doc",
             tenant_state=tenant_x,
             index_filters=IndexFilters(access_control_list=None, tenant_id=None),
             include_hidden=False,
@@ -1030,7 +1030,7 @@ class TestOpenSearchClient:
 
         # Verify tenant-y chunks still exist.
         verify_query_y = DocumentQuery.get_from_document_id_query(
-            document_id="doc-tenant-y",
+            document_id="doc",
             tenant_state=tenant_y,
             index_filters=IndexFilters(access_control_list=None, tenant_id=None),
             include_hidden=False,
