@@ -66,6 +66,10 @@ class SSEKeepalive:
 
     This is yielded when no ACP events have been received for SSE_KEEPALIVE_INTERVAL
     seconds, allowing the SSE stream to send a comment to keep the connection alive.
+
+    Note: This is an internal event type - it's consumed by session/manager.py and
+    converted to an SSE comment before leaving that layer. It should not be exposed
+    to external consumers.
     """
 
 
@@ -566,6 +570,8 @@ class ACPExecClient:
             return "prompt_response"
         elif isinstance(event, Error):
             return "error"
+        elif isinstance(event, SSEKeepalive):
+            return "sse_keepalive"
         return "unknown"
 
     def _process_session_update(
