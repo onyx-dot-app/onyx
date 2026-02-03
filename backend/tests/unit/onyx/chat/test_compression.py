@@ -1,5 +1,8 @@
 """Unit tests for chat history compression module."""
 
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from unittest.mock import MagicMock
 
 from onyx.chat.compression import find_summary_for_branch
@@ -7,6 +10,9 @@ from onyx.chat.compression import get_compression_params
 from onyx.chat.compression import get_messages_to_summarize
 from onyx.chat.compression import SummaryContent
 from onyx.configs.constants import MessageType
+
+# Base time for generating sequential timestamps
+BASE_TIME = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def create_mock_message(
@@ -27,6 +33,8 @@ def create_mock_message(
     mock.chat_session_id = chat_session_id
     mock.parent_message_id = parent_message_id
     mock.last_summarized_message_id = last_summarized_message_id
+    # Generate time_sent based on id for chronological ordering
+    mock.time_sent = BASE_TIME + timedelta(minutes=id)
     return mock
 
 
