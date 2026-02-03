@@ -76,6 +76,11 @@ logger = setup_logger()
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
 MAX_FINAL_REPORT_TOKENS = 20000
 
+# 30 minute timeout before forcing final report generation
+# NOTE: The overall execution may be much longer still because it could run a research cycle at minute 29
+# and that runs for another nearly 30 minutes.
+DEEP_RESEARCH_FORCE_REPORT_SECONDS = 30 * 60
+
 # Might be something like (this gives a lot of leeway for change but typically the models don't do this):
 # 0. Research topics 1-3
 # 1. Think
@@ -406,8 +411,18 @@ def run_deep_research_llm_loop(
                 orchestrator_start_turn_index  # Track the final turn_index for stop packet
             )
             for cycle in range(max_orchestrator_cycles):
-                if cycle == max_orchestrator_cycles - 1:
-                    # If it's the last cycle, forcibly generate the final report
+                # Check if we've exceeded the time limit or reached the last cycle
+                # - if so, skip LLM and generate final report
+                elapsed_seconds = time.monotonic() - processing_start_time
+                timed_out = elapsed_seconds > DEEP_RESEARCH_FORCE_REPORT_SECONDS
+                is_last_cycle = cycle == max_orchestrator_cycles - 1
+
+                if timed_out or is_last_cycle:
+                    if timed_out:
+                        logger.info(
+                            f"Deep research exceeded {DEEP_RESEARCH_FORCE_REPORT_SECONDS}s "
+                            f"(elapsed: {elapsed_seconds:.1f}s), forcing final report generation"
+                        )
                     report_turn_index = (
                         orchestrator_start_turn_index + cycle + reasoning_cycles
                     )
@@ -420,10 +435,8 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
-                        pre_answer_processing_time=time.monotonic()
-                        - processing_start_time,
+                        pre_answer_processing_time=elapsed_seconds,
                     )
-                    # Update final_turn_index: base + 1 for the report itself + 1 if reasoning occurred
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
 
@@ -496,6 +509,10 @@ def run_deep_research_llm_loop(
                     user_identity=user_identity,
                     custom_token_processor=custom_processor,
                     is_deep_research=True,
+                    # Even for the reasoning tool, this should be plenty
+                    # The generation here should never be very long as it's just the tool calls.
+                    # This prevents timeouts where the model gets into an endless loop of null or bad tokens.
+                    max_tokens=1000,
                 )
                 if has_reasoned:
                     reasoning_cycles += 1
