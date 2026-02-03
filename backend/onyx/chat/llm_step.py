@@ -496,7 +496,6 @@ def translate_history_to_llm_format(
                 messages.append(user_msg_text)
 
         elif msg.message_type == MessageType.ASSISTANT:
-            # Handle ASSISTANT messages with tool_calls field (new OpenAI parallel format)
             tool_calls_list: list[ToolCall] | None = None
             if msg.tool_calls:
                 tool_calls_list = [

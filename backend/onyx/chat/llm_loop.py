@@ -636,7 +636,7 @@ def run_llm_loop(
             # Failure case, give something reasonable to the LLM to try again
             if tool_calls and not tool_responses:
                 failure_messages = create_tool_call_failure_messages(
-                    tool_calls[0], token_counter
+                    tool_calls, token_counter
                 )
                 simple_chat_history.extend(failure_messages)
                 continue
@@ -734,7 +734,9 @@ def run_llm_loop(
                 tool_calls_simple: list[ToolCallSimple] = []
                 for tool_response in valid_tool_responses:
                     tc = tool_response.tool_call
-                    assert tc is not None  # Already filtered above
+                    assert (
+                        tc is not None
+                    )  # Already filtered above, this is just for typing purposes
 
                     tool_call_message = tc.to_msg_str()
                     tool_call_token_count = token_counter(tool_call_message)

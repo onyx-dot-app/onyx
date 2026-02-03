@@ -11,6 +11,7 @@ from onyx.auth.users import is_user_admin
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import PersonaOverrideConfig
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
@@ -509,8 +510,6 @@ def convert_chat_history(
         followed by N TOOL_CALL_RESPONSE messages (OpenAI parallel tool calling format)
     For assistant messages without tool calls: creates a simple ASSISTANT message
     """
-    from onyx.chat.models import ToolCallSimple
-
     simple_messages: list[ChatMessageSimple] = []
 
     # Create a mapping of file IDs to loaded files for quick lookup
@@ -712,47 +711,60 @@ def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> 
 
 
 def create_tool_call_failure_messages(
-    tool_call: ToolCallKickoff, token_counter: Callable[[str], int]
+    tool_calls: list[ToolCallKickoff], token_counter: Callable[[str], int]
 ) -> list[ChatMessageSimple]:
-    """Create ChatMessageSimple objects for a failed tool call.
+    """Create ChatMessageSimple objects for failed tool calls.
 
-    Creates two messages using OpenAI parallel tool calling format:
-    1. An ASSISTANT message with tool_calls field containing the failed tool call
-    2. A TOOL_CALL_RESPONSE failure message indicating the tool call failed
+    Creates messages using OpenAI parallel tool calling format:
+    1. An ASSISTANT message with tool_calls field containing all failed tool calls
+    2. A TOOL_CALL_RESPONSE failure message for each tool call
 
     Args:
-        tool_call: The ToolCallKickoff object representing the failed tool call
+        tool_calls: List of ToolCallKickoff objects representing the failed tool calls
         token_counter: Function to count tokens in a message string
 
     Returns:
-        List containing two ChatMessageSimple objects: assistant message with tool call and failure response
+        List containing ChatMessageSimple objects: one assistant message with all tool calls
+        followed by a failure response for each tool call
     """
-    from onyx.chat.models import ToolCallSimple
+    if not tool_calls:
+        return []
 
-    tool_call_token_count = token_counter(tool_call.to_msg_str())
+    # Create ToolCallSimple for each failed tool call
+    tool_calls_simple: list[ToolCallSimple] = []
+    for tool_call in tool_calls:
+        tool_call_token_count = token_counter(tool_call.to_msg_str())
+        tool_calls_simple.append(
+            ToolCallSimple(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                tool_arguments=tool_call.tool_args,
+                token_count=tool_call_token_count,
+            )
+        )
 
-    # Create ASSISTANT message with tool_calls field (OpenAI format)
-    tool_call_simple = ToolCallSimple(
-        tool_call_id=tool_call.tool_call_id,
-        tool_name=tool_call.tool_name,
-        tool_arguments=tool_call.tool_args,
-        token_count=tool_call_token_count,
-    )
+    total_token_count = sum(tc.token_count for tc in tool_calls_simple)
 
+    # Create ONE ASSISTANT message with all tool_calls (OpenAI format)
     assistant_msg = ChatMessageSimple(
         message="",  # No text content when making tool calls
-        token_count=tool_call_token_count,
+        token_count=total_token_count,
         message_type=MessageType.ASSISTANT,
-        tool_calls=[tool_call_simple],
+        tool_calls=tool_calls_simple,
         image_files=None,
     )
 
-    failure_response_msg = ChatMessageSimple(
-        message=TOOL_CALL_FAILURE_PROMPT,
-        token_count=token_counter(TOOL_CALL_FAILURE_PROMPT),
-        message_type=MessageType.TOOL_CALL_RESPONSE,
-        tool_call_id=tool_call.tool_call_id,
-        image_files=None,
-    )
+    messages: list[ChatMessageSimple] = [assistant_msg]
 
-    return [assistant_msg, failure_response_msg]
+    # Create a TOOL_CALL_RESPONSE failure message for each tool call
+    for tool_call in tool_calls:
+        failure_response_msg = ChatMessageSimple(
+            message=TOOL_CALL_FAILURE_PROMPT,
+            token_count=50,  # Tiny overestimate
+            message_type=MessageType.TOOL_CALL_RESPONSE,
+            tool_call_id=tool_call.tool_call_id,
+            image_files=None,
+        )
+        messages.append(failure_response_msg)
+
+    return messages

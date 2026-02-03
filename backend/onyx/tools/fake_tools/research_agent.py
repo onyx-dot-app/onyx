@@ -458,7 +458,7 @@ def run_research_agent_call(
 
                     if tool_calls and not tool_responses:
                         failure_messages = create_tool_call_failure_messages(
-                            tool_calls[0], token_counter
+                            tool_calls, token_counter
                         )
                         msg_history.extend(failure_messages)
 
