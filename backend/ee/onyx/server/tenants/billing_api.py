@@ -29,6 +29,7 @@ from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.billing import fetch_customer_portal_session
 from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
 from ee.onyx.server.tenants.models import BillingInformation
+from ee.onyx.server.tenants.models import CreateCheckoutSessionRequest
 from ee.onyx.server.tenants.models import CreateSubscriptionSessionRequest
 from ee.onyx.server.tenants.models import ProductGatingFullSyncRequest
 from ee.onyx.server.tenants.models import ProductGatingRequest
@@ -117,6 +118,24 @@ async def create_customer_portal_session(
         return {"stripe_customer_portal_url": portal_url}
     except Exception as e:
         logger.exception("Failed to create customer portal session")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create-checkout-session")
+async def create_checkout_session(
+    request: CreateCheckoutSessionRequest | None = None,
+    _: User = Depends(current_admin_user),
+) -> dict:
+    """Create a Stripe checkout session via the control plane."""
+    tenant_id = get_current_tenant_id()
+    billing_period = request.billing_period if request else "monthly"
+    seats = request.seats if request else None
+
+    try:
+        checkout_url = fetch_stripe_checkout_session(tenant_id, billing_period, seats)
+        return {"stripe_checkout_url": checkout_url}
+    except Exception as e:
+        logger.exception("Failed to create checkout session")
         raise HTTPException(status_code=500, detail=str(e))
 
 
