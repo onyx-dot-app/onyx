@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238
         with:
           node-version: 24
           cache: "npm" # zizmor: ignore[cache-poisoning]
