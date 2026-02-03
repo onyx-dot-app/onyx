@@ -21,7 +21,7 @@ export function highlightMatch(text: string, query: string): React.ReactNode {
   if (parts.length === 1) return text; // No matches
 
   return parts.map((part, i) =>
-    regex.test(part)
+    i % 2 === 1
       ? React.createElement("span", { key: i, className: "text-text-05" }, part)
       : React.createElement(React.Fragment, { key: i }, part)
   );
