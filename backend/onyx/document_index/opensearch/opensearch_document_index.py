@@ -549,7 +549,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         Does nothing if the specified document ID does not exist.
 
-        TODO(andrei): Make this method require supplying source type.
         TODO(andrei): Consider implementing this method to delete on document
         chunk IDs vs querying for matching document chunks.
 
@@ -581,10 +580,13 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Updates some set of chunks.
 
-        NOTE: Will raise if the specified document chunks do not exist.
+        NOTE: Will raise if the specified document chunks do not exist. This may
+        be due to a concurrent ongoing indexing operation. In that event callers
+        are expected to retry after a bit once the state of the document index
+        is updated.
         NOTE: Requires document chunk count be known; will raise if it is not.
-        NOTE: Each update request must have some field to update; if not it is
-        assumed there is a bug in the caller and this will raise.
+        This may be caused by the same situation outlined above.
+        NOTE: Will no-op if an update request has no fields to update.
 
         TODO(andrei): Consider exploring a batch API for OpenSearch for this
         operation.
@@ -627,17 +629,29 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     update_request.project_ids
                 )
 
-            for doc_id in update_request.document_ids:
-                if not properties_to_update:
-                    raise ValueError(
-                        f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
-                    )
+            if not properties_to_update:
+                logger.warning(
+                    f"[OpenSearchDocumentIndex] Tried to update {len(update_request.document_ids)} documents "
+                    "with no specified update fields. This will be a no-op."
+                )
+                continue
 
+            for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
+                    # This means the chunk count is not known. This is due to a
+                    # race condition between doc indexing and updating steps
+                    # which run concurrently when a doc is indexed. The indexing
+                    # step should update chunk count shortly. This could also
+                    # have been due to an older version of the indexing pipeline
+                    # which did not compute chunk count, but that codepath has
+                    # since been deprecated and should no longer be the case
+                    # here.
+                    # TODO(andrei): Fix the aforementioned race condition.
                     raise ValueError(
                         f"Tried to update document {doc_id} but its chunk count is not known. Older versions of the "
-                        "application used to permit this but is not a supported state for a document when using OpenSearch."
+                        "application used to permit this but is not a supported state for a document when using OpenSearch. "
+                        "The document was likely just added to the indexing pipeline and the chunk count will be updated shortly."
                     )
                 if doc_chunk_count == 0:
                     raise ValueError(
