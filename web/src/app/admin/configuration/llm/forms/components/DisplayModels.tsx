@@ -133,19 +133,8 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
 
-  // Sort models: default first, then selected, then unselected
-  const sortedModelConfigurations = [...modelConfigurations].sort((a, b) => {
-    const aIsDefault = a.name === defaultModel;
-    const bIsDefault = b.name === defaultModel;
-    const aIsSelected = selectedModels.includes(a.name);
-    const bIsSelected = selectedModels.includes(b.name);
-
-    if (aIsDefault && !bIsDefault) return -1;
-    if (!aIsDefault && bIsDefault) return 1;
-    if (aIsSelected && !bIsSelected) return -1;
-    if (!aIsSelected && bIsSelected) return 1;
-    return 0;
-  });
+  // Keep the provider's order stable so scrolling doesn't jump on selection.
+  const orderedModelConfigurations = modelConfigurations;
 
   if (modelConfigurations.length === 0) {
     return (
@@ -242,7 +231,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                 "overflow-y-auto"
               )}
             >
-              {sortedModelConfigurations.map((modelConfiguration) => {
+              {orderedModelConfigurations.map((modelConfiguration) => {
                 const isSelected = selectedModels.includes(
                   modelConfiguration.name
                 );
