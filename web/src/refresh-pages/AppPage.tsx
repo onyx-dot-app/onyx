@@ -346,9 +346,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, []);
 
-  // Always reset the app-focus back to "auto" when navigating back to the "New Sessions" page.
-  useEffect(() => setAppMode("auto"), [appFocus.isNewSession()]);
-
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
   );
@@ -490,6 +487,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     ]
   );
   const { submit: submitQuery, classification } = useQueryController();
+
+  // 1. Reset the app-mode back to "auto" when navigating back to the "New Sessions" tag.
+  // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
+  useEffect(() => {
+    if (appFocus.isNewSession()) setAppMode("auto");
+    if (!appFocus.isNewSession() && classification === "search")
+      resetInputBar();
+  }, [appFocus.isNewSession()]);
 
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
@@ -644,7 +649,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     gridTemplateColumns: "1fr",
     gridTemplateRows: isSearch
       ? "0fr auto 1fr"
-      : classification === "chat" || appFocus.isChat()
+      : appFocus.isChat()
         ? "1fr auto 0fr"
         : "1fr auto 1fr",
   };
@@ -785,7 +790,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <div className="row-start-2 flex flex-col items-center">
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
-                    {showScrollButton && !isSearch && (
+                    {appFocus.isChat() && showScrollButton && (
                       <div className="absolute top-[-3.5rem] self-center">
                         <IconButton
                           icon={SvgChevronDown}
@@ -798,7 +803,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                      !isSearch &&
+                      !classification &&
                       (showOnboarding ||
                         (user?.role !== UserRole.ADMIN &&
                           !user?.personalization?.name)) && (
@@ -873,15 +878,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
-                          classification === "chat" || appFocus.isChat()
-                            ? "h-[14px]"
-                            : "h-0"
+                          appFocus.isChat() ? "h-[14px]" : "h-0"
                         )}
                       />
                     </div>
 
                     {/* ProjectChatSessionsUI */}
-                    {!isSearch && appFocus.isProject() && (
+                    {appFocus.isProject() && (
                       <>
                         <Spacer rem={0.5} />
                         <ProjectChatSessionList />

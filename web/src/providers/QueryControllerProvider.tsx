@@ -190,6 +190,7 @@ export function QueryControllerProvider({
         !appFocus.isNewSession() ||
         appMode === "chat"
       ) {
+        setClassification("chat");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
         onChat(submitQuery);
@@ -297,10 +298,7 @@ export function QueryControllerProvider({
   );
 
   // Sync classification state with navigation context
-  useEffect(() => {
-    if (appFocus.isNewSession()) return;
-    reset();
-  }, [appFocus, reset]);
+  useEffect(reset, [appFocus, reset]);
 
   return (
     <QueryControllerContext.Provider value={value}>

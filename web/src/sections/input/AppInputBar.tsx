@@ -517,7 +517,12 @@ const AppInputBar = React.memo(
                     !(event.nativeEvent as any).isComposing
                   ) {
                     event.preventDefault();
-                    if (message) {
+                    if (
+                      message &&
+                      !disabled &&
+                      !isClassifying &&
+                      !hasUploadingFiles
+                    ) {
                       onSubmit(message);
                     }
                   }

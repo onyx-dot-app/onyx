@@ -416,7 +416,7 @@ function Header() {
           - more-options buttons
         */}
         <div className="flex flex-1 justify-end">
-          {appFocus.isChat() && (
+          {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
                 leftIcon={SvgShare}
