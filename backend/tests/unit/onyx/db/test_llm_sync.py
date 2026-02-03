@@ -46,7 +46,9 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 2  # Two new models
-            assert mock_session.execute.call_count == 2
+            assert (
+                mock_session.execute.call_count == 2 * 3
+            )  # 2 models * (model insert + chat insert + vision insert)
             mock_session.commit.assert_called_once()
 
     def test_skips_existing_models(self) -> None:

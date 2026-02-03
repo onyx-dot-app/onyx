@@ -151,6 +151,7 @@ def get_default_llm_with_vision(
             ),
         )
 
+    provider_map = {}
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
         default_model = fetch_default_vision_model(db_session)
@@ -168,11 +169,17 @@ def get_default_llm_with_vision(
             flow_types=[LLMModelFlowType.VISION, LLMModelFlowType.CHAT],
         )
 
-    if not models:
-        return None
+        if not models:
+            return None
 
-    # Search for viable vision model followed by conversation models
-    # Sort models from VISION to CONVERSATION priority
+        for model in models:
+            if model.llm_provider_id not in provider_map:
+                provider_map[model.llm_provider_id] = LLMProviderView.from_model(
+                    model.llm_provider
+                )
+
+    # Search for viable vision model followed by chat models
+    # Sort models from VISION to CHAT priority
     sorted_models = sorted(
         models,
         key=lambda x: (
@@ -185,7 +192,7 @@ def get_default_llm_with_vision(
     for model in sorted_models:
         if model_supports_image_input(model.name, model.llm_provider.provider):
             return create_vision_llm(
-                LLMProviderView.from_model(model.llm_provider),
+                provider_map[model.llm_provider_id],
                 model.name,
             )
 
