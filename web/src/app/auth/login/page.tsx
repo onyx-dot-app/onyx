@@ -24,6 +24,8 @@ export default async function Page(props: PageProps) {
   const nextUrl: string | null = Array.isArray(searchParams?.next)
     ? searchParams?.next[0] ?? null
     : searchParams?.next ?? null;
+  const verified = searchParams?.verified === "true";
+  const isFirstUser = searchParams?.first_user === "true";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -112,6 +114,8 @@ export default async function Page(props: PageProps) {
           authTypeMetadata={authTypeMetadata}
           nextUrl={nextUrl}
           hidePageRedirect={true}
+          verified={verified}
+          isFirstUser={isFirstUser}
         />
       </AuthFlowContainer>
     </div>
