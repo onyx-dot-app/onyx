@@ -143,10 +143,8 @@ def create_session(
         logger.error(f"Session creation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
     finally:
-        try:
+        if lock.owned():
             lock.release()
-        except Exception:
-            pass
 
 
 @router.get("/{session_id}", response_model=DetailedSessionResponse)
