@@ -133,9 +133,6 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
 
-  // Keep the provider's order stable so scrolling doesn't jump on selection.
-  const orderedModelConfigurations = modelConfigurations;
-
   if (modelConfigurations.length === 0) {
     return (
       <div>
@@ -231,7 +228,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                 "overflow-y-auto"
               )}
             >
-              {orderedModelConfigurations.map((modelConfiguration) => {
+              {modelConfigurations.map((modelConfiguration) => {
                 const isSelected = selectedModels.includes(
                   modelConfiguration.name
                 );
