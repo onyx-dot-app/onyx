@@ -1,6 +1,7 @@
 import { ModelConfiguration, SimpleKnownModel } from "../../interfaces";
 import { FormikProps } from "formik";
 import { BaseLLMFormValues } from "../formUtils";
+import { useMemo } from "react";
 
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import Text from "@/refresh-components/texts/Text";
@@ -132,6 +133,39 @@ export function DisplayModels<T extends BaseLLMFormValues>({
 
   const selectedModels = formikProps.values.selected_model_names ?? [];
   const defaultModel = formikProps.values.default_model_name;
+  const selectedModelSet = useMemo(
+    () => new Set(selectedModels),
+    [selectedModels]
+  );
+  const allModelNames = useMemo(
+    () => modelConfigurations.map((model) => model.name),
+    [modelConfigurations]
+  );
+  const areAllModelsSelected =
+    allModelNames.length > 0 &&
+    allModelNames.every((modelName) => selectedModelSet.has(modelName));
+  const areSomeModelsSelected = selectedModels.length > 0;
+
+  const handleSelectAllModels = () => {
+    formikProps.setFieldValue("selected_model_names", allModelNames);
+
+    const currentDefault = defaultModel ?? "";
+    const hasValidDefault =
+      currentDefault.length > 0 && allModelNames.includes(currentDefault);
+
+    if (!hasValidDefault && allModelNames.length > 0) {
+      const nextDefault =
+        recommendedDefaultModel &&
+        allModelNames.includes(recommendedDefaultModel.name)
+          ? recommendedDefaultModel.name
+          : allModelNames[0];
+      formikProps.setFieldValue("default_model_name", nextDefault ?? null);
+    }
+  };
+  const handleClearAllModels = () => {
+    formikProps.setFieldValue("selected_model_names", []);
+    formikProps.setFieldValue("default_model_name", null);
+  };
 
   if (modelConfigurations.length === 0) {
     return (
@@ -156,6 +190,43 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   return (
     <div className="flex flex-col gap-3">
       <DisplayModelHeader />
+      {!isAutoMode && modelConfigurations.length > 0 && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={areAllModelsSelected}
+              indeterminate={areSomeModelsSelected && !areAllModelsSelected}
+              onCheckedChange={(checked) =>
+                checked ? handleSelectAllModels() : handleClearAllModels()
+              }
+              aria-label="Select all models"
+            />
+            <button
+              type="button"
+              className={cn(
+                "text-xs font-medium text-text-03 hover:text-text-05",
+                !areSomeModelsSelected && "text-text-02 hover:text-text-02"
+              )}
+              onClick={() =>
+                areAllModelsSelected
+                  ? handleClearAllModels()
+                  : handleSelectAllModels()
+              }
+            >
+              Select all models
+            </button>
+          </div>
+          {areSomeModelsSelected && (
+            <button
+              type="button"
+              className="text-xs font-medium text-action-link-05 hover:text-action-link-06"
+              onClick={handleClearAllModels}
+            >
+              Clear all ({selectedModels.length})
+            </button>
+          )}
+        </div>
+      )}
       <div className="border border-border-01 rounded-lg p-3">
         {shouldShowAutoUpdateToggle && (
           <AutoModeToggle
