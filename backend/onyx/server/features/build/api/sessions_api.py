@@ -74,6 +74,10 @@ def list_sessions(
     )
 
 
+# Lock timeout for session creation (should be longer than max provision time)
+SESSION_CREATE_LOCK_TIMEOUT_SECONDS = 300
+
+
 @router.post("", response_model=DetailedSessionResponse)
 def create_session(
     request: SessionCreateRequest,
@@ -88,12 +92,31 @@ def create_session(
 
     This endpoint is atomic - if sandbox provisioning fails, no database
     records are created (transaction is rolled back).
+
+    Uses Redis lock to prevent race conditions when multiple requests try to
+    create/provision a session for the same user concurrently.
     """
-    session_manager = SessionManager(db_session)
+    tenant_id = get_current_tenant_id()
+    redis_client = get_redis_client(tenant_id=tenant_id)
+
+    # Lock on user_id to prevent concurrent session creation for the same user
+    # This prevents race conditions where two requests both see sandbox as SLEEPING
+    # and both try to provision, with one deleting the other's work
+    lock_key = f"session_create:{user.id}"
+    lock = redis_client.lock(lock_key, timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS)
+
+    # blocking=True means wait if another create is in progress
+    acquired = lock.acquire(
+        blocking=True, blocking_timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS
+    )
+    if not acquired:
+        raise HTTPException(
+            status_code=503,
+            detail="Session creation timed out waiting for lock",
+        )
 
     try:
-        # Only pass user_work_area and user_level if demo data is enabled
-        # This prevents org_info directory creation when demo data is disabled
+        session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
             user_work_area=(
@@ -105,27 +128,23 @@ def create_session(
             demo_data_enabled=request.demo_data_enabled,
         )
         db_session.commit()
+
+        sandbox = get_sandbox_by_user_id(db_session, user.id)
+        base_response = SessionResponse.from_model(build_session, sandbox)
+        return DetailedSessionResponse.from_session_response(
+            base_response, session_loaded_in_sandbox=True
+        )
     except ValueError as e:
-        # Max concurrent sandboxes reached or other validation error
-        logger.exception("Sandbox provisioning failed")
+        logger.exception("Session creation failed")
         db_session.rollback()
         raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
-        # Sandbox provisioning failed - rollback to remove any uncommitted records
         db_session.rollback()
-        logger.error(f"Sandbox provisioning failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Sandbox provisioning failed: {e}",
-        )
-
-    # Get the user's sandbox to include in response
-    sandbox = get_sandbox_by_user_id(db_session, user.id)
-    base_response = SessionResponse.from_model(build_session, sandbox)
-    # Session was just created, so it's loaded in the sandbox
-    return DetailedSessionResponse.from_session_response(
-        base_response, session_loaded_in_sandbox=True
-    )
+        logger.error(f"Session creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
+    finally:
+        if lock.owned():
+            lock.release()
 
 
 @router.get("/{session_id}", response_model=DetailedSessionResponse)
