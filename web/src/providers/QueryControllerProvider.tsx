@@ -31,6 +31,8 @@ export interface QueryControllerValue {
   searchResults: SearchDocWithContent[];
   /** Document IDs selected by the LLM as most relevant */
   llmSelectedDocIds: string[] | null;
+  /** User-facing error message from the last search or classification request, null when idle */
+  error: string | null;
   /** Submit a query - routes to search or chat based on app mode */
   submit: (
     query: string,
@@ -79,6 +81,7 @@ export function QueryControllerProvider({
   const [llmSelectedDocIds, setLlmSelectedDocIds] = useState<string[] | null>(
     null
   );
+  const [error, setError] = useState<string | null>(null);
 
   // Abort controllers for in-flight requests
   const classifyAbortRef = useRef<AbortController | null>(null);
@@ -108,11 +111,13 @@ export function QueryControllerProvider({
         );
 
         if (response.error) {
+          setError(response.error);
           setSearchResults([]);
           setLlmSelectedDocIds(null);
           return;
         }
 
+        setError(null);
         setSearchResults(response.search_docs);
         setLlmSelectedDocIds(response.llm_selected_doc_ids ?? null);
       } catch (err) {
@@ -120,7 +125,7 @@ export function QueryControllerProvider({
           return;
         }
 
-        console.error("Document search failed:", err);
+        setError("Document search failed. Please try again.");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
       }
@@ -155,7 +160,7 @@ export function QueryControllerProvider({
           throw error;
         }
 
-        console.error("Query classification failed:", error);
+        setError("Query classification failed. Falling back to chat.");
         return "chat";
       } finally {
         setIsClassifying(false);
@@ -174,6 +179,7 @@ export function QueryControllerProvider({
       filters?: BaseFilters
     ): Promise<void> => {
       setQuery(submitQuery);
+      setError(null);
 
       // 1.
       // We always route through chat if we're not Enterprise Enabled.
@@ -279,6 +285,7 @@ export function QueryControllerProvider({
     setClassification(null);
     setSearchResults([]);
     setLlmSelectedDocIds(null);
+    setError(null);
   }, []);
 
   const value: QueryControllerValue = useMemo(
@@ -287,6 +294,7 @@ export function QueryControllerProvider({
       isClassifying,
       searchResults,
       llmSelectedDocIds,
+      error,
       submit,
       refineSearch,
       reset,
@@ -296,6 +304,7 @@ export function QueryControllerProvider({
       isClassifying,
       searchResults,
       llmSelectedDocIds,
+      error,
       submit,
       refineSearch,
       reset,
