@@ -635,7 +635,9 @@ class VespaDocumentIndex(DocumentIndex):
         Returns:
             List of raw document chunks.
         """
-        chunk_request = VespaChunkRequest(document_id=document_id)
+        # Vespa doc IDs are sanitized using replace_invalid_doc_id_characters.
+        sanitized_document_id = replace_invalid_doc_id_characters(document_id)
+        chunk_request = VespaChunkRequest(document_id=sanitized_document_id)
         raw_chunks = get_chunks_via_visit_api(
             chunk_request=chunk_request,
             index_name=self._index_name,

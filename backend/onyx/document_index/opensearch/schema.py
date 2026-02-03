@@ -16,6 +16,9 @@ from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
 from onyx.document_index.opensearch.constants import EF_SEARCH
 from onyx.document_index.opensearch.constants import M
+from onyx.document_index.opensearch.string_filtering import (
+    filter_and_validate_document_id,
+)
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -56,12 +59,19 @@ def get_opensearch_doc_chunk_id(
     """
     Returns a unique identifier for the chunk.
 
+    This will be the string used to identify the chunk in OpenSearch. Any direct
+    chunk queries should use this function.
+
     TODO(andrei): Add source type to this.
     TODO(andrei): Add tenant ID to this.
-    TODO(andrei): Sanitize document_id in the event it contains characters that
-    are not allowed in OpenSearch IDs.
     """
-    return f"{document_id}__{max_chunk_size}__{chunk_index}"
+    sanitized_document_id = filter_and_validate_document_id(document_id)
+    opensearch_doc_chunk_id = (
+        f"{sanitized_document_id}__{max_chunk_size}__{chunk_index}"
+    )
+    # Do one more validation to ensure we haven't exceeded the max length.
+    opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)
+    return opensearch_doc_chunk_id
 
 
 def set_or_convert_timezone_to_utc(value: datetime) -> datetime:

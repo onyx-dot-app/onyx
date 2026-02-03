@@ -352,7 +352,7 @@ class OpenSearchClient:
     def update_document(
         self, document_chunk_id: str, properties_to_update: dict[str, Any]
     ) -> None:
-        """Updates a document's properties.
+        """Updates an OpenSearch document chunk's properties.
 
         Args:
             document_chunk_id: The OpenSearch ID of the document chunk to
@@ -394,9 +394,9 @@ class OpenSearchClient:
                 )
 
     def get_document(self, document_chunk_id: str) -> DocumentChunk:
-        """Gets a document.
+        """Gets an OpenSearch document chunk.
 
-        Will raise an exception if the document is not found.
+        Will raise an exception if the document chunk is not found.
 
         Args:
             document_chunk_id: The OpenSearch ID of the document chunk to get.

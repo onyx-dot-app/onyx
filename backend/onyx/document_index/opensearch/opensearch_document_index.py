@@ -64,6 +64,7 @@ from onyx.document_index.opensearch.search import (
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
 from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
@@ -152,32 +153,50 @@ def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
 def _convert_onyx_chunk_to_opensearch_document(
     chunk: DocMetadataAwareIndexChunk,
 ) -> DocumentChunk:
+    filtered_blurb = remove_invalid_unicode_chars(chunk.blurb)
+    _title = chunk.source_document.get_title_for_document_index()
+    filtered_title = remove_invalid_unicode_chars(_title) if _title else None
+    filtered_content = remove_invalid_unicode_chars(
+        generate_enriched_content_for_chunk_text(chunk)
+    )
+    filtered_semantic_identifier = remove_invalid_unicode_chars(
+        chunk.source_document.semantic_identifier
+    )
+    filtered_metadata_suffix = remove_invalid_unicode_chars(
+        chunk.metadata_suffix_keyword
+    )
+    _metadata_list = chunk.source_document.get_metadata_str_attributes()
+    filtered_metadata_list = (
+        [remove_invalid_unicode_chars(metadata) for metadata in _metadata_list]
+        if _metadata_list
+        else None
+    )
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
         # Use get_title_for_document_index to match the logic used when creating
         # the title_embedding in the embedder. This method falls back to
         # semantic_identifier when title is None (but not empty string).
-        title=chunk.source_document.get_title_for_document_index(),
+        title=filtered_title,
         title_vector=chunk.title_embedding,
-        content=generate_enriched_content_for_chunk_text(chunk),
+        content=filtered_content,
         content_vector=chunk.embeddings.full_embedding,
         source_type=chunk.source_document.source.value,
-        metadata_list=chunk.source_document.get_metadata_str_attributes(),
-        metadata_suffix=chunk.metadata_suffix_keyword,
+        metadata_list=filtered_metadata_list,
+        metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
         public=chunk.access.is_public,
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
         ),
         global_boost=chunk.boost,
-        semantic_identifier=chunk.source_document.semantic_identifier,
+        semantic_identifier=filtered_semantic_identifier,
         image_file_id=chunk.image_file_id,
         # Small optimization, if this list is empty we can supply None to
         # OpenSearch and it will not store any data at all for this field, which
         # is different from supplying an empty list.
         source_links=json.dumps(chunk.source_links) if chunk.source_links else None,
-        blurb=chunk.blurb,
+        blurb=filtered_blurb,
         doc_summary=chunk.doc_summary,
         chunk_context=chunk.chunk_context,
         # Small optimization, if this list is empty we can supply None to
@@ -689,6 +708,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
             query_body = DocumentQuery.get_from_document_id_query(
                 document_id=chunk_request.document_id,
                 tenant_state=self._tenant_state,
+                # NOTE: Index filters includes metadata tags which were filtered
+                # for invalid unicode at indexing time. In theory it would be
+                # ideal to do filtering here as well, in practice we never did
+                # that in the Vespa codepath and have not seen issues in
+                # production, so we deliberately conform to the existing logic
+                # in order to not unknowningly introduce a possible bug.
                 index_filters=filters,
                 include_hidden=False,
                 max_chunk_size=chunk_request.max_chunk_size,
@@ -730,6 +755,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_candidates=1000,  # TODO(andrei): Magic number.
             num_hits=num_to_retrieve,
             tenant_state=self._tenant_state,
+            # NOTE: Index filters includes metadata tags which were filtered
+            # for invalid unicode at indexing time. In theory it would be
+            # ideal to do filtering here as well, in practice we never did
+            # that in the Vespa codepath and have not seen issues in
+            # production, so we deliberately conform to the existing logic
+            # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
         )
@@ -751,9 +782,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
     def random_retrieval(
         self,
-        # TODO(andrei): When going over ACL look very carefully at
-        # access_control_list. Notice DocumentAccess::to_acl prepends every
-        # string with a type.
         filters: IndexFilters,
         num_to_retrieve: int = 100,
         dirty: bool | None = None,
