@@ -650,7 +650,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     # TODO(andrei): Fix the aforementioned race condition.
                     raise ValueError(
                         f"Tried to update document {doc_id} but its chunk count is not known. Older versions of the "
-                        "application used to permit this but is not a supported state for a document when using OpenSearch."
+                        "application used to permit this but is not a supported state for a document when using OpenSearch. "
                         "The document was likely just added to the indexing pipeline and the chunk count will be updated shortly."
                     )
                 if doc_chunk_count == 0:
