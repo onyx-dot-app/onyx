@@ -259,10 +259,12 @@ export const ResearchAgentRenderer: MessageRenderer<
           status: null,
           content: (
             <div className="flex flex-col">
-              <Text as="p" text02 className="text-sm mb-1">
+              <Text as="p" text04 mainUiMuted>
                 Research Task
               </Text>
-              <div className="text-text-600 text-sm">{researchTask}</div>
+              <Text as="p" text03 mainUiMuted>
+                {researchTask}
+              </Text>
             </div>
           ),
           supportsCollapsible: true,
@@ -297,7 +299,9 @@ export const ResearchAgentRenderer: MessageRenderer<
           }
           isHover={isHover}
         >
-          <div className="text-text-600 text-sm">{researchTask}</div>
+          <Text as="p" text02 mainUiMuted>
+            {researchTask}
+          </Text>
         </StepContainer>
       )}
 
