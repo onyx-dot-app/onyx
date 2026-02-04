@@ -362,16 +362,39 @@ class KubernetesSandboxManager(SandboxManager):
             command=["/bin/sh", "-c"],
             args=[
                 f"""
-set -e
-
 # Handle SIGTERM for fast container termination
 trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
 
 # Initial sync on startup - sync knowledge files for this user/tenant
 echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
-aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
+echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
 
-echo "Initial sync complete, staying alive for incremental syncs"
+# Capture both stdout and stderr, track exit code
+# aws s3 sync returns exit code 1 even on success if there are warnings
+sync_exit_code=0
+sync_stderr=$(mktemp)
+aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/ 2>"$sync_stderr" || sync_exit_code=$?
+
+# Always show stderr if there was any output (for debugging)
+if [ -s "$sync_stderr" ]; then
+    echo "=== S3 sync stderr output ==="
+    cat "$sync_stderr"
+    echo "=== End stderr output ==="
+fi
+rm -f "$sync_stderr"
+
+# Report outcome
+echo "S3 sync finished with exit code: $sync_exit_code"
+
+# Exit codes 0 and 1 are both considered success
+# (exit code 1 = success with warnings, e.g., metadata/timestamp issues)
+if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
+    echo "Initial sync complete, staying alive for incremental syncs"
+else
+    echo "ERROR: Initial sync failed with exit code: $sync_exit_code"
+    exit $sync_exit_code
+fi
+
 # Stay alive - incremental sync commands will be executed via kubectl exec
 # Use 'wait' so shell can respond to signals while sleeping
 while true; do
@@ -1886,10 +1909,14 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
+        # Configure AWS CLI for higher concurrency (default is 10) then run sync
+        # max_concurrent_requests controls parallel S3 API calls for faster transfers
+        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/"
         sync_command = [
             "/bin/sh",
             "-c",
-            f'aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/" /workspace/files/',
+            f"aws configure set default.s3.max_concurrent_requests 200 && "
+            f'aws s3 sync "{s3_path}" /workspace/files/',
         ]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
