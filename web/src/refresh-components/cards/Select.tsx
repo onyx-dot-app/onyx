@@ -155,6 +155,7 @@ export default function Select({
                   tooltip="Edit"
                   internal
                   tertiary
+                  disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}
                 />
@@ -180,6 +181,7 @@ export default function Select({
                   tooltip="Edit"
                   internal
                   tertiary
+                  disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}
                 />

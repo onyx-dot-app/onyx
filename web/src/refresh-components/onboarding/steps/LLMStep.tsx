@@ -117,7 +117,7 @@ const LLMStepInner = ({
     onboardingState.currentStep === OnboardingStep.Name
   ) {
     return (
-      <Disabled disabled={disabled}>
+      <Disabled disabled={disabled} allowClick>
         <div className="flex flex-col items-center justify-between w-full max-w-[800px] p-1 rounded-16 border border-border-01 bg-background-tint-00">
           <div className="flex gap-2 justify-between h-full w-full">
             <div className="flex mx-2 mt-2 gap-1">
