@@ -1172,7 +1172,7 @@ class SharepointConnector(
         site_descriptors = self.site_descriptors or self.fetch_sites()
 
         # Create a temporary checkpoint for hierarchy node tracking
-        temp_checkpoint = SharepointConnectorCheckpoint()
+        temp_checkpoint = SharepointConnectorCheckpoint(has_more=True)
 
         # goes over all urls, converts them into SlimDocument objects and then yields them in batches
         doc_batch: list[SlimDocument | HierarchyNode] = []
