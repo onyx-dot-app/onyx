@@ -20,6 +20,7 @@ class ReasoningEffort(str, Enum):
     - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
     """
 
+    AUTO = "auto"
     OFF = "off"
     LOW = "low"
     MEDIUM = "medium"
@@ -27,12 +28,21 @@ class ReasoningEffort(str, Enum):
 
 
 # OpenAI reasoning effort mapping
-OPENAI_REASONING_EFFORT: dict[ReasoningEffort | None, str] = {
-    None: "low",
+OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
+    ReasoningEffort.AUTO: "auto",
     ReasoningEffort.OFF: "none",
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",
+}
+
+# Anthropic reasoning effort to budget tokens mapping
+# Loosely based on budgets from LiteLLM but this ensures it's not updated without our knowing from a version bump.
+ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
+    ReasoningEffort.AUTO: 2048,
+    ReasoningEffort.LOW: 1024,
+    ReasoningEffort.MEDIUM: 2048,
+    ReasoningEffort.HIGH: 4096,
 }
 
 

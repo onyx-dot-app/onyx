@@ -19,6 +19,7 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import Usage
+from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
 from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
@@ -235,7 +236,7 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -245,9 +246,6 @@ class LitellmLLM(LLM):
         # Lazy loading to avoid memory bloat for non-inference flows
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
-        from litellm.constants import DEFAULT_REASONING_EFFORT_HIGH_THINKING_BUDGET
-        from litellm.constants import DEFAULT_REASONING_EFFORT_LOW_THINKING_BUDGET
-        from litellm.constants import DEFAULT_REASONING_EFFORT_MEDIUM_THINKING_BUDGET
 
         #########################
         # Flags that modify the final arguments
@@ -264,7 +262,7 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Vertex Anthropic Opus 4.5 rejects output_config (LiteLLM maps reasoning_effort).
+        # Vertex Anthropic Opus 4.5 rejects output_config.
         # Keep this guard until LiteLLM/Vertex accept the field for this model.
         is_vertex_opus_4_5 = (
             is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
@@ -303,7 +301,7 @@ class LitellmLLM(LLM):
             optional_kwargs["stream_options"] = {"include_usage": True}
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
-        # of the major providers.
+        # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
@@ -321,15 +319,9 @@ class LitellmLLM(LLM):
                     }
 
             if is_claude_model:
-                budget_tokens: int | None = None
-                if reasoning_effort is None:
-                    budget_tokens = DEFAULT_REASONING_EFFORT_MEDIUM_THINKING_BUDGET
-                elif reasoning_effort == ReasoningEffort.LOW:
-                    budget_tokens = DEFAULT_REASONING_EFFORT_LOW_THINKING_BUDGET
-                elif reasoning_effort == ReasoningEffort.MEDIUM:
-                    budget_tokens = DEFAULT_REASONING_EFFORT_MEDIUM_THINKING_BUDGET
-                elif reasoning_effort == ReasoningEffort.HIGH:
-                    budget_tokens = DEFAULT_REASONING_EFFORT_HIGH_THINKING_BUDGET
+                budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
+                    reasoning_effort
+                )
 
                 if budget_tokens is not None:
                     if max_tokens is not None:
@@ -431,7 +423,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
@@ -470,7 +462,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
