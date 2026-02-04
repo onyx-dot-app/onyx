@@ -962,7 +962,42 @@ class LocalSandboxManager(SandboxManager):
             f"({len(content)} bytes)"
         )
 
+        # Inject attachments section into AGENTS.md if not already present
+        self._ensure_agents_md_attachments_section(session_path)
+
         return f"attachments/{filename}"
+
+    def _ensure_agents_md_attachments_section(self, session_path: Path) -> None:
+        """Ensure AGENTS.md has the attachments section.
+
+        Called after uploading a file. Only adds the section if it doesn't exist.
+        Inserts the section above ## Skills for better document flow.
+        """
+        from onyx.server.features.build.sandbox.util.agent_instructions import (
+            ATTACHMENTS_SECTION_CONTENT,
+        )
+
+        agents_md_path = session_path / "AGENTS.md"
+        if not agents_md_path.exists():
+            return
+
+        current_content = agents_md_path.read_text()
+        section_marker = "## Attachments (PRIORITY)"
+
+        if section_marker not in current_content:
+            # Insert before ## Skills if it exists, otherwise append
+            skills_marker = "## Skills"
+            if skills_marker in current_content:
+                updated_content = current_content.replace(
+                    skills_marker,
+                    ATTACHMENTS_SECTION_CONTENT + "\n\n" + skills_marker,
+                )
+            else:
+                updated_content = (
+                    current_content.rstrip() + "\n\n" + ATTACHMENTS_SECTION_CONTENT
+                )
+            agents_md_path.write_text(updated_content)
+            logger.debug("Added attachments section to AGENTS.md")
 
     def delete_file(
         self,

@@ -78,6 +78,9 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
+    ATTACHMENTS_SECTION_CONTENT,
+)
+from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
@@ -287,6 +290,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _load_agent_instructions(
         self,
+        files_path: Path | None = None,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
@@ -298,7 +302,9 @@ class KubernetesSandboxManager(SandboxManager):
     ) -> str:
         """Load and populate agent instructions from template file.
 
+
         Args:
+            files_path: Path to the files directory (symlink to knowledge sources)
             provider: LLM provider type
             model_name: Model name
             nextjs_port: Next.js port
@@ -312,15 +318,14 @@ class KubernetesSandboxManager(SandboxManager):
             Populated agent instructions content
 
         Note:
-            files_path is not passed here because in Kubernetes, the files are
-            synced via an init container after pod creation. The agent will
-            discover the file structure at runtime by exploring the files/ directory.
+            In Kubernetes mode, files_path refers to paths inside the pod.
+            Since the backend cannot access the pod filesystem, these are passed as None
+            to leave placeholders intact for the container script to resolve at runtime.
         """
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
-            files_path=None,  # Files are synced after pod creation
-            attachments_path=None,  # Attachments won't exist until session workspace is created
+            files_path=files_path,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -1108,7 +1113,15 @@ done
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
+        # Paths inside the pod (created during workspace setup below):
+        # - {session_path}/files: symlink to knowledge sources
+        # - {session_path}/attachments: user-uploaded files
+        #
+        # Note: files_path=None leaves {{KNOWLEDGE_SOURCES_SECTION}} placeholder intact
+        # for generate_agents_md.py to resolve at container runtime by scanning /workspace/files.
+        # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
+            files_path=None,  # Container script handles this at runtime
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1932,6 +1945,71 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         logger.debug(f"File sync response: {resp}")
         return True
 
+    def _ensure_agents_md_attachments_section(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> None:
+        """Ensure AGENTS.md has the attachments section.
+
+        Called after uploading a file. Only adds the section if it doesn't exist.
+        Inserts the section above ## Skills for better document flow.
+        This is a fire-and-forget operation - failures are logged but not raised.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = f"/workspace/sessions/{session_id}"
+        agents_md_path = f"{session_path}/AGENTS.md"
+
+        # Base64 encode the content for safe shell handling
+        attachments_content_b64 = base64.b64encode(
+            ATTACHMENTS_SECTION_CONTENT.encode()
+        ).decode()
+
+        # Script: add section before ## Skills if not present
+        # Uses a temp file approach for safe insertion
+        script = f"""
+if [ -f "{agents_md_path}" ]; then
+    if ! grep -q "## Attachments (PRIORITY)" "{agents_md_path}" 2>/dev/null; then
+        # Check if ## Skills exists
+        if grep -q "## Skills" "{agents_md_path}" 2>/dev/null; then
+            # Insert before ## Skills using awk
+            awk -v content="$(echo "{attachments_content_b64}" | base64 -d)" '
+                /^## Skills/ {{ print content; print ""; }}
+                {{ print }}
+            ' "{agents_md_path}" > "{agents_md_path}.tmp" && mv "{agents_md_path}.tmp" "{agents_md_path}"
+            echo "ADDED_BEFORE_SKILLS"
+        else
+            # Fallback: append to end
+            echo "" >> "{agents_md_path}"
+            echo "" >> "{agents_md_path}"
+            echo "{attachments_content_b64}" | base64 -d >> "{agents_md_path}"
+            echo "ADDED_AT_END"
+        fi
+    else
+        echo "EXISTS"
+    fi
+else
+    echo "NO_AGENTS_MD"
+fi
+"""
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", script],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+            logger.debug(
+                f"Ensure AGENTS.md attachments section for session {session_id}: "
+                f"{resp.strip()}"
+            )
+        except ApiException as e:
+            logger.warning(f"Failed to ensure AGENTS.md attachments section: {e}")
+
     def upload_file(
         self,
         sandbox_id: UUID,
@@ -2057,6 +2135,9 @@ echo "$base"
                 f"Uploaded file to session {session_id}: attachments/{final_filename} "
                 f"({len(content)} bytes)"
             )
+
+            # Ensure AGENTS.md has the attachments section
+            self._ensure_agents_md_attachments_section(sandbox_id, session_id)
 
             return f"attachments/{final_filename}"
 
