@@ -18,6 +18,7 @@ from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
 
@@ -107,6 +108,15 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
         override_kwargs: MemoryToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
+        if MEMORY_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{MEMORY_FIELD}' parameter in add_memory tool call",
+                llm_facing_message=(
+                    f"The add_memory tool requires a '{MEMORY_FIELD}' parameter containing "
+                    f"the memory text to save. Please provide like: "
+                    f'{{"memory": "User prefers dark mode"}}'
+                ),
+            )
         memory = cast(str, llm_kwargs[MEMORY_FIELD])
 
         existing_memories = override_kwargs.existing_memories
