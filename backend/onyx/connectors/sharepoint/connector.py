@@ -30,6 +30,7 @@ from office365.runtime.client_request import ClientRequestException  # type: ign
 from office365.runtime.queries.client_query import ClientQuery  # type: ignore[import-untyped]
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -56,6 +57,7 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
+from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -144,8 +146,13 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
 
     cached_drive_names: deque[str] | None = None
     current_drive_name: str | None = None
+    # Drive's web_url from the API - used as raw_node_id for DRIVE hierarchy nodes
+    current_drive_web_url: str | None = None
 
     process_site_pages: bool = False
+
+    # Track yielded hierarchy nodes by their raw_node_id (URLs) to avoid duplicates
+    seen_hierarchy_node_raw_ids: set[str] = Field(default_factory=set)
 
 
 class SharepointAuthMethod(Enum):
@@ -314,6 +321,7 @@ def _convert_driveitem_to_document_with_permissions(
     ctx: ClientContext | None,
     graph_client: GraphClient,
     include_permissions: bool = False,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
 
     if not driveitem.name or not driveitem.id:
@@ -476,6 +484,7 @@ def _convert_driveitem_to_document_with_permissions(
             )
         ],
         metadata={"drive": drive_name},
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
     return doc
 
@@ -486,6 +495,7 @@ def _convert_sitepage_to_document(
     ctx: ClientContext | None,
     graph_client: GraphClient,
     include_permissions: bool = False,
+    parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document:
     """Convert a SharePoint site page to a Document object."""
     # Extract text content from the site page
@@ -634,6 +644,7 @@ def _convert_sitepage_to_document(
             if site_name
             else {}
         ),
+        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
     )
     return doc
 
@@ -806,7 +817,13 @@ class SharepointConnector(
         drive_name: str,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[DriveItem]:
+    ) -> tuple[list[DriveItem], str | None]:
+        """Fetch drive items for a given drive name.
+
+        Returns:
+            A tuple of (list of DriveItem, drive_web_url).
+            drive_web_url is the actual web_url from the Drive API for use as hierarchy node ID.
+        """
         try:
             site = self.graph_client.sites.get_by_url(site_descriptor.url)
             drives = site.drives.get().execute_query()
@@ -824,9 +841,10 @@ class SharepointConnector(
             drive = drives[0] if len(drives) > 0 else None
             if drive is None:
                 logger.warning(f"Drive '{drive_name}' not found")
-                return []
+                return [], None
 
-            logger.info(f"Found drive: {drive.name}")
+            drive_web_url: str | None = drive.web_url
+            logger.info(f"Found drive: {drive.name} (web_url: {drive_web_url})")
             try:
                 root_folder = drive.root
                 if site_descriptor.folder_path:
@@ -884,12 +902,12 @@ class SharepointConnector(
                         f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
                     )
 
-                return list(driveitems)
+                return list(driveitems), drive_web_url
 
             except Exception as e:
                 # Some drives might not be accessible
                 logger.warning(f"Failed to process drive: {str(e)}")
-                return []
+                return [], None
 
         except Exception as e:
             err_str = str(e)
@@ -903,15 +921,21 @@ class SharepointConnector(
             # Sites include things that do not contain drives so this fails
             # but this is fine, as there are no actual documents in those
             logger.warning(f"Failed to process site: {site_descriptor.url} - {err_str}")
-            return []
+            return [], None
 
     def _fetch_driveitems(
         self,
         site_descriptor: SiteDescriptor,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[tuple[DriveItem, str]]:
-        final_driveitems: list[tuple[DriveItem, str]] = []
+    ) -> list[tuple[DriveItem, str, str | None]]:
+        """Fetch all drive items for a site.
+
+        Returns:
+            A list of tuples (DriveItem, drive_name, drive_web_url).
+            drive_web_url is the actual web_url from the Drive API for use as hierarchy node ID.
+        """
+        final_driveitems: list[tuple[DriveItem, str, str | None]] = []
         try:
             site = self.graph_client.sites.get_by_url(site_descriptor.url)
 
@@ -1005,8 +1029,9 @@ class SharepointConnector(
                             f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
                         )
 
+                    drive_web_url: str | None = drive.web_url
                     for item in driveitems:
-                        final_driveitems.append((item, drive_name or ""))
+                        final_driveitems.append((item, drive_name or "", drive_web_url))
 
                 except Exception as e:
                     # Some drives might not be accessible
@@ -1146,6 +1171,9 @@ class SharepointConnector(
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
 
+        # Create a temporary checkpoint for hierarchy node tracking
+        temp_checkpoint = SharepointConnectorCheckpoint(has_more=True)
+
         # goes over all urls, converts them into SlimDocument objects and then yields them in batches
         doc_batch: list[SlimDocument | HierarchyNode] = []
         for site_descriptor in site_descriptors:
@@ -1164,10 +1192,42 @@ class SharepointConnector(
                 logger.warning("ClientContext is not set, skipping permissions")
                 continue
 
+            site_url = site_descriptor.url
+
+            # Yield site hierarchy node using helper
+            doc_batch.extend(
+                self._yield_site_hierarchy_node(site_descriptor, temp_checkpoint)
+            )
+
             # Process site documents if flag is True
             if self.include_site_documents:
                 driveitems = self._fetch_driveitems(site_descriptor=site_descriptor)
-                for driveitem, drive_name in driveitems:
+                for driveitem, drive_name, drive_web_url in driveitems:
+                    # Yield drive hierarchy node using helper
+                    if drive_web_url:
+                        doc_batch.extend(
+                            self._yield_drive_hierarchy_node(
+                                site_url, drive_web_url, drive_name, temp_checkpoint
+                            )
+                        )
+
+                    # Extract folder path and yield folder hierarchy nodes using helper
+                    folder_path = self._extract_folder_path_from_parent_reference(
+                        driveitem.parent_reference.path
+                        if driveitem.parent_reference
+                        else None
+                    )
+                    if folder_path and drive_web_url:
+                        doc_batch.extend(
+                            self._yield_folder_hierarchy_nodes(
+                                site_url,
+                                drive_web_url,
+                                drive_name,
+                                folder_path,
+                                temp_checkpoint,
+                            )
+                        )
+
                     try:
                         logger.debug(f"Processing: {driveitem.web_url}")
                         doc_batch.append(
@@ -1324,6 +1384,165 @@ class SharepointConnector(
             logger.warning(f"Failed to fetch drives for site '{site_url}': {e}")
             return []
 
+    def _build_folder_url(
+        self, site_url: str, drive_name: str, folder_path: str
+    ) -> str:
+        """Build a URL for a folder to use as raw_node_id.
+
+        NOTE: This constructs an approximate folder URL from components rather than
+        fetching the actual webUrl from the API. The constructed URL may differ
+        slightly from SharePoint's canonical webUrl (e.g., URL encoding differences),
+        but it functions correctly as a unique identifier for hierarchy tracking.
+        We avoid fetching folder metadata to minimize API calls.
+        """
+        return f"{site_url}/{drive_name}/{folder_path}"
+
+    def _extract_folder_path_from_parent_reference(
+        self, parent_reference_path: str | None
+    ) -> str | None:
+        """Extract folder path from DriveItem's parentReference.path.
+
+        Example input: "/drives/b!abc123/root:/Engineering/API"
+        Example output: "Engineering/API"
+
+        Returns None if the item is at the root of the drive.
+        """
+        if not parent_reference_path:
+            return None
+
+        # Path format: /drives/{drive_id}/root:/folder/path
+        if "root:/" in parent_reference_path:
+            folder_path = parent_reference_path.split("root:/")[1]
+            return folder_path if folder_path else None
+
+        # Item is at drive root
+        return None
+
+    def _yield_site_hierarchy_node(
+        self,
+        site_descriptor: SiteDescriptor,
+        checkpoint: SharepointConnectorCheckpoint,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield a hierarchy node for a site if not already yielded.
+
+        Uses site.web_url as the raw_node_id (exact URL from API).
+        """
+        site_url = site_descriptor.url
+
+        if site_url in checkpoint.seen_hierarchy_node_raw_ids:
+            return
+
+        checkpoint.seen_hierarchy_node_raw_ids.add(site_url)
+
+        # Extract display name from URL (last path segment)
+        display_name = site_url.rstrip("/").split("/")[-1]
+
+        yield HierarchyNode(
+            raw_node_id=site_url,
+            raw_parent_id=None,  # Parent is SOURCE
+            display_name=display_name,
+            link=site_url,
+            node_type=HierarchyNodeType.SITE,
+        )
+
+    def _yield_drive_hierarchy_node(
+        self,
+        site_url: str,
+        drive_web_url: str,
+        drive_name: str,
+        checkpoint: SharepointConnectorCheckpoint,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield a hierarchy node for a drive if not already yielded.
+
+        Uses drive.web_url as the raw_node_id (exact URL from API).
+        """
+        if drive_web_url in checkpoint.seen_hierarchy_node_raw_ids:
+            return
+
+        checkpoint.seen_hierarchy_node_raw_ids.add(drive_web_url)
+
+        yield HierarchyNode(
+            raw_node_id=drive_web_url,
+            raw_parent_id=site_url,  # Site URL is parent
+            display_name=drive_name,
+            link=drive_web_url,
+            node_type=HierarchyNodeType.DRIVE,
+        )
+
+    def _yield_folder_hierarchy_nodes(
+        self,
+        site_url: str,
+        drive_web_url: str,
+        drive_name: str,
+        folder_path: str,
+        checkpoint: SharepointConnectorCheckpoint,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Yield hierarchy nodes for all folders in a path.
+
+        For path "Engineering/API/v2", yields nodes for:
+        1. "Engineering" (parent = drive)
+        2. "Engineering/API" (parent = "Engineering")
+        3. "Engineering/API/v2" (parent = "Engineering/API")
+
+        Nodes are yielded in parent-to-child order.
+
+        Uses constructed URLs as raw_node_id. See _build_folder_url for details
+        on why we construct URLs rather than fetching them from the API.
+        """
+        if not folder_path:
+            return
+
+        path_parts = folder_path.split("/")
+
+        for i, part in enumerate(path_parts):
+            current_path = "/".join(path_parts[: i + 1])
+            folder_url = self._build_folder_url(site_url, drive_name, current_path)
+
+            if folder_url in checkpoint.seen_hierarchy_node_raw_ids:
+                continue
+
+            checkpoint.seen_hierarchy_node_raw_ids.add(folder_url)
+
+            # Determine parent URL
+            if i == 0:
+                # First folder, parent is the drive
+                parent_url = drive_web_url
+            else:
+                # Parent is the previous folder
+                parent_path = "/".join(path_parts[:i])
+                parent_url = self._build_folder_url(site_url, drive_name, parent_path)
+
+            yield HierarchyNode(
+                raw_node_id=folder_url,
+                raw_parent_id=parent_url,
+                display_name=part,  # Just the folder name
+                link=folder_url,
+                node_type=HierarchyNodeType.FOLDER,
+            )
+
+    def _get_parent_hierarchy_url(
+        self,
+        site_url: str,
+        drive_web_url: str,
+        drive_name: str,
+        driveitem: DriveItem,
+    ) -> str:
+        """Determine the parent hierarchy node URL for a document.
+
+        Returns:
+            - Folder URL if document is in a folder
+            - Drive URL if document is at drive root
+        """
+        folder_path = self._extract_folder_path_from_parent_reference(
+            driveitem.parent_reference.path if driveitem.parent_reference else None
+        )
+
+        if folder_path:
+            return self._build_folder_url(site_url, drive_name, folder_path)
+
+        # Document is at drive root
+        return drive_web_url
+
     def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
@@ -1364,6 +1583,10 @@ class SharepointConnector(
                 )
                 logger.info(
                     f"Starting with site: {checkpoint.current_site_descriptor.url}"
+                )
+                # Yield site hierarchy node for the first site
+                yield from self._yield_site_hierarchy_node(
+                    checkpoint.current_site_descriptor, checkpoint
                 )
                 return checkpoint
 
@@ -1474,9 +1697,11 @@ class SharepointConnector(
                 logger.info(
                     f"Fetching drive items for drive name: {current_drive_name}"
                 )
-                driveitems = self._get_drive_items_for_drive_name(
+                driveitems, drive_web_url = self._get_drive_items_for_drive_name(
                     site_descriptor, current_drive_name, start_dt, end_dt
                 )
+                # Store drive_web_url in checkpoint for hierarchy tracking
+                checkpoint.current_drive_web_url = drive_web_url
 
                 if not driveitems:
                     logger.warning(
@@ -1499,10 +1724,23 @@ class SharepointConnector(
                 )
                 # Clear current drive and continue to next
                 checkpoint.current_drive_name = None
+                checkpoint.current_drive_web_url = None
                 return checkpoint
+
+            # Normalize drive name (e.g., "Documents" -> "Shared Documents")
             current_drive_name = SHARED_DOCUMENTS_MAP.get(
                 current_drive_name, current_drive_name
             )
+
+            # Yield drive hierarchy node if we have a valid drive_web_url
+            if drive_web_url:
+                yield from self._yield_drive_hierarchy_node(
+                    site_descriptor.url,
+                    drive_web_url,
+                    current_drive_name,
+                    checkpoint,
+                )
+
             for driveitem in driveitems:
                 driveitem_extension = get_file_ext(driveitem.name)
                 if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
@@ -1517,6 +1755,31 @@ class SharepointConnector(
                     or driveitem_extension == ".pdf"
                 )
 
+                # Extract folder path and yield folder hierarchy nodes
+                folder_path = self._extract_folder_path_from_parent_reference(
+                    driveitem.parent_reference.path
+                    if driveitem.parent_reference
+                    else None
+                )
+                if folder_path and drive_web_url:
+                    yield from self._yield_folder_hierarchy_nodes(
+                        site_descriptor.url,
+                        drive_web_url,
+                        current_drive_name,
+                        folder_path,
+                        checkpoint,
+                    )
+
+                # Determine parent hierarchy URL for this document
+                parent_hierarchy_url: str | None = None
+                if drive_web_url:
+                    parent_hierarchy_url = self._get_parent_hierarchy_url(
+                        site_descriptor.url,
+                        drive_web_url,
+                        current_drive_name,
+                        driveitem,
+                    )
+
                 try:
                     doc = _convert_driveitem_to_document_with_permissions(
                         driveitem,
@@ -1524,6 +1787,7 @@ class SharepointConnector(
                         ctx,
                         self.graph_client,
                         include_permissions=include_permissions,
+                        parent_hierarchy_raw_node_id=parent_hierarchy_url,
                     )
 
                     if doc:
@@ -1549,6 +1813,7 @@ class SharepointConnector(
 
             # Clear current drive after processing
             checkpoint.current_drive_name = None
+            checkpoint.current_drive_web_url = None
 
         # Phase 4: Progression logic - determine next step
         # If we have more drives in current site, continue with current site
@@ -1602,6 +1867,8 @@ class SharepointConnector(
                         client_ctx,
                         self.graph_client,
                         include_permissions=include_permissions,
+                        # Site pages have the site as their parent
+                        parent_hierarchy_raw_node_id=site_descriptor.url,
                     )
                 )
             logger.info(
@@ -1628,6 +1895,10 @@ class SharepointConnector(
             )
             logger.info(
                 f"Remaining sites to process: {len(checkpoint.cached_site_descriptors) + 1}"
+            )
+            # Yield site hierarchy node for the new site
+            yield from self._yield_site_hierarchy_node(
+                checkpoint.current_site_descriptor, checkpoint
             )
             return checkpoint
 
