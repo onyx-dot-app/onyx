@@ -1,4 +1,5 @@
 import email
+import uuid
 from datetime import datetime
 from email.message import Message
 from enum import Enum
@@ -38,7 +39,11 @@ class EmailHeaders(BaseModel):
             decoded_value, encoding = email.header.decode_header(value)[0]
             if isinstance(decoded_value, bytes):
                 encoding = encoding or "utf-8"
-                return decoded_value.decode(encoding, errors="replace")
+                try:
+                    return decoded_value.decode(encoding, errors="replace")
+                except LookupError:
+                    # Fallback for unknown encodings like "unknown-8bit"
+                    return decoded_value.decode("latin-1", errors="replace")
             elif isinstance(decoded_value, str):
                 return decoded_value
             else:
@@ -55,15 +60,24 @@ class EmailHeaders(BaseModel):
         message_id = _decode(header=Header.MESSAGE_ID_HEADER)
         # It's possible for the subject line to not exist or be an empty string.
         subject = _decode(header=Header.SUBJECT_HEADER) or "Unknown Subject"
-        from_ = _decode(header=Header.FROM_HEADER)
+        # It's possible for the from header to not exist (e.g., malformed emails).
+        from_ = _decode(header=Header.FROM_HEADER) or "Unknown Sender"
         to = _decode(header=Header.TO_HEADER)
         if not to:
             to = _decode(header=Header.DELIVERED_TO_HEADER)
         date_str = _decode(header=Header.DATE_HEADER)
         date = _parse_date(date_str=date_str)
 
-        # If any of the above are `None`, model validation will fail.
-        # Therefore, no guards (i.e.: `if <header> is None: raise RuntimeError(..)`) were written.
+        # Fallback for missing required fields to handle malformed/old emails
+        if message_id is None:
+            # Generate a unique ID based on subject and date, or fallback to UUID
+            fallback_content = f"{subject or ''}-{date_str or ''}"
+            message_id = f"<generated-{uuid.uuid5(uuid.NAMESPACE_DNS, fallback_content)}>"
+        
+        if date is None:
+            # Use current time as fallback for missing/unparseable dates
+            date = datetime.now()
+
         return cls.model_validate(
             {
                 "id": message_id,
