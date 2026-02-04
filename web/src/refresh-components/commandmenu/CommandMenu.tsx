@@ -90,11 +90,22 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     null
   );
   const [isKeyboardNav, setIsKeyboardNav] = React.useState(false);
+  const [itemsRevision, setItemsRevision] = React.useState(0);
 
-  // Centralized callback registry - items register their onSelect callback and type
+  // Centralized callback registry - items register their onSelect callback, type, and defaultHighlight
   const itemCallbacks = useRef<
-    Map<string, { callback: () => void; type: "filter" | "item" | "action" }>
+    Map<
+      string,
+      {
+        callback: () => void;
+        type: "filter" | "item" | "action";
+        defaultHighlight: boolean;
+      }
+    >
   >(new Map());
+
+  // Track previous itemsRevision to detect when items actually change
+  const prevItemsRevisionRef = useRef(itemsRevision);
 
   // Reset state when menu closes
   useEffect(() => {
@@ -105,12 +116,49 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
     }
   }, [open]);
 
+  // Ensure valid highlight when menu is open and items change
+  useEffect(() => {
+    if (open) {
+      const frame = requestAnimationFrame(() => {
+        const items = getOrderedItems();
+        const currentEntry = highlightedValue
+          ? itemCallbacks.current.get(highlightedValue)
+          : null;
+
+        const itemsChanged = prevItemsRevisionRef.current !== itemsRevision;
+        prevItemsRevisionRef.current = itemsRevision;
+
+        // Re-evaluate if:
+        // 1. No highlight set
+        // 2. Current highlight is not in DOM
+        // 3. Items changed AND current highlight has defaultHighlight=false
+        const shouldReselect =
+          !highlightedValue ||
+          !items.includes(highlightedValue) ||
+          (itemsChanged && currentEntry?.defaultHighlight === false);
+
+        if (shouldReselect) {
+          // Find first item eligible for default highlight
+          const defaultItem = items.find((value) => {
+            const entry = itemCallbacks.current.get(value);
+            return entry?.defaultHighlight !== false;
+          });
+          // Use default item if found, otherwise fall back to first item
+          const targetItem = defaultItem || items[0];
+          setHighlightedValue(targetItem || null);
+        }
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [open, highlightedValue, itemsRevision]);
+
   // Registration functions (items call on mount)
   const registerItem = useCallback(
     (
       value: string,
       onSelect: () => void,
-      type: "filter" | "item" | "action" = "item"
+      type: "filter" | "item" | "action" = "item",
+      defaultHighlight: boolean = true
     ) => {
       if (
         process.env.NODE_ENV === "development" &&
@@ -121,13 +169,19 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
             `Values must be unique across all Filter, Item, and Action components.`
         );
       }
-      itemCallbacks.current.set(value, { callback: onSelect, type });
+      itemCallbacks.current.set(value, {
+        callback: onSelect,
+        type,
+        defaultHighlight,
+      });
+      setItemsRevision((r) => r + 1);
     },
     []
   );
 
   const unregisterItem = useCallback((value: string) => {
     itemCallbacks.current.delete(value);
+    setItemsRevision((r) => r + 1);
   }, []);
 
   // Shared mouse handlers (items call on events)
@@ -181,21 +235,10 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
       switch (e.key) {
         case "ArrowDown": {
           e.preventDefault();
-          const wasKeyboardNav = isKeyboardNav;
           setIsKeyboardNav(true);
           const items = getOrderedItems();
           if (items.length === 0) return;
 
-          // If transitioning from mouse to keyboard mode, start from first item
-          if (!wasKeyboardNav) {
-            const firstItem = items[0];
-            if (firstItem !== undefined) {
-              setHighlightedValue(firstItem);
-            }
-            break;
-          }
-
-          // Continue normal keyboard navigation
           const currentIndex = highlightedValue
             ? items.indexOf(highlightedValue)
             : -1;
@@ -209,21 +252,10 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
         case "ArrowUp": {
           e.preventDefault();
-          const wasKeyboardNav = isKeyboardNav;
           setIsKeyboardNav(true);
           const items = getOrderedItems();
           if (items.length === 0) return;
 
-          // If transitioning from mouse to keyboard mode, start from first item
-          if (!wasKeyboardNav) {
-            const firstItem = items[0];
-            if (firstItem !== undefined) {
-              setHighlightedValue(firstItem);
-            }
-            break;
-          }
-
-          // Continue normal keyboard navigation
           const currentIndex = highlightedValue
             ? items.indexOf(highlightedValue)
             : 0;
@@ -237,6 +269,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
         case "Enter": {
           e.preventDefault();
+          e.stopPropagation();
           if (highlightedValue) {
             const entry = itemCallbacks.current.get(highlightedValue);
             entry?.callback();
@@ -253,7 +286,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
         }
       }
     },
-    [highlightedValue, isKeyboardNav, onOpenChange]
+    [highlightedValue, onOpenChange]
   );
 
   // Scroll highlighted item into view on keyboard nav
@@ -350,17 +383,18 @@ const CommandMenuContent = React.forwardRef<
         ref={ref}
         onKeyDown={handleKeyDown}
         className={cn(
-          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+          "fixed inset-x-0 top-[72px] mx-auto",
           "z-modal",
           "bg-background-tint-00 border rounded-16 shadow-2xl outline-none",
           "flex flex-col overflow-hidden",
-          "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
+          "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-144px)]",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-          "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-          "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
+          "data-[state=open]:slide-in-from-bottom data-[state=open]:slide-in-from-left-0",
+          "data-[state=closed]:slide-out-to-bottom data-[state=closed]:slide-out-to-left-0",
           "duration-200",
           "w-[32rem]",
-          "min-h-[15rem] max-h-[40rem]"
+          "min-h-[15rem]"
         )}
       >
         <VisuallyHidden.Root asChild>
@@ -390,6 +424,7 @@ function CommandMenuHeader({
   onValueChange,
   onFilterRemove,
   onClose,
+  onEmptyBackspace,
 }: CommandMenuHeaderProps) {
   // Prevent default for arrow/enter keys so they don't move cursor or submit forms
   // The actual handling happens in Root's centralized handler via event bubbling
@@ -398,8 +433,12 @@ function CommandMenuHeader({
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
         e.preventDefault();
       }
+      // Handle backspace on empty input for navigation
+      if (e.key === "Backspace" && !value) {
+        onEmptyBackspace?.();
+      }
     },
-    []
+    [value, onEmptyBackspace]
   );
 
   return (
@@ -444,7 +483,8 @@ function CommandMenuHeader({
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
           autoFocus
-          className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover,:active,:focus,:focus-within)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
+          className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
+          showClearButton={false}
         />
       </div>
     </div>
@@ -483,7 +523,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
     <ScrollIndicatorDiv
       role="listbox"
       aria-label="Command menu options"
-      className="p-1 gap-0 max-h-[60vh] bg-background-tint-01"
+      className="p-1 gap-1 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
       data-command-menu-list
       data-keyboard-nav={isKeyboardNav ? "true" : undefined}
@@ -636,6 +676,7 @@ function CommandMenuAction({
   shortcut,
   onSelect,
   children,
+  defaultHighlight = true,
 }: CommandMenuActionProps) {
   const {
     highlightedValue,
@@ -648,9 +689,9 @@ function CommandMenuAction({
 
   // Register callback on mount - NO keyboard listener needed
   useEffect(() => {
-    registerItem(value, () => onSelect?.(value), "action");
+    registerItem(value, () => onSelect?.(value), "action", defaultHighlight);
     return () => unregisterItem(value);
-  }, [value, onSelect, registerItem, unregisterItem]);
+  }, [value, onSelect, defaultHighlight, registerItem, unregisterItem]);
 
   const isHighlighted = value === highlightedValue;
 

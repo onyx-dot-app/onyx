@@ -39,6 +39,7 @@ export interface CommandMenuHeaderProps {
   onValueChange?: (value: string) => void;
   onFilterRemove?: (filterId: string) => void;
   onClose?: () => void;
+  onEmptyBackspace?: () => void;
 }
 
 /**
@@ -80,7 +81,7 @@ export interface CommandMenuItemProps {
     | React.ReactNode
     | ((params: { isHighlighted: boolean }) => React.ReactNode); // For timestamps, badges, etc.
   onSelect?: (value: string) => void;
-  children: string;
+  children: React.ReactNode;
 }
 
 /**
@@ -96,7 +97,13 @@ export interface CommandMenuActionProps {
   icon?: React.FunctionComponent<IconProps>;
   shortcut?: string; // Keyboard shortcut like "⌘N", "⌘P"
   onSelect?: (value: string) => void;
-  children: string;
+  children: React.ReactNode;
+  /**
+   * Whether this action should be considered for initial highlight.
+   * Default: true. Set false to skip this item when determining initial highlight.
+   * Arrow key navigation still includes all items regardless of this setting.
+   */
+  defaultHighlight?: boolean;
 }
 
 /**
@@ -128,7 +135,8 @@ export interface CommandMenuContextValue {
   registerItem: (
     value: string,
     onSelect: () => void,
-    type?: "filter" | "item" | "action"
+    type?: "filter" | "item" | "action",
+    defaultHighlight?: boolean
   ) => void;
   unregisterItem: (value: string) => void;
 

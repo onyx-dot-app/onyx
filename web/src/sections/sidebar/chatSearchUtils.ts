@@ -1,3 +1,32 @@
+import React from "react";
+
+/**
+ * Escapes special regex characters in a string
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Highlights matched portions of text based on search query.
+ * Matched portions get text-05 (highlighted), non-matched stay as default.
+ */
+export function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+
+  const escapedQuery = escapeRegex(query.trim());
+  const regex = new RegExp(`(${escapedQuery})`, "gi");
+  const parts = text.split(regex);
+
+  if (parts.length === 1) return text; // No matches
+
+  return parts.map((part, i) =>
+    i % 2 === 1
+      ? React.createElement("span", { key: i, className: "text-text-05" }, part)
+      : React.createElement(React.Fragment, { key: i }, part)
+  );
+}
+
 /**
  * Formats a date string for display in the chat search menu.
  * Examples: "just now", "5 mins ago", "3 hours ago", "yesterday", "3 days ago", "October 23"

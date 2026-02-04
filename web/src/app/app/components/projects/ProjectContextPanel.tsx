@@ -167,7 +167,7 @@ export default function ProjectContextPanel({
           </div>
         </div>
 
-        <Separator className="my-0" />
+        <Separator className="py-0" />
         <div className="flex flex-row gap-2 justify-between">
           <div className="min-w-0 flex-1">
             <Text as="p" headingH3 text04>
