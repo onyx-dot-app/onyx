@@ -369,11 +369,7 @@ trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
 
 # Initial sync on startup - sync knowledge files for this user/tenant
 echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
-# Note: aws s3 sync can return non-zero exit codes for non-fatal warnings
-# (access denied on metadata, timestamp mismatches, etc.) even when files
-# sync successfully. We capture the exit code and continue regardless.
-S3_PATH="s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
-aws s3 sync "$S3_PATH" /workspace/files/ || echo "Sync warning (exit: $?)"
+aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
 
 echo "Initial sync complete, staying alive for incremental syncs"
 # Stay alive - incremental sync commands will be executed via kubectl exec
@@ -462,7 +458,7 @@ done
             service_account_name=self._file_sync_service_account,
             containers=[sandbox_container, file_sync_container],
             volumes=volumes,
-            restart_policy="OnFailure",  # Auto-restart crashed containers (e.g., file-sync sidecar)
+            restart_policy="Never",
             termination_grace_period_seconds=10,  # Fast pod termination
             # CRITICAL: Disable service environment variable injection
             # Without this, Kubernetes injects env vars for ALL services in the namespace,
