@@ -82,7 +82,7 @@ jobs:
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             IS_STABLE=true
           fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta(\.[0-9]+)?$ ]]; then
             IS_BETA=true
           fi
 
@@ -204,6 +204,7 @@ jobs:
       actions: read
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - platform: "macos-latest" # Build a universal image for macOS.
@@ -366,8 +367,8 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
+          tagName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && github.ref_name || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
+          releaseName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && github.ref_name || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
           releaseBody: "See the assets to download this version and install."
           releaseDraft: true
           prerelease: false
