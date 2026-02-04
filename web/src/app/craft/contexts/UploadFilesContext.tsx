@@ -605,7 +605,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    * Set the active session. Triggers fetching/clearing as needed.
    */
   const setActiveSession = useCallback((sessionId: string | null) => {
-    console.log("[UploadFilesContext] setActiveSession called:", sessionId);
     setActiveSessionId(sessionId);
   }, []);
 
@@ -615,18 +614,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
    */
   const uploadFiles = useCallback(
     async (files: File[]): Promise<BuildFile[]> => {
-      console.log("[UploadFilesContext] uploadFiles called", {
-        fileCount: files.length,
-        fileNames: files.map((f) => f.name),
-        activeSessionId,
-      });
-
       // Get current files for batch validation
       const existingFiles = currentMessageFiles;
 
       // Validate batch constraints first
       const batchValidation = validateBatch(files, existingFiles);
-      console.log("[UploadFilesContext] Batch validation:", batchValidation);
       if (!batchValidation.valid) {
         // Create failed files for all with the batch error
         const failedFiles = files.map((f) =>
@@ -642,23 +634,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       for (const file of files) {
         const validation = validateFile(file);
-        console.log("[UploadFilesContext] File validation:", {
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          validation,
-        });
         if (validation.valid) {
           validFiles.push(file);
         } else {
           failedFiles.push(createFailedFile(file, validation.error!));
         }
       }
-
-      console.log("[UploadFilesContext] After validation:", {
-        validCount: validFiles.length,
-        failedCount: failedFiles.length,
-      });
 
       // Add failed files immediately
       if (failedFiles.length > 0) {
@@ -678,38 +659,17 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       const sessionId = activeSessionId;
 
-      console.log("[UploadFilesContext] Upload decision:", {
-        sessionId,
-        hasSession: !!sessionId,
-        optimisticFileCount: optimisticFiles.length,
-      });
-
       if (sessionId) {
-        console.log(
-          "[UploadFilesContext] Session available - uploading immediately"
-        );
         // Session available - upload immediately
         const uploadPromises = optimisticFiles.map(async (optimisticFile) => {
           try {
-            console.log("[UploadFilesContext] Calling uploadFileApi", {
-              sessionId,
-              fileName: optimisticFile.file?.name,
-            });
             const result = await uploadFileApi(sessionId, optimisticFile.file!);
-            console.log("[UploadFilesContext] uploadFileApi success", {
-              fileName: optimisticFile.file?.name,
-              result,
-            });
             return {
               id: optimisticFile.id,
               success: true as const,
               result,
             };
           } catch (error) {
-            console.error("[UploadFilesContext] uploadFileApi error", {
-              fileName: optimisticFile.file?.name,
-              error,
-            });
             const { message } = classifyError(error);
             return {
               id: optimisticFile.id,
@@ -746,7 +706,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         );
       } else {
         // No session yet - mark as PENDING (effect will auto-upload when session available)
-        console.log("[UploadFilesContext] No session - marking as PENDING");
         setCurrentMessageFiles((prev) =>
           prev.map((f) =>
             optimisticFiles.some((of) => of.id === f.id)

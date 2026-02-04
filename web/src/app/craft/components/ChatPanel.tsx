@@ -140,11 +140,6 @@ export default function BuildChatPanel({
    */
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
-    console.log("[ChatPanel] Setting activeSession:", {
-      existingSessionId,
-      preProvisionedSessionId,
-      computed: activeSession,
-    });
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
