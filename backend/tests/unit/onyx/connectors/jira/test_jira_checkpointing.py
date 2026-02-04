@@ -210,6 +210,7 @@ def test_load_from_checkpoint_happy_path(
     assert checkpoint_output1.next_checkpoint == JiraConnectorCheckpoint(
         offset=2,
         has_more=True,
+        seen_hierarchy_node_ids=["TEST"],
     )
 
     checkpoint_output2 = outputs[1]
@@ -220,6 +221,7 @@ def test_load_from_checkpoint_happy_path(
     assert checkpoint_output2.next_checkpoint == JiraConnectorCheckpoint(
         offset=3,
         has_more=False,
+        seen_hierarchy_node_ids=["TEST"],
     )
 
     # Check that search_issues was called with the right parameters
