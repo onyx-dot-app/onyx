@@ -195,8 +195,45 @@ jobs:
           title: "🚨 Version Tag Check Failed"
           ref-name: ${{ github.ref_name }}
 
-  build-desktop:
+  create-release:
     needs: determine-builds
+    if: needs.determine-builds.outputs.build-desktop == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release-tag: ${{ steps.resolve-tag.outputs.release-tag }}
+    steps:
+      - name: Resolve release tag
+        id: resolve-tag
+        env:
+          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
+          SHORT_SHA: ${{ needs.determine-builds.outputs.short-sha }}
+        run: |
+          if [ "${IS_TEST_RUN}" == "true" ]; then
+            TAG="v0.0.0-dev+${SHORT_SHA}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "release-tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.resolve-tag.outputs.release-tag }}
+        run: |
+          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" \
+              --draft \
+              --title "${RELEASE_TAG}" \
+              --notes "See the assets to download this version and install."
+          fi
+
+  build-desktop:
+    needs:
+      - determine-builds
+      - create-release
     if: needs.determine-builds.outputs.build-desktop == 'true'
     permissions:
       id-token: write
@@ -204,7 +241,6 @@ jobs:
       actions: read
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         include:
           - platform: "macos-latest" # Build a universal image for macOS.
@@ -359,21 +395,28 @@ jobs:
           echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
           echo "Certificate imported."
 
-      - uses: tauri-apps/tauri-action@73fb865345c54760d875b94642314f8c0c894afa # ratchet:tauri-apps/tauri-action@action-v0.6.1
+      - name: Build desktop app
+        if: runner.os != 'macOS'
+        working-directory: ./desktop
+        run: npx tauri build ${{ matrix.args }}
+
+      - name: Build desktop app (macOS)
+        if: runner.os == 'macOS'
+        working-directory: ./desktop
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ env.APPLE_ID }}
           APPLE_PASSWORD: ${{ env.APPLE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
-        with:
-          tagName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && github.ref_name || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && github.ref_name || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
-          prerelease: false
-          assetNamePattern: "[name]_[arch][ext]"
-          args: ${{ matrix.args }}
+        run: npx tauri build ${{ matrix.args }}
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.create-release.outputs.release-tag }}
+        shell: bash
+        run: |
+          gh release upload "${RELEASE_TAG}" desktop/src-tauri/target/release/bundle/**/* --clobber
 
   build-web-amd64:
     needs: determine-builds
