@@ -247,10 +247,10 @@ def sync_sandbox_files(self: Task, *, user_id: str, tenant_id: str) -> bool:
     """Sync files from S3 to a user's running sandbox.
 
     This task is triggered after documents are written to S3 during indexing.
-    It executes `aws s3 sync` in the file-sync sidecar container to download
+    It executes `s5cmd sync` in the file-sync sidecar container to download
     any new or changed files.
 
-    This is safe to call multiple times - aws s3 sync is idempotent.
+    This is safe to call multiple times - s5cmd sync is idempotent.
 
     Args:
         user_id: The user ID whose sandbox should be synced
