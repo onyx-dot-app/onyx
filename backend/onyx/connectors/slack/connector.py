@@ -67,6 +67,7 @@ from onyx.connectors.slack.utils import (
 from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call
 from onyx.connectors.slack.utils import SlackTextCleaner
+from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
@@ -259,6 +260,7 @@ def thread_to_doc(
         },
         metadata={"Channel": channel_name},
         external_access=channel_access,
+        parent_hierarchy_raw_node_id=channel_id,
     )
 
 
@@ -340,6 +342,34 @@ def filter_channels(
     return [
         channel for channel in all_channels if channel["name"] in channels_to_connect
     ]
+
+
+def _channel_to_hierarchy_node(
+    channel: ChannelType,
+    channel_access: ExternalAccess | None,
+    workspace_url: str | None = None,
+) -> HierarchyNode:
+    """Convert a Slack channel to a HierarchyNode.
+
+    Args:
+        channel: The Slack channel object
+        channel_access: External access permissions for the channel
+        workspace_url: The workspace URL (e.g., https://myworkspace.slack.com)
+
+    Returns:
+        A HierarchyNode representing the channel
+    """
+    # Link format: https://{workspace}.slack.com/archives/{channel_id}
+    link = f"{workspace_url}/archives/{channel['id']}" if workspace_url else None
+
+    return HierarchyNode(
+        raw_node_id=channel["id"],
+        raw_parent_id=None,  # Direct child of SOURCE
+        display_name=f"#{channel['name']}",
+        link=link,
+        node_type=HierarchyNodeType.CHANNEL,
+        external_access=channel_access,
+    )
 
 
 def _get_channel_by_id(client: WebClient, channel_id: str) -> ChannelType:
@@ -473,6 +503,7 @@ def _get_all_doc_ids(
         [MessageType], SlackMessageFilterReason | None
     ] = default_msg_filter,
     callback: IndexingHeartbeatInterface | None = None,
+    workspace_url: str | None = None,
 ) -> GenerateSlimDocumentOutput:
     """
     Get all document ids in the workspace, channel by channel
@@ -495,6 +526,10 @@ def _get_all_doc_ids(
             channel=channel,
             user_cache=user_cache,
         )
+
+        # Yield the channel as a HierarchyNode first (before any documents)
+        yield [_channel_to_hierarchy_node(channel, external_access, workspace_url)]
+
         channel_message_batches = get_channel_messages(
             client=client,
             channel=channel,
@@ -635,6 +670,8 @@ class SlackConnector(
         self.credentials_provider: CredentialsProviderInterface | None = None
         self.credential_prefix: str | None = None
         self.use_redis: bool = use_redis
+        # Workspace URL for building channel links (e.g., https://myworkspace.slack.com)
+        self._workspace_url: str | None = None
         # self.delay_lock: str | None = None  # the redis key for the shared lock
         # self.delay_key: str | None = None  # the redis key for the shared delay
 
@@ -781,6 +818,14 @@ class SlackConnector(
         self.text_cleaner = SlackTextCleaner(client=self.client)
         self.credentials_provider = credentials_provider
 
+        # Extract workspace URL from auth_test response for building channel links
+        try:
+            auth_response = self.client.auth_test()
+            self._workspace_url = auth_response.get("url")
+        except Exception as e:
+            logger.warning(f"Failed to get workspace URL from auth_test: {e}")
+            self._workspace_url = None
+
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -795,6 +840,7 @@ class SlackConnector(
             channels=self.channels,
             channel_name_regex_enabled=self.channel_regex_enabled,
             callback=callback,
+            workspace_url=self._workspace_url,
         )
 
     def _load_from_checkpoint(
@@ -888,6 +934,13 @@ class SlackConnector(
             if channel_message_ts:
                 # Set oldest to the checkpoint timestamp to resume from where we left off
                 oldest = channel_message_ts
+            else:
+                # First time processing this channel - yield its hierarchy node
+                yield _channel_to_hierarchy_node(
+                    channel,
+                    checkpoint.current_channel_access,
+                    self._workspace_url,
+                )
 
             logger.debug(
                 f"Getting messages for channel {channel} within range {oldest} - {latest}"
