@@ -174,23 +174,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
-        with:
-          secret-ids: |
-            MONITOR_DEPLOYMENTS_WEBHOOK, deploy/monitor-deployments-webhook
-          parse-json-secrets: true
-
       - name: Send Slack notification
         uses: ./.github/actions/slack-notify
         with:
-          webhook-url: ${{ env.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
           failed-jobs: "• check-version-tag"
           title: "🚨 Version Tag Check Failed"
           ref-name: ${{ github.ref_name }}
@@ -1709,19 +1696,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
-        with:
-          secret-ids: |
-            MONITOR_DEPLOYMENTS_WEBHOOK, deploy/monitor-deployments-webhook
-          parse-json-secrets: true
-
       - name: Determine failed jobs
         id: failed-jobs
         shell: bash
@@ -1787,7 +1761,7 @@ jobs:
       - name: Send Slack notification
         uses: ./.github/actions/slack-notify
         with:
-          webhook-url: ${{ env.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
           failed-jobs: ${{ steps.failed-jobs.outputs.jobs }}
           title: "🚨 Deployment Workflow Failed"
           ref-name: ${{ github.ref_name }}
