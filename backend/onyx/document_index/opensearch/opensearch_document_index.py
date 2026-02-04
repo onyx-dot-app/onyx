@@ -5,6 +5,7 @@ import httpx
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
@@ -27,7 +28,6 @@ from onyx.document_index.interfaces import (
     DocumentInsertionRecord as OldDocumentInsertionRecord,
 )
 from onyx.document_index.interfaces import IndexBatchParams
-from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.document_index.interfaces import VespaDocumentUserFields
@@ -66,6 +66,7 @@ from onyx.indexing.models import Document
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.model_server_models import Embedding
 
 
@@ -252,12 +253,15 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             raise ValueError(
                 "Bug: OpenSearch is not yet ready for multitenant environments but something tried to use it."
             )
+        if multitenant != MULTI_TENANT:
+            raise ValueError(
+                "Bug: Multitenant mismatch when initializing an OpenSearchDocumentIndex. "
+                f"Expected {MULTI_TENANT}, got {multitenant}."
+            )
+        tenant_id = get_current_tenant_id()
         self._real_index = OpenSearchDocumentIndex(
             index_name=index_name,
-            # TODO(andrei): Sus. Do not plug this into production until all
-            # instances where tenant ID is passed into a method call get
-            # refactored to passing this data in on class init.
-            tenant_state=TenantState(tenant_id="", multitenant=multitenant),
+            tenant_state=TenantState(tenant_id=tenant_id, multitenant=multitenant),
         )
 
     @staticmethod
@@ -266,8 +270,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         embedding_dims: list[int],
         embedding_precisions: list[EmbeddingPrecision],
     ) -> None:
+        # TODO(andrei): Implement.
         raise NotImplementedError(
-            "[ANDREI]: Multitenant index registration is not implemented for OpenSearch."
+            "Multitenant index registration is not yet implemented for OpenSearch."
         )
 
     def ensure_indices_exist(
@@ -330,9 +335,10 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         user_fields: VespaDocumentUserFields | None,
     ) -> None:
         if fields is None and user_fields is None:
-            raise ValueError(
-                f"Bug: Tried to update document {doc_id} with no updated fields or user fields."
+            logger.warning(
+                f"Tried to update document {doc_id} with no updated fields or user fields."
             )
+            return
 
         # Convert VespaDocumentFields to MetadataUpdateRequest.
         update_request = MetadataUpdateRequest(
@@ -352,14 +358,6 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         )
 
         return self._real_index.update([update_request])
-
-    def update(
-        self,
-        update_requests: list[UpdateRequest],
-        *,
-        tenant_id: str,
-    ) -> None:
-        raise NotImplementedError("[ANDREI]: Update is not implemented for OpenSearch.")
 
     def id_based_retrieval(
         self,
@@ -415,18 +413,25 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
     def admin_retrieval(
         self,
         query: str,
+        query_embedding: Embedding,
         filters: IndexFilters,
-        num_to_retrieve: int,
+        num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError(
-            "[ANDREI]: Admin retrieval is not implemented for OpenSearch."
+        return self._real_index.hybrid_retrieval(
+            query=query,
+            query_embedding=query_embedding,
+            final_keywords=None,
+            query_type=QueryType.KEYWORD,
+            filters=filters,
+            num_to_retrieve=num_to_retrieve,
+            offset=offset,
         )
 
     def random_retrieval(
         self,
         filters: IndexFilters,
-        num_to_retrieve: int = 100,
+        num_to_retrieve: int = 10,
     ) -> list[InferenceChunk]:
         return self._real_index.random_retrieval(
             filters=filters,
@@ -601,10 +606,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Updates some set of chunks.
 
-        NOTE: Will raise if the specified document chunks do not exist. This may
-        be due to a concurrent ongoing indexing operation. In that event callers
-        are expected to retry after a bit once the state of the document index
-        is updated.
+        NOTE: Will raise if one of the specified document chunks do not exist.
+        This may be due to a concurrent ongoing indexing operation. In that
+        event callers are expected to retry after a bit once the state of the
+        document index is updated.
         NOTE: Requires document chunk count be known; will raise if it is not.
         This may be caused by the same situation outlined above.
         NOTE: Will no-op if an update request has no fields to update.
@@ -651,8 +656,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 )
 
             if not properties_to_update:
+                if len(update_request.document_ids) > 1:
+                    update_string = f"{len(update_request.document_ids)} documents"
+                else:
+                    update_string = f"document {update_request.document_ids[0]}"
                 logger.warning(
-                    f"[OpenSearchDocumentIndex] Tried to update {len(update_request.document_ids)} documents "
+                    f"[OpenSearchDocumentIndex] Tried to update {update_string} "
                     "with no specified update fields. This will be a no-op."
                 )
                 continue
@@ -744,6 +753,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self,
         query: str,
         query_embedding: Embedding,
+        # TODO(andrei): This param is not great design, get rid of it.
         final_keywords: list[str] | None,
         query_type: QueryType,
         filters: IndexFilters,
@@ -753,10 +763,13 @@ class OpenSearchDocumentIndex(DocumentIndex):
         logger.debug(
             f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
         )
+        # TODO(andrei): This could be better, the caller should just make this
+        # decision when passing in the query param. See the above comment in the
+        # function signature.
+        final_query = " ".join(final_keywords) if final_keywords else query
         query_body = DocumentQuery.get_hybrid_search_query(
-            query_text=query,
+            query_text=final_query,
             query_vector=query_embedding,
-            num_candidates=1000,  # TODO(andrei): Magic number.
             num_hits=num_to_retrieve,
             tenant_state=self._tenant_state,
             # NOTE: Index filters includes metadata tags which were filtered
@@ -787,12 +800,32 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def random_retrieval(
         self,
         filters: IndexFilters,
-        num_to_retrieve: int = 100,
+        num_to_retrieve: int = 10,
         dirty: bool | None = None,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError(
-            "[ANDREI]: Random retrieval is not implemented for OpenSearch."
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Randomly retrieving {num_to_retrieve} chunks for index {self._index_name}."
         )
+        query_body = DocumentQuery.get_random_search_query(
+            tenant_state=self._tenant_state,
+            index_filters=filters,
+            num_to_retrieve=num_to_retrieve,
+        )
+        search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
+            body=query_body,
+            search_pipeline_id=None,
+        )
+        inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
+            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                search_hit.document_chunk, search_hit.score, search_hit.match_highlights
+            )
+            for search_hit in search_hits
+        ]
+        inference_chunks: list[InferenceChunk] = cleanup_content_for_chunks(
+            inference_chunks_uncleaned
+        )
+
+        return inference_chunks
 
     def index_raw_chunks(self, chunks: list[DocumentChunk]) -> None:
         """Indexes raw document chunks into OpenSearch.

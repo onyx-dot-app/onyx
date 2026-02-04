@@ -5,6 +5,7 @@ from typing import Any
 
 from onyx.access.models import DocumentAccess
 from onyx.access.models import ExternalAccess
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -295,20 +296,6 @@ class Updatable(abc.ABC):
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
-        """
-        Updates some set of chunks. The document and fields to update are specified in the update
-        requests. Each update request in the list applies its changes to a list of document ids.
-        None values mean that the field does not need an update.
-
-        Parameters:
-        - update_requests: for a list of document ids in the update request, apply the same updates
-                to all of the documents with those ids. This is for bulk handling efficiency. Many
-                updates are done at the connector level which have many documents for the connector
-        """
-        raise NotImplementedError
-
 
 class IdRetrievalCapable(abc.ABC):
     """
@@ -410,8 +397,9 @@ class AdminCapable(abc.ABC):
     def admin_retrieval(
         self,
         query: str,
+        query_embedding: Embedding,
         filters: IndexFilters,
-        num_to_retrieve: int,
+        num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
     ) -> list[InferenceChunk]:
         """
