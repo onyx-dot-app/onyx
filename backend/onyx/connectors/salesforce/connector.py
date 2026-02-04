@@ -45,6 +45,18 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
+def _convert_to_metadata_value(value: Any) -> str | list[str]:
+    """Convert a Salesforce field value to a valid metadata value.
+
+    Document metadata expects str | list[str], but Salesforce returns
+    various types (bool, float, int, etc.). This function ensures all
+    values are properly converted to strings.
+    """
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return str(value)
+
+
 _DEFAULT_PARENT_OBJECT_TYPES = [ACCOUNT_OBJECT_TYPE]
 
 _DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
@@ -578,9 +590,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                     canonical_attribute,
                 ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(parent_type, {}).items():
                     if sf_attribute in parent_object.data:
-                        doc.metadata[canonical_attribute] = parent_object.data[
-                            sf_attribute
-                        ]
+                        doc.metadata[canonical_attribute] = _convert_to_metadata_value(
+                            parent_object.data[sf_attribute]
+                        )
 
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
@@ -802,7 +814,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                     canonical_attribute,
                 ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(actual_parent_type, {}).items():
                     if sf_attribute in record:
-                        doc.metadata[canonical_attribute] = record[sf_attribute]
+                        doc.metadata[canonical_attribute] = _convert_to_metadata_value(
+                            record[sf_attribute]
+                        )
 
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
