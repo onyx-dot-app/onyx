@@ -1126,7 +1126,13 @@ export default function AgentKnowledgePane({
             />
           </InputLayouts.Horizontal>
 
-          {renderedContent}
+          <GeneralLayouts.Section
+            disabled={!enableKnowledge}
+            alignItems="stretch"
+            height="auto"
+          >
+            {renderedContent}
+          </GeneralLayouts.Section>
         </GeneralLayouts.Section>
       </Card>
     </GeneralLayouts.Section>
