@@ -1914,7 +1914,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
     ) -> str:
         """Upload a file to the session's attachments directory.
 
-        Uses tar streaming via stdin for efficient binary transfer.
+        Uses tar streaming via stdin with explicit byte count to avoid EOF issues.
+        The K8s Python client cannot close stdin without closing the entire WebSocket
+        connection, so we use `head -c <size>` to read exactly the expected bytes
+        instead of waiting for EOF.
+
         Handles filename collisions atomically within the shell script.
 
         Args:
@@ -1939,13 +1943,15 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             tarinfo.size = len(content)
             tar.addfile(tarinfo, io.BytesIO(content))
         tar_data = tar_buffer.getvalue()
+        tar_size = len(tar_data)
 
         # Shell script that:
         # 1. Creates target directory and temp extraction directory
-        # 2. Extracts tar to temp directory
-        # 3. Moves file to target with collision handling
-        # 4. Cleans up temp directory
-        # 5. Outputs final filename
+        # 2. Reads exactly tar_size bytes from stdin (avoids needing EOF signal)
+        # 3. Extracts tar to temp directory
+        # 4. Moves file to target with collision handling
+        # 5. Cleans up temp directory
+        # 6. Outputs final filename
         script = f"""
 set -e
 target_dir="{target_dir}"
@@ -1953,7 +1959,9 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
 mkdir -p "$target_dir"
-tar xf - -C "$tmpdir"
+
+# Read exactly {tar_size} bytes and extract (avoids waiting for EOF)
+head -c {tar_size} | tar xf - -C "$tmpdir"
 
 # Find the extracted file (first file in tmpdir)
 original=$(ls -1 "$tmpdir" | head -1)
@@ -1991,9 +1999,9 @@ echo "$base"
 
             # Write tar data to stdin
             ws_client.write_stdin(tar_data)
-            ws_client.close()
 
-            # Read response
+            # Read response - head -c will read exactly tar_size bytes and proceed,
+            # so we don't need to close stdin to signal EOF
             stdout_data = ""
             stderr_data = ""
             while ws_client.is_open():
@@ -2020,7 +2028,7 @@ echo "$base"
 
             logger.info(
                 f"Uploaded file to session {session_id}: attachments/{final_filename} "
-                f"({len(content)} bytes via tar)"
+                f"({len(content)} bytes)"
             )
 
             return f"attachments/{final_filename}"
