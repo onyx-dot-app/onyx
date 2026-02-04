@@ -549,7 +549,6 @@ class VespaDocumentIndex(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the rerank-count value set in the
@@ -595,7 +594,6 @@ class VespaDocumentIndex(DocumentIndex):
             "input.query(alpha)": hybrid_alpha,
             "input.query(title_content_ratio)": TITLE_CONTENT_RATIO,
             "hits": num_to_retrieve,
-            "offset": offset,
             "ranking.profile": ranking_profile,
             "timeout": VESPA_TIMEOUT,
         }
