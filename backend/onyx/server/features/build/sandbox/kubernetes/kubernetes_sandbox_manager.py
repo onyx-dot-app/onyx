@@ -365,8 +365,7 @@ echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
 echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
 
 # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-# Note: s5cmd requires wildcard (*) at end of source path for sync
-if s5cmd sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" /workspace/files/; then
+if /s5cmd sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/; then
     echo "Initial sync complete, staying alive for incremental syncs"
 else
     sync_exit_code=$?
@@ -1889,12 +1888,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         pod_name = self._get_pod_name(str(sandbox_id))
 
         # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-        # Note: s5cmd requires wildcard (*) at end of source path for sync
-        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
+        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/"
         sync_command = [
             "/bin/sh",
             "-c",
-            f's5cmd sync "{s3_path}" /workspace/files/',
+            f'/s5cmd sync "{s3_path}" /workspace/files/',
         ]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
