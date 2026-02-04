@@ -1,5 +1,10 @@
 import { ValidSources } from "@/lib/types";
 
+// Sort options for document pagination
+export type DocumentSortField = "name" | "last_updated";
+export type DocumentSortDirection = "asc" | "desc";
+export type FolderPosition = "on_top" | "mixed";
+
 // Hierarchy Node types matching backend models
 export interface HierarchyNodeSummary {
   id: number;
@@ -18,14 +23,21 @@ export interface HierarchyNodesResponse {
 
 // Document types for hierarchy
 export interface DocumentPageCursor {
-  last_modified: string | null;
-  last_synced: string | null;
+  // Fields for last_updated sorting
+  last_modified?: string | null;
+  last_synced?: string | null;
+  // Field for name sorting
+  name?: string | null;
+  // Document ID for tie-breaking (always required)
   document_id: string;
 }
 
 export interface HierarchyNodeDocumentsRequest {
   parent_hierarchy_node_id: number;
   cursor?: DocumentPageCursor | null;
+  sort_field?: DocumentSortField;
+  sort_direction?: DocumentSortDirection;
+  folder_position?: FolderPosition;
 }
 
 export interface DocumentSummary {
@@ -41,6 +53,9 @@ export interface HierarchyNodeDocumentsResponse {
   documents: DocumentSummary[];
   next_cursor: DocumentPageCursor | null;
   page_size: number;
+  sort_field: DocumentSortField;
+  sort_direction: DocumentSortDirection;
+  folder_position: FolderPosition;
 }
 
 // Connected source type for display

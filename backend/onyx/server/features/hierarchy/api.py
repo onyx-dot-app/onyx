@@ -14,6 +14,8 @@ from onyx.server.features.hierarchy.constants import HIERARCHY_NODE_DOCUMENTS_PA
 from onyx.server.features.hierarchy.constants import HIERARCHY_NODES_LIST_PATH
 from onyx.server.features.hierarchy.constants import HIERARCHY_NODES_PREFIX
 from onyx.server.features.hierarchy.models import DocumentPageCursor
+from onyx.server.features.hierarchy.models import DocumentSortDirection
+from onyx.server.features.hierarchy.models import DocumentSortField
 from onyx.server.features.hierarchy.models import DocumentSummary
 from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsRequest
 from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsResponse
@@ -66,15 +68,24 @@ def list_accessible_hierarchy_node_documents(
 ) -> HierarchyNodeDocumentsResponse:
     user_email, external_group_ids = _get_user_access_info(user, db_session)
     cursor = documents_request.cursor
+    sort_field = documents_request.sort_field
+    sort_direction = documents_request.sort_direction
+
+    sort_by_name = sort_field == DocumentSortField.NAME
+    sort_ascending = sort_direction == DocumentSortDirection.ASC
+
     documents = get_accessible_documents_for_hierarchy_node_paginated(
         db_session=db_session,
         parent_hierarchy_node_id=documents_request.parent_hierarchy_node_id,
         user_email=user_email,
         external_group_ids=external_group_ids,
+        limit=DOCUMENT_PAGE_SIZE + 1,
+        sort_by_name=sort_by_name,
+        sort_ascending=sort_ascending,
         cursor_last_modified=cursor.last_modified if cursor else None,
         cursor_last_synced=cursor.last_synced if cursor else None,
+        cursor_name=cursor.name if cursor else None,
         cursor_document_id=cursor.document_id if cursor else None,
-        limit=DOCUMENT_PAGE_SIZE + 1,
     )
     document_summaries = [
         DocumentSummary(
@@ -90,8 +101,14 @@ def list_accessible_hierarchy_node_documents(
     next_cursor = None
     if len(documents) > DOCUMENT_PAGE_SIZE and document_summaries:
         last_document = document_summaries[-1]
-        if last_document.last_modified is not None:
-            next_cursor = DocumentPageCursor.from_document(last_document)
+        # For name sorting, we always have a title; for last_updated, we need last_modified
+        can_create_cursor = sort_by_name or last_document.last_modified is not None
+        if can_create_cursor:
+            next_cursor = DocumentPageCursor.from_document(last_document, sort_field)
     return HierarchyNodeDocumentsResponse(
-        documents=document_summaries, next_cursor=next_cursor
+        documents=document_summaries,
+        next_cursor=next_cursor,
+        sort_field=sort_field,
+        sort_direction=sort_direction,
+        folder_position=documents_request.folder_position,
     )
