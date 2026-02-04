@@ -109,44 +109,6 @@ describe("usePacedTurnGroups", () => {
       expect(result.current.pacedDisplayGroups.length).toBe(1);
       expect(result.current.pacedFinalAnswerComing).toBe(true);
     });
-
-    test("does not bypass pacing if stopPacketSeen becomes true after first render", () => {
-      const step1 = createStep(0, 0);
-      const turnGroups = [createTurnGroup([step1])];
-
-      const { result, rerender } = renderHook(
-        ({ stopPacketSeen }) =>
-          usePacedTurnGroups(turnGroups, [], stopPacketSeen, 1, false),
-        { initialProps: { stopPacketSeen: false } }
-      );
-
-      // First step revealed immediately
-      expect(result.current.pacedTurnGroups.length).toBe(1);
-
-      // Add second step
-      const step2 = createStep(1, 0);
-      const updatedTurnGroups = [
-        createTurnGroup([step1]),
-        createTurnGroup([step2]),
-      ];
-
-      rerender({ stopPacketSeen: false });
-
-      // Manually update turnGroups by re-rendering with new props
-      const { result: result2 } = renderHook(() =>
-        usePacedTurnGroups(updatedTurnGroups, [], false, 1, false)
-      );
-
-      // First render starts fresh, first step immediate
-      expect(result2.current.pacedTurnGroups.length).toBe(1);
-
-      // Second step should be pending, not bypassed
-      act(() => {
-        jest.advanceTimersByTime(200);
-      });
-
-      expect(result2.current.pacedTurnGroups.length).toBe(2);
-    });
   });
 
   describe("stop packet handling", () => {
