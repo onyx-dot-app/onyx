@@ -1890,10 +1890,14 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
+        # Configure AWS CLI for higher concurrency (default is 10) then run sync
+        # max_concurrent_requests controls parallel S3 API calls for faster transfers
+        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/"
         sync_command = [
             "/bin/sh",
             "-c",
-            f'aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/" /workspace/files/',
+            f"aws configure set default.s3.max_concurrent_requests 200 && "
+            f'aws s3 sync "{s3_path}" /workspace/files/',
         ]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
