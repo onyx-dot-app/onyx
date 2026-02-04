@@ -9,9 +9,9 @@ Usage:
 
 Environment Variables:
     OPENSEARCH_HOST: OpenSearch host
-    OPENSEARCH_PORT: OpenSearch port
-    OPENSEARCH_USERNAME: Admin username
-    OPENSEARCH_PASSWORD: Admin password
+    OPENSEARCH_REST_API_PORT: OpenSearch port
+    OPENSEARCH_ADMIN_USERNAME: Admin username
+    OPENSEARCH_ADMIN_PASSWORD: Admin password
 
 Dependencies:
     opensearch-py
@@ -109,19 +109,19 @@ def main() -> None:
             "--port",
             help="OpenSearch port. If not provided, will fall back to OPENSEARCH_PORT, then prompt for input.",
             type=int,
-            default=int(os.environ.get("OPENSEARCH_PORT", 0)),
+            default=int(os.environ.get("OPENSEARCH_REST_API_PORT", 0)),
         )
         parser.add_argument(
             "--username",
             help="OpenSearch username. If not provided, will fall back to OPENSEARCH_USERNAME, then prompt for input.",
             type=str,
-            default=os.environ.get("OPENSEARCH_USERNAME", ""),
+            default=os.environ.get("OPENSEARCH_ADMIN_USERNAME", ""),
         )
         parser.add_argument(
             "--password",
             help="OpenSearch password. If not provided, will fall back to OPENSEARCH_PASSWORD, then prompt for input.",
             type=str,
-            default=os.environ.get("OPENSEARCH_PASSWORD", ""),
+            default=os.environ.get("OPENSEARCH_ADMIN_PASSWORD", ""),
         )
         parser.add_argument(
             "--no-ssl", help="Disable SSL.", action="store_true", default=False
