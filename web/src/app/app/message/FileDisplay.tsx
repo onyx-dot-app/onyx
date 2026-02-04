@@ -5,7 +5,7 @@ import { ChatFileType, FileDescriptor } from "@/app/app/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import CsvContent from "@/components/tools/CSVContent";
-import TextView from "@/components/chat/TextView";
+import TextViewModal from "@/sections/modals/TextViewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { cn } from "@/lib/utils";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
@@ -36,7 +36,7 @@ export default function FileDisplay({ files, alignBubble }: FileDisplayProps) {
   return (
     <>
       {previewingFile && (
-        <TextView
+        <TextViewModal
           presentingDocument={presentingDocument}
           onClose={() => setPreviewingFile(null)}
         />

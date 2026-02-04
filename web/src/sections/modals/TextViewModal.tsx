@@ -25,12 +25,13 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { cn } from "@/lib/utils";
 import { Section } from "@/layouts/general-layouts";
+
 export interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
 }
 
-export default function TextView({
+export default function TextViewModal({
   presentingDocument,
   onClose,
 }: TextViewProps) {

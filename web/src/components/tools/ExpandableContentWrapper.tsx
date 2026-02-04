@@ -6,7 +6,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
 import { cn } from "@/lib/utils";
-import TextView from "@/components/chat/TextView";
+import TextViewModal from "@/sections/modals/TextViewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
 export interface ExpandableContentWrapperProps {
@@ -113,7 +113,7 @@ export default function ExpandableContentWrapper({
   return (
     <>
       {expanded && (
-        <TextView
+        <TextViewModal
           presentingDocument={presentingDocument}
           onClose={() => setExpanded(false)}
         />
