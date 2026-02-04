@@ -448,6 +448,8 @@ class JiraConnectorCheckpoint(ConnectorCheckpoint):
     # deprecated
     # Used for v2 endpoint (server/data center)
     offset: int | None = None
+    # Track hierarchy nodes we've already yielded to avoid duplicates across restarts
+    seen_hierarchy_node_ids: list[str] = []
 
 
 class JiraConnector(
@@ -483,8 +485,6 @@ class JiraConnector(
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
-        # Track hierarchy nodes we've already yielded to avoid duplicates
-        self._seen_hierarchy_node_ids: set[str] = set()
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -533,14 +533,32 @@ class JiraConnector(
             return False
         return issuetype.name.lower() == "epic"
 
+    def _is_parent_epic(self, parent: Any) -> bool:
+        """Check if a parent reference is an Epic.
+
+        The parent object from issue.fields.parent has a different structure
+        than a full Issue, so we handle it separately.
+        """
+        parent_issuetype = (
+            getattr(parent.fields, "issuetype", None)
+            if hasattr(parent, "fields")
+            else None
+        )
+        if parent_issuetype is None:
+            return False
+        return parent_issuetype.name.lower() == "epic"
+
     def _yield_project_hierarchy_node(
-        self, project_key: str, project_name: str | None
+        self,
+        project_key: str,
+        project_name: str | None,
+        seen_hierarchy_node_ids: set[str],
     ) -> Generator[HierarchyNode, None, None]:
         """Yield a hierarchy node for a project if not already yielded."""
-        if project_key in self._seen_hierarchy_node_ids:
+        if project_key in seen_hierarchy_node_ids:
             return
 
-        self._seen_hierarchy_node_ids.add(project_key)
+        seen_hierarchy_node_ids.add(project_key)
 
         yield HierarchyNode(
             raw_node_id=project_key,
@@ -554,13 +572,14 @@ class JiraConnector(
         self,
         issue: Issue,
         project_key: str,
+        seen_hierarchy_node_ids: set[str],
     ) -> Generator[HierarchyNode, None, None]:
         """Yield a hierarchy node for an Epic issue."""
         issue_key = issue.key
-        if issue_key in self._seen_hierarchy_node_ids:
+        if issue_key in seen_hierarchy_node_ids:
             return
 
-        self._seen_hierarchy_node_ids.add(issue_key)
+        seen_hierarchy_node_ids.add(issue_key)
 
         yield HierarchyNode(
             raw_node_id=issue_key,
@@ -574,25 +593,18 @@ class JiraConnector(
         self,
         parent: Any,
         project_key: str,
+        seen_hierarchy_node_ids: set[str],
     ) -> Generator[HierarchyNode, None, None]:
         """Yield hierarchy node for parent issue if it's an Epic we haven't seen."""
         parent_key = parent.key
-        if parent_key in self._seen_hierarchy_node_ids:
+        if parent_key in seen_hierarchy_node_ids:
             return
 
-        # Check if parent is an Epic
-        parent_issuetype = (
-            getattr(parent.fields, "issuetype", None)
-            if hasattr(parent, "fields")
-            else None
-        )
-        is_epic = parent_issuetype and parent_issuetype.name.lower() == "epic"
-
-        if not is_epic:
+        if not self._is_parent_epic(parent):
             # Not an epic, don't create hierarchy node for it
             return
 
-        self._seen_hierarchy_node_ids.add(parent_key)
+        seen_hierarchy_node_ids.add(parent_key)
 
         # Get summary if available
         parent_summary = (
@@ -624,15 +636,7 @@ class JiraConnector(
             # No parent, directly under project
             return project_key
 
-        # Check if parent is an Epic
-        parent_issuetype = (
-            getattr(parent.fields, "issuetype", None)
-            if hasattr(parent, "fields")
-            else None
-        )
-        is_parent_epic = parent_issuetype and parent_issuetype.name.lower() == "epic"
-
-        if is_parent_epic:
+        if self._is_parent_epic(parent):
             return parent.key
 
         # For non-epic parents (e.g., story with subtasks),
@@ -720,6 +724,9 @@ class JiraConnector(
         current_offset = starting_offset
         new_checkpoint = copy.deepcopy(checkpoint)
 
+        # Convert checkpoint list to set for efficient lookups
+        seen_hierarchy_node_ids = set(new_checkpoint.seen_hierarchy_node_ids)
+
         checkpoint_callback = make_checkpoint_callback(new_checkpoint)
 
         for issue in _perform_jql_search(
@@ -743,19 +750,21 @@ class JiraConnector(
                 if project_key:
                     # 1. Yield project hierarchy node (if not already yielded)
                     yield from self._yield_project_hierarchy_node(
-                        project_key, project_name
+                        project_key, project_name, seen_hierarchy_node_ids
                     )
 
                     # 2. If parent is an Epic, yield hierarchy node for it
                     parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
                     if parent:
                         yield from self._yield_parent_hierarchy_node_if_epic(
-                            parent, project_key
+                            parent, project_key, seen_hierarchy_node_ids
                         )
 
                     # 3. If this issue IS an Epic, yield it as hierarchy node
                     if self._is_epic(issue):
-                        yield from self._yield_epic_hierarchy_node(issue, project_key)
+                        yield from self._yield_epic_hierarchy_node(
+                            issue, project_key, seen_hierarchy_node_ids
+                        )
 
                 # Determine parent hierarchy node ID for the document
                 parent_hierarchy_raw_node_id = (
@@ -790,6 +799,9 @@ class JiraConnector(
                 )
 
             current_offset += 1
+
+        # Update checkpoint with seen hierarchy nodes
+        new_checkpoint.seen_hierarchy_node_ids = list(seen_hierarchy_node_ids)
 
         # Update checkpoint
         self.update_checkpoint_for_next_run(
@@ -835,6 +847,9 @@ class JiraConnector(
         current_offset = 0
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
 
+        # Track seen hierarchy nodes within this sync run
+        seen_hierarchy_node_ids: set[str] = set()
+
         while checkpoint.has_more:
             for issue in _perform_jql_search(
                 jira_client=self.jira_client,
@@ -857,7 +872,7 @@ class JiraConnector(
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
                 # 1. Yield project hierarchy node (if not already yielded)
                 for node in self._yield_project_hierarchy_node(
-                    project_key, project_name
+                    project_key, project_name, seen_hierarchy_node_ids
                 ):
                     slim_doc_batch.append(node)
 
@@ -865,13 +880,15 @@ class JiraConnector(
                 parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
                 if parent:
                     for node in self._yield_parent_hierarchy_node_if_epic(
-                        parent, project_key
+                        parent, project_key, seen_hierarchy_node_ids
                     ):
                         slim_doc_batch.append(node)
 
                 # 3. If this issue IS an Epic, yield it as hierarchy node
                 if self._is_epic(issue):
-                    for node in self._yield_epic_hierarchy_node(issue, project_key):
+                    for node in self._yield_epic_hierarchy_node(
+                        issue, project_key, seen_hierarchy_node_ids
+                    ):
                         slim_doc_batch.append(node)
 
                 # Now add the slim document
