@@ -338,7 +338,7 @@ class S3PersistentDocumentWriter:
         {tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/
 
         This matches the path that KubernetesSandboxManager syncs from:
-        s5cmd sync "s3://{bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
+        s5cmd sync "s3://{bucket}/{tenant_id}/knowledge/{user_id}/*" /workspace/files/
         """
         # Tenant and user segregation (matches K8s sandbox init container path)
         parts = [self.tenant_id, "knowledge", self.user_id]
