@@ -4,14 +4,20 @@
  * Tests the React hook that wraps packet processing functions with React state
  * management, memoization, and callbacks. Uses @testing-library/react's renderHook.
  */
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import {
   Packet,
   PacketType,
-  Placement,
   StopReason,
 } from "@/app/app/services/streamingModels";
 import { usePacketProcessor } from "./usePacketProcessor";
+import {
+  createPacket,
+  createSearchToolStartPacket,
+  createMessageStartPacket,
+  createStopPacket,
+  createBranchingPacket,
+} from "./__tests__/testHelpers";
 
 // Mock the transformers module
 jest.mock("../transformers", () => ({
@@ -44,60 +50,6 @@ jest.mock("../transformers", () => ({
       }));
   }),
 }));
-
-// ============================================================================
-// Mock Helpers
-// ============================================================================
-
-function createPacket(
-  type: PacketType,
-  placement: Partial<Placement> = {},
-  objOverrides: Record<string, unknown> = {}
-): Packet {
-  return {
-    placement: {
-      turn_index: 0,
-      tab_index: 0,
-      ...placement,
-    },
-    obj: {
-      type,
-      ...objOverrides,
-    },
-  } as Packet;
-}
-
-function createSearchToolStartPacket(
-  placement: Partial<Placement> = {}
-): Packet {
-  return createPacket(PacketType.SEARCH_TOOL_START, placement);
-}
-
-function createMessageStartPacket(
-  placement: Partial<Placement> = {},
-  preAnswerProcessingSeconds?: number
-): Packet {
-  return createPacket(PacketType.MESSAGE_START, placement, {
-    id: "msg-1",
-    content: "",
-    final_documents: null,
-    ...(preAnswerProcessingSeconds !== undefined && {
-      pre_answer_processing_seconds: preAnswerProcessingSeconds,
-    }),
-  });
-}
-
-function createStopPacket(stopReason?: StopReason): Packet {
-  return createPacket(PacketType.STOP, {}, { stop_reason: stopReason });
-}
-
-function createBranchingPacket(numBranches: number, turnIndex: number): Packet {
-  return createPacket(
-    PacketType.TOP_LEVEL_BRANCHING,
-    { turn_index: turnIndex },
-    { num_parallel_branches: numBranches }
-  );
-}
 
 // ============================================================================
 // Tests
