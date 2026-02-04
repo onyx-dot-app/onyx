@@ -223,8 +223,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.resolve-tag.outputs.release-tag }}
         run: |
-          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release create "${RELEASE_TAG}" \
+          if ! gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
               --draft \
               --title "${RELEASE_TAG}" \
               --notes "See the assets to download this version and install."
@@ -416,7 +416,7 @@ jobs:
           RELEASE_TAG: ${{ needs.create-release.outputs.release-tag }}
         shell: bash
         run: |
-          gh release upload "${RELEASE_TAG}" desktop/src-tauri/target/release/bundle/**/* --clobber
+          gh release upload "${RELEASE_TAG}" desktop/src-tauri/target/release/bundle/*/* --repo "${GITHUB_REPOSITORY}" --clobber
 
   build-web-amd64:
     needs: determine-builds
