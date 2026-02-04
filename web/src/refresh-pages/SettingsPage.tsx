@@ -58,7 +58,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Hoverable, HoverableContainer } from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/atoms";
 
 interface PAT {
   id: number;
@@ -1446,13 +1446,15 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Hoverable
+                      <Interactive.Base
                         key={pat.id}
-                        asChild
-                        nonInteractive
+                        disableHover
                         variant="secondary"
                       >
-                        <HoverableContainer noPadding heightVariant="full">
+                        <Interactive.Container
+                          paddingVariant="none"
+                          heightVariant="full"
+                        >
                           <AttachmentItemLayout
                             icon={SvgKey}
                             title={pat.name}
@@ -1467,8 +1469,8 @@ function AccountsAccessSettings() {
                               />
                             }
                           />
-                        </HoverableContainer>
-                      </Hoverable>
+                        </Interactive.Container>
+                      </Interactive.Base>
                     );
                   })}
                 </Section>
