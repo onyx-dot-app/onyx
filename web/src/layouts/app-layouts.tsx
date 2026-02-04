@@ -306,7 +306,7 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center pt-4 pb-3 px-4 max-h-[5rem]">
+      <div className="w-full flex flex-row justify-center items-center px-4 h-[4.25rem]">
         {/*
           Left:
           - (mobile) sidebar toggle
