@@ -182,8 +182,52 @@ jobs:
           title: "🚨 Version Tag Check Failed"
           ref-name: ${{ github.ref_name }}
 
-  build-desktop:
+  # Create GitHub release first, before desktop builds start.
+  # This ensures all desktop matrix jobs upload to the same release instead of
+  # racing to create duplicate releases.
+  create-release:
     needs: determine-builds
+    if: needs.determine-builds.outputs.build-desktop == 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.create-release.outputs.id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Determine release tag
+        id: release-tag
+        env:
+          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
+          SHORT_SHA: ${{ needs.determine-builds.outputs.short-sha }}
+        run: |
+          if [ "${IS_TEST_RUN}" == "true" ]; then
+            echo "tag=v0.0.0-dev+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # ratchet:softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release-tag.outputs.tag }}
+          name: ${{ steps.release-tag.outputs.tag }}
+          body: "See the assets to download this version and install."
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-desktop:
+    needs:
+      - determine-builds
+      - create-release
     if: needs.determine-builds.outputs.build-desktop == 'true'
     permissions:
       id-token: write
@@ -208,7 +252,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6.0.2
         with:
-          # NOTE: persist-credentials is needed for tauri-action to create GitHub releases.
+          # NOTE: persist-credentials is needed for tauri-action to upload assets to GitHub releases.
           persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: Configure AWS credentials
@@ -353,11 +397,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
         with:
-          tagName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseName: ${{ needs.determine-builds.outputs.is-test-run != 'true' && 'v__VERSION__' || format('v0.0.0-dev+{0}', needs.determine-builds.outputs.short-sha) }}
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
-          prerelease: false
+          # Use the release created by the create-release job to avoid race conditions
+          # when multiple matrix jobs try to create/update the same release simultaneously
+          releaseId: ${{ needs.create-release.outputs.release-id }}
           assetNamePattern: "[name]_[arch][ext]"
           args: ${{ matrix.args }}
 
