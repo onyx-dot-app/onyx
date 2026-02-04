@@ -523,7 +523,7 @@ const TabsList = React.forwardRef<
           )}
 
           {isPill && rightContent && (
-            <div ref={rightContentRef} className="ml-auto pl-2 flex-shrink-0">
+            <div ref={rightContentRef} className="ml-auto px-1 flex-shrink-0">
               {rightContent}
             </div>
           )}

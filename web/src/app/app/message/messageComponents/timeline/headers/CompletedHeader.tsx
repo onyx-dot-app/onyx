@@ -1,25 +1,28 @@
 import React from "react";
-import { SvgExpand } from "@opal/icons";
+import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { formatDurationSeconds } from "@/lib/time";
+import { noProp } from "@/lib/utils";
 
-export interface CollapsedHeaderProps {
+export interface CompletedHeaderProps {
   totalSteps: number;
   collapsible: boolean;
+  isExpanded: boolean;
   onToggle: () => void;
   processingDurationSeconds?: number;
   generatedImageCount?: number;
 }
 
-/** Header when completed + collapsed - duration text + step count */
-export const CollapsedHeader = React.memo(function CollapsedHeader({
+/** Header when completed - handles both collapsed and expanded states */
+export const CompletedHeader = React.memo(function CompletedHeader({
   totalSteps,
   collapsible,
+  isExpanded,
   onToggle,
   processingDurationSeconds = 0,
   generatedImageCount = 0,
-}: CollapsedHeaderProps) {
+}: CompletedHeaderProps) {
   const durationText = processingDurationSeconds
     ? `Thought for ${formatDurationSeconds(processingDurationSeconds)}`
     : "Thought for some time";
@@ -32,30 +35,25 @@ export const CollapsedHeader = React.memo(function CollapsedHeader({
       : null;
 
   return (
-    <>
-      <div className="flex flex-col">
-        {!imageText && (
-          <Text as="p" mainUiAction text03>
-            {durationText}
-          </Text>
-        )}
-        {imageText && (
-          <Text as="p" mainUiAction text03>
-            {imageText}
-          </Text>
-        )}
-      </div>
+    <div
+      role="button"
+      onClick={onToggle}
+      className="flex items-center justify-between w-full rounded-12 p-1"
+    >
+      <Text as="p" mainUiAction text03>
+        {isExpanded ? durationText : imageText ?? durationText}
+      </Text>
       {collapsible && totalSteps > 0 && (
         <Button
           tertiary
-          onClick={onToggle}
-          rightIcon={SvgExpand}
+          onClick={noProp(onToggle)}
+          rightIcon={isExpanded ? SvgFold : SvgExpand}
           aria-label="Expand timeline"
-          aria-expanded={false}
+          aria-expanded={isExpanded}
         >
           {totalSteps} {totalSteps === 1 ? "step" : "steps"}
         </Button>
       )}
-    </>
+    </div>
   );
 });

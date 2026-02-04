@@ -20,8 +20,7 @@ import {
   stepSupportsCollapsedStreaming,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { StreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/StreamingHeader";
-import { CollapsedHeader } from "@/app/app/message/messageComponents/timeline/headers/CollapsedHeader";
-import { ExpandedHeader } from "@/app/app/message/messageComponents/timeline/headers/ExpandedHeader";
+import { CompletedHeader } from "@/app/app/message/messageComponents/timeline/headers/CompletedHeader";
 import { StoppedHeader } from "@/app/app/message/messageComponents/timeline/headers/StoppedHeader";
 import { ParallelStreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/ParallelStreamingHeader";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
@@ -252,26 +251,17 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         );
 
       case TimelineUIState.COMPLETED_COLLAPSED:
+      case TimelineUIState.COMPLETED_EXPANDED:
         return (
-          <CollapsedHeader
+          <CompletedHeader
             totalSteps={totalSteps}
             collapsible={collapsible}
+            isExpanded={isExpanded}
             onToggle={handleToggle}
             processingDurationSeconds={
               toolProcessingDuration ?? processingDurationSeconds
             }
             generatedImageCount={generatedImageCount}
-          />
-        );
-
-      case TimelineUIState.COMPLETED_EXPANDED:
-        return (
-          <ExpandedHeader
-            collapsible={collapsible}
-            onToggle={handleToggle}
-            processingDurationSeconds={
-              toolProcessingDuration ?? processingDurationSeconds
-            }
           />
         );
 
@@ -332,8 +322,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       headerContent={
         <div
           className={cn(
-            "flex w-full min-w-0 h-full items-center justify-between pl-2 pr-1 transition-colors duration-300",
-            showTintedBackground && "bg-background-tint-00 rounded-t-12",
+            "flex flex-1 min-w-0 h-full items-center justify-between pl-2 hover:bg-background-tint-00 rounded-t-12 transition-colors duration-300",
+            showTintedBackground && "bg-background-tint-00",
             showRoundedBottom && "rounded-b-12"
           )}
         >
@@ -363,17 +353,19 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
       {/* Expanded timeline view */}
       {isExpanded && (
-        <ExpandedTimelineContent
-          turnGroups={turnGroups}
-          chatState={chatState}
-          stopPacketSeen={stopPacketSeen}
-          stopReason={stopReason}
-          isSingleStep={isSingleStep}
-          userStopped={userStopped}
-          showDoneStep={showDoneStep}
-          showStoppedStep={showStoppedStep}
-          hasDoneIndicator={hasDoneIndicator}
-        />
+        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+          <ExpandedTimelineContent
+            turnGroups={turnGroups}
+            chatState={chatState}
+            stopPacketSeen={stopPacketSeen}
+            stopReason={stopReason}
+            isSingleStep={isSingleStep}
+            userStopped={userStopped}
+            showDoneStep={showDoneStep}
+            showStoppedStep={showStoppedStep}
+            hasDoneIndicator={hasDoneIndicator}
+          />
+        </div>
       )}
     </TimelineContainer>
   );
