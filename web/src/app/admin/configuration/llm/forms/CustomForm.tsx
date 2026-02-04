@@ -131,10 +131,15 @@ export function CustomForm({
                   return;
                 }
 
+                const selectedModelNames = modelConfigurations.map(
+                  (config) => config.name
+                );
+
                 await submitLLMProvider({
                   providerName: values.provider,
                   values: {
                     ...values,
+                    selected_model_names: selectedModelNames,
                     custom_config: customConfigProcessing(
                       values.custom_config_list
                     ),
