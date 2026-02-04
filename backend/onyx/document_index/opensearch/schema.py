@@ -479,8 +479,8 @@ class DocumentSchema:
                 # Hierarchy filtering - list of ancestor hierarchy node IDs.
                 # Used for scoped search within folder/space hierarchies.
                 # OpenSearch's terms query with value_type: "bitmap" can
-                # efficiently check if any value in this array matches a
-                # query bitmap.
+                # efficiently check if any value in this array matches a query
+                # bitmap.
                 ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: {"type": "integer"},
             },
         }
