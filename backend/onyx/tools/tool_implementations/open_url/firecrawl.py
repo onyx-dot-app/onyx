@@ -15,7 +15,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v1/scrape"
+FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v2/scrape"
 _DEFAULT_MAX_WORKERS = 5
 
 # Timeout is tuned to stay under the 2-minute outer timeout in
@@ -58,6 +58,7 @@ class FirecrawlClient(WebContentProvider):
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             return list(executor.map(self._get_webpage_content_safe, urls))
 
+    # This allows the contents call to continue even if one URL fails, and return the results for the other URLs.
     def _get_webpage_content_safe(self, url: str) -> WebContent:
         try:
             return self._get_webpage_content(url)
