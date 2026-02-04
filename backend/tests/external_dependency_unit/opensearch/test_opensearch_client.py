@@ -1318,3 +1318,64 @@ class TestOpenSearchClient:
         assert (
             last_six_months_results[1].document_chunk.document_id == "no-last-updated"
         )
+
+    def test_random_search(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests the random search query works."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Index chunks for two different documents, one hidden one not.
+        doc1_chunks = [
+            _create_test_document_chunk(
+                document_id="doc-1",
+                chunk_index=i,
+                content=f"Doc 1 Chunk {i}",
+                tenant_state=tenant_state,
+                hidden=False,
+            )
+            for i in range(3)
+        ]
+        doc2_chunks = [
+            _create_test_document_chunk(
+                document_id="doc-2",
+                chunk_index=i,
+                content=f"Doc 2 Chunk {i}",
+                tenant_state=tenant_state,
+                hidden=True,
+            )
+            for i in range(2)
+        ]
+
+        for chunk in doc1_chunks + doc2_chunks:
+            test_client.index_document(document=chunk, tenant_state=tenant_state)
+        test_client.refresh_index()
+
+        # Build query.
+        query_body = DocumentQuery.get_random_search_query(
+            tenant_state=tenant_state,
+            index_filters=IndexFilters(
+                access_control_list=None, tenant_id=tenant_state.tenant_id
+            ),
+            num_to_retrieve=3,
+        )
+
+        # Under test.
+        results = test_client.search(body=query_body, search_pipeline_id=None)
+
+        # Postcondition.
+        assert len(results) == 3
+        assert set(result.document_chunk.chunk_index for result in results) == set(
+            [0, 1, 2]
+        )
+        for result in results:
+            # Note each result must be from doc 1, which is not hidden.
+            expected_result = doc1_chunks[result.document_chunk.chunk_index]
+            assert result.document_chunk == expected_result

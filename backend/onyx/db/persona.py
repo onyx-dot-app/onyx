@@ -449,7 +449,9 @@ def get_persona_snapshots_for_user(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.hierarchy_nodes),
-        selectinload(Persona.attached_documents),
+        selectinload(Persona.attached_documents).selectinload(
+            Document.parent_hierarchy_node
+        ),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -605,7 +607,9 @@ def get_persona_snapshots_paginated(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.hierarchy_nodes),
-        selectinload(Persona.attached_documents),
+        selectinload(Persona.attached_documents).selectinload(
+            Document.parent_hierarchy_node
+        ),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),

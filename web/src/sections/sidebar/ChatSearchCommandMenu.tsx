@@ -9,7 +9,10 @@ import CommandMenu, {
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
-import { formatDisplayTime } from "@/sections/sidebar/chatSearchUtils";
+import {
+  formatDisplayTime,
+  highlightMatch,
+} from "@/sections/sidebar/chatSearchUtils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useCurrentAgent } from "@/hooks/useAgents";
 import Text from "@/refresh-components/texts/Text";
@@ -25,6 +28,7 @@ import {
   SvgArrowUpDown,
   SvgKeystroke,
 } from "@opal/icons";
+import TextSeparator from "@/refresh-components/TextSeparator";
 
 /**
  * Dynamic footer that shows contextual action labels based on highlighted item type
@@ -66,6 +70,9 @@ export default function ChatSearchCommandMenu({
   const [activeFilter, setActiveFilter] = useState<
     "all" | "chats" | "projects"
   >("all");
+  const [initialProjectName, setInitialProjectName] = useState<
+    string | undefined
+  >();
   const router = useRouter();
 
   // Data hooks
@@ -76,7 +83,7 @@ export default function ChatSearchCommandMenu({
 
   // Constants for preview limits
   const PREVIEW_CHATS_LIMIT = 4;
-  const PREVIEW_PROJECTS_LIMIT = 2;
+  const PREVIEW_PROJECTS_LIMIT = 3;
 
   // Determine if we should enable optimistic search (when searching or viewing chats filter)
   const shouldUseOptimisticSearch =
@@ -171,10 +178,14 @@ export default function ChatSearchCommandMenu({
     [router]
   );
 
-  const handleNewProject = useCallback(() => {
-    setOpen(false);
-    createProjectModal.toggle(true);
-  }, [createProjectModal]);
+  const handleNewProject = useCallback(
+    (initialName?: string) => {
+      setInitialProjectName(initialName);
+      setOpen(false);
+      createProjectModal.toggle(true);
+    },
+    [createProjectModal]
+  );
 
   const handleOpenChange = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
@@ -183,6 +194,16 @@ export default function ChatSearchCommandMenu({
       setActiveFilter("all");
     }
   }, []);
+
+  const handleEmptyBackspace = useCallback(() => {
+    if (activeFilter !== "all") {
+      // Remove active filter, return to root menu
+      setActiveFilter("all");
+    } else {
+      // No filter active, close the menu
+      setOpen(false);
+    }
+  }, [activeFilter]);
 
   const hasSearchValue = searchValue.trim().length > 0;
 
@@ -199,6 +220,7 @@ export default function ChatSearchCommandMenu({
             filters={headerFilters}
             onFilterRemove={handleFilterRemove}
             onClose={() => setOpen(false)}
+            onEmptyBackspace={handleEmptyBackspace}
           />
 
           <CommandMenu.List
@@ -206,12 +228,13 @@ export default function ChatSearchCommandMenu({
               hasSearchValue ? "No results found" : "No chats or projects yet"
             }
           >
-            {/* New Session action - always shown when no search and no filter */}
-            {!hasSearchValue && activeFilter === "all" && (
+            {/* New Session action - always visible in "all" filter, even during search */}
+            {activeFilter === "all" && (
               <CommandMenu.Action
                 value="new-session"
                 icon={SvgEditBig}
                 onSelect={handleNewSession}
+                defaultHighlight={!hasSearchValue}
               >
                 New Session
               </CommandMenu.Action>
@@ -225,7 +248,10 @@ export default function ChatSearchCommandMenu({
                     <CommandMenu.Filter
                       value="recent-sessions"
                       onSelect={() => setActiveFilter("chats")}
-                      isApplied={activeFilter === "chats"}
+                      isApplied={
+                        activeFilter === "chats" ||
+                        filteredChats.length <= PREVIEW_CHATS_LIMIT
+                      }
                     >
                       {activeFilter === "chats" ? "Recent" : "Recent Sessions"}
                     </CommandMenu.Filter>
@@ -248,7 +274,7 @@ export default function ChatSearchCommandMenu({
                       }
                       onSelect={() => handleChatSelect(chat.id)}
                     >
-                      {chat.label}
+                      {highlightMatch(chat.label, searchValue)}
                     </CommandMenu.Item>
                   ))}
                   {/* Infinite scroll sentinel and loading indicator for chats */}
@@ -265,53 +291,75 @@ export default function ChatSearchCommandMenu({
               )}
 
             {/* Projects section - show if filter is 'all' or 'projects' */}
-            {(activeFilter === "all" || activeFilter === "projects") &&
-              displayedProjects.length > 0 && (
-                <>
-                  {(activeFilter === "all" || activeFilter === "projects") && (
-                    <CommandMenu.Filter
-                      value="projects"
-                      onSelect={() => setActiveFilter("projects")}
-                      isApplied={activeFilter === "projects"}
-                    >
-                      Projects
-                    </CommandMenu.Filter>
-                  )}
-                  {displayedProjects.map((project) => (
-                    <CommandMenu.Item
-                      key={project.id}
-                      value={`project-${project.id}`}
-                      icon={SvgFolder}
-                      rightContent={({ isHighlighted }) =>
-                        isHighlighted ? (
-                          <Text figureKeystroke text02>
-                            ↵
-                          </Text>
-                        ) : (
-                          <Text secondaryBody text03>
-                            {formatDisplayTime(project.time)}
-                          </Text>
-                        )
-                      }
-                      onSelect={() => handleProjectSelect(project.id)}
-                    >
-                      {project.label}
-                    </CommandMenu.Item>
-                  ))}
-                </>
-              )}
+            {(activeFilter === "all" || activeFilter === "projects") && (
+              <>
+                <CommandMenu.Filter
+                  value="projects"
+                  onSelect={() => setActiveFilter("projects")}
+                  isApplied={
+                    activeFilter === "projects" ||
+                    filteredProjects.length <= PREVIEW_PROJECTS_LIMIT
+                  }
+                >
+                  Projects
+                </CommandMenu.Filter>
+                {/* New Project action - shown after Projects filter when no search term */}
+                {!hasSearchValue && activeFilter === "all" && (
+                  <CommandMenu.Action
+                    value="new-project"
+                    icon={SvgFolderPlus}
+                    onSelect={() => handleNewProject()}
+                  >
+                    New Project
+                  </CommandMenu.Action>
+                )}
+                {displayedProjects.map((project) => (
+                  <CommandMenu.Item
+                    key={project.id}
+                    value={`project-${project.id}`}
+                    icon={SvgFolder}
+                    rightContent={({ isHighlighted }) =>
+                      isHighlighted ? (
+                        <Text figureKeystroke text02>
+                          ↵
+                        </Text>
+                      ) : (
+                        <Text secondaryBody text03>
+                          {formatDisplayTime(project.time)}
+                        </Text>
+                      )
+                    }
+                    onSelect={() => handleProjectSelect(project.id)}
+                  >
+                    {highlightMatch(project.label, searchValue)}
+                  </CommandMenu.Item>
+                ))}
+              </>
+            )}
 
-            {/* New Project action - shown when no search and no filter or projects filter */}
-            {!hasSearchValue &&
+            {/* Create New Project with search term - shown at bottom when searching */}
+            {hasSearchValue &&
               (activeFilter === "all" || activeFilter === "projects") && (
                 <CommandMenu.Action
-                  value="new-project"
+                  value="create-project-with-name"
                   icon={SvgFolderPlus}
-                  onSelect={handleNewProject}
+                  onSelect={() => handleNewProject(searchValue.trim())}
                 >
-                  New Project
+                  <>
+                    Create New Project "
+                    <span className="text-text-05">{searchValue.trim()}</span>"
+                  </>
                 </CommandMenu.Action>
               )}
+
+            {/* No more results separator - shown when no results for the active filter */}
+            {((activeFilter === "chats" && displayedChats.length === 0) ||
+              (activeFilter === "projects" && displayedProjects.length === 0) ||
+              (activeFilter === "all" &&
+                displayedChats.length === 0 &&
+                displayedProjects.length === 0)) && (
+              <TextSeparator text="No more results" className="mt-auto mb-2" />
+            )}
           </CommandMenu.List>
 
           <DynamicFooter />
@@ -320,7 +368,7 @@ export default function ChatSearchCommandMenu({
 
       {/* Project creation modal */}
       <createProjectModal.Provider>
-        <CreateProjectModal />
+        <CreateProjectModal initialProjectName={initialProjectName} />
       </createProjectModal.Provider>
     </>
   );
