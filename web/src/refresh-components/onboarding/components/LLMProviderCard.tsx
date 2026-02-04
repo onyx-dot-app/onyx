@@ -32,6 +32,10 @@ function LLMProviderCardInner({
   const [isHovered, setIsHovered] = useState(false);
 
   const handleCardClick = useCallback(() => {
+    if (disabled) {
+      return;
+    }
+
     if (isConnected) {
       // If connected, redirect to admin page
       window.location.href = "/admin/configuration/llm";
@@ -40,7 +44,7 @@ function LLMProviderCardInner({
 
     // If not connected, call onClick to open the form
     onClick();
-  }, [isConnected, onClick]);
+  }, [disabled, isConnected, onClick]);
 
   const handleSettingsClick = useCallback(
     noProp(() => (window.location.href = "/admin/configuration/llm")),
@@ -51,7 +55,7 @@ function LLMProviderCardInner({
     <Disabled disabled={disabled} allowClick>
       <div
         role="button"
-        tabIndex={disabled ? -1 : 0}
+        tabIndex={0}
         onClick={handleCardClick}
         onKeyDown={(e) => {
           if (!disabled && (e.key === "Enter" || e.key === " ")) {

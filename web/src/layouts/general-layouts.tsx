@@ -111,13 +111,19 @@ export interface SectionProps
 }
 
 /**
- * Note: To disable a Section, wrap it with the `<Disabled>` component:
- * ```tsx
- * import { Disabled } from "@/refresh-components/Disabled";
+ * WARNING: Do NOT wrap Section with the `<Disabled>` component.
  *
- * <Disabled disabled={!isEnabled}>
- *   <Section>...</Section>
- * </Disabled>
+ * The `<Disabled>` component uses Radix Slot which injects a `className` prop.
+ * Since `Section` spreads `...rest` after setting its own `className`, the injected
+ * className will overwrite all layout classes (flex, flex-col, etc.), breaking the layout.
+ *
+ * To disable content within a Section, wrap the individual children instead:
+ * ```tsx
+ * <Section>
+ *   <Disabled disabled={!isEnabled}>
+ *     <Button>...</Button>
+ *   </Disabled>
+ * </Section>
  * ```
  */
 function Section({

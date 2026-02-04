@@ -419,7 +419,7 @@ const ChatInputBar = React.memo(
     }
 
     return (
-      <Disabled disabled={disabled}>
+      <Disabled disabled={disabled} allowClick>
         <div
           ref={containerRef}
           id="onyx-chat-input"
