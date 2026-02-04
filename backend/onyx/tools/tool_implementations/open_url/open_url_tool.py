@@ -320,14 +320,10 @@ def _convert_sections_to_llm_string_with_citations(
         }
         if updated_at_str is not None:
             result["updated_at"] = updated_at_str
-        result["source_type"] = chunk.source_type.value
         if chunk.source_links:
             link = next(iter(chunk.source_links.values()), None)
             if link:
                 result["url"] = link
-
-        if "url" not in result:
-            result["document_identifier"] = document_id
 
         if chunk.metadata:
             result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
