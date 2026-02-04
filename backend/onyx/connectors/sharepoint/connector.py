@@ -1171,8 +1171,8 @@ class SharepointConnector(
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
 
-        # Track seen hierarchy nodes locally (no checkpoint in this method)
-        seen_hierarchy_node_raw_ids: set[str] = set()
+        # Create a temporary checkpoint for hierarchy node tracking
+        temp_checkpoint = SharepointConnectorCheckpoint()
 
         # goes over all urls, converts them into SlimDocument objects and then yields them in batches
         doc_batch: list[SlimDocument | HierarchyNode] = []
@@ -1194,73 +1194,39 @@ class SharepointConnector(
 
             site_url = site_descriptor.url
 
-            # Yield site hierarchy node
-            if site_url not in seen_hierarchy_node_raw_ids:
-                seen_hierarchy_node_raw_ids.add(site_url)
-                display_name = site_url.rstrip("/").split("/")[-1]
-                doc_batch.append(
-                    HierarchyNode(
-                        raw_node_id=site_url,
-                        raw_parent_id=None,
-                        display_name=display_name,
-                        link=site_url,
-                        node_type=HierarchyNodeType.SITE,
-                    )
-                )
+            # Yield site hierarchy node using helper
+            doc_batch.extend(
+                self._yield_site_hierarchy_node(site_descriptor, temp_checkpoint)
+            )
 
             # Process site documents if flag is True
             if self.include_site_documents:
                 driveitems = self._fetch_driveitems(site_descriptor=site_descriptor)
                 for driveitem, drive_name, drive_web_url in driveitems:
-                    # Yield drive hierarchy node
-                    if (
-                        drive_web_url
-                        and drive_web_url not in seen_hierarchy_node_raw_ids
-                    ):
-                        seen_hierarchy_node_raw_ids.add(drive_web_url)
-                        doc_batch.append(
-                            HierarchyNode(
-                                raw_node_id=drive_web_url,
-                                raw_parent_id=site_url,
-                                display_name=drive_name,
-                                link=drive_web_url,
-                                node_type=HierarchyNodeType.DRIVE,
+                    # Yield drive hierarchy node using helper
+                    if drive_web_url:
+                        doc_batch.extend(
+                            self._yield_drive_hierarchy_node(
+                                site_url, drive_web_url, drive_name, temp_checkpoint
                             )
                         )
 
-                    # Extract folder path and yield folder hierarchy nodes
+                    # Extract folder path and yield folder hierarchy nodes using helper
                     folder_path = self._extract_folder_path_from_parent_reference(
                         driveitem.parent_reference.path
                         if driveitem.parent_reference
                         else None
                     )
                     if folder_path and drive_web_url:
-                        path_parts = folder_path.split("/")
-                        for i, part in enumerate(path_parts):
-                            current_path = "/".join(path_parts[: i + 1])
-                            folder_url = self._build_folder_url(
-                                site_url, drive_name, current_path
+                        doc_batch.extend(
+                            self._yield_folder_hierarchy_nodes(
+                                site_url,
+                                drive_web_url,
+                                drive_name,
+                                folder_path,
+                                temp_checkpoint,
                             )
-                            if folder_url not in seen_hierarchy_node_raw_ids:
-                                seen_hierarchy_node_raw_ids.add(folder_url)
-                                parent_url = (
-                                    drive_web_url
-                                    if i == 0
-                                    else self._build_folder_url(
-                                        site_url,
-                                        drive_name,
-                                        "/".join(path_parts[:i]),
-                                    )
-                                )
-                                doc_batch.append(
-                                    HierarchyNode(
-                                        raw_node_id=folder_url,
-                                        raw_parent_id=parent_url,
-                                        display_name=part,
-                                        link=folder_url,
-                                        node_type=HierarchyNodeType.FOLDER,
-                                    )
-                                )
+                        )
 
                     try:
                         logger.debug(f"Processing: {driveitem.web_url}")
