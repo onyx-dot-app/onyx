@@ -771,7 +771,6 @@ export default function SourceHierarchyBrowser({
                 >
                   Last Updated
                 </LineItem>
-                {null}
                 {/* Sorting Order section */}
                 <Divider showTitle text="Sorting Order" dividerLine={false} />
                 <LineItem
@@ -794,7 +793,6 @@ export default function SourceHierarchyBrowser({
                 >
                   {sortField === "name" ? "A to Z" : "Old to Recent"}
                 </LineItem>
-                {null}
                 {/* Folders section */}
                 <Divider showTitle text="Folders" dividerLine={false} />
                 <LineItem
