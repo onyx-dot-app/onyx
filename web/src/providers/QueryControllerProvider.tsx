@@ -64,7 +64,7 @@ interface QueryControllerProviderProps {
 export function QueryControllerProvider({
   children,
 }: QueryControllerProviderProps) {
-  const { appMode } = useAppMode();
+  const { appMode, setAppMode } = useAppMode();
   const appFocus = useAppFocus();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
@@ -128,6 +128,10 @@ export function QueryControllerProvider({
         setError("Document search failed. Please try again.");
         setSearchResults([]);
         setLlmSelectedDocIds(null);
+      } finally {
+        // After we've performed a search, we automatically switch to "search" mode.
+        // This is a "sticky" implementation; on purpose.
+        setAppMode("search");
       }
     },
     []
