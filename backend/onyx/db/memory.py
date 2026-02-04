@@ -15,6 +15,9 @@ def get_memories(user: User, db_session: Session) -> list[str]:
         f"User's email: {user.email}" if user.email else "",
     ]
 
+    if user.use_user_preferences and user.user_preferences:
+        user_info.append(f"User preferences: {user.user_preferences}")
+
     memory_rows = db_session.scalars(
         select(Memory).where(Memory.user_id == user.id)
     ).all()

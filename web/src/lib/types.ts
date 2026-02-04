@@ -37,6 +37,8 @@ export interface UserPersonalization {
   role: string;
   memories: string[];
   use_memories: boolean;
+  user_preferences: string;
+  use_user_preferences: boolean;
 }
 
 export enum UserRole {

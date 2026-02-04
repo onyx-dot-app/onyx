@@ -216,6 +216,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
     use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    user_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
+    use_user_preferences: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None

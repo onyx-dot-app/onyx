@@ -8,6 +8,8 @@ const DEFAULT_PERSONALIZATION: UserPersonalization = {
   role: "",
   memories: [],
   use_memories: true,
+  user_preferences: "",
+  use_user_preferences: false,
 };
 
 function derivePersonalizationFromUser(user: User | null): UserPersonalization {
@@ -21,6 +23,8 @@ function derivePersonalizationFromUser(user: User | null): UserPersonalization {
     memories: [...(user.personalization.memories ?? [])],
     use_memories:
       user.personalization.use_memories ?? DEFAULT_PERSONALIZATION.use_memories,
+    user_preferences: user.personalization.user_preferences ?? "",
+    use_user_preferences: user.personalization.use_user_preferences ?? false,
   };
 }
 
@@ -126,6 +130,23 @@ export default function useUserPersonalization(
     }));
   }, []);
 
+  const updateUserPreferences = useCallback((value: string) => {
+    setPersonalizationValues((prev) => ({
+      ...prev,
+      user_preferences: value,
+    }));
+  }, []);
+
+  const toggleUseUserPreferences = useCallback(
+    (useUserPreferences: boolean) => {
+      setPersonalizationValues((prev) => ({
+        ...prev,
+        use_user_preferences: useUserPreferences,
+      }));
+    },
+    []
+  );
+
   const updateMemoryAtIndex = useCallback((index: number, value: string) => {
     setPersonalizationValues((prev) => {
       const updatedMemories = [...prev.memories];
@@ -191,6 +212,8 @@ export default function useUserPersonalization(
     personalizationValues,
     updatePersonalizationField,
     toggleUseMemories,
+    updateUserPreferences,
+    toggleUseUserPreferences,
     updateMemoryAtIndex,
     addMemory,
     setMemories,
