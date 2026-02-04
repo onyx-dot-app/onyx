@@ -660,13 +660,15 @@ class DocumentQuery:
             attached_doc_ids: list[str] | None,
             node_ids: list[int] | None,
             file_ids: list[UUID] | None,
+            document_sets: list[str] | None,
         ) -> dict[str, Any]:
-            """Combined filter for assistant knowledge (documents OR hierarchy nodes OR user files).
+            """Combined filter for assistant knowledge.
 
             When an assistant has attached knowledge, search should be scoped to:
             - Documents explicitly attached (by document ID), OR
             - Documents under attached hierarchy nodes (by ancestor node IDs), OR
-            - User-uploaded files attached to the assistant
+            - User-uploaded files attached to the assistant, OR
+            - Documents in the assistant's document sets (if any)
             """
             knowledge_filter: dict[str, Any] = {
                 "bool": {"should": [], "minimum_should_match": 1}
@@ -682,6 +684,10 @@ class DocumentQuery:
             if file_ids:
                 knowledge_filter["bool"]["should"].append(
                     _get_user_file_id_filter(file_ids)
+                )
+            if document_sets:
+                knowledge_filter["bool"]["should"].append(
+                    _get_document_set_filter(document_sets)
                 )
             return knowledge_filter
 
@@ -710,24 +716,24 @@ class DocumentQuery:
             # document's metadata list.
             filter_clauses.append(_get_tag_filter(tags))
 
-        if document_sets:
-            # If at least one document set is provided, the caller will only
-            # retrieve documents where at least one document set provided here
-            # is present in the document's document sets list.
-            filter_clauses.append(_get_document_set_filter(document_sets))
-
         # Check if this is an assistant knowledge search (has any assistant-scoped knowledge)
         has_assistant_knowledge = (
-            attached_document_ids or hierarchy_node_ids or user_file_ids
+            attached_document_ids
+            or hierarchy_node_ids
+            or user_file_ids
+            or document_sets
         )
 
         if has_assistant_knowledge:
             # If assistant has attached knowledge, scope search to that knowledge.
-            # This is an OR filter: match documents OR hierarchy nodes OR user files.
-            # ACL is still applied separately as an AND filter.
+            # Document sets are included in the OR filter so directly attached
+            # docs are always findable even if not in the document sets.
             filter_clauses.append(
                 _get_assistant_knowledge_filter(
-                    attached_document_ids, hierarchy_node_ids, user_file_ids
+                    attached_document_ids,
+                    hierarchy_node_ids,
+                    user_file_ids,
+                    document_sets,
                 )
             )
         elif user_file_ids:
