@@ -2,7 +2,7 @@ import { FormikProps, ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import { cn } from "@/lib/utils";
+import { Disabled } from "@/refresh-components/Disabled";
 import { SvgX } from "@opal/icons";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
@@ -113,27 +113,29 @@ export function GenericMultiSelect<
         </Text>
       )}
 
-      <div className={cn(disabled && "opacity-50 pointer-events-none")}>
-        <InputComboBox
-          placeholder="Search..."
-          value=""
-          onChange={() => {}}
-          onValueChange={(selectedValue) => {
-            const numValue = parseInt(selectedValue, 10);
-            if (!isNaN(numValue)) {
-              handleSelect(numValue);
-            }
-          }}
-          options={items
-            .filter((item) => !selectedIds.includes(item.id))
-            .map((item) => ({
-              label: item.name,
-              value: String(item.id),
-            }))}
-          strict
-          leftSearchIcon
-        />
-      </div>
+      <Disabled disabled={disabled}>
+        <div>
+          <InputComboBox
+            placeholder="Search..."
+            value=""
+            onChange={() => {}}
+            onValueChange={(selectedValue) => {
+              const numValue = parseInt(selectedValue, 10);
+              if (!isNaN(numValue)) {
+                handleSelect(numValue);
+              }
+            }}
+            options={items
+              .filter((item) => !selectedIds.includes(item.id))
+              .map((item) => ({
+                label: item.name,
+                value: String(item.id),
+              }))}
+            strict
+            leftSearchIcon
+          />
+        </div>
+      </Disabled>
 
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">

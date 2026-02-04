@@ -104,14 +104,22 @@ export interface SectionProps
   padding?: number;
   wrap?: boolean;
 
-  /** Visually dims the section and prevents all pointer interactions */
-  disabled?: boolean;
-
   // Debugging utilities
   dbg?: boolean;
 
   ref?: React.Ref<HTMLDivElement>;
 }
+
+/**
+ * Note: To disable a Section, wrap it with the `<Disabled>` component:
+ * ```tsx
+ * import { Disabled } from "@/refresh-components/Disabled";
+ *
+ * <Disabled disabled={!isEnabled}>
+ *   <Section>...</Section>
+ * </Disabled>
+ * ```
+ */
 function Section({
   flexDirection = "column",
   justifyContent = "center",
@@ -121,7 +129,6 @@ function Section({
   gap = 1,
   padding = 0,
   wrap,
-  disabled,
   dbg,
   ref,
   ...rest
@@ -139,11 +146,9 @@ function Section({
         heightClassmap[height],
 
         wrap && "flex-wrap",
-        disabled && "opacity-50 cursor-not-allowed pointer-events-none",
         dbg && "dbg-red"
       )}
       style={{ gap: `${gap}rem`, padding: `${padding}rem` }}
-      aria-disabled={disabled}
       {...rest}
     />
   );
