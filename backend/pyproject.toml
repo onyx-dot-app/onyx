@@ -47,7 +47,8 @@ target-version = "py311"
 [tool.ruff.lint]
 ignore = []
 select = [
-  "E",
-  "F",
-  "W",
+  "E",  # Style errors: indentation, whitespace, etc.
+  "F",  # Logical errors: undefined names, unused imports, etc.
+  "W",  # Style warnings: trailing whitespace, blank lines at end of file, etc.
+  "ARG",  # Argument errors: unused arguments, etc.
 ]
