@@ -6,7 +6,6 @@ from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.chat_configs import QA_TIMEOUT
-from onyx.configs.model_configs import DEFAULT_REASONING_EFFORT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
@@ -243,8 +242,12 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
+        # Lazy loading to avoid memory bloat for non-inference flows
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
+        from litellm.constants import DEFAULT_REASONING_EFFORT_HIGH_THINKING_BUDGET
+        from litellm.constants import DEFAULT_REASONING_EFFORT_LOW_THINKING_BUDGET
+        from litellm.constants import DEFAULT_REASONING_EFFORT_MEDIUM_THINKING_BUDGET
 
         #########################
         # Flags that modify the final arguments
@@ -299,10 +302,11 @@ class LitellmLLM(LLM):
         if stream and not is_vertex_opus_4_5:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
-        # Use configured default if not provided (if not set in env, low)
-        reasoning_effort = reasoning_effort or ReasoningEffort(DEFAULT_REASONING_EFFORT)
+        # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
+        # of the major providers.
         if (
             is_reasoning
+            # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
             and not is_vertex_opus_4_5
         ):
@@ -315,6 +319,34 @@ class LitellmLLM(LLM):
                         "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
                         "summary": "auto",
                     }
+
+            if is_claude_model:
+                budget_tokens: int | None = None
+                if reasoning_effort is None:
+                    budget_tokens = DEFAULT_REASONING_EFFORT_MEDIUM_THINKING_BUDGET
+                elif reasoning_effort == ReasoningEffort.LOW:
+                    budget_tokens = DEFAULT_REASONING_EFFORT_LOW_THINKING_BUDGET
+                elif reasoning_effort == ReasoningEffort.MEDIUM:
+                    budget_tokens = DEFAULT_REASONING_EFFORT_MEDIUM_THINKING_BUDGET
+                elif reasoning_effort == ReasoningEffort.HIGH:
+                    budget_tokens = DEFAULT_REASONING_EFFORT_HIGH_THINKING_BUDGET
+
+                if budget_tokens is not None:
+                    if max_tokens is not None:
+                        # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
+                        # and the minimum budget tokens is 1024
+                        # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
+                        # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
+                        # call as compared to reducing the budget for reasoning.
+                        max_tokens = max(budget_tokens + 1, max_tokens)
+                    optional_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": budget_tokens,
+                    }
+
+                # LiteLLM just does some mapping like this anyway but is incomplete for Anthropic
+                optional_kwargs.pop("reasoning_effort", None)
+
             else:
                 # Note that litellm auto maps reasoning_effort to thinking
                 # and budget_tokens for Anthropic Claude models
