@@ -28,6 +28,7 @@ from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
 from onyx.tools.models import OpenURLToolOverrideKwargs
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.tools.tool_implementations.open_url.url_normalization import (
@@ -488,7 +489,14 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             urls = urls[: override_kwargs.max_urls]
 
         if not urls:
-            raise ValueError("OpenURL requires at least one URL to run.")
+            raise ToolCallException(
+                message=f"Missing required '{URLS_FIELD}' parameter in open_url tool call",
+                llm_facing_message=(
+                    f"The open_url tool requires a '{URLS_FIELD}' parameter "
+                    f"containing an array of URLs or document identifiers. Please provide "
+                    f'like: {{"urls": ["https://example.com"]}}'
+                ),
+            )
 
         self.emitter.emit(
             Packet(

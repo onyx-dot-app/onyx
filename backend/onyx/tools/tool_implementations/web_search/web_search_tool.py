@@ -172,6 +172,15 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the web search tool with multiple queries in parallel"""
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in web_search tool call",
+                llm_facing_message=(
+                    f"The web_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
         raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Normalize queries:

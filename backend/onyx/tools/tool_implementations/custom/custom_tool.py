@@ -24,6 +24,7 @@ from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import CustomToolUserFileSnapshot
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
@@ -153,9 +154,16 @@ class CustomTool(Tool[None]):
         path_params = {}
 
         for path_param_schema in self._method_spec.get_path_param_schemas():
-            path_params[path_param_schema["name"]] = llm_kwargs[
-                path_param_schema["name"]
-            ]
+            param_name = path_param_schema["name"]
+            if param_name not in llm_kwargs:
+                raise ToolCallException(
+                    message=f"Missing required path parameter '{param_name}' in {self._name} tool call",
+                    llm_facing_message=(
+                        f"The {self._name} tool requires the '{param_name}' path parameter. "
+                        f"Please provide it in the tool call arguments."
+                    ),
+                )
+            path_params[param_name] = llm_kwargs[param_name]
 
         query_params = {}
         for query_param_schema in self._method_spec.get_query_param_schemas():
