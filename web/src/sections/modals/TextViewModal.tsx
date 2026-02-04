@@ -212,7 +212,6 @@ export default function TextViewModal({
           title={fileName || "Document"}
           onClose={onClose}
         >
-          {/*<div className="flex flex-row items-center justify-end gap-1">*/}
           <Section flexDirection="row" justifyContent="start" gap={0.25}>
             <IconButton
               tertiary
