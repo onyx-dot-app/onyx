@@ -436,16 +436,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                             "type": "array",
                             "items": {"type": "string"},
                             "description": (
-                                "List of URLs or document identifiers to open and read. "
-                                "Can be a single URL/identifier or multiple. "
-                                "Accepts: (1) Raw URLs (e.g., 'https://docs.google.com/document/d/123/edit'), "
-                                "(2) Normalized document IDs from search results "
-                                "(e.g., 'https://docs.google.com/document/d/123'), "
-                                "or (3) Non-URL document identifiers for file connectors "
-                                "(e.g., 'FILE_CONNECTOR__abc-123'). "
-                                "Use the 'document_identifier' field from search results when 'url' is not available. "
-                                "You can extract URLs or document_identifier values from search results "
-                                "to read those documents in full."
+                                "List of URLs to open and read, can be a single URL or multiple URLs. "
+                                "This will return the text content of the page(s)."
                             ),
                         },
                     },
@@ -493,7 +485,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 message=f"Missing required '{URLS_FIELD}' parameter in open_url tool call",
                 llm_facing_message=(
                     f"The open_url tool requires a '{URLS_FIELD}' parameter "
-                    f"containing an array of URLs or document identifiers. Please provide "
+                    f"containing an array of URLs. Please provide "
                     f'like: {{"urls": ["https://example.com"]}}'
                 ),
             )
