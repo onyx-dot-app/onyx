@@ -365,11 +365,32 @@ echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
 echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
 
 # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-if /s5cmd sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" /workspace/files/; then
-    echo "Initial sync complete, staying alive for incremental syncs"
+# Capture both stdout and stderr to see all messages including errors
+sync_exit_code=0
+sync_output=$(mktemp)
+/s5cmd --log debug --stat sync \
+    "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" \
+    /workspace/files/ 2>&1 | tee "$sync_output" || sync_exit_code=$?
+
+echo "=== S3 sync finished with exit code: $sync_exit_code ==="
+
+# Count files synced
+file_count=$(find /workspace/files -type f | wc -l)
+echo "Total files in /workspace/files: $file_count"
+
+# Show summary of any errors from the output
+if [ $sync_exit_code -ne 0 ]; then
+    echo "=== Errors/warnings from sync ==="
+    grep -iE "error|warn|fail" "$sync_output" || echo "No errors found"
+    echo "=========================="
+fi
+rm -f "$sync_output"
+
+# Exit codes 0 and 1 are considered success (1 = success with warnings)
+if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
+    echo "Sync complete (exit $sync_exit_code), staying alive for incremental syncs"
 else
-    sync_exit_code=$?
-    echo "ERROR: Initial sync failed with exit code: $sync_exit_code"
+    echo "ERROR: Sync failed with exit code: $sync_exit_code"
     exit $sync_exit_code
 fi
 
@@ -1888,11 +1909,13 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         pod_name = self._get_pod_name(str(sandbox_id))
 
         # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
+        # --stat shows transfer statistics for monitoring
         s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
         sync_command = [
             "/bin/sh",
             "-c",
-            f'/s5cmd sync "{s3_path}" /workspace/files/',
+            f'/s5cmd --log debug --stat sync "{s3_path}" /workspace/files/; '
+            f'echo "Files in workspace: $(find /workspace/files -type f | wc -l)"',
         ]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
