@@ -1,6 +1,7 @@
 import email
 import uuid
 from datetime import datetime
+from datetime import timezone
 from email.message import Message
 from enum import Enum
 
@@ -70,13 +71,18 @@ class EmailHeaders(BaseModel):
 
         # Fallback for missing required fields to handle malformed/old emails
         if message_id is None:
-            # Generate a unique ID based on subject and date, or fallback to UUID
-            fallback_content = f"{subject or ''}-{date_str or ''}"
-            message_id = f"<generated-{uuid.uuid5(uuid.NAMESPACE_DNS, fallback_content)}>"
+            # Generate a unique ID based on subject, date, and sender
+            # Include sender to reduce collision risk for similar malformed emails
+            fallback_content = f"{subject or ''}-{date_str or ''}-{from_ or ''}"
+            if fallback_content == "--":
+                # All fields empty - use random UUID to avoid collisions
+                message_id = f"<generated-{uuid.uuid4()}>"
+            else:
+                message_id = f"<generated-{uuid.uuid5(uuid.NAMESPACE_DNS, fallback_content)}>"
         
         if date is None:
             # Use current time as fallback for missing/unparseable dates
-            date = datetime.now()
+            date = datetime.now(timezone.utc)
 
         return cls.model_validate(
             {

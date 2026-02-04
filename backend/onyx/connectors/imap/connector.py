@@ -189,7 +189,7 @@ class ImapConnector(
         for email_id in current_todos:
             email_msg = _fetch_email(mail_client=mail_client, email_id=email_id)
             if not email_msg:
-                logger.warn(f"Failed to fetch message {email_id=}; skipping")
+                logger.warning(f"Failed to fetch message {email_id=}; skipping")
                 continue
 
             email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
@@ -261,7 +261,7 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         elif isinstance(mailboxes_raw, str):
             mailboxes_str = mailboxes_raw
         else:
-            logger.warn(
+            logger.warning(
                 f"Expected the mailbox data to be of type str, instead got {type(mailboxes_raw)=} {mailboxes_raw}; skipping"
             )
             continue
@@ -275,7 +275,7 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         # The below regex matches on that pattern; from there, we select the 3rd match (index 2), which is the mailbox-name.
         match = re.match(r'\([^)]*\)\s+"([^"]+)"\s+"?(.+?)"?$', mailboxes_str)
         if not match:
-            logger.warn(
+            logger.warning(
                 f"Invalid mailbox-data formatting structure: {mailboxes_str=}; skipping"
             )
             continue
@@ -392,7 +392,7 @@ def _parse_email_body(
         try:
             raw_payload = part.get_payload(decode=True)
             if not isinstance(raw_payload, bytes):
-                logger.warn(
+                logger.warning(
                     "Payload section from email was expected to be an array of bytes, instead got "
                     f"{type(raw_payload)=}, {raw_payload=}"
                 )
@@ -404,7 +404,7 @@ def _parse_email_body(
             continue
 
     if not body:
-        logger.warn(
+        logger.warning(
             f"Email with {email_headers.id=} has an empty body; returning an empty string"
         )
         return ""
@@ -450,13 +450,13 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
             name_part = raw_header[:raw_header.find('<')].strip()
             # Remove surrounding quotes if present
             name_part = name_part.strip('"').strip()
-            logger.warn(
+            logger.warning(
                 f"Standard parsing failed, using fallback extraction; {raw_header=}"
             )
             return (name_part, email_addr)
 
         # Ultimate fallback: return raw header as name with empty address
-        logger.warn(
+        logger.warning(
             f"No valid email address found in header, using raw value; {raw_header=}"
         )
         return (raw_header.strip().strip('"'), "")
@@ -469,13 +469,13 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
             email_addr = match.group(1)
             name_part = raw_header[:raw_header.find('<')].strip()
             name_part = name_part.strip('"').strip()
-            logger.warn(
+            logger.warning(
                 f"Multiple addresses found, using fallback extraction; {raw_header=} {addrs=}"
             )
             return (name_part, email_addr)
 
         # Ultimate fallback: return first address or raw header
-        logger.warn(
+        logger.warning(
             f"Multiple addresses found without valid email, using first; {raw_header=} {addrs=}"
         )
         if addrs:
@@ -487,7 +487,7 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
 
 if __name__ == "__main__":
     import time
-    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+    from tests.daily.connectors.utils import load_all_from_connector
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 
     host = os.environ.get("IMAP_HOST")
@@ -520,9 +520,9 @@ if __name__ == "__main__":
         )
     )
 
-    for doc in load_all_docs_from_checkpoint_connector(
+    for doc in load_all_from_connector(
         connector=imap_connector,
         start=0,
         end=time.time(),
-    ):
+    ).documents:
         print(doc)
