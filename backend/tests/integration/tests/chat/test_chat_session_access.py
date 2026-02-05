@@ -3,8 +3,12 @@ from uuid import uuid4
 import pytest
 import requests
 
+from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.user import build_email
+from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser
@@ -19,7 +23,20 @@ def reset_for_module() -> None:
 @pytest.fixture
 def second_user(admin_user: DATestUser) -> DATestUser:
     # Ensure admin exists so this new user is created with BASIC role.
-    return UserManager.create(name="second_basic_user")
+    try:
+        return UserManager.create(name="second_basic_user")
+    except Exception as e:
+        print(f"Failed to create second basic user, trying to login: {e}")
+        return UserManager.login_as_user(
+            DATestUser(
+                id="",
+                email=build_email("second_basic_user"),
+                password=DEFAULT_PASSWORD,
+                headers=GENERAL_HEADERS,
+                role=UserRole.BASIC,
+                is_active=True,
+            )
+        )
 
 
 def _get_chat_session(
