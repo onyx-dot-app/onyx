@@ -68,7 +68,7 @@ def downgrade() -> None:
             default_vision_model = mc.name
         FROM llm_model_flow mf
         JOIN model_configuration mc ON mc.id = mf.model_configuration_id
-        WHERE mf.llm_model_flow_type = 'vision'
+        WHERE mf.llm_model_flow_type = 'VISION'
           AND mf.is_default = TRUE
           AND mc.llm_provider_id = lp.id;
         """
@@ -83,7 +83,7 @@ def downgrade() -> None:
             default_model_name = mc.name
         FROM llm_model_flow mf
         JOIN model_configuration mc ON mc.id = mf.model_configuration_id
-        WHERE mf.llm_model_flow_type = 'chat'
+        WHERE mf.llm_model_flow_type = 'CHAT'
           AND mf.is_default = TRUE
           AND mc.llm_provider_id = lp.id;
         """
@@ -100,7 +100,7 @@ def downgrade() -> None:
             FROM model_configuration mc
             JOIN llm_model_flow mf ON mf.model_configuration_id = mc.id
             WHERE mc.llm_provider_id = lp.id
-              AND mf.llm_model_flow_type = 'chat'
+              AND mf.llm_model_flow_type = 'CHAT'
             ORDER BY mc.is_visible DESC, mc.id ASC
             LIMIT 1
         )
