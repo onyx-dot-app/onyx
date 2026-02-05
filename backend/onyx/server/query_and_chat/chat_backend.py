@@ -1049,7 +1049,7 @@ async def search_chats(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user),  # noqa: ARG001
     redis_client: Redis = Depends(get_redis_client),
 ) -> dict[str, str]:
     """

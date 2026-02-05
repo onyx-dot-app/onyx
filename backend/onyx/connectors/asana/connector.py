@@ -54,7 +54,9 @@ class AsanaConnector(LoadConnector, PollConnector):
         return None
 
     def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch | None
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch | None,  # noqa: ARG002
     ) -> GenerateDocumentsOutput:
         start_time = datetime.datetime.fromtimestamp(start).isoformat()
         logger.info(f"Starting Asana poll from {start_time}")

@@ -28,7 +28,7 @@ def _patch_personalization(headers: dict, cookies: dict, payload: dict) -> None:
     response.raise_for_status()
 
 
-def test_personalization_round_trip(reset: None) -> None:
+def test_personalization_round_trip(reset: None) -> None:  # noqa: ARG001
     user = UserManager.create()
     headers, cookies = _get_auth_headers(user)
 

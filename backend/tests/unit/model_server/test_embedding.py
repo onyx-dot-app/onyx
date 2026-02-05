@@ -50,7 +50,7 @@ async def test_embed_text_local_model() -> None:
 
 @pytest.mark.asyncio
 async def test_concurrent_embeddings() -> None:
-    def mock_encode(*args: Any, **kwargs: Any) -> List[List[float]]:
+    def mock_encode(*args: Any, **kwargs: Any) -> List[List[float]]:  # noqa: ARG001
         time.sleep(5)
         return [[0.1, 0.2, 0.3]]
 

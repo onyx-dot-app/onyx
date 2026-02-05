@@ -28,7 +28,9 @@ def gong_connector() -> GongConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_gong_basic(mock_get_api_key: MagicMock, gong_connector: GongConnector) -> None:
+def test_gong_basic(
+    mock_get_api_key: MagicMock, gong_connector: GongConnector  # noqa: ARG001
+) -> None:
     doc_batch_generator = gong_connector.poll_source(0, time.time())
 
     doc_batch = next(doc_batch_generator)

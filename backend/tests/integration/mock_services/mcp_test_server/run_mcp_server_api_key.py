@@ -11,7 +11,7 @@ from fastmcp.server.server import FunctionTool
 def make_many_tools(mcp: FastMCP) -> list[FunctionTool]:
     def make_tool(i: int) -> FunctionTool:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
-        def tool_name(name: str) -> str:
+        def tool_name(name: str) -> str:  # noqa: ARG001
             """Get secret value."""
             return f"Secret value {200 - i}!"
 

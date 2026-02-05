@@ -245,7 +245,7 @@ def include_auth_router_with_prefix(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # Set recursion limit
     if SYSTEM_RECURSION_LIMIT is not None:
         sys.setrecursionlimit(SYSTEM_RECURSION_LIMIT)

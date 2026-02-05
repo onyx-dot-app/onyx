@@ -780,7 +780,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Optional[Request] = None
+        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
     ) -> None:
         if not EMAIL_CONFIGURED:
             logger.error(
@@ -799,7 +799,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
-        self, user: User, token: str, request: Optional[Request] = None
+        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
     ) -> None:
         verify_email_domain(user.email)
 
@@ -983,7 +983,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         except (exceptions.UserNotExists, exceptions.InvalidID, KeyError):
             return None
 
-    async def destroy_token(self, token: str, user: User) -> None:
+    async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
         """Properly delete the token from async redis."""
         redis = await get_async_redis_connection()
         await redis.delete(f"{self.key_prefix}{token}")

@@ -52,7 +52,7 @@ class Tool(abc.ABC, Generic[TOverride]):
         raise NotImplementedError
 
     @classmethod
-    def is_available(cls, db_session: "Session") -> bool:
+    def is_available(cls, db_session: "Session") -> bool:  # noqa: ARG003
         """
         Whether this tool is currently available for use given
         the state of the system. Default: available.

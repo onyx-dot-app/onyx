@@ -209,6 +209,7 @@ target-version = "py311"
 [tool.ruff.lint]
 ignore = []
 select = [
+  "ARG",
   "E",
   "F",
   "W",

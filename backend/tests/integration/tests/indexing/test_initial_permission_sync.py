@@ -142,7 +142,7 @@ def test_mock_connector_initial_permission_sync(
 )
 def test_permission_sync_attempt_tracking_integration(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: vespa_fixture,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that permission sync attempts are properly tracked during real sync workflows."""
@@ -225,7 +225,7 @@ def test_permission_sync_attempt_tracking_integration(
 )
 def test_permission_sync_attempt_tracking_with_mocked_failure(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: vespa_fixture,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that permission sync attempts are properly tracked when sync fails."""
@@ -307,7 +307,7 @@ def test_permission_sync_attempt_tracking_with_mocked_failure(
 )
 def test_permission_sync_attempt_status_success(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: vespa_fixture,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that permission sync attempts are marked as SUCCESS when sync completes without errors."""

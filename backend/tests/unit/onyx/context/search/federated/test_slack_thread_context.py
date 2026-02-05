@@ -216,7 +216,7 @@ class TestFetchThreadContextsWithRateLimitHandling:
     def test_batch_processing_respects_batch_size(
         self,
         mock_parallel: MagicMock,
-        mock_fetch_context: MagicMock,
+        mock_fetch_context: MagicMock,  # noqa: ARG002
     ) -> None:
         """Test that messages are processed in batches of specified size."""
         messages = [
@@ -246,7 +246,7 @@ class TestFetchThreadContextsWithRateLimitHandling:
     def test_rate_limit_stops_further_batches(
         self,
         mock_parallel: MagicMock,
-        mock_fetch_context: MagicMock,
+        mock_fetch_context: MagicMock,  # noqa: ARG002
     ) -> None:
         """Test that rate limiting stops processing of subsequent batches."""
         messages = [
@@ -296,7 +296,7 @@ class TestFetchThreadContextsWithRateLimitHandling:
     def test_other_errors_dont_stop_processing(
         self,
         mock_parallel: MagicMock,
-        mock_fetch_context: MagicMock,
+        mock_fetch_context: MagicMock,  # noqa: ARG002
     ) -> None:
         """Test that non-rate-limit errors don't stop batch processing."""
         messages = [
@@ -345,7 +345,7 @@ class TestMaxMessagesLimit:
     def test_max_messages_limits_context_fetches(
         self,
         mock_parallel: MagicMock,
-        mock_fetch_context: MagicMock,
+        mock_fetch_context: MagicMock,  # noqa: ARG002
     ) -> None:
         """Test that only top N messages get thread context when max_messages is set."""
         messages = [
@@ -388,7 +388,7 @@ class TestMaxMessagesLimit:
     def test_max_messages_none_fetches_all(
         self,
         mock_parallel: MagicMock,
-        mock_fetch_context: MagicMock,
+        mock_fetch_context: MagicMock,  # noqa: ARG002
     ) -> None:
         """Test that max_messages=None fetches context for all messages."""
         messages = [
@@ -420,7 +420,7 @@ class TestMaxMessagesLimit:
     def test_max_messages_greater_than_total_fetches_all(
         self,
         mock_parallel: MagicMock,
-        mock_fetch_context: MagicMock,
+        mock_fetch_context: MagicMock,  # noqa: ARG002
     ) -> None:
         """Test that max_messages > total messages fetches all."""
         messages = [

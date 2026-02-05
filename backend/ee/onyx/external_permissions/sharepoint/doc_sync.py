@@ -17,7 +17,7 @@ SHAREPOINT_DOC_SYNC_TAG = "sharepoint_doc_sync"
 
 def sharepoint_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[ElementExternalAccess, None, None]:

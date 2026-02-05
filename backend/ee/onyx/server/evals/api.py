@@ -17,7 +17,7 @@ router = APIRouter(prefix="/evals")
 @router.post("/eval_run", response_model=EvalRunAck)
 def eval_run(
     request: EvalConfigurationOptions,
-    user: User = Depends(current_cloud_superuser),
+    user: User = Depends(current_cloud_superuser),  # noqa: ARG001
 ) -> EvalRunAck:
     """
     Run an evaluation with the given message and optional dataset.

@@ -157,7 +157,7 @@ class LocalSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
+        llm_config: LLMProviderConfig,  # noqa: ARG002
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -265,7 +265,7 @@ class LocalSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int,
         file_system_path: str | None = None,
-        snapshot_path: str | None = None,
+        snapshot_path: str | None = None,  # noqa: ARG002
         user_name: str | None = None,
         user_role: str | None = None,
         user_work_area: str | None = None,
@@ -661,7 +661,7 @@ class LocalSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002
         nextjs_port: int,
     ) -> None:
         """Restore a snapshot into a session's workspace directory and start NextJS.
@@ -707,7 +707,9 @@ class LocalSandboxManager(SandboxManager):
                 f"Web directory not found at {web_dir}, skipping NextJS startup"
             )
 
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(
+        self, sandbox_id: UUID, timeout: float = 60.0  # noqa: ARG002
+    ) -> bool:
         """Check if the sandbox is healthy (folder exists).
 
         Args:
@@ -1084,7 +1086,7 @@ class LocalSandboxManager(SandboxManager):
 
         return file_count, total_size
 
-    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
+    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:  # noqa: ARG002
         """Get the webapp URL for a session's Next.js server.
 
         For local backend, returns localhost URL with port.
@@ -1101,8 +1103,8 @@ class LocalSandboxManager(SandboxManager):
     def sync_files(
         self,
         sandbox_id: UUID,
-        user_id: UUID,
-        tenant_id: str,
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
     ) -> bool:
         """No-op for local mode - files are directly accessible via symlink.
 

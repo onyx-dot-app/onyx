@@ -831,7 +831,7 @@ class JiraConnector(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-        callback: IndexingHeartbeatInterface | None = None,
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
         one_day = timedelta(hours=24).total_seconds()
 

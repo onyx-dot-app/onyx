@@ -12,7 +12,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def is_user_subscribed(user: User, db_session: Session) -> bool:
+def is_user_subscribed(user: User, db_session: Session) -> bool:  # noqa: ARG001
     """
     Check if a user has an active subscription.
 

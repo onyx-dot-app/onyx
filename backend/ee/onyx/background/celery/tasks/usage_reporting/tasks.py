@@ -21,9 +21,9 @@ logger = setup_logger()
     trail=False,
 )
 def generate_usage_report_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     *,
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
     user_id: str | None = None,
     period_from: str | None = None,
     period_to: str | None = None,

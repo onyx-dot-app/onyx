@@ -31,8 +31,8 @@ class _FakeFolder:
         return self
 
     def get_files(
-        self, *, recursive: bool, page_size: int
-    ) -> _FakeQuery:  # noqa: ARG002
+        self, *, recursive: bool, page_size: int  # noqa: ARG002
+    ) -> _FakeQuery:
         return _FakeQuery(self._items)
 
 
@@ -140,11 +140,11 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     captured_drive_names: list[str] = []
 
     def fake_get_drive_items(
-        self: SharepointConnector,
-        site_descriptor: SiteDescriptor,
+        self: SharepointConnector,  # noqa: ARG001
+        site_descriptor: SiteDescriptor,  # noqa: ARG001
         drive_name: str,
-        start: datetime | None,
-        end: datetime | None,
+        start: datetime | None,  # noqa: ARG001
+        end: datetime | None,  # noqa: ARG001
     ) -> tuple[list[SimpleNamespace], str | None]:
         assert drive_name == "Documents"
         return (
@@ -159,12 +159,12 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         )
 
     def fake_convert(
-        driveitem: SimpleNamespace,
+        driveitem: SimpleNamespace,  # noqa: ARG001
         drive_name: str,
-        ctx: Any,
-        graph_client: Any,
-        include_permissions: bool,
-        parent_hierarchy_raw_node_id: str | None = None,
+        ctx: Any,  # noqa: ARG001
+        graph_client: Any,  # noqa: ARG001
+        include_permissions: bool,  # noqa: ARG001
+        parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
     ) -> SimpleNamespace:
         captured_drive_names.append(drive_name)
         return SimpleNamespace(sections=["content"])

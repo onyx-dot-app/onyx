@@ -36,7 +36,7 @@ TIMEOUT_SECONDS = 6000
     bind=True,
     ignore_result=True,
 )
-def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
+def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """Put idle sandboxes to sleep after snapshotting all sessions.
 
     This task:
@@ -243,7 +243,9 @@ def _list_session_directories(
     bind=True,
     ignore_result=True,
 )
-def sync_sandbox_files(self: Task, *, user_id: str, tenant_id: str) -> bool:
+def sync_sandbox_files(
+    self: Task, *, user_id: str, tenant_id: str  # noqa: ARG001
+) -> bool:
     """Sync files from S3 to a user's running sandbox.
 
     This task is triggered after documents are written to S3 during indexing.

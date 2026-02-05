@@ -331,7 +331,7 @@ def construct_message_history(
 
 def _create_project_files_message(
     project_files: ExtractedProjectFiles,
-    token_counter: Callable[[str], int] | None,
+    token_counter: Callable[[str], int] | None,  # noqa: ARG001
 ) -> ChatMessageSimple:
     """Convert project files to a ChatMessageSimple message.
 

@@ -62,9 +62,9 @@ class NoOpFeatureFlagProvider(FeatureFlagProvider):
 
     def feature_enabled(
         self,
-        flag_key: str,
-        user_id: UUID,
-        user_properties: dict[str, Any] | None = None,
+        flag_key: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        user_properties: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> bool:
         environment = ENVIRONMENT
         if environment == "local":

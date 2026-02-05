@@ -764,7 +764,7 @@ done
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
+        llm_config: LLMProviderConfig,  # noqa: ARG002
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1063,7 +1063,7 @@ done
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
-        file_system_path: str | None = None,
+        file_system_path: str | None = None,  # noqa: ARG002
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -1268,7 +1268,7 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
+        nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
         """Clean up a session workspace (on session delete).
 
@@ -1455,7 +1455,7 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002
         nextjs_port: int,
     ) -> None:
         """Download snapshot from S3, extract into session workspace, and start NextJS.

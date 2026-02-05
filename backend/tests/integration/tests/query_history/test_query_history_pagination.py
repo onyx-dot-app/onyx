@@ -54,7 +54,7 @@ def _verify_query_history_pagination(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Query history tests are enterprise only",
 )
-def test_query_history_pagination(reset: None) -> None:
+def test_query_history_pagination(reset: None) -> None:  # noqa: ARG001
     (
         admin_user,
         chat_sessions_by_feedback_type,
