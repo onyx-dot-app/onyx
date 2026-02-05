@@ -2933,8 +2933,6 @@ class PersonaLabel(Base):
         "Persona",
         secondary=Persona__PersonaLabel.__table__,
         back_populates="labels",
-        cascade="all, delete-orphan",
-        single_parent=True,
     )
 
 
