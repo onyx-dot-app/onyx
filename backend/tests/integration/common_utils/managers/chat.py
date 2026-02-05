@@ -474,8 +474,8 @@ class ChatSessionManager:
                 else GENERAL_HEADERS
             ),
         )
-        # Chat session should return 400 if it doesn't exist
-        return response.status_code == 400
+        # Chat session should return 404 if it doesn't exist or is deleted
+        return response.status_code == 404
 
     @staticmethod
     def verify_soft_deleted(

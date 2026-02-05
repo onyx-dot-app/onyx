@@ -58,6 +58,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import remove_chat_message_feedback
+from onyx.db.models import ChatSessionSharedStatus
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
@@ -267,7 +268,35 @@ def get_chat_session(
             include_deleted=include_deleted,
         )
     except ValueError:
-        raise ValueError("Chat session does not exist or has been deleted")
+        try:
+            # If we failed to get a chat session, try to retrieve the session with
+            # less restrictive filters in order to identify what exactly mismatched
+            # so we can bubble up an accurate error code andmessage.
+            existing_chat_session = get_chat_session_by_id(
+                chat_session_id=session_id,
+                user_id=None,
+                db_session=db_session,
+                is_shared=False,
+                include_deleted=True,
+            )
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+
+        if not include_deleted and existing_chat_session.deleted:
+            raise HTTPException(status_code=404, detail="Chat session has been deleted")
+
+        if is_shared:
+            if existing_chat_session.shared_status != ChatSessionSharedStatus.PUBLIC:
+                raise HTTPException(
+                    status_code=403, detail="Chat session is not shared"
+                )
+        elif user_id is not None and existing_chat_session.user_id not in (
+            user_id,
+            None,
+        ):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        raise HTTPException(status_code=404, detail="Chat session not found")
 
     # for chat-seeding: if the session is unassigned, assign it now. This is done here
     # to avoid another back and forth between FE -> BE before starting the first
