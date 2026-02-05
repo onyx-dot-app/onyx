@@ -1,6 +1,6 @@
 /* Interactive — base (structural only, no color changes) */
 .interactive {
-  @apply flex self-stretch cursor-pointer select-none;
+  @apply flex self-stretch cursor-pointer select-none transition-colors;
 }
 
 .interactive[data-disabled] {
@@ -14,207 +14,207 @@
 /* ---------------------------------------------------------------------------
    Standard + Primary
    --------------------------------------------------------------------------- */
-.interactive[data-variant="standard"][data-subvariant="primary"] {
-  @apply bg-[var(--theme-primary-05)] transition-colors;
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"] {
+  @apply bg-[var(--theme-primary-05)];
 }
-.interactive[data-variant="standard"][data-subvariant="primary"]:hover:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-04)];
 }
-.interactive[data-variant="standard"][data-subvariant="primary"]:active:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="standard"][data-subvariant="primary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-06)];
 }
-.interactive[data-variant="standard"][data-subvariant="primary"][data-disabled] {
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-background-neutral-04;
 }
 
 /* ---------------------------------------------------------------------------
    Standard + Secondary
    --------------------------------------------------------------------------- */
-.interactive[data-variant="standard"][data-subvariant="secondary"] {
-  @apply bg-background-tint-01 transition-colors;
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"] {
+  @apply bg-background-tint-01;
 }
-.interactive[data-variant="standard"][data-subvariant="secondary"]:hover:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
-.interactive[data-variant="standard"][data-subvariant="secondary"]:active:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="standard"][data-subvariant="secondary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
-.interactive[data-variant="standard"][data-subvariant="secondary"][data-disabled] {
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-03;
 }
 
 /* ---------------------------------------------------------------------------
    Standard + Ghost
    --------------------------------------------------------------------------- */
-.interactive[data-variant="standard"][data-subvariant="ghost"] {
-  @apply bg-transparent transition-colors;
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"] {
+  @apply bg-transparent;
 }
-.interactive[data-variant="standard"][data-subvariant="ghost"]:hover:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
-.interactive[data-variant="standard"][data-subvariant="ghost"]:active:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="standard"][data-subvariant="ghost"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
-.interactive[data-variant="standard"][data-subvariant="ghost"][data-disabled] {
+.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
 }
 
 /* ---------------------------------------------------------------------------
    Action + Primary
    --------------------------------------------------------------------------- */
-.interactive[data-variant="action"][data-subvariant="primary"] {
-  @apply bg-[var(--action-link-05)] transition-colors;
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"] {
+  @apply bg-[var(--action-link-05)];
 }
 
-.interactive[data-variant="action"][data-subvariant="primary"]:hover:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-link-04)];
 }
-.interactive[data-variant="action"][data-subvariant="primary"]:active:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="action"][data-subvariant="primary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-link-06)];
 }
-.interactive[data-variant="action"][data-subvariant="primary"][data-disabled] {
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-[var(--action-link-02)];
 }
 
 /* ---------------------------------------------------------------------------
    Action + Secondary
    --------------------------------------------------------------------------- */
-.interactive[data-variant="action"][data-subvariant="secondary"] {
-  @apply bg-background-tint-01 transition-colors;
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"] {
+  @apply bg-background-tint-01;
 }
-.interactive[data-variant="action"][data-subvariant="secondary"]:hover:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
-.interactive[data-variant="action"][data-subvariant="secondary"]:active:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="action"][data-subvariant="secondary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
-.interactive[data-variant="action"][data-subvariant="secondary"][data-disabled] {
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-02;
 }
 
 /* ---------------------------------------------------------------------------
    Action + Ghost
    --------------------------------------------------------------------------- */
-.interactive[data-variant="action"][data-subvariant="ghost"] {
-  @apply bg-transparent transition-colors;
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"] {
+  @apply bg-transparent;
 }
-.interactive[data-variant="action"][data-subvariant="ghost"]:hover:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
-.interactive[data-variant="action"][data-subvariant="ghost"]:active:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="action"][data-subvariant="ghost"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
-.interactive[data-variant="action"][data-subvariant="ghost"][data-disabled] {
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
 }
 
 /* ---------------------------------------------------------------------------
    Danger + Primary
    --------------------------------------------------------------------------- */
-.interactive[data-variant="danger"][data-subvariant="primary"] {
-  @apply bg-[var(--action-danger-05)] transition-colors;
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"] {
+  @apply bg-[var(--action-danger-05)];
 }
-.interactive[data-variant="danger"][data-subvariant="primary"]:hover:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-danger-04)];
 }
-.interactive[data-variant="danger"][data-subvariant="primary"]:active:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="danger"][data-subvariant="primary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-danger-06)];
 }
-.interactive[data-variant="danger"][data-subvariant="primary"][data-disabled] {
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-[var(--action-danger-02)];
 }
 
 /* ---------------------------------------------------------------------------
    Danger + Secondary
    --------------------------------------------------------------------------- */
-.interactive[data-variant="danger"][data-subvariant="secondary"] {
-  @apply bg-background-tint-01 transition-colors;
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"] {
+  @apply bg-background-tint-01;
 }
-.interactive[data-variant="danger"][data-subvariant="secondary"]:hover:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
-.interactive[data-variant="danger"][data-subvariant="secondary"]:active:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="danger"][data-subvariant="secondary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
-.interactive[data-variant="danger"][data-subvariant="secondary"][data-disabled] {
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-02;
 }
 
 /* ---------------------------------------------------------------------------
    Danger + Ghost
    --------------------------------------------------------------------------- */
-.interactive[data-variant="danger"][data-subvariant="ghost"] {
-  @apply bg-transparent transition-colors;
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"] {
+  @apply bg-transparent;
 }
-.interactive[data-variant="danger"][data-subvariant="ghost"]:hover:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
-.interactive[data-variant="danger"][data-subvariant="ghost"]:active:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-variant="danger"][data-subvariant="ghost"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
-.interactive[data-variant="danger"][data-subvariant="ghost"][data-disabled] {
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
 }

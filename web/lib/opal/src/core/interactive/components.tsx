@@ -13,11 +13,12 @@ import type { WithoutStyles } from "@opal/types";
  *
  * Determines the semantic color palette used for the interactive element:
  *
+ * - `"none"` — No background styling; defers to child component's background
  * - `"standard"` — Uses theme primary colors (default brand colors)
  * - `"action"` — Uses action/link colors (blue)
  * - `"danger"` — Uses danger colors (red) for destructive actions
  */
-export type InteractiveBaseVariant = "standard" | "action" | "danger";
+export type InteractiveBaseVariant = "none" | "standard" | "action" | "danger";
 
 /**
  * Subvariant for interactive elements.
@@ -95,6 +96,7 @@ export interface InteractiveBaseProps
   /**
    * Variant determining the semantic color palette.
    *
+   * - `"none"` — No background styling; defers to child component's background
    * - `"standard"` — Uses theme primary colors (default)
    * - `"action"` — Uses action/link colors (blue)
    * - `"danger"` — Uses danger colors (red)
@@ -253,8 +255,9 @@ function InteractiveBase({
   );
 
   const dataAttrs = {
-    "data-variant": variant,
-    "data-subvariant": subvariant,
+    "data-interactive-base-variant": variant !== "none" ? variant : undefined,
+    "data-interactive-base-subvariant":
+      variant !== "none" ? subvariant : undefined,
     "data-static": isStatic ? "true" : undefined,
     "data-pressed": transient ? "true" : undefined,
     "data-disabled": disabled ? "true" : undefined,
