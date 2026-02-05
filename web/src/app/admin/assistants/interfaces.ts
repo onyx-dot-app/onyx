@@ -78,7 +78,7 @@ export interface Persona extends MinimalPersonaSnapshot {
 }
 
 export interface FullPersona extends Persona {
-  search_start_date: Date | null;
+  search_start_date: string | null;
   llm_relevance_filter?: boolean;
   llm_filter_extraction?: boolean;
 }
