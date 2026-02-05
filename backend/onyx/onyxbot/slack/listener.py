@@ -1094,9 +1094,6 @@ def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) 
 
     Returns True if blocked.
     """
-    from datetime import datetime as dt
-    from datetime import timezone
-
     from onyx.server.settings.models import ApplicationStatus
 
     # Multi-tenant path: control plane marks gated tenants in Redis
@@ -1117,11 +1114,6 @@ def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) 
         if metadata is not None:
             if metadata.status == ApplicationStatus.GATED_ACCESS:
                 is_gated = True
-            elif dt.now(timezone.utc) > metadata.expires_at:
-                # License expired but cached status wasn't refreshed yet
-                grace_end = metadata.grace_period_end
-                if not grace_end or dt.now(timezone.utc) > grace_end:
-                    is_gated = True
 
     if not is_gated:
         return False

@@ -1,9 +1,6 @@
 """Tests for Slack bot gating and seat limit enforcement."""
 
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -40,14 +37,10 @@ def _make_socket_request(
 
 def _make_license_metadata(
     status: ApplicationStatus = ApplicationStatus.ACTIVE,
-    expires_in_days: int = 30,
-    grace_period_end: datetime | None = None,
 ) -> MagicMock:
     """Create a mock LicenseMetadata."""
     metadata = MagicMock()
     metadata.status = status
-    metadata.expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
-    metadata.grace_period_end = grace_period_end
     return metadata
 
 
@@ -127,7 +120,7 @@ class TestCheckTenantGated:
     def test_multi_tenant_gated_blocks_and_responds(
         self, mock_fetch_ee: MagicMock, mock_respond: MagicMock
     ) -> None:
-        mock_fetch_ee.return_value = lambda *a, **kw: True
+        mock_fetch_ee.side_effect = _ee_side_effect(is_gated=True)
 
         result, _ = self._call(mock_fetch_ee)
 
@@ -147,32 +140,6 @@ class TestCheckTenantGated:
 
         assert result is True
         mock_respond.assert_called_once()
-
-    @patch(f"{_LISTENER}.respond_in_thread_or_channel")
-    @patch(f"{_LISTENER}.fetch_ee_implementation_or_noop")
-    def test_stale_cache_expired_license_blocks(
-        self, mock_fetch_ee: MagicMock, mock_respond: MagicMock
-    ) -> None:
-        """Expired expires_at blocks even if cached status is still ACTIVE."""
-        metadata = _make_license_metadata(expires_in_days=-1)
-        mock_fetch_ee.side_effect = _ee_side_effect(metadata=metadata)
-
-        result, _ = self._call(mock_fetch_ee)
-        assert result is True
-
-    @patch(f"{_LISTENER}.fetch_ee_implementation_or_noop")
-    def test_expired_within_grace_period_not_gated(
-        self, mock_fetch_ee: MagicMock
-    ) -> None:
-        metadata = _make_license_metadata(
-            status=ApplicationStatus.GRACE_PERIOD,
-            expires_in_days=-1,
-            grace_period_end=datetime.now(timezone.utc) + timedelta(days=29),
-        )
-        mock_fetch_ee.side_effect = _ee_side_effect(metadata=metadata)
-
-        result, _ = self._call(mock_fetch_ee)
-        assert result is False
 
     @pytest.mark.parametrize(
         "event",
@@ -194,7 +161,7 @@ class TestCheckTenantGated:
         self, mock_fetch_ee: MagicMock, mock_respond: MagicMock, event: dict
     ) -> None:
         """Bot messages are blocked but no response is sent (prevents loop)."""
-        mock_fetch_ee.return_value = lambda *a, **kw: True
+        mock_fetch_ee.side_effect = _ee_side_effect(is_gated=True)
 
         result, _ = self._call(mock_fetch_ee, event=event)
 
@@ -207,7 +174,7 @@ class TestCheckTenantGated:
         self, mock_fetch_ee: MagicMock, mock_respond: MagicMock
     ) -> None:
         """app_mention events are blocked silently (dedup with message event)."""
-        mock_fetch_ee.return_value = lambda *a, **kw: True
+        mock_fetch_ee.side_effect = _ee_side_effect(is_gated=True)
 
         result, _ = self._call(
             mock_fetch_ee,
@@ -230,7 +197,7 @@ class TestCheckTenantGated:
     def test_response_uses_thread_ts(
         self, mock_fetch_ee: MagicMock, mock_respond: MagicMock
     ) -> None:
-        mock_fetch_ee.return_value = lambda *a, **kw: True
+        mock_fetch_ee.side_effect = _ee_side_effect(is_gated=True)
 
         self._call(
             mock_fetch_ee,
@@ -276,12 +243,6 @@ class TestExtractChannelFromRequest:
 # ---------------------------------------------------------------------------
 # handle_message seat check
 # ---------------------------------------------------------------------------
-
-# Common patches needed for every handle_message call
-_HANDLE_MSG_PATCHES = [
-    f"{_HANDLE_MSG}.slack_usage_report",
-    f"{_HANDLE_MSG}.send_msg_ack_to_user",
-]
 
 
 class TestHandleMessageSeatCheck:
