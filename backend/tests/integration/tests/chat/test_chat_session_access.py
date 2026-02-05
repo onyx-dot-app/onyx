@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 import requests
+from requests import HTTPError
 
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -25,8 +26,19 @@ def second_user(admin_user: DATestUser) -> DATestUser:
     # Ensure admin exists so this new user is created with BASIC role.
     try:
         return UserManager.create(name="second_basic_user")
-    except Exception as e:
-        print(f"Failed to create second basic user, trying to login: {e}")
+    except HTTPError as e:
+        response = e.response
+        if response is None:
+            raise
+        if response.status_code not in (400, 409):
+            raise
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = None
+        if detail is None or "already exists" not in str(detail).lower():
+            raise
+        print("Second basic user already exists; logging in instead.")
         return UserManager.login_as_user(
             DATestUser(
                 id="",

@@ -269,6 +269,9 @@ def get_chat_session(
         )
     except ValueError:
         try:
+            # If we failed to get a chat session, try to retrieve the session with
+            # less restrictive filters in order to identify what exactly mismatched
+            # so we can bubble up an accurate error code andmessage.
             existing_chat_session = get_chat_session_by_id(
                 chat_session_id=session_id,
                 user_id=None,
