@@ -370,6 +370,8 @@ def run_deep_research_llm_loop(
             llm_step_result = cast(LlmStepResult, llm_step_result)
 
             research_plan = llm_step_result.answer
+            if research_plan is None:
+                raise RuntimeError("Deep Research failed to generate a research plan")
             span.span_data.output = research_plan if research_plan else None
 
         #########################################################
@@ -536,6 +538,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
