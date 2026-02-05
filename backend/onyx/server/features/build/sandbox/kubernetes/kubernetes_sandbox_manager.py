@@ -408,7 +408,7 @@ done
             resources=client.V1ResourceRequirements(
                 # Reduced resources since sidecar is mostly idle (sleeping)
                 requests={"cpu": "50m", "memory": "128Mi"},
-                limits={"cpu": "1000m", "memory": "1Gi"},
+                limits={"cpu": "1000m", "memory": "4Gi"},
             ),
         )
 

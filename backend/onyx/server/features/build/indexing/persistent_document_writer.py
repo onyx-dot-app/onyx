@@ -15,6 +15,7 @@ Both modes use consistent tenant/user-segregated paths for multi-tenant isolatio
 
 import hashlib
 import json
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -48,16 +49,24 @@ def sanitize_path_component(component: str, replace_slash: bool = True) -> str:
     Returns:
         Sanitized path component safe for use in file paths or S3 keys
     """
+    # First, normalize Unicode to decomposed form and remove combining characters
+    # This handles cases like accented characters, while also filtering format chars
+    normalized = unicodedata.normalize("NFKD", component)
+
+    # Filter out Unicode format/control characters (categories Cf, Cc)
+    # This removes invisible chars like U+2060 (WORD JOINER), zero-width spaces, etc.
+    sanitized = "".join(
+        c for c in normalized if unicodedata.category(c) not in ("Cf", "Cc")
+    )
+
     # Replace spaces with underscores
-    sanitized = component.replace(" ", "_")
+    sanitized = sanitized.replace(" ", "_")
     # Replace problematic characters
     if replace_slash:
         sanitized = sanitized.replace("/", "_")
     sanitized = sanitized.replace("\\", "_").replace(":", "_")
     sanitized = sanitized.replace("<", "_").replace(">", "_").replace("|", "_")
     sanitized = sanitized.replace('"', "_").replace("?", "_").replace("*", "_")
-    # Also handle null bytes and other control characters
-    sanitized = "".join(c for c in sanitized if ord(c) >= 32)
     return sanitized.strip() or "unnamed"
 
 
