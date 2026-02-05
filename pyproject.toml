@@ -202,6 +202,18 @@ include = ["backend"]
 exclude = ["backend/generated"]
 typeCheckingMode = "off"
 
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = []
+select = [
+  "E",
+  "F",
+  "W",
+]
+
 [tool.setuptools.packages.find]
 where = ["backend"]
 include = ["onyx*", "tests*"]
