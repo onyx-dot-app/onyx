@@ -1,7 +1,7 @@
 """Populate flow mapping data
 
 Revision ID: 01f8e6d95a33
-Revises: f220515df7b4
+Revises: d5c86e2c6dc6
 Create Date: 2026-01-31 17:37:10.485558
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "01f8e6d95a33"
-down_revision = "f220515df7b4"
+down_revision = "d5c86e2c6dc6"
 branch_labels = None
 depends_on = None
 
