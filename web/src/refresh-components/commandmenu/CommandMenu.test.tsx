@@ -2,7 +2,9 @@ import React, { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
-import CommandMenu, { useCommandMenuContext } from "./CommandMenu";
+import CommandMenu, {
+  useCommandMenuContext,
+} from "@/refresh-components/commandmenu/CommandMenu";
 
 // Mock Radix Dialog portal to render inline for testing
 jest.mock("@radix-ui/react-dialog", () => {
