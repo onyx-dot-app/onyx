@@ -6,9 +6,11 @@ import logging
 import threading
 from datetime import datetime
 from typing import Any
-from typing import Dict
 from typing import Optional
 from typing import Union
+
+from langfuse import Langfuse
+from langfuse._client.span import LangfuseObservationWrapper
 
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import AgentSpanData
@@ -41,26 +43,28 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     def __init__(
         self,
-        client: Any = None,
+        client: Optional[Langfuse] = None,
         enable_masking: bool = True,
     ) -> None:
-        self._client = client
+        self._client: Optional[Langfuse] = client
         self._enable_masking = enable_masking
         self._lock = threading.Lock()  # Protects all dict access
-        self._spans: Dict[str, Any] = {}
-        self._trace_spans: Dict[str, Any] = {}  # Root spans for traces
-        self._first_input: Dict[str, Any] = {}
-        self._last_output: Dict[str, Any] = {}
-        self._trace_metadata: Dict[str, Dict[str, Any]] = {}
+        self._spans: dict[str, LangfuseObservationWrapper] = {}
+        self._trace_spans: dict[str, LangfuseObservationWrapper] = (
+            {}
+        )  # Root spans for traces
+        self._first_input: dict[str, Any] = {}
+        self._last_output: dict[str, Any] = {}
+        self._trace_metadata: dict[str, dict[str, Any]] = {}
         # Langfuse IDs for thread-safe parent linking via trace_context
-        self._langfuse_trace_ids: Dict[str, str] = (
+        self._langfuse_trace_ids: dict[str, str] = (
             {}
         )  # framework_trace_id -> langfuse_trace_id
-        self._langfuse_span_ids: Dict[str, str] = (
+        self._langfuse_span_ids: dict[str, str] = (
             {}
         )  # framework_span_id -> langfuse_span.id
 
-    def _get_client(self) -> Any:
+    def _get_client(self) -> Langfuse:
         """Get or create Langfuse client."""
         if self._client is None:
             from langfuse import get_client
@@ -113,9 +117,9 @@ class LangfuseTracingProcessor(TracingProcessor):
 
             # Create a root span which implicitly creates a Langfuse trace
             # The span name becomes the trace name in Langfuse UI
-            langfuse_span = client.start_span(
+            # In Langfuse SDK v3, use start_observation instead of start_span
+            langfuse_span = client.start_observation(
                 name=trace.name,
-                metadata=metadata,
             )
 
             # Always update the trace-level properties to set the trace name
@@ -189,10 +193,10 @@ class LangfuseTracingProcessor(TracingProcessor):
                     f"No Langfuse trace ID found for span {span.span_id}, creating orphan"
                 )
                 # Fall back to creating an orphan span
+                # In Langfuse SDK v3, use start_observation instead of start_span
                 client = self._get_client()
-                langfuse_span = client.start_span(
+                langfuse_span = client.start_observation(
                     name=data.type if hasattr(data, "type") else "unknown",
-                    metadata=trace_metadata,
                 )
                 with self._lock:
                     self._spans[span.span_id] = langfuse_span
@@ -203,31 +207,33 @@ class LangfuseTracingProcessor(TracingProcessor):
 
             # Build trace_context for thread-safe parent linking
             # This uses immutable string IDs instead of mutable span objects
-            trace_context: Dict[str, str] = {"trace_id": langfuse_trace_id}
+            trace_context: dict[str, str] = {"trace_id": langfuse_trace_id}
             if parent_langfuse_id:
                 trace_context["parent_span_id"] = parent_langfuse_id
 
             # Create spans using trace_context (thread-safe ID-based approach)
+            # In Langfuse SDK v3, use start_observation with as_type parameter
             if isinstance(data, GenerationSpanData):
-                langfuse_span = client.start_generation(
-                    trace_context=trace_context,
+                langfuse_span = client.start_observation(
                     name=self._get_generation_name(data),
+                    as_type="generation",
+                    trace_context=trace_context,
                     model=data.model,
                     model_parameters=self._get_model_parameters(data),
                     metadata=trace_metadata,
                 )
             elif isinstance(data, FunctionSpanData):
                 langfuse_span = client.start_observation(
-                    trace_context=trace_context,
                     name=data.name,
                     as_type="tool",
+                    trace_context=trace_context,
                     metadata=trace_metadata,
                 )
             elif isinstance(data, AgentSpanData):
                 langfuse_span = client.start_observation(
-                    trace_context=trace_context,
                     name=data.name,
                     as_type="agent",
+                    trace_context=trace_context,
                     metadata={
                         **(trace_metadata or {}),
                         "tools": data.tools,
@@ -236,9 +242,9 @@ class LangfuseTracingProcessor(TracingProcessor):
                     },
                 )
             else:
-                langfuse_span = client.start_span(
-                    trace_context=trace_context,
+                langfuse_span = client.start_observation(
                     name=data.type if hasattr(data, "type") else "unknown",
+                    trace_context=trace_context,
                     metadata=trace_metadata,
                 )
 
@@ -269,7 +275,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 usage = self._get_usage_details(data)
                 cost = self._calculate_cost(data)
 
-                update_kwargs: Dict[str, Any] = {
+                update_kwargs: dict[str, Any] = {
                     "input": self._mask_if_enabled(input_data),
                     "output": self._mask_if_enabled(output_data),
                 }
@@ -321,20 +327,18 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     def _get_generation_name(self, data: GenerationSpanData) -> str:
         """Get a descriptive name for a generation span."""
-        if isinstance(data.model_config, dict):
-            flow = data.model_config.get("flow")
-            if isinstance(flow, str) and flow.strip():
-                return flow
+        if data.model:
+            return f"Generation with {data.model}"
         return "Generation"
 
     def _get_model_parameters(
         self, data: GenerationSpanData
-    ) -> Optional[Dict[str, Union[str, int, bool, None]]]:
+    ) -> Optional[dict[str, Union[str, int, bool, None]]]:
         """Extract model parameters from generation span data."""
         if not isinstance(data.model_config, dict):
             return None
 
-        params: Dict[str, Union[str, int, bool, None]] = {}
+        params: dict[str, Union[str, int, bool, None]] = {}
         for key in [
             "temperature",
             "max_tokens",
@@ -346,10 +350,10 @@ class LangfuseTracingProcessor(TracingProcessor):
                 params[key] = data.model_config[key]
         return params if params else None
 
-    def _get_usage_details(self, data: GenerationSpanData) -> Optional[Dict[str, int]]:
+    def _get_usage_details(self, data: GenerationSpanData) -> Optional[dict[str, int]]:
         """Extract usage details from generation span data."""
         usage = data.usage or {}
-        details: Dict[str, int] = {}
+        details: dict[str, int] = {}
 
         prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens")
         if prompt_tokens is not None:
