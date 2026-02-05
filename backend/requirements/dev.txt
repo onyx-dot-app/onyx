@@ -397,7 +397,7 @@ protobuf==5.29.5 ; python_full_version < '3.14'
     #   grpc-google-iam-v1
     #   grpcio-status
     #   proto-plus
-protobuf==6.33.4 ; python_full_version >= '3.14'
+protobuf==6.33.5 ; python_full_version >= '3.14'
     # via
     #   google-api-core
     #   google-cloud-aiplatform

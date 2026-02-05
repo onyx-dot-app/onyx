@@ -774,7 +774,7 @@ protobuf==5.29.5 ; python_full_version < '3.14'
     #   onnxruntime
     #   opentelemetry-proto
     #   proto-plus
-protobuf==6.33.4 ; python_full_version >= '3.14'
+protobuf==6.33.5 ; python_full_version >= '3.14'
     # via
     #   ddtrace
     #   google-api-core
