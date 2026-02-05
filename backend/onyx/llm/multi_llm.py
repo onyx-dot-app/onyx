@@ -6,7 +6,6 @@ from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.chat_configs import QA_TIMEOUT
-from onyx.configs.model_configs import DEFAULT_REASONING_EFFORT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
@@ -20,6 +19,7 @@ from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import Usage
+from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
 from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
@@ -236,13 +236,14 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         parallel_tool_calls: bool,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
     ) -> Union["ModelResponse", "CustomStreamWrapper"]:
+        # Lazy loading to avoid memory bloat for non-inference flows
         from onyx.llm.litellm_singleton import litellm
         from litellm.exceptions import Timeout, RateLimitError
 
@@ -261,7 +262,7 @@ class LitellmLLM(LLM):
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Vertex Anthropic Opus 4.5 rejects output_config (LiteLLM maps reasoning_effort).
+        # Vertex Anthropic Opus 4.5 rejects output_config.
         # Keep this guard until LiteLLM/Vertex accept the field for this model.
         is_vertex_opus_4_5 = (
             is_vertex_ai and "claude-opus-4-5" in self.config.model_name.lower()
@@ -299,10 +300,11 @@ class LitellmLLM(LLM):
         if stream and not is_vertex_opus_4_5:
             optional_kwargs["stream_options"] = {"include_usage": True}
 
-        # Use configured default if not provided (if not set in env, low)
-        reasoning_effort = reasoning_effort or ReasoningEffort(DEFAULT_REASONING_EFFORT)
+        # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
+        # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
+            # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
             and not is_vertex_opus_4_5
         ):
@@ -315,10 +317,38 @@ class LitellmLLM(LLM):
                         "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
                         "summary": "auto",
                     }
+
+            if is_claude_model:
+                budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
+                    reasoning_effort
+                )
+
+                if budget_tokens is not None:
+                    if max_tokens is not None:
+                        # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
+                        # and the minimum budget tokens is 1024
+                        # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
+                        # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
+                        # call as compared to reducing the budget for reasoning.
+                        max_tokens = max(budget_tokens + 1, max_tokens)
+                    optional_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": budget_tokens,
+                    }
+
+                # LiteLLM just does some mapping like this anyway but is incomplete for Anthropic
+                optional_kwargs.pop("reasoning_effort", None)
+
             else:
-                # Note that litellm auto maps reasoning_effort to thinking
-                # and budget_tokens for Anthropic Claude models
-                optional_kwargs["reasoning_effort"] = reasoning_effort
+                # Hope for the best from LiteLLM
+                if reasoning_effort in [
+                    ReasoningEffort.LOW,
+                    ReasoningEffort.MEDIUM,
+                    ReasoningEffort.HIGH,
+                ]:
+                    optional_kwargs["reasoning_effort"] = reasoning_effort.value
+                else:
+                    optional_kwargs["reasoning_effort"] = ReasoningEffort.LOW.value
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -400,7 +430,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> ModelResponse:
         from litellm import ModelResponse as LiteLLMModelResponse
@@ -439,7 +469,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper

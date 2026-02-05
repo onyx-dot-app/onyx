@@ -512,7 +512,7 @@ def run_deep_research_llm_loop(
                     # Even for the reasoning tool, this should be plenty
                     # The generation here should never be very long as it's just the tool calls.
                     # This prevents timeouts where the model gets into an endless loop of null or bad tokens.
-                    max_tokens=1000,
+                    max_tokens=1024,
                 )
                 if has_reasoned:
                     reasoning_cycles += 1

@@ -571,7 +571,7 @@ def run_llm_step_pkt_generator(
     placement: Placement,
     state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
-    reasoning_effort: ReasoningEffort | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
@@ -999,7 +999,7 @@ def run_llm_step(
     placement: Placement,
     state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
-    reasoning_effort: ReasoningEffort | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
