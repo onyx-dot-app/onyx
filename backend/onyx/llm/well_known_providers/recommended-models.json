@@ -13,6 +13,10 @@
       "default_model": "claude-opus-4-6",
       "additional_visible_models": [
         {
+          "name": "claude-opus-4-6",
+          "display_name": "Claude Opus 4.6"
+        },
+        {
           "name": "claude-opus-4-5",
           "display_name": "Claude Opus 4.5"
         },
