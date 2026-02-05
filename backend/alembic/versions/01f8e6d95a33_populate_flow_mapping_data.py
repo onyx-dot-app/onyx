@@ -23,7 +23,7 @@ def upgrade() -> None:
         """
         INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
         SELECT
-            'chat' AS llm_model_flow_type,
+            'CHAT' AS llm_model_flow_type,
             COALESCE(
                 (lp.is_default_provider IS TRUE AND lp.default_model_name = mc.name),
                 FALSE
@@ -44,7 +44,7 @@ def upgrade() -> None:
         """
         INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
         SELECT
-            'vision' AS llm_model_flow_type,
+            'VISION' AS llm_model_flow_type,
             COALESCE(
                 (lp.is_default_vision_provider IS TRUE AND lp.default_vision_model = mc.name),
                 FALSE
