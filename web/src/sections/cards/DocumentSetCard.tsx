@@ -35,6 +35,7 @@ export default function DocumentSetCard({
               ? undefined
               : () => onSelectToggle?.(!isSelected)
           }
+          variant="none"
           static={disabled || isSelected === undefined}
         >
           <Interactive.Container
