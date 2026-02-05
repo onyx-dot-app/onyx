@@ -3,7 +3,6 @@ import os
 import re
 from types import SimpleNamespace
 
-from psycopg2 import sql
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
@@ -92,25 +91,16 @@ def create_schema_if_not_exists(tenant_id: str) -> bool:
 def drop_schema(tenant_id: str) -> None:
     """Drop a tenant's schema.
 
-    Uses defense-in-depth approach:
-    1. Strict regex validation to reject unexpected formats early
-    2. psycopg2.sql.Identifier for proper escaping of schema names
+    Uses strict regex validation to reject unexpected formats early,
+    preventing SQL injection since schema names cannot be parameterized.
     """
     if not validate_tenant_id(tenant_id):
         raise ValueError(f"Invalid tenant_id format: {tenant_id}")
 
     with get_sqlalchemy_engine().connect() as connection:
-        # Use psycopg2.sql for safe identifier handling.
-        # This properly escapes any special characters (e.g., " becomes "")
-        # even though our validation should prevent them.
-        raw_conn = connection.connection.dbapi_connection
-        cursor = raw_conn.cursor()
-
-        stmt = sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
-            sql.Identifier(tenant_id)
-        )
-        cursor.execute(stmt)
-        raw_conn.commit()
+        with connection.begin():
+            # Use string formatting with validated tenant_id (safe after validation)
+            connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
 
 
 def get_current_alembic_version(tenant_id: str) -> str:
