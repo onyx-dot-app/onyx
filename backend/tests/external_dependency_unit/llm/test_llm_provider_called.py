@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
+from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
 from onyx.db.models import UserRole
@@ -63,7 +65,6 @@ def _create_provider(
             api_key="sk-ant-api03-...",
             default_model_name="claude-3-5-sonnet-20240620",
             is_public=is_public,
-            is_default_provider=is_public,
         ),
         db_session=db_session,
     )
@@ -83,11 +84,11 @@ def use_mock_llm() -> (
         "provider": None,
     }
 
-    def mock_get_default_llm(*args, **kwargs):
+    def mock_get_default_llm(*args: Any, **kwargs: Any) -> MockLLM:
         call_tracker["get_default_llm_called"] = True
         return mock_llm
 
-    def mock_get_llm(provider: str, *args, **kwargs):
+    def mock_get_llm(provider: str, *args: Any, **kwargs: Any) -> MockLLM:
         call_tracker["get_llm_called"] = True
         call_tracker["provider"] = provider
         return mock_llm
@@ -141,8 +142,12 @@ def test_user_sends_message_to_private_provider(
     admin_user = _create_admin(db_session)
 
     # Create providers
-    _create_provider(db_session, LlmProviderNames.ANTHROPIC, "public-provider", True)
+    public_provider_id = _create_provider(
+        db_session, LlmProviderNames.ANTHROPIC, "public-provider", True
+    )
     _create_provider(db_session, LlmProviderNames.GOOGLE, "private-provider", False)
+
+    update_default_provider(public_provider_id, db_session)
 
     try:
         # Create chat session
