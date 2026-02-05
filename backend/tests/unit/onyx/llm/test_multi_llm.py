@@ -249,7 +249,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             max_tokens=None,
-            client=None,
+            client=ANY,  # HTTPHandler instance created per-request
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
