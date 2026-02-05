@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from typing import cast
@@ -31,18 +32,27 @@ from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import BASE_DATA_PATH
-from onyx.connectors.salesforce.utils import get_sqlite_db_path
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
 from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
 
 
 logger = setup_logger()
+
+
+def _convert_to_metadata_value(value: Any) -> str | list[str]:
+    """Convert a Salesforce field value to a valid metadata value.
+
+    Document metadata expects str | list[str], but Salesforce returns
+    various types (bool, float, int, etc.). This function ensures all
+    values are properly converted to strings.
+    """
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return str(value)
 
 
 _DEFAULT_PARENT_OBJECT_TYPES = [ACCOUNT_OBJECT_TYPE]
@@ -434,6 +444,88 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
     #     # gc.collect()
     #     return all_types
 
+    def _yield_doc_batches(
+        self,
+        sf_db: OnyxSalesforceSQLite,
+        type_to_processed: dict[str, int],
+        changed_ids_to_type: dict[str, str],
+        parent_types: set[str],
+        increment_parents_changed: Callable[[], None],
+    ) -> GenerateDocumentsOutput:
+        """ """
+        docs_to_yield: list[Document | HierarchyNode] = []
+        docs_to_yield_bytes = 0
+
+        last_log_time = 0.0
+
+        for (
+            parent_type,
+            parent_id,
+            examined_ids,
+        ) in sf_db.get_changed_parent_ids_by_type(
+            changed_ids=list(changed_ids_to_type.keys()),
+            parent_types=parent_types,
+        ):
+            now = time.monotonic()
+
+            processed = examined_ids - 1
+            if now - last_log_time > SalesforceConnector.LOG_INTERVAL:
+                logger.info(
+                    f"Processing stats: {type_to_processed} "
+                    f"file_size={sf_db.file_size} "
+                    f"processed={processed} "
+                    f"remaining={len(changed_ids_to_type) - processed}"
+                )
+                last_log_time = now
+
+            type_to_processed[parent_type] = type_to_processed.get(parent_type, 0) + 1
+
+            parent_object = sf_db.get_record(parent_id, parent_type)
+            if not parent_object:
+                logger.warning(
+                    f"Failed to get parent object {parent_id} for {parent_type}"
+                )
+                continue
+
+            # use the db to create a document we can yield
+            doc = convert_sf_object_to_doc(
+                sf_db,
+                sf_object=parent_object,
+                sf_instance=self.sf_client.sf_instance,
+            )
+
+            doc.metadata["object_type"] = parent_type
+
+            # Add default attributes to the metadata
+            for (
+                sf_attribute,
+                canonical_attribute,
+            ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(parent_type, {}).items():
+                if sf_attribute in parent_object.data:
+                    doc.metadata[canonical_attribute] = _convert_to_metadata_value(
+                        parent_object.data[sf_attribute]
+                    )
+
+            doc_sizeof = sys.getsizeof(doc)
+            docs_to_yield_bytes += doc_sizeof
+            docs_to_yield.append(doc)
+            increment_parents_changed()
+
+            # memory usage is sensitive to the input length, so we're yielding immediately
+            # if the batch exceeds a certain byte length
+            if (
+                len(docs_to_yield) >= self.batch_size
+                or docs_to_yield_bytes > SalesforceConnector.MAX_BATCH_BYTES
+            ):
+                yield docs_to_yield
+                docs_to_yield = []
+                docs_to_yield_bytes = 0
+
+                # observed a memory leak / size issue with the account table if we don't gc.collect here.
+                gc.collect()
+
+        yield docs_to_yield
+
     def _full_sync(
         self,
         temp_dir: str,
@@ -443,8 +535,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         logger.info("_fetch_from_salesforce starting (full sync).")
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
-
-        docs_to_yield: list[Document | HierarchyNode] = []
 
         changed_ids_to_type: dict[str, str] = {}
         parents_changed = 0
@@ -493,9 +583,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                         f"records={num_records}"
                     )
 
-                    # yield an empty list to keep the connector alive
-                    yield docs_to_yield
-
                     new_ids = sf_db.update_from_csv(
                         object_type=object_type,
                         csv_download_path=csv_path,
@@ -528,79 +615,17 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             )
 
             # Step 3 - extract and index docs
-            docs_to_yield_bytes = 0
-
-            last_log_time = 0.0
-
-            for (
-                parent_type,
-                parent_id,
-                examined_ids,
-            ) in sf_db.get_changed_parent_ids_by_type(
-                changed_ids=list(changed_ids_to_type.keys()),
-                parent_types=ctx.parent_types,
-            ):
-                now = time.monotonic()
-
-                processed = examined_ids - 1
-                if now - last_log_time > SalesforceConnector.LOG_INTERVAL:
-                    logger.info(
-                        f"Processing stats: {type_to_processed} "
-                        f"file_size={sf_db.file_size} "
-                        f"processed={processed} "
-                        f"remaining={len(changed_ids_to_type) - processed}"
-                    )
-                    last_log_time = now
-
-                type_to_processed[parent_type] = (
-                    type_to_processed.get(parent_type, 0) + 1
-                )
-
-                parent_object = sf_db.get_record(parent_id, parent_type)
-                if not parent_object:
-                    logger.warning(
-                        f"Failed to get parent object {parent_id} for {parent_type}"
-                    )
-                    continue
-
-                # use the db to create a document we can yield
-                doc = convert_sf_object_to_doc(
-                    sf_db,
-                    sf_object=parent_object,
-                    sf_instance=self.sf_client.sf_instance,
-                )
-
-                doc.metadata["object_type"] = parent_type
-
-                # Add default attributes to the metadata
-                for (
-                    sf_attribute,
-                    canonical_attribute,
-                ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(parent_type, {}).items():
-                    if sf_attribute in parent_object.data:
-                        doc.metadata[canonical_attribute] = parent_object.data[
-                            sf_attribute
-                        ]
-
-                doc_sizeof = sys.getsizeof(doc)
-                docs_to_yield_bytes += doc_sizeof
-                docs_to_yield.append(doc)
+            def increment_parents_changed() -> None:
+                nonlocal parents_changed
                 parents_changed += 1
 
-                # memory usage is sensitive to the input length, so we're yielding immediately
-                # if the batch exceeds a certain byte length
-                if (
-                    len(docs_to_yield) >= self.batch_size
-                    or docs_to_yield_bytes > SalesforceConnector.MAX_BATCH_BYTES
-                ):
-                    yield docs_to_yield
-                    docs_to_yield = []
-                    docs_to_yield_bytes = 0
-
-                    # observed a memory leak / size issue with the account table if we don't gc.collect here.
-                    gc.collect()
-
-            yield docs_to_yield
+            yield from self._yield_doc_batches(
+                sf_db,
+                type_to_processed,
+                changed_ids_to_type,
+                ctx.parent_types,
+                increment_parents_changed,
+            )
         except Exception:
             logger.exception("Unexpected exception")
             raise
@@ -802,7 +827,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                     canonical_attribute,
                 ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(actual_parent_type, {}).items():
                     if sf_attribute in record:
-                        doc.metadata[canonical_attribute] = record[sf_attribute]
+                        doc.metadata[canonical_attribute] = _convert_to_metadata_value(
+                            record[sf_attribute]
+                        )
 
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
@@ -1089,36 +1116,21 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         return return_context
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        if MULTI_TENANT:
-            # if multi tenant, we cannot expect the sqlite db to be cached/present
-            with tempfile.TemporaryDirectory() as temp_dir:
-                return self._full_sync(temp_dir)
-
-        # nuke the db since we're starting from scratch
-        sqlite_db_path = get_sqlite_db_path(BASE_DATA_PATH)
-        if os.path.exists(sqlite_db_path):
-            logger.info(f"load_from_state: Removing db at {sqlite_db_path}.")
-            os.remove(sqlite_db_path)
-        return self._full_sync(BASE_DATA_PATH)
+        # Always use a temp directory for SQLite - the database is rebuilt
+        # from scratch each time via CSV downloads, so there's no caching benefit
+        # from persisting it. Using temp dirs also avoids collisions between
+        # multiple CC pairs and eliminates stale WAL/SHM file issues.
+        # TODO(evan): make this thing checkpointed and persist/load db from filestore
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield from self._full_sync(temp_dir)
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
         """Poll source will synchronize updated parent objects one by one."""
-
-        if start == 0:
-            # nuke the db if we're starting from scratch
-            sqlite_db_path = get_sqlite_db_path(BASE_DATA_PATH)
-            if os.path.exists(sqlite_db_path):
-                logger.info(
-                    f"poll_source: Starting at time 0, removing db at {sqlite_db_path}."
-                )
-                os.remove(sqlite_db_path)
-
-            return self._delta_sync(BASE_DATA_PATH, start, end)
-
+        # Always use a temp directory - see comment in load_from_state()
         with tempfile.TemporaryDirectory() as temp_dir:
-            return self._delta_sync(temp_dir, start, end)
+            yield from self._delta_sync(temp_dir, start, end)
 
     def retrieve_all_slim_docs_perm_sync(
         self,
