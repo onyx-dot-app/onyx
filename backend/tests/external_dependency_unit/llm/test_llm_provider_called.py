@@ -28,7 +28,7 @@ from tests.external_dependency_unit.mock_llm import LLMAnswerResponse
 from tests.external_dependency_unit.mock_llm import MockLLM
 
 
-def _create_mock_admin(db_session: Session) -> User:
+def _create_admin(db_session: Session) -> User:
     """Create a mock admin user for testing."""
     unique_email = f"admin_{uuid4().hex[:8]}@example.com"
     password_helper = PasswordHelper()
@@ -138,7 +138,7 @@ def test_user_sends_message_to_private_provider(
     db_session: Session,
 ) -> None:
     """Test that messages sent to a private provider use get_llm instead of get_default_llm."""
-    admin_user = _create_mock_admin(db_session)
+    admin_user = _create_admin(db_session)
 
     # Create providers
     _create_provider(db_session, LlmProviderNames.ANTHROPIC, "public-provider", True)
