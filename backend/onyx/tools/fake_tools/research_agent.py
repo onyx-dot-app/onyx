@@ -138,6 +138,7 @@ def generate_intermediate_report(
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
+            timeout_override=300,  # 5 minute read timeout for long report generation
         )
 
         while True:

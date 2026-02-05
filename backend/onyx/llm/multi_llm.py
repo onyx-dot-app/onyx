@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.chat_configs import QA_TIMEOUT
+from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
@@ -45,7 +45,6 @@ from onyx.llm.well_known_providers.constants import (
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
@@ -82,10 +81,6 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     return [prompt.model_dump(exclude_none=True)]
 
 
-def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
-    return cast(JSON_ro, _prompt_to_dicts(prompt))
-
-
 class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
@@ -107,12 +102,14 @@ class LitellmLLM(LLM):
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
     ):
+        # Timeout in seconds for each socket read operation (i.e., max time between
+        # receiving data chunks/tokens). This is NOT a total request timeout - a
+        # request can run indefinitely as long as data keeps arriving within this
+        # window. If the LLM pauses for longer than this timeout between chunks,
+        # a ReadTimeout is raised.
         self._timeout = timeout
         if timeout is None:
-            if model_is_reasoning_model(model_name, model_provider):
-                self._timeout = QA_TIMEOUT * 10  # Reasoning models are slow
-            else:
-                self._timeout = QA_TIMEOUT
+            self._timeout = LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
@@ -433,33 +430,41 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> ModelResponse:
+        from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.model_response import from_litellm_model_response
 
-        response = cast(
-            LiteLLMModelResponse,
-            self._completion(
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=False,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=True,
-                reasoning_effort=reasoning_effort,
-                user_identity=user_identity,
-            ),
-        )
+        # Create an isolated HTTP handler for this request to avoid
+        # connection pool conflicts when multiple threads call concurrently.
+        client = HTTPHandler()
+        try:
+            response = cast(
+                LiteLLMModelResponse,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=False,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
 
-        model_response = from_litellm_model_response(response)
+            model_response = from_litellm_model_response(response)
 
-        # Track LLM cost for Onyx-managed API keys
-        if model_response.usage:
-            self._track_llm_cost(model_response.usage)
+            # Track LLM cost for Onyx-managed API keys
+            if model_response.usage:
+                self._track_llm_cost(model_response.usage)
 
-        return model_response
+            return model_response
+        finally:
+            client.close()
 
     def stream(
         self,
