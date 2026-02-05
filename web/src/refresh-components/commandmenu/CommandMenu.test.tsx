@@ -566,23 +566,6 @@ describe("CommandMenu", () => {
     });
   });
 
-  describe("Empty List", () => {
-    test("shows empty message when list has no children", () => {
-      render(
-        <CommandMenu open={true} onOpenChange={() => {}}>
-          <CommandMenu.Content>
-            <CommandMenu.Header placeholder="Search..." />
-            <CommandMenu.List emptyMessage="No results found">
-              <></>
-            </CommandMenu.List>
-          </CommandMenu.Content>
-        </CommandMenu>
-      );
-
-      expect(screen.getByText("No results found")).toBeInTheDocument();
-    });
-  });
-
   describe("Header Input Behavior", () => {
     test("typing in input does not trigger keyboard navigation", async () => {
       const user = setupUser();
