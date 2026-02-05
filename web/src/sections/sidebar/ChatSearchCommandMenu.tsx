@@ -209,7 +209,9 @@ export default function ChatSearchCommandMenu({
 
   return (
     <>
-      <div onClick={() => setOpen(true)}>{trigger}</div>
+      <div aria-label="Open chat search" onClick={() => setOpen(true)}>
+        {trigger}
+      </div>
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
         <CommandMenu.Content>
