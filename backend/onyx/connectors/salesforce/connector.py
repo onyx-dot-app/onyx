@@ -1106,7 +1106,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         # multiple CC pairs and eliminates stale WAL/SHM file issues.
         # TODO(evan): make this thing checkpointed and persist/load db from filestore
         with tempfile.TemporaryDirectory() as temp_dir:
-            return self._full_sync(temp_dir)
+            yield from self._full_sync(temp_dir)
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
@@ -1114,7 +1114,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         """Poll source will synchronize updated parent objects one by one."""
         # Always use a temp directory - see comment in load_from_state()
         with tempfile.TemporaryDirectory() as temp_dir:
-            return self._delta_sync(temp_dir, start, end)
+            yield from self._delta_sync(temp_dir, start, end)
 
     def retrieve_all_slim_docs_perm_sync(
         self,
