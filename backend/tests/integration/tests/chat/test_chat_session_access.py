@@ -33,10 +33,11 @@ def second_user(admin_user: DATestUser) -> DATestUser:
         if response.status_code not in (400, 409):
             raise
         try:
-            detail = response.json().get("detail")
+            payload = response.json()
         except ValueError:
-            detail = None
-        if detail is None or "already exists" not in str(detail).lower():
+            raise
+        detail = payload.get("detail")
+        if not _is_user_already_exists_detail(detail):
             raise
         print("Second basic user already exists; logging in instead.")
         return UserManager.login_as_user(
@@ -49,6 +50,23 @@ def second_user(admin_user: DATestUser) -> DATestUser:
                 is_active=True,
             )
         )
+
+
+def _is_user_already_exists_detail(detail: object) -> bool:
+    if isinstance(detail, str):
+        normalized = detail.lower()
+        return (
+            "already exists" in normalized
+            or "register_user_already_exists" in normalized
+        )
+    if isinstance(detail, dict):
+        code = detail.get("code")
+        if isinstance(code, str) and code.lower() == "register_user_already_exists":
+            return True
+        message = detail.get("message")
+        if isinstance(message, str) and "already exists" in message.lower():
+            return True
+    return False
 
 
 def _get_chat_session(
