@@ -409,6 +409,10 @@ done
             ],
             volume_mounts=[
                 client.V1VolumeMount(name="files", mount_path="/workspace/files"),
+                # Mount sessions directory so file-sync can create snapshots
+                client.V1VolumeMount(
+                    name="workspace", mount_path="/workspace/sessions"
+                ),
             ],
             resources=client.V1ResourceRequirements(
                 # Reduced resources since sidecar is mostly idle (sleeping)
@@ -441,6 +445,10 @@ done
             volume_mounts=[
                 client.V1VolumeMount(
                     name="files", mount_path="/workspace/files", read_only=True
+                ),
+                # Mount sessions directory (shared with file-sync for snapshots)
+                client.V1VolumeMount(
+                    name="workspace", mount_path="/workspace/sessions"
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -1335,10 +1343,12 @@ echo "Session cleanup complete"
         session_id: UUID,
         tenant_id: str,
     ) -> SnapshotResult | None:
-        """Create a snapshot of a session's outputs directory.
+        """Create a snapshot of a session's outputs and attachments directories.
 
-        For Kubernetes backend, we exec into the pod to create the snapshot.
-        Only captures sessions/$session_id/outputs/
+        For Kubernetes backend, we exec into the file-sync container to create
+        the snapshot and upload to S3. Captures:
+        - sessions/$session_id/outputs/ (generated artifacts, web apps)
+        - sessions/$session_id/attachments/ (user uploaded files)
 
         Args:
             sandbox_id: The sandbox ID
@@ -1362,20 +1372,33 @@ echo "Session cleanup complete"
             f"{session_id_str}/{snapshot_id}.tar.gz"
         )
 
-        # Exec into pod to create and upload snapshot (session outputs only)
+        # Exec into pod to create and upload snapshot (outputs + attachments)
+        # Uses s5cmd pipe to stream tar.gz directly to S3
+        # Note: attachments/ may not exist if user never uploaded files, so we
+        # use a shell script to only include directories that exist
         exec_command = [
             "/bin/sh",
             "-c",
-            f'tar -czf - -C {session_path} outputs | aws s3 cp - {s3_path} --tagging "Type=snapshot"',
+            f"""
+cd {session_path}
+dirs=""
+[ -d outputs ] && dirs="$dirs outputs"
+[ -d attachments ] && dirs="$dirs attachments"
+if [ -n "$dirs" ]; then
+    tar -czf - $dirs | /s5cmd pipe {s3_path}
+else
+    echo "No outputs or attachments to snapshot"
+fi
+""",
         ]
 
         try:
-            # Use exec to run snapshot command in sandbox container
+            # Use exec to run snapshot command in file-sync container (has s5cmd)
             resp = k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container="file-sync",
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -1392,9 +1415,8 @@ echo "Session cleanup complete"
         # In production, you might want to query S3 for the actual size
         size_bytes = 0
 
-        storage_path = (
-            f"sandbox-snapshots/{tenant_id}/{session_id_str}/{snapshot_id}.tar.gz"
-        )
+        # Storage path must match the S3 upload path (without s3://bucket/ prefix)
+        storage_path = f"{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
 
         logger.info(f"Created snapshot for session {session_id}")
 
@@ -1533,7 +1555,7 @@ mkdir -p {safe_session_path}/outputs
 
             tar_b64 = base64.b64encode(tar_data).decode("ascii")
 
-            # Extract in the session directory (tar was created with outputs/ as root)
+            # Extract in the session directory (tar contains outputs/ and attachments/)
             extract_script = f"""
 set -e
 cd {safe_session_path}
