@@ -44,8 +44,9 @@ logger = logging.getLogger(__name__)
 class OpenInferenceTracingProcessor(TracingProcessor):
     _MAX_HANDOFFS_IN_FLIGHT = 1000
 
-    def __init__(self, tracer: Tracer) -> None:
+    def __init__(self, tracer: Tracer, enable_masking: bool = True) -> None:
         self._tracer = tracer
+        self._enable_masking = enable_masking
         self._root_spans: dict[str, OtelSpan] = {}
         self._otel_spans: dict[str, OtelSpan] = {}
         self._tokens: dict[str, object] = {}
@@ -56,6 +57,39 @@ class OpenInferenceTracingProcessor(TracingProcessor):
         self._reverse_handoffs_dict: OrderedDict[str, str] = OrderedDict()
         self._first_input: dict[str, Any] = {}
         self._last_output: dict[str, Any] = {}
+
+    def _mask_if_enabled(self, data: Any) -> Any:
+        """Apply masking to data if masking is enabled."""
+        if not self._enable_masking:
+            return data
+        try:
+            from onyx.tracing.masking import mask_sensitive_data
+
+            return mask_sensitive_data(data)
+        except Exception as e:
+            logger.warning(f"Failed to mask data: {e}")
+            return data
+
+    def _calculate_cost(self, data: GenerationSpanData) -> float:
+        """Calculate LLM cost for this generation span."""
+        try:
+            from onyx.llm.cost import calculate_llm_cost_cents
+
+            usage = data.usage or {}
+            prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
+            completion_tokens = (
+                usage.get("completion_tokens") or usage.get("output_tokens") or 0
+            )
+
+            if data.model and prompt_tokens and completion_tokens:
+                return calculate_llm_cost_cents(
+                    model_name=data.model,
+                    prompt_tokens=int(prompt_tokens),
+                    completion_tokens=int(completion_tokens),
+                )
+        except Exception as e:
+            logger.debug(f"Failed to calculate cost: {e}")
+        return 0.0
 
     def on_trace_start(self, trace: Trace) -> None:
         """Called when a trace is started.
@@ -153,10 +187,24 @@ class OpenInferenceTracingProcessor(TracingProcessor):
         # otel_span.set_attributes(flatten_attributes)
         data = span.span_data
         if isinstance(data, GenerationSpanData):
-            for k, v in _get_attributes_from_generation_span_data(data):
+            # Apply masking to input/output before sending
+            masked_input = self._mask_if_enabled(data.input)
+            masked_output = self._mask_if_enabled(data.output)
+            for k, v in _get_attributes_from_generation_span_data(
+                data, masked_input, masked_output
+            ):
                 otel_span.set_attribute(k, v)
+            # Add cost calculation
+            cost = self._calculate_cost(data)
+            if cost > 0:
+                otel_span.set_attribute("llm.cost_cents", cost)
         elif isinstance(data, FunctionSpanData):
-            for k, v in _get_attributes_from_function_span_data(data):
+            # Apply masking to function input/output
+            masked_input = self._mask_if_enabled(data.input)
+            masked_output = self._mask_if_enabled(data.output)
+            for k, v in _get_attributes_from_function_span_data(
+                data, masked_input, masked_output
+            ):
                 otel_span.set_attribute(k, v)
         elif isinstance(data, AgentSpanData):
             otel_span.set_attribute(GRAPH_NODE_ID, data.name)
@@ -194,11 +242,26 @@ class OpenInferenceTracingProcessor(TracingProcessor):
 
     def force_flush(self) -> None:
         """Forces an immediate flush of all queued spans/traces."""
-        # TODO
+        try:
+            from langfuse import get_client
+
+            client = get_client()
+            if client:
+                client.flush()
+        except Exception as e:
+            logger.warning(f"Failed to flush Langfuse client: {e}")
 
     def shutdown(self) -> None:
         """Called when the application stops."""
-        # TODO
+        try:
+            self.force_flush()
+            from langfuse import get_client
+
+            client = get_client()
+            if client:
+                client.shutdown()
+        except Exception as e:
+            logger.warning(f"Failed to shutdown Langfuse client: {e}")
 
 
 def _as_utc_nano(dt: datetime) -> int:
@@ -223,6 +286,8 @@ def _get_span_kind(obj: SpanData) -> str:
 
 def _get_attributes_from_generation_span_data(
     obj: GenerationSpanData,
+    masked_input: Optional[Any] = None,
+    masked_output: Optional[Any] = None,
 ) -> Iterator[tuple[str, AttributeValue]]:
     if isinstance(model := obj.model, str):
         yield LLM_MODEL_NAME, model
@@ -235,8 +300,11 @@ def _get_attributes_from_generation_span_data(
                 yield LLM_PROVIDER, OpenInferenceLLMProviderValues.OPENAI.value
     if obj.time_to_first_action_seconds is not None:
         yield LLM_TIME_TO_FIRST_ACTION_SECONDS, obj.time_to_first_action_seconds
-    yield from _get_attributes_from_chat_completions_input(obj.input)
-    yield from _get_attributes_from_chat_completions_output(obj.output)
+    # Use masked input/output if provided, otherwise fall back to original
+    input_data = masked_input if masked_input is not None else obj.input
+    output_data = masked_output if masked_output is not None else obj.output
+    yield from _get_attributes_from_chat_completions_input(input_data)
+    yield from _get_attributes_from_chat_completions_output(output_data)
     yield from _get_attributes_from_chat_completions_usage(obj.usage)
 
 
@@ -363,18 +431,25 @@ def _convert_to_primitive(value: Any) -> Union[bool, str, bytes, int, float]:
 
 def _get_attributes_from_function_span_data(
     obj: FunctionSpanData,
+    masked_input: Optional[Any] = None,
+    masked_output: Optional[Any] = None,
 ) -> Iterator[tuple[str, AttributeValue]]:
     yield TOOL_NAME, obj.name
-    if obj.input:
-        yield INPUT_VALUE, obj.input
+    # Use masked input/output if provided, otherwise fall back to original
+    input_data = masked_input if masked_input is not None else obj.input
+    output_data = masked_output if masked_output is not None else obj.output
+    if input_data:
+        yield INPUT_VALUE, (
+            input_data if isinstance(input_data, str) else str(input_data)
+        )
         yield INPUT_MIME_TYPE, JSON
-    if obj.output is not None:
-        yield OUTPUT_VALUE, _convert_to_primitive(obj.output)
+    if output_data is not None:
+        yield OUTPUT_VALUE, _convert_to_primitive(output_data)
         if (
-            isinstance(obj.output, str)
-            and len(obj.output) > 1
-            and obj.output[0] == "{"
-            and obj.output[-1] == "}"
+            isinstance(output_data, str)
+            and len(output_data) > 1
+            and output_data[0] == "{"
+            and output_data[-1] == "}"
         ):
             yield OUTPUT_MIME_TYPE, JSON
 
