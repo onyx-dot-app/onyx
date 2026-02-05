@@ -27,6 +27,7 @@ import SelectButton from "@/refresh-components/buttons/SelectButton";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   SvgArrowUp,
+  SvgClock,
   SvgFileText,
   SvgImage,
   SvgLoader,
@@ -53,14 +54,12 @@ export interface InputBarProps {
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
-  /** Session ID for immediate file uploads. If provided, files upload immediately when attached. */
-  sessionId?: string;
-  /** Pre-provisioned session ID for file uploads before a session is active. */
-  preProvisionedSessionId?: string | null;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
   /** When true, removes bottom rounding to allow seamless connection with components below */
   noBottomRounding?: boolean;
+  /** Whether this is the welcome page (no existing session in URL). Used for Demo Data pill. */
+  isWelcomePage?: boolean;
 }
 
 /**
@@ -75,6 +74,7 @@ function BuildFileCard({
 }) {
   const isImage = isImageFile(file.name);
   const isUploading = file.status === UploadFileStatus.UPLOADING;
+  const isPending = file.status === UploadFileStatus.PENDING;
   const isFailed = file.status === UploadFileStatus.FAILED;
 
   const cardContent = (
@@ -88,6 +88,8 @@ function BuildFileCard({
     >
       {isUploading ? (
         <SvgLoader className="h-4 w-4 animate-spin text-text-03" />
+      ) : isPending ? (
+        <SvgClock className="h-4 w-4 text-text-03" />
       ) : isFailed ? (
         <SvgAlertCircle className="h-4 w-4 text-status-error-02" />
       ) : isImage ? (
@@ -112,7 +114,7 @@ function BuildFileCard({
     </div>
   );
 
-  // Wrap in tooltip if there's an error
+  // Wrap in tooltip for error or pending status
   if (isFailed && file.error) {
     return (
       <SimpleTooltip tooltip={file.error} side="top">
@@ -121,9 +123,30 @@ function BuildFileCard({
     );
   }
 
+  if (isPending) {
+    return (
+      <SimpleTooltip tooltip="Waiting for session to be ready..." side="top">
+        {cardContent}
+      </SimpleTooltip>
+    );
+  }
+
   return cardContent;
 }
 
+/**
+ * InputBar - Text input with file attachment support
+ *
+ * File upload state is managed by UploadFilesContext. This component just:
+ * - Triggers file selection/paste
+ * - Displays attached files
+ * - Handles message submission
+ *
+ * The context handles:
+ * - Session binding (which session to upload to)
+ * - Auto-upload when session becomes available
+ * - Fetching existing attachments on session change
+ */
 const InputBar = memo(
   forwardRef<InputBarHandle, InputBarProps>(
     (
@@ -132,10 +155,9 @@ const InputBar = memo(
         isRunning,
         disabled = false,
         placeholder = "Describe your task...",
-        sessionId,
-        preProvisionedSessionId,
         sandboxInitializing = false,
         noBottomRounding = false,
+        isWelcomePage = false,
       },
       ref
     ) => {
@@ -143,9 +165,6 @@ const InputBar = memo(
       const demoDataEnabled = useDemoDataEnabled();
       const [message, setMessage] = useState("");
 
-      // Use active session ID, falling back to pre-provisioned session ID
-      const effectiveSessionId =
-        sessionId ?? preProvisionedSessionId ?? undefined;
       const textAreaRef = useRef<HTMLTextAreaElement>(null);
       const containerRef = useRef<HTMLDivElement>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
@@ -201,11 +220,11 @@ const InputBar = memo(
         async (e: ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
-          // Pass effectiveSessionId so files upload immediately if session exists
-          uploadFiles(Array.from(files), effectiveSessionId);
+          // Context handles session binding internally
+          uploadFiles(Array.from(files));
           e.target.value = "";
         },
-        [uploadFiles, effectiveSessionId]
+        [uploadFiles]
       );
 
       const handlePaste = useCallback(
@@ -222,12 +241,12 @@ const InputBar = memo(
             }
             if (pastedFiles.length > 0) {
               event.preventDefault();
-              // Pass effectiveSessionId so files upload immediately if session exists
-              uploadFiles(pastedFiles, effectiveSessionId);
+              // Context handles session binding internally
+              uploadFiles(pastedFiles);
             }
           }
         },
-        [uploadFiles, effectiveSessionId]
+        [uploadFiles]
       );
 
       const handleInputChange = useCallback(
@@ -308,7 +327,7 @@ const InputBar = memo(
                   <BuildFileCard
                     key={file.id}
                     file={file}
-                    onRemove={(id) => removeFile(id, effectiveSessionId)}
+                    onRemove={removeFile}
                   />
                 ))}
               </div>
@@ -357,7 +376,7 @@ const InputBar = memo(
                   onClick={() => fileInputRef.current?.click()}
                 />
                 {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
-                {demoDataEnabled && !sessionId && (
+                {demoDataEnabled && isWelcomePage && (
                   <SimpleTooltip
                     tooltip="Switch to your data in the Configure panel!"
                     side="top"

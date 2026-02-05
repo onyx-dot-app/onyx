@@ -300,15 +300,11 @@ class DirectoryManager:
         # Get the files path (symlink to knowledge sources)
         files_path = sandbox_path / "files"
 
-        # Get the attachments path (user-uploaded files)
-        attachments_path = sandbox_path / "attachments"
-
         # Use shared utility to generate content
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
             files_path=files_path if files_path.exists() else None,
-            attachments_path=attachments_path if attachments_path.exists() else None,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
