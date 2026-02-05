@@ -340,8 +340,15 @@ class LitellmLLM(LLM):
                 optional_kwargs.pop("reasoning_effort", None)
 
             else:
-                # Because LiteLLM doesn't handle translating None to Auto, we'll just set this fallback to low
-                optional_kwargs["reasoning_effort"] = ReasoningEffort.LOW.value
+                # Hope for the best from LiteLLM
+                if reasoning_effort in [
+                    ReasoningEffort.LOW,
+                    ReasoningEffort.MEDIUM,
+                    ReasoningEffort.HIGH,
+                ]:
+                    optional_kwargs["reasoning_effort"] = reasoning_effort.value
+                else:
+                    optional_kwargs["reasoning_effort"] = ReasoningEffort.LOW.value
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
