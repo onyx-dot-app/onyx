@@ -99,6 +99,7 @@ MAX_ORCHESTRATOR_CYCLES_REASONING = 4
 
 def generate_final_report(
     history: list[ChatMessageSimple],
+    research_plan: str,
     llm: LLM,
     token_counter: Callable[[str], int],
     state_container: ChatStateContainer,
@@ -125,9 +126,10 @@ def generate_final_report(
             token_count=token_counter(final_report_prompt),
             message_type=MessageType.SYSTEM,
         )
+        final_reminder = USER_FINAL_REPORT_QUERY.format(research_plan=research_plan)
         reminder_message = ChatMessageSimple(
-            message=USER_FINAL_REPORT_QUERY,
-            token_count=token_counter(USER_FINAL_REPORT_QUERY),
+            message=final_reminder,
+            token_count=token_counter(final_reminder),
             message_type=MessageType.USER,
         )
         final_report_history = construct_message_history(
@@ -428,6 +430,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -554,6 +557,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -626,6 +630,7 @@ def run_deep_research_llm_loop(
                         )
                         report_reasoned = generate_final_report(
                             history=simple_chat_history,
+                            research_plan=research_plan,
                             llm=llm,
                             token_counter=token_counter,
                             state_container=state_container,
