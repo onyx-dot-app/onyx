@@ -11,11 +11,12 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
+var validProfiles = []string{"dev", "multitenant"}
+
 // ComposeOptions holds options for the compose command
 type ComposeOptions struct {
-	Dev         bool
-	Multitenant bool
-	Down        bool
+	Down bool
+	Wait bool
 }
 
 // NewComposeCommand creates a new compose command for launching docker containers
@@ -23,39 +24,53 @@ func NewComposeCommand() *cobra.Command {
 	opts := &ComposeOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "compose",
+		Use:   "compose [profile]",
 		Short: "Launch Onyx docker containers",
 		Long: `Launch Onyx docker containers using docker compose.
 
 By default, this runs docker compose up -d with the standard docker-compose.yml.
+
+Available profiles:
+  dev          Use dev configuration (exposes service ports for development)
+  multitenant  Use multitenant configuration
 
 Examples:
   # Start containers with default configuration
   ods compose
 
   # Start containers with dev configuration (exposes service ports)
-  ods compose --dev
+  ods compose dev
 
   # Start containers with multitenant configuration
-  ods compose --multitenant
+  ods compose multitenant
 
   # Stop running containers
-  ods compose --down`,
+  ods compose --down
+  ods compose dev --down
+
+  # Start without waiting for services to be healthy
+  ods compose --wait=false`,
+		Args:      cobra.MaximumNArgs(1),
+		ValidArgs: validProfiles,
 		Run: func(cmd *cobra.Command, args []string) {
-			runCompose(opts)
+			profile := ""
+			if len(args) > 0 {
+				profile = args[0]
+			}
+			runCompose(profile, opts)
 		},
 	}
 
-	cmd.Flags().BoolVar(&opts.Dev, "dev", false, "Use dev configuration (exposes service ports for development)")
-	cmd.Flags().BoolVar(&opts.Multitenant, "multitenant", false, "Use multitenant configuration")
 	cmd.Flags().BoolVar(&opts.Down, "down", false, "Stop running containers instead of starting them")
+	cmd.Flags().BoolVar(&opts.Wait, "wait", true, "Wait for services to be healthy before returning")
 
 	return cmd
 }
 
-func runCompose(opts *ComposeOptions) {
-	if opts.Dev && opts.Multitenant {
-		log.Fatal("Cannot use both --dev and --multitenant flags together")
+func runCompose(profile string, opts *ComposeOptions) {
+	// Validate profile
+	if profile != "" && profile != "dev" && profile != "multitenant" {
+		log.Fatalf("Invalid profile %q. Valid profiles: dev, multitenant", profile)
 	}
 
 	// Get the docker compose directory
@@ -67,11 +82,12 @@ func runCompose(opts *ComposeOptions) {
 
 	// Build the docker compose command
 	var composeFiles []string
-	if opts.Multitenant {
+	switch profile {
+	case "multitenant":
 		composeFiles = []string{"docker-compose.multitenant-dev.yml"}
-	} else if opts.Dev {
+	case "dev":
 		composeFiles = []string{"docker-compose.yml", "docker-compose.dev.yml"}
-	} else {
+	default:
 		composeFiles = []string{"docker-compose.yml"}
 	}
 
@@ -85,6 +101,9 @@ func runCompose(opts *ComposeOptions) {
 		args = append(args, "down")
 	} else {
 		args = append(args, "up", "-d")
+		if opts.Wait {
+			args = append(args, "--wait")
+		}
 	}
 
 	// Log what we're doing
@@ -92,11 +111,9 @@ func runCompose(opts *ComposeOptions) {
 	if opts.Down {
 		action = "Stopping"
 	}
-	config := "default"
-	if opts.Multitenant {
-		config = "multitenant"
-	} else if opts.Dev {
-		config = "dev"
+	config := profile
+	if config == "" {
+		config = "default"
 	}
 	log.Infof("%s containers with %s configuration...", action, config)
 	log.Debugf("Running: docker %v", args)
