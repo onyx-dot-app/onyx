@@ -11,7 +11,6 @@ This test verifies the full flow: provisioning failure → rollback → schema c
 import uuid
 from unittest.mock import patch
 
-import pytest
 from sqlalchemy import text
 
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
@@ -35,8 +34,7 @@ def _schema_exists(schema_name: str) -> bool:
 class TestTenantProvisioningRollback:
     """Integration tests for provisioning failure and rollback."""
 
-    @pytest.mark.asyncio
-    async def test_failed_provisioning_cleans_up_schema(
+    def test_failed_provisioning_cleans_up_schema(
         self, reset_multitenant: None
     ) -> None:
         """
