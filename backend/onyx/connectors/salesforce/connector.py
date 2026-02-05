@@ -31,15 +31,12 @@ from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
-from onyx.connectors.salesforce.utils import BASE_DATA_PATH
-from onyx.connectors.salesforce.utils import get_sqlite_db_path
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
 from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
 
 
 logger = setup_logger()
@@ -1103,34 +1100,19 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         return return_context
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        if MULTI_TENANT:
-            # if multi tenant, we cannot expect the sqlite db to be cached/present
-            with tempfile.TemporaryDirectory() as temp_dir:
-                return self._full_sync(temp_dir)
-
-        # nuke the db since we're starting from scratch
-        sqlite_db_path = get_sqlite_db_path(BASE_DATA_PATH)
-        if os.path.exists(sqlite_db_path):
-            logger.info(f"load_from_state: Removing db at {sqlite_db_path}.")
-            os.remove(sqlite_db_path)
-        return self._full_sync(BASE_DATA_PATH)
+        # Always use a temp directory for SQLite - the database is rebuilt
+        # from scratch each time via CSV downloads, so there's no caching benefit
+        # from persisting it. Using temp dirs also avoids collisions between
+        # multiple CC pairs and eliminates stale WAL/SHM file issues.
+        # TODO(evan): make this thing checkpointed and persist/load db from filestore
+        with tempfile.TemporaryDirectory() as temp_dir:
+            return self._full_sync(temp_dir)
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
         """Poll source will synchronize updated parent objects one by one."""
-
-        if start == 0:
-            # nuke the db if we're starting from scratch
-            sqlite_db_path = get_sqlite_db_path(BASE_DATA_PATH)
-            if os.path.exists(sqlite_db_path):
-                logger.info(
-                    f"poll_source: Starting at time 0, removing db at {sqlite_db_path}."
-                )
-                os.remove(sqlite_db_path)
-
-            return self._delta_sync(BASE_DATA_PATH, start, end)
-
+        # Always use a temp directory - see comment in load_from_state()
         with tempfile.TemporaryDirectory() as temp_dir:
             return self._delta_sync(temp_dir, start, end)
 
