@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useState, useMemo, useRef, memo, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  memo,
+  useCallback,
+  useEffect,
+} from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
@@ -31,6 +38,7 @@ import {
 } from "@/app/admin/assistants/interfaces";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
+import { Disabled } from "@/refresh-components/Disabled";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
 
 // Knowledge pane view states
@@ -723,7 +731,6 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
 // ============================================================================
 
 interface KnowledgeMainContentProps {
-  enableKnowledge: boolean;
   hasAnyKnowledge: boolean;
   selectedDocumentSetIds: number[];
   selectedDocumentIds: string[];
@@ -739,7 +746,6 @@ interface KnowledgeMainContentProps {
 }
 
 const KnowledgeMainContent = memo(function KnowledgeMainContent({
-  enableKnowledge,
   hasAnyKnowledge,
   selectedDocumentSetIds,
   selectedDocumentIds,
@@ -753,10 +759,6 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
   onViewEdit,
   onFileClick,
 }: KnowledgeMainContentProps) {
-  if (!enableKnowledge) {
-    return null;
-  }
-
   if (!hasAnyKnowledge) {
     return (
       <GeneralLayouts.Section
@@ -861,6 +863,13 @@ export default function AgentKnowledgePane({
   // View state
   const [view, setView] = useState<KnowledgeView>("main");
   const [activeSource, setActiveSource] = useState<ValidSources | undefined>();
+
+  // Reset view to main when knowledge is disabled
+  useEffect(() => {
+    if (!enableKnowledge) {
+      setView("main");
+    }
+  }, [enableKnowledge]);
 
   // Get connected sources from CC pairs
   const { ccPairs } = useCCPairs();
@@ -1004,7 +1013,6 @@ export default function AgentKnowledgePane({
       case "main":
         return (
           <KnowledgeMainContent
-            enableKnowledge={enableKnowledge}
             hasAnyKnowledge={hasAnyKnowledge}
             selectedDocumentSetIds={selectedDocumentSetIds}
             selectedDocumentIds={selectedDocumentIds}
@@ -1075,7 +1083,6 @@ export default function AgentKnowledgePane({
   }, [
     view,
     activeSource,
-    enableKnowledge,
     hasAnyKnowledge,
     selectedDocumentSetIds,
     selectedDocumentIds,
@@ -1126,7 +1133,11 @@ export default function AgentKnowledgePane({
             />
           </InputLayouts.Horizontal>
 
-          {renderedContent}
+          <Disabled disabled={!enableKnowledge}>
+            <GeneralLayouts.Section alignItems="stretch" height="auto">
+              {renderedContent}
+            </GeneralLayouts.Section>
+          </Disabled>
         </GeneralLayouts.Section>
       </Card>
     </GeneralLayouts.Section>

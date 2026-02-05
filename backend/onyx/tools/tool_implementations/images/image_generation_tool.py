@@ -23,6 +23,7 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
@@ -37,6 +38,8 @@ logger = setup_logger()
 
 # Heartbeat interval in seconds to prevent timeouts
 HEARTBEAT_INTERVAL = 5.0
+
+PROMPT_FIELD = "prompt"
 
 
 # override_kwargs is not supported for image generation tools
@@ -114,7 +117,7 @@ class ImageGenerationTool(Tool[None]):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "prompt": {
+                        PROMPT_FIELD: {
                             "type": "string",
                             "description": "Prompt used to generate the image",
                         },
@@ -127,7 +130,7 @@ class ImageGenerationTool(Tool[None]):
                             "enum": [shape.value for shape in ImageShape],
                         },
                     },
-                    "required": ["prompt"],
+                    "required": [PROMPT_FIELD],
                 },
             },
         }
@@ -230,7 +233,15 @@ class ImageGenerationTool(Tool[None]):
         override_kwargs: None = None,
         **llm_kwargs: Any,
     ) -> ToolResponse:
-        prompt = cast(str, llm_kwargs["prompt"])
+        if PROMPT_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{PROMPT_FIELD}' parameter in generate_image tool call",
+                llm_facing_message=(
+                    f"The generate_image tool requires a '{PROMPT_FIELD}' parameter describing "
+                    f'the image to generate. Please provide like: {{"prompt": "a sunset over mountains"}}'
+                ),
+            )
+        prompt = cast(str, llm_kwargs[PROMPT_FIELD])
         shape = ImageShape(llm_kwargs.get("shape", ImageShape.SQUARE.value))
 
         # Use threading to generate images in parallel while emitting heartbeats

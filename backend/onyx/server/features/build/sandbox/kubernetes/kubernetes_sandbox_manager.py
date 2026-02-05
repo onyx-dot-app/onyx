@@ -362,16 +362,39 @@ class KubernetesSandboxManager(SandboxManager):
             command=["/bin/sh", "-c"],
             args=[
                 f"""
-set -e
-
 # Handle SIGTERM for fast container termination
 trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
 
 # Initial sync on startup - sync knowledge files for this user/tenant
 echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
-aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
+echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
 
-echo "Initial sync complete, staying alive for incremental syncs"
+# Capture both stdout and stderr, track exit code
+# aws s3 sync returns exit code 1 even on success if there are warnings
+sync_exit_code=0
+sync_stderr=$(mktemp)
+aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/ 2>"$sync_stderr" || sync_exit_code=$?
+
+# Always show stderr if there was any output (for debugging)
+if [ -s "$sync_stderr" ]; then
+    echo "=== S3 sync stderr output ==="
+    cat "$sync_stderr"
+    echo "=== End stderr output ==="
+fi
+rm -f "$sync_stderr"
+
+# Report outcome
+echo "S3 sync finished with exit code: $sync_exit_code"
+
+# Exit codes 0 and 1 are both considered success
+# (exit code 1 = success with warnings, e.g., metadata/timestamp issues)
+if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
+    echo "Initial sync complete, staying alive for incremental syncs"
+else
+    echo "ERROR: Initial sync failed with exit code: $sync_exit_code"
+    exit $sync_exit_code
+fi
+
 # Stay alive - incremental sync commands will be executed via kubectl exec
 # Use 'wait' so shell can respond to signals while sleeping
 while true; do
@@ -699,6 +722,39 @@ done
         logger.warning(f"Timeout waiting for pod {pod_name} to become ready")
         return False
 
+    def _pod_exists_and_healthy(self, pod_name: str) -> bool:
+        """Check if a pod exists and is in a healthy/running state.
+
+        Args:
+            pod_name: Name of the pod to check
+
+        Returns:
+            True if pod exists and is running/ready, False otherwise
+        """
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+            )
+            phase = pod.status.phase
+
+            # Check if running and ready
+            if phase == "Running":
+                conditions = pod.status.conditions or []
+                for condition in conditions:
+                    if condition.type == "Ready" and condition.status == "True":
+                        return True
+
+            # Pending is OK too - pod is being created by another request
+            if phase == "Pending":
+                return True
+
+            return False
+        except ApiException as e:
+            if e.status == 404:
+                return False
+            raise
+
     def provision(
         self,
         sandbox_id: UUID,
@@ -707,6 +763,10 @@ done
         llm_config: LLMProviderConfig,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
+
+        This method is idempotent - if a pod already exists and is healthy,
+        it will be reused. This prevents race conditions when multiple requests
+        try to provision the same sandbox concurrently.
 
         Creates pod with:
         1. Init container syncs files/ from S3
@@ -734,6 +794,51 @@ done
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
+        service_name = self._get_service_name(str(sandbox_id))
+
+        # Check if pod already exists and is healthy (idempotency check)
+        if self._pod_exists_and_healthy(pod_name):
+            logger.info(
+                f"Pod {pod_name} already exists and is healthy, reusing existing pod"
+            )
+            # Ensure service exists too
+            try:
+                self._core_api.read_namespaced_service(
+                    name=service_name,
+                    namespace=self._namespace,
+                )
+            except ApiException as e:
+                if e.status == 404:
+                    # Service doesn't exist, create it
+                    logger.debug(f"Creating missing Service {service_name}")
+                    service = self._create_sandbox_service(sandbox_id, tenant_id)
+                    try:
+                        self._core_api.create_namespaced_service(
+                            namespace=self._namespace,
+                            body=service,
+                        )
+                    except ApiException as svc_e:
+                        if svc_e.status != 409:  # Ignore AlreadyExists
+                            raise
+                else:
+                    raise
+
+            # Wait for pod to be ready if it's still pending
+            logger.info(f"Waiting for existing pod {pod_name} to become ready...")
+            if not self._wait_for_pod_ready(pod_name):
+                raise RuntimeError(
+                    f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
+                )
+
+            logger.info(
+                f"Reusing existing Kubernetes sandbox {sandbox_id}, pod: {pod_name}"
+            )
+            return SandboxInfo(
+                sandbox_id=sandbox_id,
+                directory_path=f"k8s://{self._namespace}/{pod_name}",
+                status=SandboxStatus.RUNNING,
+                last_heartbeat=None,
+            )
 
         try:
             # 1. Create Pod (user-level only, no session setup)
@@ -743,18 +848,48 @@ done
                 user_id=str(user_id),
                 tenant_id=tenant_id,
             )
-            self._core_api.create_namespaced_pod(
-                namespace=self._namespace,
-                body=pod,
-            )
+            try:
+                self._core_api.create_namespaced_pod(
+                    namespace=self._namespace,
+                    body=pod,
+                )
+            except ApiException as e:
+                if e.status == 409:
+                    # Pod was created by another concurrent request
+                    # Check if it's healthy and reuse it
+                    logger.warning(
+                        f"Pod {pod_name} already exists (409 conflict, this shouldn't normally happen), "
+                        "checking if it's healthy..."
+                    )
+                    if self._pod_exists_and_healthy(pod_name):
+                        logger.warning(
+                            f"During provisioning, discovered that pod {pod_name} already exists. Reusing"
+                        )
+                        # Continue to ensure service exists and wait for ready
+                    else:
+                        # Pod exists but is not healthy - this shouldn't happen often
+                        # but could occur if a previous provision failed mid-way
+                        logger.warning(
+                            f"Pod {pod_name} exists but is not healthy, "
+                            "waiting for it to become ready or fail"
+                        )
+                else:
+                    raise
 
-            # 2. Create Service
-            logger.debug(f"Creating Service {self._get_service_name(str(sandbox_id))}")
+            # 2. Create Service (idempotent - ignore 409)
+            logger.debug(f"Creating Service {service_name}")
             service = self._create_sandbox_service(sandbox_id, tenant_id)
-            self._core_api.create_namespaced_service(
-                namespace=self._namespace,
-                body=service,
-            )
+            try:
+                self._core_api.create_namespaced_service(
+                    namespace=self._namespace,
+                    body=service,
+                )
+            except ApiException as e:
+                if e.status != 409:  # Ignore AlreadyExists
+                    raise
+                logger.warning(
+                    f"During provisioning, discovered that service {service_name} already exists. Reusing"
+                )
 
             # 3. Wait for pod to be ready
             logger.info(f"Waiting for pod {pod_name} to become ready...")
@@ -776,12 +911,19 @@ done
             )
 
         except Exception as e:
-            # Cleanup on failure
-            logger.error(
-                f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}",
-                exc_info=True,
-            )
-            self._cleanup_kubernetes_resources(str(sandbox_id))
+            # Only cleanup if we're sure the pod is not being used by another request
+            # Check if pod is healthy - if so, don't clean up (another request may own it)
+            if self._pod_exists_and_healthy(pod_name):
+                logger.warning(
+                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}, "
+                    "but pod is healthy (likely owned by concurrent request), not cleaning up"
+                )
+            else:
+                logger.error(
+                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}",
+                    exc_info=True,
+                )
+                self._cleanup_kubernetes_resources(str(sandbox_id))
             raise
 
     def _wait_for_resource_deletion(
@@ -1767,10 +1909,14 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
+        # Configure AWS CLI for higher concurrency (default is 10) then run sync
+        # max_concurrent_requests controls parallel S3 API calls for faster transfers
+        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/"
         sync_command = [
             "/bin/sh",
             "-c",
-            f'aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/" /workspace/files/',
+            f"aws configure set default.s3.max_concurrent_requests 200 && "
+            f'aws s3 sync "{s3_path}" /workspace/files/',
         ]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,

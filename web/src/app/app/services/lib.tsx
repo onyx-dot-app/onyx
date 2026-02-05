@@ -342,6 +342,7 @@ export function processRawChatHistory(
             query: messageInfo.rephrased_query,
             documents: messageInfo?.context_docs || [],
             citations: messageInfo?.citations || {},
+            processingDurationSeconds: messageInfo.processing_duration_seconds,
           }
         : {}),
       toolCall: messageInfo.tool_call,

@@ -79,18 +79,18 @@ export function usePacketProcessor(
   }
 
   // Track for transition detection
-  const prevLastProcessed = stateRef.current.lastProcessedIndex;
+  const prevNextPacketIndex = stateRef.current.nextPacketIndex;
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
 
   // Detect stream reset (packets shrunk)
-  if (prevLastProcessed > rawPackets.length) {
+  if (prevNextPacketIndex > rawPackets.length) {
     stateRef.current = createInitialState(nodeId);
     setRenderComplete(false);
     setForceShowAnswer(false);
   }
 
   // Process packets synchronously (incremental) - only if new packets arrived
-  if (rawPackets.length > stateRef.current.lastProcessedIndex) {
+  if (rawPackets.length > stateRef.current.nextPacketIndex) {
     stateRef.current = processPackets(stateRef.current, rawPackets);
   }
 

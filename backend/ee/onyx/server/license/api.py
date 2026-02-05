@@ -106,6 +106,11 @@ async def claim_license(
     - Updating seats via the billing API
     - Returning from the Stripe customer portal
     - Any operation that regenerates the license on control plane
+    Claim a license from the control plane (self-hosted only).
+
+    Two modes:
+    1. With session_id: After Stripe checkout, exchange session_id for license
+    2. Without session_id: Re-claim using existing license for auth
     """
     if MULTI_TENANT:
         raise HTTPException(

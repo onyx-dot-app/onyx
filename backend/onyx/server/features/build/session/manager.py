@@ -69,6 +69,7 @@ from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_t
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     SSEKeepalive,
@@ -481,8 +482,10 @@ class SessionManager:
                     tenant_id=tenant_id,
                     llm_config=llm_config,
                 )
-                sandbox.status = sandbox_info.status
-                self._db_session.flush()
+                # Use update function to also set heartbeat when transitioning to RUNNING
+                update_sandbox_status__no_commit(
+                    self._db_session, sandbox_id, sandbox_info.status
+                )
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
@@ -494,8 +497,9 @@ class SessionManager:
                     self._sandbox_manager.terminate(sandbox_id)
 
                     # Mark as terminated and re-provision
-                    sandbox.status = SandboxStatus.TERMINATED
-                    self._db_session.flush()
+                    update_sandbox_status__no_commit(
+                        self._db_session, sandbox_id, SandboxStatus.TERMINATED
+                    )
 
                     logger.info(
                         f"Re-provisioning sandbox {sandbox_id} for user {user_id}"
@@ -506,8 +510,10 @@ class SessionManager:
                         tenant_id=tenant_id,
                         llm_config=llm_config,
                     )
-                    sandbox.status = sandbox_info.status
-                    self._db_session.flush()
+                    # Use update function to also set heartbeat when transitioning to RUNNING
+                    update_sandbox_status__no_commit(
+                        self._db_session, sandbox_id, sandbox_info.status
+                    )
                 else:
                     logger.info(
                         f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
@@ -539,9 +545,10 @@ class SessionManager:
                 llm_config=llm_config,
             )
 
-            # Update sandbox record with status from provisioning
-            sandbox.status = sandbox_info.status
-            self._db_session.flush()
+            # Update sandbox status (also refreshes heartbeat when transitioning to RUNNING)
+            update_sandbox_status__no_commit(
+                self._db_session, sandbox_id, sandbox_info.status
+            )
 
         # Set up session workspace within the sandbox
         logger.info(

@@ -52,6 +52,7 @@ def record_llm_span_output(
     span: Span[GenerationSpanData],
     output: str | Sequence[Mapping[str, Any]] | None,
     usage: Any | None = None,
+    reasoning: str | None = None,
 ) -> None:
     if output is None:
         span.span_data.output = [{"content": None}]
@@ -63,6 +64,9 @@ def record_llm_span_output(
     usage_dict = _build_usage_dict(usage)
     if usage_dict:
         span.span_data.usage = usage_dict
+
+    if reasoning:
+        span.span_data.reasoning = reasoning
 
 
 def _build_usage_dict(usage: Any | None) -> dict[str, Any] | None:

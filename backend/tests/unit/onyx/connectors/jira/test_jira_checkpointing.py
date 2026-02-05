@@ -59,6 +59,11 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         updated: str = "2023-01-01T12:00:00.000+0000",
         description: str = "Test Description",
         labels: list[str] | None = None,
+        project_key: str = "TEST",
+        project_name: str = "Test Project",
+        issuetype_name: str = "Story",
+        parent_key: str | None = None,
+        parent_issuetype_name: str | None = None,
     ) -> MagicMock:
         """Helper to create a mock Issue object"""
         mock_issue = MagicMock(spec=Issue)
@@ -88,6 +93,28 @@ def create_mock_issue() -> Callable[..., MagicMock]:
 
         mock_issue.fields.resolution = MagicMock()
         mock_issue.fields.resolution.name = "Fixed"
+
+        # Set up project for hierarchy node generation
+        mock_issue.fields.project = MagicMock()
+        mock_issue.fields.project.key = project_key
+        mock_issue.fields.project.name = project_name
+
+        # Set up issuetype for epic detection
+        mock_issue.fields.issuetype = MagicMock()
+        mock_issue.fields.issuetype.name = issuetype_name
+
+        # Set up parent field for hierarchy
+        if parent_key:
+            mock_issue.fields.parent = MagicMock()
+            mock_issue.fields.parent.key = parent_key
+            mock_issue.fields.parent.fields = MagicMock()
+            mock_issue.fields.parent.fields.issuetype = MagicMock()
+            mock_issue.fields.parent.fields.issuetype.name = (
+                parent_issuetype_name or "Story"
+            )
+            mock_issue.fields.parent.fields.summary = f"Parent {parent_key}"
+        else:
+            mock_issue.fields.parent = None
 
         # Add raw field for accessing through API version check
         mock_issue.raw = {"fields": {"description": description}}
@@ -183,6 +210,7 @@ def test_load_from_checkpoint_happy_path(
     assert checkpoint_output1.next_checkpoint == JiraConnectorCheckpoint(
         offset=2,
         has_more=True,
+        seen_hierarchy_node_ids=["TEST"],
     )
 
     checkpoint_output2 = outputs[1]
@@ -193,6 +221,7 @@ def test_load_from_checkpoint_happy_path(
     assert checkpoint_output2.next_checkpoint == JiraConnectorCheckpoint(
         offset=3,
         has_more=False,
+        seen_hierarchy_node_ids=["TEST"],
     )
 
     # Check that search_issues was called with the right parameters
@@ -319,42 +348,28 @@ def test_retrieve_all_slim_docs_perm_sync(
     jira_connector: JiraConnector, create_mock_issue: Any
 ) -> None:
     """Test retrieving all slim documents"""
-    # Set up mocked issues
-    mock_issue1 = create_mock_issue(key="TEST-1")
-    mock_issue2 = create_mock_issue(key="TEST-2")
+    # Set up mocked issues with proper project fields
+    mock_issue1 = create_mock_issue(key="TEST-1", project_key="TEST")
+    mock_issue2 = create_mock_issue(key="TEST-2", project_key="TEST")
 
     # Mock search_issues to return our mock issues
     jira_client = cast(JIRA, jira_connector._jira_client)
     search_issues_mock = cast(MagicMock, jira_client.search_issues)
     search_issues_mock.return_value = [mock_issue1, mock_issue2]
 
-    # Mock best_effort_get_field_from_issue to return the keys
-    with patch(
-        "onyx.connectors.jira.connector.best_effort_get_field_from_issue"
-    ) as mock_field:
-        mock_field.side_effect = ["TEST-1", "TEST-2"]
+    # Call retrieve_all_slim_docs_perm_sync
+    batches = list(jira_connector.retrieve_all_slim_docs_perm_sync(0, 100))
 
-        # Mock build_jira_url to return URLs
-        with patch("onyx.connectors.jira.connector.build_jira_url") as mock_url:
-            mock_url.side_effect = [
-                "https://jira.example.com/browse/TEST-1",
-                "https://jira.example.com/browse/TEST-2",
-            ]
+    # Check that a batch was returned (may include hierarchy nodes + slim docs)
+    assert len(batches) == 1
+    # Filter to just slim documents for checking
+    slim_docs = [item for item in batches[0] if isinstance(item, SlimDocument)]
+    assert len(slim_docs) == 2
+    assert slim_docs[0].id == "https://jira.example.com/browse/TEST-1"
+    assert slim_docs[1].id == "https://jira.example.com/browse/TEST-2"
 
-            # Call retrieve_all_slim_docs_perm_sync
-            batches = list(jira_connector.retrieve_all_slim_docs_perm_sync(0, 100))
-
-            # Check that a batch with 2 documents was returned
-            assert len(batches) == 1
-            assert len(batches[0]) == 2
-            assert isinstance(batches[0][0], SlimDocument)
-            assert isinstance(batches[0][1], SlimDocument)
-            assert batches[0][0].id == "https://jira.example.com/browse/TEST-1"
-            assert batches[0][1].id == "https://jira.example.com/browse/TEST-2"
-
-            # Check that search_issues was called with the right parameters
-            search_issues_mock.assert_called_once()
-            args, kwargs = search_issues_mock.call_args
+    # Check that search_issues was called
+    search_issues_mock.assert_called_once()
 
 
 @pytest.mark.parametrize(
