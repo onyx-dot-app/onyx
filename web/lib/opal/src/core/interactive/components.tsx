@@ -108,10 +108,13 @@ export interface InteractiveBaseProps
   /**
    * Subvariant determining the background fill treatment.
    *
-   * - `"primary"` — Solid filled background
-   * - `"ghost"` — Transparent, visible only on hover
+   * Ignored when `variant` is `"none"`.
    *
-   * @default "ghost"
+   * - `"primary"` — Solid filled background with prominent appearance
+   * - `"secondary"` — Subtle tinted background (`tint-01`)
+   * - `"ghost"` — Transparent background, visible only on hover
+   *
+   * @default "primary"
    */
   subvariant?: InteractiveBaseSubvariant;
 
@@ -164,9 +167,10 @@ export interface InteractiveBaseProps
   /**
    * When `true`, disables the interactive element.
    *
-   * Sets `data-disabled` attribute which CSS uses to apply disabled styles
-   * (muted colors, no pointer events). This prop can also be set via a parent
-   * `Disabled` wrapper component using Radix Slot prop merging.
+   * Sets `data-disabled` and `aria-disabled` attributes. CSS uses `data-disabled`
+   * to apply disabled styles (muted colors, `cursor-not-allowed`). Click handlers
+   * and `href` navigation are blocked in JS, but hover events still fire to
+   * support tooltips explaining why the element is disabled.
    *
    * @default false
    */
@@ -197,10 +201,12 @@ export interface InteractiveBaseProps
  * `Interactive.Base` is the lowest-level building block for any clickable
  * element in the design system. It applies:
  *
- * 1. The `.interactive` CSS class (flex layout, pointer cursor, no text selection)
- * 2. `data-variant` attribute for variant-specific background colors
+ * 1. The `.interactive` CSS class (flex layout, pointer cursor, color transitions)
+ * 2. `data-interactive-base-variant` and `data-interactive-base-subvariant`
+ *    attributes for variant-specific background colors (omitted when `variant="none"`)
  * 3. `data-static` attribute when hover feedback is disabled
  * 4. `data-pressed` attribute for forced pressed state
+ * 5. `data-disabled` attribute for disabled styling
  *
  * All props are merged onto the single child element via Radix `Slot`, meaning
  * the child element *becomes* the interactive surface (no wrapper div).
@@ -208,10 +214,15 @@ export interface InteractiveBaseProps
  * @example
  * ```tsx
  * // Basic usage with a container
- * <Interactive.Base variant="standard" subvariant="ghost">
+ * <Interactive.Base variant="standard" subvariant="primary">
  *   <Interactive.Container border>
  *     <span>Click me</span>
  *   </Interactive.Container>
+ * </Interactive.Base>
+ *
+ * // Wrapping a component that controls its own background
+ * <Interactive.Base variant="none" onClick={handleClick}>
+ *   <Card>Card controls its own background</Card>
  * </Interactive.Base>
  *
  * // With group hover for child visibility
@@ -261,6 +272,7 @@ function InteractiveBase({
     "data-static": isStatic ? "true" : undefined,
     "data-pressed": transient ? "true" : undefined,
     "data-disabled": disabled ? "true" : undefined,
+    "aria-disabled": disabled || undefined,
   };
 
   if (href) {
