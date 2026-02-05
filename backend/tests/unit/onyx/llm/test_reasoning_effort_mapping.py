@@ -25,11 +25,10 @@ def test_openai_reasoning_effort_mapping_has_valid_values() -> None:
 
 
 def test_openai_reasoning_effort_mapping_covers_all_effort_levels() -> None:
-    """Test that OPENAI_REASONING_EFFORT has mappings for all ReasoningEffort values except OFF.
+    """Test that OPENAI_REASONING_EFFORT has mappings for all ReasoningEffort values.
 
     This ensures we don't accidentally forget to add a mapping when new effort levels are added.
-    Note: ReasoningEffort.OFF is excluded because it maps to "none" and is handled separately
-    in multi_llm.py (the reasoning block is not added when effort is OFF).
+    Note: ReasoningEffort.OFF maps to "none" in the OpenAI API.
     """
     # These are the effort levels that should have OpenAI mappings
     expected_effort_levels = {
