@@ -1,0 +1,44 @@
+/* Interactive — base (structural only, no color changes) */
+.interactive {
+  @apply flex self-stretch cursor-pointer select-none;
+}
+
+/* Primary: tint-00 base, hover → tint-02 */
+.interactive[data-variant="primary"] {
+  @apply bg-background-tint-00 transition-colors;
+}
+
+.interactive[data-variant="primary"]:hover:not([data-static]) {
+  @apply bg-background-tint-02;
+}
+
+.interactive[data-variant="primary"]:active:not([data-static]),
+.interactive[data-variant="primary"][data-pressed="true"]:not([data-static]) {
+  @apply bg-background-tint-00;
+}
+
+.interactive[data-variant="secondary"] {
+  @apply bg-background-tint-01 transition-colors;
+}
+
+.interactive[data-variant="secondary"]:hover:not([data-static]) {
+  @apply bg-background-tint-02;
+}
+
+.interactive[data-variant="secondary"]:active:not([data-static]),
+.interactive[data-variant="secondary"][data-pressed="true"]:not([data-static]) {
+  @apply bg-background-tint-00;
+}
+
+.interactive[data-variant="tertiary"] {
+  @apply bg-background-tint-02 transition-colors;
+}
+
+.interactive[data-variant="tertiary"]:hover:not([data-static]) {
+  @apply bg-background-tint-03;
+}
+
+.interactive[data-variant="tertiary"]:active:not([data-static]),
+.interactive[data-variant="tertiary"][data-pressed="true"]:not([data-static]) {
+  @apply bg-background-tint-00;
+}

@@ -6,3 +6,6 @@ export interface IconProps extends SVGProps<SVGSVGElement> {
   title?: string;
   color?: string;
 }
+
+/** Strips `className` and `style` from a props type to enforce design-system styling. */
+export type WithoutStyles<T> = Omit<T, "className" | "style">;
