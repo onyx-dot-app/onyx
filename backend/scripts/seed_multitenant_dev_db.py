@@ -48,7 +48,6 @@ from onyx.indexing.indexing_pipeline import IndexBatchParams
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
-from onyx.utils.logger import setup_logger
 from shared_configs.model_server_models import Embedding
 
 # Configure logging
@@ -57,7 +56,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
-logger = setup_logger()
+logger = logging.getLogger()
 
 # Constants
 API_SERVER_PROTOCOL = "http"
