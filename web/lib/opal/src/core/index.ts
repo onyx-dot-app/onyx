@@ -1,3 +1,4 @@
+/* Interactive */
 import "@opal/core/interactive/styles.css";
 export {
   Interactive,
