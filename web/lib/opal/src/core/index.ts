@@ -1,4 +1,4 @@
-import "@opal/atoms/interactive.css";
+import "@opal/core/interactive/styles.css";
 export {
   Interactive,
   type InteractiveBaseProps,
@@ -8,4 +8,4 @@ export {
   type InteractiveContainerHeightVariant as ContainerHeightVariant,
   type InteractiveContainerPaddingVariant as ContainerPaddingVariant,
   type InteractiveContainerRoundingVariant as ContainerRoundingVariant,
-} from "@opal/atoms/interactive";
+} from "@opal/core/interactive/components";

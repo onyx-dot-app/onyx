@@ -58,7 +58,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import { Interactive } from "@opal/atoms";
+import { Interactive } from "@opal/core";
 
 interface PAT {
   id: number;

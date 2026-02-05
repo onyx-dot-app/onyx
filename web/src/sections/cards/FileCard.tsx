@@ -6,7 +6,7 @@ import { UserFileStatus } from "@/app/app/projects/projectsService";
 import { cn, isImageFile } from "@/lib/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgFileText, SvgX } from "@opal/icons";
-import { Interactive } from "@opal/atoms";
+import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 

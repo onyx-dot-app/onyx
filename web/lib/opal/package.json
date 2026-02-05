@@ -2,9 +2,9 @@
   "name": "@onyx/opal",
   "version": "0.0.1",
   "exports": {
-    "./atoms": {
-      "types": "./src/atoms/index.ts",
-      "default": "./src/atoms/index.ts"
+    "./core": {
+      "types": "./src/core/index.ts",
+      "default": "./src/core/index.ts"
     },
     "./icons": {
       "types": "./src/icons/index.ts",

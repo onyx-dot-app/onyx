@@ -103,7 +103,7 @@ function InteractiveBase({
 // ---------------------------------------------------------------------------
 
 export interface InteractiveContainerProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   /** Ref to the underlying `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
   /** Show a border around the container. */

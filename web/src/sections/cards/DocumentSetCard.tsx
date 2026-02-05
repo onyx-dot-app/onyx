@@ -4,7 +4,7 @@ import { DocumentSetSummary } from "@/lib/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { SvgFiles } from "@opal/icons";
-import { Interactive } from "@opal/atoms";
+import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 
