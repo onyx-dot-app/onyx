@@ -46,8 +46,8 @@ def mock_nlp_embeddings_post() -> Iterator[None]:
     def _mock_post(
         url: str,
         json: Mapping[str, Any] | None = None,
-        headers: Mapping[str, str] | None = None,
-        **kwargs: Any,
+        headers: Mapping[str, str] | None = None,  # noqa: ARG001
+        **kwargs: Any,  # noqa: ARG001
     ) -> MagicMock:
         resp = MagicMock()
         if "encoder/bi-encoder-embed" in url:
@@ -89,7 +89,7 @@ def mock_file_store() -> Iterator[None]:
     """Mock the file store to avoid S3/storage dependencies in tests."""
     global _mock_file_id_counter
 
-    def _mock_save_file(*args: Any, **kwargs: Any) -> str:
+    def _mock_save_file(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
         global _mock_file_id_counter
         _mock_file_id_counter += 1
         # Return a predictable file ID for tests
@@ -108,10 +108,10 @@ def mock_file_store() -> Iterator[None]:
 
 @pytest.fixture
 def mock_external_deps(
-    mock_nlp_embeddings_post: None,
-    mock_gpu_status: None,
-    mock_vespa_query: None,
-    mock_file_store: None,
+    mock_nlp_embeddings_post: None,  # noqa: ARG001
+    mock_gpu_status: None,  # noqa: ARG001
+    mock_vespa_query: None,  # noqa: ARG001
+    mock_file_store: None,  # noqa: ARG001
 ) -> Iterator[None]:
     """Convenience fixture to enable all common external dependency mocks."""
     yield

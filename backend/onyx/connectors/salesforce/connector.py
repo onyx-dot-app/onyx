@@ -1134,9 +1134,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        callback: IndexingHeartbeatInterface | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument | HierarchyNode] = []
         for parent_object_type in self.parent_object_list:

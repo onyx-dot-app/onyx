@@ -100,7 +100,7 @@ def _migrate_single_document(
     bind=True,
 )
 def check_for_documents_for_opensearch_migration_task(
-    self: Task, *, tenant_id: str
+    self: Task, *, tenant_id: str  # noqa: ARG001
 ) -> bool | None:
     """
     Periodic task to check for and add documents to the OpenSearch migration
@@ -211,7 +211,7 @@ def check_for_documents_for_opensearch_migration_task(
     bind=True,
 )
 def migrate_documents_from_vespa_to_opensearch_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     *,
     tenant_id: str,
 ) -> bool | None:

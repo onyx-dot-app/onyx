@@ -30,7 +30,7 @@ REFRESH_ENDPOINTS = {
 async def _test_expire_oauth_token(
     user: User,
     oauth_account: OAuthAccount,
-    db_session: AsyncSession,
+    db_session: AsyncSession,  # noqa: ARG001
     user_manager: BaseUserManager[User, Any],
     expire_in_seconds: int = 10,
 ) -> bool:
@@ -59,7 +59,7 @@ async def _test_expire_oauth_token(
 async def refresh_oauth_token(
     user: User,
     oauth_account: OAuthAccount,
-    db_session: AsyncSession,
+    db_session: AsyncSession,  # noqa: ARG001
     user_manager: BaseUserManager[User, Any],
 ) -> bool:
     """
@@ -182,7 +182,7 @@ async def check_and_refresh_oauth_tokens(
 
 
 async def check_oauth_account_has_refresh_token(
-    user: User,
+    user: User,  # noqa: ARG001
     oauth_account: OAuthAccount,
 ) -> bool:
     """

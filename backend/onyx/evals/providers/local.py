@@ -73,7 +73,7 @@ class LocalEvalProvider(EvalProvider):
     def eval(
         self,
         task: Callable[[dict[str, Any]], EvalToolResult],
-        configuration: EvalConfigurationOptions,
+        configuration: EvalConfigurationOptions,  # noqa: ARG002
         data: list[dict[str, Any]] | None = None,
         remote_dataset_name: str | None = None,
         multi_turn_task: Callable[[dict[str, Any]], MultiTurnEvalResult] | None = None,

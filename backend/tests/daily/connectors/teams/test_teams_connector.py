@@ -179,7 +179,7 @@ def set_ee_on() -> Generator[None, None, None]:
 
 def test_load_from_checkpoint_with_perm_sync(
     teams_connector: TeamsConnector,
-    set_ee_on: None,
+    set_ee_on: None,  # noqa: ARG001
 ) -> None:
     """Test that load_from_checkpoint_with_perm_sync returns documents with external_access.
 

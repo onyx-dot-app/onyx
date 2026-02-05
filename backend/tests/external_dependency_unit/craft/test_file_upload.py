@@ -30,7 +30,9 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(scope="function")
-def sandbox(db_session: Session, test_user: User, tenant_context: None) -> Sandbox:
+def sandbox(
+    db_session: Session, test_user: User, tenant_context: None  # noqa: ARG001
+) -> Sandbox:
     """Create a test sandbox for the user (sandboxes are per-user, not per-session)."""
     sandbox = Sandbox(
         id=uuid4(),
@@ -45,7 +47,10 @@ def sandbox(db_session: Session, test_user: User, tenant_context: None) -> Sandb
 
 @pytest.fixture(scope="function")
 def build_session_with_user(
-    db_session: Session, test_user: User, sandbox: Sandbox, tenant_context: None
+    db_session: Session,
+    test_user: User,
+    sandbox: Sandbox,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
 ) -> BuildSession:
     """Create a test build session for a user who has a sandbox."""
     session = BuildSession(
@@ -123,7 +128,7 @@ class TestFileUpload:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -146,7 +151,7 @@ class TestFileUpload:
     def test_upload_file_session_not_found(
         self,
         test_user: User,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         session_manager_with_mock: "SessionManager",
     ) -> None:
         """Test that uploading to a non-existent session raises ValueError."""
@@ -166,7 +171,7 @@ class TestFileUploadLimits:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -193,7 +198,7 @@ class TestFileUploadLimits:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -218,7 +223,7 @@ class TestFileUploadLimits:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -272,7 +277,7 @@ class TestFileDelete:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -290,7 +295,7 @@ class TestFileDelete:
     def test_delete_file_session_not_found(
         self,
         test_user: User,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         session_manager_with_mock: "SessionManager",
     ) -> None:
         """Test that deleting from a non-existent session raises ValueError."""
@@ -309,7 +314,7 @@ class TestPathSanitization:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -330,7 +335,7 @@ class TestPathSanitization:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -350,7 +355,7 @@ class TestPathSanitization:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -381,7 +386,7 @@ class TestPathSanitization:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -405,7 +410,7 @@ class TestFilenameCollision:
         self,
         test_user: User,
         build_session_with_user: BuildSession,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         mock_sandbox_manager: MagicMock,
         session_manager_with_mock: "SessionManager",
     ) -> None:
@@ -457,7 +462,7 @@ class TestGetUploadStats:
     def test_get_upload_stats_session_not_found(
         self,
         test_user: User,
-        sandbox: Sandbox,
+        sandbox: Sandbox,  # noqa: ARG002
         session_manager_with_mock: "SessionManager",
     ) -> None:
         """Test that getting stats for non-existent session raises ValueError."""

@@ -341,7 +341,7 @@ def create_temporary_persona(
 
 
 def process_kg_commands(
-    message: str, persona_name: str, tenant_id: str, db_session: Session
+    message: str, persona_name: str, tenant_id: str, db_session: Session  # noqa: ARG001
 ) -> None:
     # Temporarily, until we have a draft UI for the KG Operations/Management
     # TODO: move to api endpoint once we get frontend

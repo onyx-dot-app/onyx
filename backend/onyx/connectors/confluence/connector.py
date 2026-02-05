@@ -891,8 +891,8 @@ class ConfluenceConnector(
 
     def _retrieve_all_slim_docs(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
     ) -> GenerateSlimDocumentOutput:

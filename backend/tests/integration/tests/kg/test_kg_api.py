@@ -50,7 +50,7 @@ def connectors() -> None:
         create_connector(db_session, connector_data)
 
 
-def test_kg_enable_and_disable(connectors: None) -> None:
+def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
     admin_user = UserManager.create(name="admin_user")
 
     # Enable KG
@@ -141,7 +141,7 @@ def test_kg_enable_with_missing_fields_should_fail() -> None:
     assert res.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_update_kg_entity_types(connectors: None) -> None:
+def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
     admin_user = UserManager.create(name="admin_user")
 
     # Enable kg and populate default entity types
@@ -234,7 +234,9 @@ def test_update_kg_entity_types(connectors: None) -> None:
     assert new_entity_types == expected_entity_types
 
 
-def test_update_invalid_kg_entity_type_should_do_nothing(connectors: None) -> None:
+def test_update_invalid_kg_entity_type_should_do_nothing(
+    connectors: None,  # noqa: ARG001
+) -> None:
     admin_user = UserManager.create(name="admin_user")
 
     # Enable kg and populate default entity types

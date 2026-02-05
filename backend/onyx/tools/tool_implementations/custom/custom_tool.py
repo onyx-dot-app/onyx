@@ -146,7 +146,7 @@ class CustomTool(Tool[None]):
     def run(
         self,
         placement: Placement,
-        override_kwargs: None = None,
+        override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
     ) -> ToolResponse:
         request_body = llm_kwargs.get(REQUEST_BODY)

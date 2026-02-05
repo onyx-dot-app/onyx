@@ -122,7 +122,9 @@ def opensearch_available() -> None:
 
 
 @pytest.fixture(scope="function")
-def test_client(opensearch_available: None) -> Generator[OpenSearchClient, None, None]:
+def test_client(
+    opensearch_available: None,  # noqa: ARG001
+) -> Generator[OpenSearchClient, None, None]:
     """Creates an OpenSearch client for testing with automatic cleanup."""
     test_index_name = f"test_index_{uuid.uuid4().hex[:8]}"
     client = OpenSearchClient(index_name=test_index_name)
@@ -586,7 +588,7 @@ class TestOpenSearchClient:
     def test_hybrid_search_with_pipeline(
         self,
         test_client: OpenSearchClient,
-        search_pipeline: None,
+        search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Tests hybrid search with a normalization pipeline."""
@@ -668,7 +670,7 @@ class TestOpenSearchClient:
     def test_search_empty_index(
         self,
         test_client: OpenSearchClient,
-        search_pipeline: None,
+        search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Tests search on an empty index returns an empty list."""
@@ -708,7 +710,7 @@ class TestOpenSearchClient:
     def test_hybrid_search_with_pipeline_and_filters(
         self,
         test_client: OpenSearchClient,
-        search_pipeline: None,
+        search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """
@@ -829,7 +831,7 @@ class TestOpenSearchClient:
     def test_hybrid_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,
         test_client: OpenSearchClient,
-        search_pipeline: None,
+        search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """
@@ -1226,7 +1228,7 @@ class TestOpenSearchClient:
     def test_time_cutoff_filter(
         self,
         test_client: OpenSearchClient,
-        search_pipeline: None,
+        search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Tests the time cutoff filter works."""

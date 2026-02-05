@@ -22,7 +22,7 @@ def reset_for_module() -> None:
 
 
 @pytest.fixture
-def second_user(admin_user: DATestUser) -> DATestUser:
+def second_user(admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
     # Ensure admin exists so this new user is created with BASIC role.
     try:
         return UserManager.create(name="second_basic_user")

@@ -98,7 +98,7 @@ class LongTermLogger:
         category: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
-        limit: int = 100,
+        limit: int = 100,  # noqa: ARG002
     ) -> list[JSON_ro]:
         category_path = self.log_file_path / category
         files = list(category_path.glob("*.json"))

@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture()
 def users_and_groups(
-    reset: None,
+    reset: None,  # noqa: ARG001
 ) -> tuple[DATestUser, DATestUser, int, int]:
     """Create admin, basic user, and two user groups."""
     admin_user = UserManager.create(name="admin_user")

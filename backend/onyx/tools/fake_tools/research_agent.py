@@ -618,8 +618,8 @@ def run_research_agent_call(
 
 
 def _on_research_agent_timeout(
-    index: int,
-    func: Callable[..., Any],
+    index: int,  # noqa: ARG001
+    func: Callable[..., Any],  # noqa: ARG001
     args: tuple[Any, ...],
 ) -> ResearchAgentCallResult:
     """Callback for handling research agent timeouts.

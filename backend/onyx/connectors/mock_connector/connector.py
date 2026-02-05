@@ -45,7 +45,9 @@ class MockConnector(CheckpointedConnectorWithPermSync[MockConnectorCheckpoint]):
         self.connector_yields: list[SingleConnectorYield] | None = None
         self.current_yield_index: int = 0
 
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+    def load_credentials(
+        self, credentials: dict[str, Any]  # noqa: ARG002
+    ) -> dict[str, Any] | None:
         response = self.client.get(self._get_mock_server_url("get-documents"))
         response.raise_for_status()
         data = response.json()
@@ -67,8 +69,8 @@ class MockConnector(CheckpointedConnectorWithPermSync[MockConnectorCheckpoint]):
 
     def _load_from_checkpoint_common(
         self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        start: SecondsSinceUnixEpoch,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch,  # noqa: ARG002
         checkpoint: MockConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[MockConnectorCheckpoint]:

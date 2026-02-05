@@ -683,7 +683,7 @@ class ACPExecClient:
             {"sessionId": self._state.current_session.session_id},
         )
 
-    def health_check(self, timeout: float = 5.0) -> bool:
+    def health_check(self, timeout: float = 5.0) -> bool:  # noqa: ARG002
         """Check if we can exec into the pod."""
         try:
             k8s = self._get_k8s_client()

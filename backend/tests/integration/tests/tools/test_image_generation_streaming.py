@@ -22,8 +22,8 @@ ART_PERSONA_ID = -3
 
 def test_image_generation_streaming(
     basic_user: DATestUser,
-    llm_provider: DATestLLMProvider,
-    image_generation_config: DATestImageGenerationConfig,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    image_generation_config: DATestImageGenerationConfig,  # noqa: ARG001
 ) -> None:
     """
     Test image generation to verify:

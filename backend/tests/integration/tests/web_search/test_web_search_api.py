@@ -264,7 +264,7 @@ def _activate_exa_provider(admin_user: DATestUser) -> int:
 
 @pytestmark_exa
 def test_web_search_endpoints_with_exa(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     provider_id = _activate_exa_provider(admin_user)

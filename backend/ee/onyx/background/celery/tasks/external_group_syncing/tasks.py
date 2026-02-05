@@ -259,7 +259,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
 def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
-    r: Redis,
+    r: Redis,  # noqa: ARG001
     tenant_id: str,
 ) -> str | None:
     """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
@@ -344,7 +344,7 @@ def try_creating_external_group_sync_task(
     bind=True,
 )
 def connector_external_group_sync_generator_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     cc_pair_id: int,
     tenant_id: str,
 ) -> None:
@@ -590,8 +590,8 @@ def _perform_external_group_sync(
 
 def validate_external_group_sync_fences(
     tenant_id: str,
-    celery_app: Celery,
-    r: Redis,
+    celery_app: Celery,  # noqa: ARG001
+    r: Redis,  # noqa: ARG001
     r_replica: Redis,
     r_celery: Redis,
     lock_beat: RedisLock,

@@ -91,7 +91,7 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
 
 
 @worker_process_init.connect
-def init_worker(**kwargs: Any) -> None:
+def init_worker(**kwargs: Any) -> None:  # noqa: ARG001
     SqlEngine.reset_engine()
 
 

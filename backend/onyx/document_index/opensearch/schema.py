@@ -197,7 +197,9 @@ class DocumentChunk(BaseModel):
 
     @field_serializer("last_updated", mode="wrap")
     def serialize_datetime_fields_to_epoch_seconds(
-        self, value: datetime | None, handler: SerializerFunctionWrapHandler
+        self,
+        value: datetime | None,
+        handler: SerializerFunctionWrapHandler,  # noqa: ARG002
     ) -> int | None:
         """
         Serializes datetime fields to seconds since the Unix epoch.
@@ -231,7 +233,7 @@ class DocumentChunk(BaseModel):
 
     @field_serializer("tenant_id", mode="wrap")
     def serialize_tenant_state(
-        self, value: TenantState, handler: SerializerFunctionWrapHandler
+        self, value: TenantState, handler: SerializerFunctionWrapHandler  # noqa: ARG002
     ) -> str | None:
         """
         Serializes tenant_state to the tenant str if multitenant, or None if

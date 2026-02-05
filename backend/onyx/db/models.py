@@ -120,12 +120,16 @@ class EncryptedString(TypeDecorator):
     # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
 
-    def process_bind_param(self, value: str | None, dialect: Dialect) -> bytes | None:
+    def process_bind_param(
+        self, value: str | None, dialect: Dialect  # noqa: ARG002
+    ) -> bytes | None:
         if value is not None:
             return encrypt_string_to_bytes(value)
         return value
 
-    def process_result_value(self, value: bytes | None, dialect: Dialect) -> str | None:
+    def process_result_value(
+        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+    ) -> str | None:
         if value is not None:
             return decrypt_bytes_to_string(value)
         return value
@@ -136,14 +140,16 @@ class EncryptedJson(TypeDecorator):
     # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
 
-    def process_bind_param(self, value: dict | None, dialect: Dialect) -> bytes | None:
+    def process_bind_param(
+        self, value: dict | None, dialect: Dialect  # noqa: ARG002
+    ) -> bytes | None:
         if value is not None:
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect
+        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
     ) -> dict | None:
         if value is not None:
             json_str = decrypt_bytes_to_string(value)
@@ -156,13 +162,17 @@ class NullFilteredString(TypeDecorator):
     # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
 
-    def process_bind_param(self, value: str | None, dialect: Dialect) -> str | None:
+    def process_bind_param(
+        self, value: str | None, dialect: Dialect  # noqa: ARG002
+    ) -> str | None:
         if value is not None and "\x00" in value:
             logger.warning(f"NUL characters found in value: {value}")
             return value.replace("\x00", "")
         return value
 
-    def process_result_value(self, value: str | None, dialect: Dialect) -> str | None:
+    def process_result_value(
+        self, value: str | None, dialect: Dialect  # noqa: ARG002
+    ) -> str | None:
         return value
 
 
@@ -273,7 +283,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     @validates("email")
-    def validate_email(self, key: str, value: str) -> str:
+    def validate_email(self, key: str, value: str) -> str:  # noqa: ARG002
         return value.lower() if value else value
 
     @property
@@ -4173,7 +4183,7 @@ class UserTenantMapping(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     @validates("email")
-    def validate_email(self, key: str, value: str) -> str:
+    def validate_email(self, key: str, value: str) -> str:  # noqa: ARG002
         return value.lower() if value else value
 
 

@@ -242,7 +242,7 @@ class TestGuildRegistrationCommand:
     @pytest.mark.asyncio
     async def test_register_syncs_forum_channels(
         self,
-        mock_discord_message: MagicMock,
+        mock_discord_message: MagicMock,  # noqa: ARG002
         mock_discord_guild: MagicMock,
     ) -> None:
         """Forum channels are included in sync."""
@@ -254,7 +254,7 @@ class TestGuildRegistrationCommand:
     @pytest.mark.asyncio
     async def test_register_private_channel_detection(
         self,
-        mock_discord_message: MagicMock,
+        mock_discord_message: MagicMock,  # noqa: ARG002
         mock_discord_guild: MagicMock,
     ) -> None:
         """Private channels are marked correctly."""
@@ -441,7 +441,7 @@ class TestThreadCreationAndResponseRouting:
     @pytest.mark.asyncio
     async def test_response_in_existing_thread(
         self,
-        mock_bot_user: MagicMock,
+        mock_bot_user: MagicMock,  # noqa: ARG002
     ) -> None:
         """Message in thread - response appended to thread."""
         thread = MagicMock(spec=discord.Thread)
@@ -462,7 +462,7 @@ class TestThreadCreationAndResponseRouting:
     async def test_response_creates_thread_thread_only_mode(
         self,
         mock_discord_message: MagicMock,
-        mock_bot_user: MagicMock,
+        mock_bot_user: MagicMock,  # noqa: ARG002
     ) -> None:
         """thread_only_mode=true creates new thread for response."""
         mock_thread = MagicMock()
@@ -483,7 +483,7 @@ class TestThreadCreationAndResponseRouting:
     async def test_response_replies_inline(
         self,
         mock_discord_message: MagicMock,
-        mock_bot_user: MagicMock,
+        mock_bot_user: MagicMock,  # noqa: ARG002
     ) -> None:
         """thread_only_mode=false uses message.reply()."""
         # Make sure it's not a thread
@@ -498,7 +498,7 @@ class TestThreadCreationAndResponseRouting:
     @pytest.mark.asyncio
     async def test_thread_name_truncation(
         self,
-        mock_bot_user: MagicMock,
+        mock_bot_user: MagicMock,  # noqa: ARG002
     ) -> None:
         """Thread name is truncated to 100 chars."""
         msg = MagicMock(spec=discord.Message)
@@ -546,7 +546,9 @@ class TestBotLifecycle:
         from onyx.onyxbot.discord.client import OnyxDiscordClient
 
         with (
-            patch.object(OnyxDiscordClient, "__init__", lambda self: None),
+            patch.object(
+                OnyxDiscordClient, "__init__", lambda self: None  # noqa: ARG005
+            ),
             patch(
                 "onyx.onyxbot.discord.client.DiscordCacheManager",
                 return_value=mock_cache_manager,
@@ -575,7 +577,11 @@ class TestBotLifecycle:
         """setup_hook calls api_client.initialize()."""
         from onyx.onyxbot.discord.client import OnyxDiscordClient
 
-        with (patch.object(OnyxDiscordClient, "__init__", lambda self: None),):
+        with (
+            patch.object(
+                OnyxDiscordClient, "__init__", lambda self: None  # noqa: ARG005
+            ),
+        ):
             bot = OnyxDiscordClient()
             bot.cache = mock_cache_manager
             bot.api_client = mock_api_client
@@ -596,7 +602,9 @@ class TestBotLifecycle:
         from onyx.onyxbot.discord.client import OnyxDiscordClient
 
         with (
-            patch.object(OnyxDiscordClient, "__init__", lambda self: None),
+            patch.object(
+                OnyxDiscordClient, "__init__", lambda self: None  # noqa: ARG005
+            ),
             patch.object(OnyxDiscordClient, "is_closed", return_value=True),
         ):
             bot = OnyxDiscordClient()

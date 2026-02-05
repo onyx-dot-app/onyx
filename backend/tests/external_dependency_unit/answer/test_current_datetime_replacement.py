@@ -18,7 +18,9 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 
 def test_stream_chat_current_date_response(
-    db_session: Session, full_deployment_setup: None, mock_external_deps: None
+    db_session: Session,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """Smoke test that asking for current date yields a streamed response.
 

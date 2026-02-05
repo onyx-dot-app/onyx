@@ -388,7 +388,7 @@ class S3BackedFileStore(FileStore):
     def read_file(
         self,
         file_id: str,
-        mode: str | None = None,
+        mode: str | None = None,  # noqa: ARG002
         use_tempfile: bool = False,
         db_session: Session | None = None,
     ) -> IO[bytes]:

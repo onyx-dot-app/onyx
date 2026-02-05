@@ -156,7 +156,9 @@ class TestRegistrationKeyAPI:
         delete_guild_config(db_session, config.id)
         db_session.commit()
 
-    def test_registration_key_is_unique(self, db_session: Session) -> None:
+    def test_registration_key_is_unique(
+        self, db_session: Session  # noqa: ARG002
+    ) -> None:
         """Each generated key is unique."""
         keys = [generate_discord_registration_key("tenant") for _ in range(5)]
         assert len(set(keys)) == 5
