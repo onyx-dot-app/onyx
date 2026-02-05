@@ -417,7 +417,7 @@ class SandboxManager(ABC):
     ) -> bool:
         """Sync files from S3 to the sandbox's /workspace/files directory.
 
-        For Kubernetes backend: Executes `aws s3 sync` in the file-sync sidecar container.
+        For Kubernetes backend: Executes `s5cmd sync` in the file-sync sidecar container.
         For Local backend: No-op since files are directly accessible via symlink.
 
         This is idempotent - only downloads changed files.
