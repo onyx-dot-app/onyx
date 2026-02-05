@@ -8,13 +8,13 @@ import {
   WellKnownLLMProviderDescriptor,
 } from "../../interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import Modal from "@/refresh-components/Modal";
-import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
-import { SvgSettings } from "@opal/icons";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
+import { SvgArrowExchange, SvgSettings } from "@opal/icons";
+import { Card } from "@/refresh-components/cards";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import { ProviderIcon } from "../../ProviderIcon";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import LLMFormLayout from "./FormLayout";
 
 export interface ProviderFormContext {
   onClose: () => void;
@@ -31,21 +31,19 @@ export interface ProviderFormContext {
 interface ProviderFormEntrypointWrapperProps {
   children: (context: ProviderFormContext) => ReactNode;
   providerName: string;
+  providerDisplayName?: string;
+  providerInternalName?: string;
   providerEndpoint?: string;
   existingLlmProvider?: LLMProviderView;
-  /** When true, renders a simple button instead of a card-based UI */
-  buttonMode?: boolean;
-  /** Custom button text for buttonMode (defaults to "Add {providerName}") */
-  buttonText?: string;
 }
 
 export function ProviderFormEntrypointWrapper({
   children,
   providerName,
+  providerDisplayName,
+  providerInternalName,
   providerEndpoint,
   existingLlmProvider,
-  buttonMode,
-  buttonText,
 }: ProviderFormEntrypointWrapperProps) {
   const [formIsVisible, setFormIsVisible] = useState(false);
 
@@ -67,37 +65,6 @@ export function ProviderFormEntrypointWrapper({
 
   const onClose = () => setFormIsVisible(false);
 
-  async function handleSetAsDefault(): Promise<void> {
-    if (
-      !existingLlmProvider ||
-      !existingLlmProvider.model_configurations ||
-      existingLlmProvider.model_configurations.length === 0
-    )
-      return;
-
-    const response = await fetch(`${LLM_PROVIDERS_ADMIN_URL}/default`, {
-      method: "POST",
-      body: JSON.stringify({
-        provider_id: existingLlmProvider.id,
-        model_name: existingLlmProvider.model_configurations[0]?.name ?? "",
-      }),
-    });
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      setPopup({
-        type: "error",
-        message: `Failed to set provider as default: ${errorMsg}`,
-      });
-      return;
-    }
-
-    await mutate(LLM_PROVIDERS_ADMIN_URL);
-    setPopup({
-      type: "success",
-      message: "Provider set as default successfully!",
-    });
-  }
-
   const context: ProviderFormContext = {
     onClose,
     mutate,
@@ -110,113 +77,51 @@ export function ProviderFormEntrypointWrapper({
     wellKnownLLMProvider,
   };
 
-  // Button mode: simple button that opens a modal
-  if (buttonMode && !existingLlmProvider) {
-    return (
-      <>
-        {popup}
-        <Button action onClick={() => setFormIsVisible(true)}>
-          {buttonText ?? `Add ${providerName}`}
-        </Button>
+  const displayName = providerDisplayName ?? providerName;
+  const internalName = providerInternalName ?? providerName;
 
-        {formIsVisible && (
-          <Modal open onOpenChange={onClose}>
-            <Modal.Content>
-              <Modal.Header
-                icon={SvgSettings}
-                title={`Setup ${providerName}`}
-                onClose={onClose}
-              />
-              <Modal.Body>{children(context)}</Modal.Body>
-            </Modal.Content>
-          </Modal>
-        )}
-      </>
-    );
-  }
-
-  // Card mode: card-based UI with modal
   return (
-    <div>
+    <>
       {popup}
-      <div className="border p-3 bg-background-neutral-01 rounded-16 w-96 flex shadow-md">
+      <Card padding={0}>
         {existingLlmProvider ? (
-          <>
-            <div className="my-auto">
-              <Text
-                as="p"
-                headingH3
-                text04
-                className="text-ellipsis overflow-hidden max-w-32"
-              >
-                {existingLlmProvider.name}
-              </Text>
-              <Text as="p" secondaryBody text03 className="italic">
-                ({providerName})
-              </Text>
-              {!existingLlmProvider.is_default_provider && (
-                <Text
-                  as="p"
-                  className={cn("text-action-link-05", "cursor-pointer")}
-                  onClick={handleSetAsDefault}
-                >
-                  Set as default
-                </Text>
-              )}
-            </div>
-
-            {existingLlmProvider && (
-              <div className="my-auto ml-3">
-                {existingLlmProvider.is_default_provider ? (
-                  <Badge variant="agent">Default</Badge>
-                ) : (
-                  <Badge variant="success">Enabled</Badge>
-                )}
-              </div>
-            )}
-
-            <div className="ml-auto my-auto">
-              <Button
-                action={!existingLlmProvider}
-                secondary={!!existingLlmProvider}
+          <GeneralLayouts.CardItemLayout
+            icon={() => <ProviderIcon provider={internalName} size={24} />}
+            title={displayName}
+            description={providerName}
+            rightChildren={
+              <IconButton
+                icon={SvgSettings}
+                internal
                 onClick={() => setFormIsVisible(true)}
-              >
-                Edit
-              </Button>
-            </div>
-          </>
+              />
+            }
+          />
         ) : (
-          <>
-            <div className="my-auto">
-              <Text as="p" headingH3>
-                {providerName}
-              </Text>
-            </div>
-            <div className="ml-auto my-auto">
-              <Button action onClick={() => setFormIsVisible(true)}>
-                Set up
-              </Button>
-            </div>
-          </>
+          <GeneralLayouts.CardItemLayout
+            icon={() => <ProviderIcon provider={internalName} size={24} />}
+            title={displayName}
+            description={providerName}
+            rightChildren={
+              <LineItem
+                children="Connect"
+                icon={SvgArrowExchange}
+                onClick={() => setFormIsVisible(true)}
+              />
+            }
+          />
         )}
-      </div>
+      </Card>
 
       {formIsVisible && (
-        <Modal open onOpenChange={onClose}>
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgSettings}
-              title={`${existingLlmProvider ? "Configure" : "Setup"} ${
-                existingLlmProvider?.name
-                  ? `"${existingLlmProvider.name}"`
-                  : providerName
-              }`}
-              onClose={onClose}
-            />
-            <Modal.Body>{children(context)}</Modal.Body>
-          </Modal.Content>
-        </Modal>
+        <LLMFormLayout.Modal
+          icon={() => <ProviderIcon provider={internalName} size={24} />}
+          displayName={displayName}
+          onClose={onClose}
+        >
+          {children(context)}
+        </LLMFormLayout.Modal>
       )}
-    </div>
+    </>
   );
 }

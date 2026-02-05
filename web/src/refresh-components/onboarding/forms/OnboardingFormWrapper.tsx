@@ -6,7 +6,10 @@ import {
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
+import {
+  LLM_ADMIN_URL,
+  LLM_PROVIDERS_ADMIN_URL,
+} from "@/app/admin/configuration/llm/constants";
 import { OnboardingActions, OnboardingState } from "../types";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import {
@@ -225,16 +228,19 @@ export function OnboardingFormWrapper<T extends Record<string, any>>({
       try {
         const newLlmProvider = await response.json();
         if (newLlmProvider?.id != null) {
-          const setDefaultResponse = await fetch(
-            `${LLM_PROVIDERS_ADMIN_URL}/default`,
-            {
-              method: "POST",
-              body: JSON.stringify({
-                provider_id: newLlmProvider.id,
-                model_name: newLlmProvider.model_configurations[0].name,
-              }),
-            }
-          );
+          const defaultLLMModel =
+            payload.default_model_name ??
+            newLlmProvider.model_configurations[0].name;
+          const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              provider_id: newLlmProvider.id,
+              model_name: defaultLLMModel,
+            }),
+          });
           if (!setDefaultResponse.ok) {
             const err = await setDefaultResponse.json().catch(() => ({}));
             console.error("Failed to set provider as default", err?.detail);

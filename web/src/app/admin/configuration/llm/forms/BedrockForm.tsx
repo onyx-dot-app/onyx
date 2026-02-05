@@ -34,7 +34,7 @@ import Tabs from "@/refresh-components/Tabs";
 import { cn } from "@/lib/utils";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
-const BEDROCK_DISPLAY_NAME = "AWS Bedrock";
+const BEDROCK_DISPLAY_NAME = "Anazon Bedrock";
 
 // AWS Bedrock regions - kept in sync with backend
 const AWS_REGION_OPTIONS = [
@@ -266,7 +266,9 @@ export function BedrockForm({
 
   return (
     <ProviderFormEntrypointWrapper
-      providerName={BEDROCK_DISPLAY_NAME}
+      providerName={"AWS"}
+      providerDisplayName={BEDROCK_DISPLAY_NAME}
+      providerInternalName={"bedrock"}
       existingLlmProvider={existingLlmProvider}
     >
       {({

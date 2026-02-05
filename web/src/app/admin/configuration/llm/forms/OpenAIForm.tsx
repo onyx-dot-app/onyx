@@ -1,23 +1,23 @@
 import { Form, Formik } from "formik";
+import * as Yup from "yup";
 
 import { LLMProviderFormProps } from "../interfaces";
-import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
+import LLMFormLayout from "./components/FormLayout";
+import { ProviderIcon } from "../ProviderIcon";
+import Separator from "@/refresh-components/Separator";
 
 export const OPENAI_PROVIDER_NAME = "openai";
-const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
 export function OpenAIForm({
   existingLlmProvider,
@@ -51,11 +51,6 @@ export function OpenAIForm({
             modelConfigurations
           ),
           api_key: existingLlmProvider?.api_key ?? "",
-          default_model_name:
-            existingLlmProvider?.default_model_name ??
-            wellKnownLLMProvider?.recommended_default_model?.name ??
-            DEFAULT_DEFAULT_MODEL_NAME,
-          // Default to auto mode for new OpenAI providers
           is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
         };
 
@@ -87,35 +82,39 @@ export function OpenAIForm({
                 });
               }}
             >
-              {(formikProps) => {
-                return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
+              {(formikProps) => (
+                <Form>
+                  <LLMFormLayout.Body>
+                    <PasswordInputTypeInField
+                      name="api_key"
+                      label="API Key"
+                      subtext="Paste your API key from OpenAI to access your models."
+                    />
+
+                    <Separator />
+
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
+                    <Separator />
 
                     <DisplayModels
                       modelConfigurations={modelConfigurations}
                       formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
                       shouldShowAutoUpdateToggle={true}
                     />
 
                     <AdvancedOptions formikProps={formikProps} />
+                  </LLMFormLayout.Body>
 
-                    <FormActionButtons
-                      isTesting={isTesting}
-                      testError={testError}
-                      existingLlmProvider={existingLlmProvider}
-                      mutate={mutate}
-                      onClose={onClose}
-                      isFormValid={formikProps.isValid}
-                    />
-                  </Form>
-                );
-              }}
+                  <LLMFormLayout.Footer
+                    onCancel={onClose}
+                    submitLabel={existingLlmProvider ? "Update" : "Enable"}
+                    isSubmitting={isTesting}
+                    isSubmitDisabled={!formikProps.isValid}
+                    error={testError}
+                  />
+                </Form>
+              )}
             </Formik>
           </>
         );

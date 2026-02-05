@@ -28,6 +28,8 @@ export function AnthropicForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName="Anthropic"
+      providerDisplayName="Claude"
+      providerInternalName="anthropic"
       providerEndpoint={ANTHROPIC_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
     >

@@ -32,7 +32,10 @@ import {
   MinimalPersonaSnapshot,
   PersonaLabel,
 } from "@/app/admin/assistants/interfaces";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
@@ -525,16 +528,20 @@ providing appropriate defaults for new conversations based on the available tool
 */
 
 function getDefaultLlmDescriptor(
-  llmProviders: LLMProviderDescriptor[]
+  llmProviders: LLMProviderDescriptor[],
+  defaultLlmModel?: DefaultModel
 ): LlmDescriptor | null {
   const defaultProvider = llmProviders.find(
-    (provider) => provider.is_default_provider
+    (provider) => provider.id === defaultLlmModel?.provider_id
   );
   if (defaultProvider) {
     return {
       name: defaultProvider.name,
       provider: defaultProvider.provider,
-      modelName: defaultProvider.default_model_name,
+      modelName:
+        defaultLlmModel?.model_name ??
+        defaultProvider.model_configurations[0]?.name ??
+        "",
     };
   }
   const firstLlmProvider = llmProviders.find(
@@ -544,7 +551,7 @@ function getDefaultLlmDescriptor(
     return {
       name: firstLlmProvider.name,
       provider: firstLlmProvider.provider,
-      modelName: firstLlmProvider.default_model_name,
+      modelName: firstLlmProvider.model_configurations[0]?.name ?? "",
     };
   }
   return null;
@@ -558,8 +565,13 @@ export function useLlmManager(
 
   // Get all user-accessible providers via SWR (general providers - no persona filter)
   // This includes public + all restricted providers user can access via groups
-  const { llmProviders: allUserProviders, isLoading: isLoadingAllProviders } =
-    useLLMProviders();
+  const {
+    llmProviders: allUserProviders,
+    defaultText,
+    isLoading: isLoadingAllProviders,
+  } = useLLMProviders();
+
+  const defaultTextLlmModel = defaultText ?? undefined;
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an assistant selected
   const personaId =
@@ -629,7 +641,10 @@ export function useLlmManager(
       } else if (user?.preferences?.default_model) {
         setCurrentLlm(getValidLlmDescriptor(user.preferences.default_model));
       } else {
-        const defaultLlm = getDefaultLlmDescriptor(llmProviders);
+        const defaultLlm = getDefaultLlmDescriptor(
+          llmProviders,
+          defaultTextLlmModel
+        );
         if (defaultLlm) {
           setCurrentLlm(defaultLlm);
         }
@@ -679,7 +694,7 @@ export function useLlmManager(
 
     // Model not found in available providers - fall back to default model
     return (
-      getDefaultLlmDescriptor(llmProviders) ?? {
+      getDefaultLlmDescriptor(llmProviders, defaultTextLlmModel) ?? {
         name: "",
         provider: "",
         modelName: "",

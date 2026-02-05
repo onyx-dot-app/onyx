@@ -26,7 +26,7 @@ import {
 import Separator from "@/refresh-components/Separator";
 
 export const AZURE_PROVIDER_NAME = "azure";
-const AZURE_DISPLAY_NAME = "Microsoft Azure Cloud";
+const AZURE_DISPLAY_NAME = "Azure OpenAI";
 
 interface AzureFormValues extends BaseLLMFormValues {
   api_key: string;
@@ -53,7 +53,9 @@ export function AzureForm({
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
-      providerName={AZURE_DISPLAY_NAME}
+      providerName={"Microsoft Azure"}
+      providerDisplayName={AZURE_DISPLAY_NAME}
+      providerInternalName={"azure"}
       providerEndpoint={AZURE_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
     >

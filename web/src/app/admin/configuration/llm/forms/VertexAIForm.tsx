@@ -39,6 +39,8 @@ export function VertexAIForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName={VERTEXAI_DISPLAY_NAME}
+      providerDisplayName="Gemini"
+      providerInternalName={"vertex_ai"}
       providerEndpoint={VERTEXAI_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
     >

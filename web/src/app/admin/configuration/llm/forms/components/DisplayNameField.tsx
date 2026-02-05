@@ -8,8 +8,8 @@ export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
     <TextFormField
       name="name"
-      label="Display Name"
-      subtext="A name which you can use to identify this provider when selecting it in the UI."
+      subtext={"Use to identify this provider in the app"}
+      label="Display Name (Optional)"
       placeholder="Display Name"
       disabled={disabled}
     />
