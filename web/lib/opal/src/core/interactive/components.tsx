@@ -53,7 +53,7 @@ export interface InteractiveBaseProps
    */
   group?: string;
   /** When true, disables hover/active visual feedback. */
-  disableHover?: boolean;
+  static?: boolean;
   /** When true, forces the pressed visual state (same as `data-pressed="true"`). */
   transient?: boolean;
 }
@@ -84,14 +84,14 @@ function InteractiveBase({
   ref,
   variant = "primary",
   group,
-  disableHover,
+  static: isStatic,
   transient,
   ...props
 }: InteractiveBaseProps) {
   const classes = cn("interactive", !props.onClick && "cursor-default", group);
   const dataAttrs = {
     "data-variant": variant,
-    ...(disableHover && { "data-disable-hover": "true" as const }),
+    ...(isStatic && { "data-static": "true" as const }),
     ...(transient && { "data-pressed": "true" as const }),
   };
 

@@ -35,7 +35,7 @@ export default function DocumentSetCard({
               ? undefined
               : () => onSelectToggle?.(!isSelected)
           }
-          disableHover={disabled || isSelected === undefined}
+          static={disabled || isSelected === undefined}
         >
           <Interactive.Container
             paddingVariant="none"

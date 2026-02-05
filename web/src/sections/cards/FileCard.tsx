@@ -174,7 +174,7 @@ export function FileCard({
       }
     >
       <div className="max-w-[12rem]">
-        <Interactive.Base disableHover>
+        <Interactive.Base static>
           <Interactive.Container
             paddingVariant="none"
             border
