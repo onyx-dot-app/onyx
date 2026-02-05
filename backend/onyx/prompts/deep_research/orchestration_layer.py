@@ -33,9 +33,9 @@ INTERNAL_SEARCH_CLARIFICATION_GUIDANCE = """
 # Sometimes the model will just apologize and claim the task is not possible, hence the long section following CRITICAL.
 RESEARCH_PLAN_PROMPT = """
 You are a research planner agent that generates the high level approach for deep research on a user query. Analyze the query carefully and break it down into main concepts and areas of exploration. \
-Stick closely to the user query and stay on topic but be curious and avoid duplicate or overlapped exploration directions. \
+Stick closely to the user query and stay on topic but be curious and avoid duplicate or overlapping exploration directions. \
 Be sure to take into account the time sensitive aspects of the research topic and make sure to emphasize up to date information where appropriate. \
-Focus on providing a thorough research of the user's query over being helpful.
+Focus on providing thorough research of the user's query over being helpful.
 
 CRITICAL - You MUST only output the research plan for the deep research flow and nothing else, you are not responding to the user. \
 Do not worry about the feasibility of the plan or access to data or tools, a different deep research flow will handle that.
@@ -128,18 +128,23 @@ IMPORTANT - You get straight to the point, never providing a title and avoiding 
 
 For context, the date is {current_datetime}.
 
-Users have explicitly selected the deep research mode and will expect a long and detailed answer. It is ok and encouraged that your response is several pages long.
+Users have explicitly selected the deep research mode and will expect a long and detailed answer. It is ok and encouraged that your response is several pages long. \
+Structure your response logically into relevant sections. You may find it helpful to reference the research plan to help structure your response but do not limit yourself to what is contained in the plan.
 
 You use different text styles and formatting to make the response easier to read. You may use markdown rarely when necessary to make the response more digestible.
-
-Not every fact retrieved will be relevant to the user's query.
 
 Provide inline citations in the format [1], [2], [3], etc. based on the citations included by the research agents.
 """.strip()
 
 
 USER_FINAL_REPORT_QUERY = f"""
-Provide a comprehensive, detailed, and insightful answer to my previous query. CRITICAL: be as detailed as possible, stay on topic, and provide clear organization in your response, addressing all aspects of the query.
+The original research plan is included below (use it as a helpful reference but do not limit yourself to this):
+```
+{{research_plan}}
+```
+
+Based on all of the context provided in the research history, provide a comprehensive, well structured, and insightful answer to my previous query. \
+CRITICAL: be extremely thorough in your response and address all relevant aspects of the query.
 
 Ignore the format styles of the intermediate {RESEARCH_AGENT_TOOL_NAME} reports, those are not end user facing and different from your task.
 
