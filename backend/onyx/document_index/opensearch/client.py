@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from opensearchpy import OpenSearch
 from opensearchpy.exceptions import TransportError
+from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
@@ -290,6 +291,64 @@ class OpenSearchClient:
                 raise RuntimeError(
                     f'Unknown OpenSearch indexing result: "{result_string}".'
                 )
+
+    def bulk_index_documents(
+        self,
+        documents: list[DocumentChunk],
+        tenant_state: TenantState,
+        update_if_exists: bool = False,
+    ) -> None:
+        """Bulk indexes documents.
+
+        Raises if there are any errors during the bulk index. It should be
+        assumed that no documents in the batch were indexed successfully if
+        there is an error.
+
+        Retries on 429 too many requests.
+
+        Args:
+            document: The document to index. In Onyx this is a chunk of a
+                document, OpenSearch simply refers to this as a document as
+                well.
+            tenant_state: The tenant state of the caller.
+            update_if_exists: Whether to update the document if it already
+                exists. If False, will raise an exception if the document
+                already exists. Defaults to False.
+
+        Raises:
+            RuntimeError: There was an error during the bulk index. This
+                includes the case where a document with the same ID already
+                exists if update_if_exists is False.
+        """
+        if not documents:
+            return
+        data = []
+        for document in documents:
+            document_chunk_id: str = get_opensearch_doc_chunk_id(
+                tenant_state=tenant_state,
+                document_id=document.document_id,
+                chunk_index=document.chunk_index,
+                max_chunk_size=document.max_chunk_size,
+            )
+            body: dict[str, Any] = document.model_dump(exclude_none=True)
+            data_for_document: dict[str, Any] = {
+                "_index": self._index_name,
+                "_id": document_chunk_id,
+                "_op_type": "index" if update_if_exists else "create",
+                "_source": body,
+            }
+            data.append(data_for_document)
+        # max_retries is the number of times to retry a request if we get a 429.
+        success, errors = bulk(self._client, data, max_retries=3)
+        if errors:
+            raise RuntimeError(
+                f"Failed to bulk index documents for index {self._index_name}. Errors: {errors}"
+            )
+        if success != len(documents):
+            raise RuntimeError(
+                f"OpenSearch reported no errors during bulk index but the number of successful operations "
+                f"({success}) does not match the number of documents ({len(documents)})."
+            )
 
     def delete_document(self, document_chunk_id: str) -> bool:
         """Deletes a document.
