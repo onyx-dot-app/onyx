@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.salesforce.connector import _convert_to_metadata_value
 from onyx.connectors.salesforce.connector import SalesforceConnector
@@ -134,7 +135,7 @@ class TestYieldDocBatches:
         mock_doc = Document(
             id=f"SALESFORCE_{parent_id}",
             sections=[],
-            source="salesforce",
+            source=DocumentSource.SALESFORCE,
             semantic_identifier="Test Opportunity",
             metadata={},
         )
@@ -222,7 +223,7 @@ class TestYieldDocBatches:
         mock_doc = Document(
             id=f"SALESFORCE_{parent_id}",
             sections=[],
-            source="salesforce",
+            source=DocumentSource.SALESFORCE,
             semantic_identifier="Minimal Opportunity",
             metadata={},
         )
@@ -289,7 +290,7 @@ class TestYieldDocBatches:
         mock_doc = Document(
             id=f"SALESFORCE_{parent_id}",
             sections=[],
-            source="salesforce",
+            source=DocumentSource.SALESFORCE,
             semantic_identifier="John Doe",
             metadata={},
         )
@@ -349,7 +350,7 @@ class TestYieldDocBatches:
         mock_doc = Document(
             id=f"SALESFORCE_{parent_id}",
             sections=[],
-            source="salesforce",
+            source=DocumentSource.SALESFORCE,
             semantic_identifier="Custom Record",
             metadata={},
         )
@@ -469,7 +470,7 @@ class TestYieldDocBatches:
             Document(
                 id=f"SALESFORCE_{pid}",
                 sections=[],
-                source="salesforce",
+                source=DocumentSource.SALESFORCE,
                 semantic_identifier=f"Opportunity {i}",
                 metadata={},
             )
