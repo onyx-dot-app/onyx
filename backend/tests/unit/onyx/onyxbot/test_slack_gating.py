@@ -174,18 +174,29 @@ class TestCheckTenantGated:
         result, _ = self._call(mock_fetch_ee)
         assert result is False
 
+    @pytest.mark.parametrize(
+        "event",
+        [
+            {"type": "message", "channel": "C123", "bot_id": "B456", "ts": "1"},
+            {
+                "type": "message",
+                "channel": "C123",
+                "bot_profile": {"id": "B456"},
+                "ts": "1",
+            },
+            {"type": "message", "channel": "C123", "subtype": "bot_message", "ts": "1"},
+        ],
+        ids=["bot_id", "bot_profile", "subtype_bot_message"],
+    )
     @patch(f"{_LISTENER}.respond_in_thread_or_channel")
     @patch(f"{_LISTENER}.fetch_ee_implementation_or_noop")
     def test_bot_message_no_response_sent(
-        self, mock_fetch_ee: MagicMock, mock_respond: MagicMock
+        self, mock_fetch_ee: MagicMock, mock_respond: MagicMock, event: dict
     ) -> None:
         """Bot messages are blocked but no response is sent (prevents loop)."""
         mock_fetch_ee.return_value = lambda *a, **kw: True
 
-        result, _ = self._call(
-            mock_fetch_ee,
-            event={"type": "message", "channel": "C123", "bot_id": "B456", "ts": "1"},
-        )
+        result, _ = self._call(mock_fetch_ee, event=event)
 
         assert result is True
         mock_respond.assert_not_called()

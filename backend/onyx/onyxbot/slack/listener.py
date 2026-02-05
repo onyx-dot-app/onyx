@@ -685,15 +685,6 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
             event_user = event.get("user", "")
             event_bot_id = event.get("bot_id", "")
 
-            # temporary debugging
-            if tenant_id == "tenant_i-04224818da13bf695":
-                logger.warning(
-                    f"{tenant_id=} "
-                    f"{bot_token_user_id=} "
-                    f"{bot_token_bot_id=} "
-                    f"{event=}"
-                )
-
             is_dm = event.get("channel_type") == "im"
             if bot_token_user_id and f"<@{bot_token_user_id}>" in msg:
                 is_tagged = True
@@ -1140,7 +1131,11 @@ def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) 
     # - Skip app_mention events (Slack fires both app_mention AND message
     #   for @mentions; we respond on the message event only)
     event = req.payload.get("event", {}) if req.type == "events_api" else {}
-    is_bot_event = bool(event.get("bot_id") or event.get("bot_profile"))
+    is_bot_event = bool(
+        event.get("bot_id")
+        or event.get("bot_profile")
+        or event.get("subtype") == "bot_message"
+    )
     is_duplicate_mention = event.get("type") == "app_mention"
     if not is_bot_event and not is_duplicate_mention:
         channel = _extract_channel_from_request(req)
