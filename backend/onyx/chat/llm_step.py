@@ -53,6 +53,15 @@ from onyx.utils.text_processing import find_all_json_objects
 logger = setup_logger()
 
 
+def _sanitize_llm_output(value: str) -> str:
+    """Remove characters that PostgreSQL's text/JSONB types cannot store.
+
+    - NULL bytes (\x00): Not allowed in PostgreSQL text types
+    - UTF-16 surrogates (\ud800-\udfff): Invalid in UTF-8 encoding
+    """
+    return "".join(c for c in value if c != "\x00" and not ("\ud800" <= c <= "\udfff"))
+
+
 def _try_parse_json_string(value: Any) -> Any:
     """Attempt to parse a JSON string value into its Python equivalent.
 
@@ -99,10 +108,18 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
 
     if isinstance(raw_args, dict):
         # Parse any string values that look like JSON arrays/objects
-        return {k: _try_parse_json_string(v) for k, v in raw_args.items()}
+        return {
+            k: _try_parse_json_string(
+                _sanitize_llm_output(v) if isinstance(v, str) else v
+            )
+            for k, v in raw_args.items()
+        }
 
     if not isinstance(raw_args, str):
         return {}
+
+    # Sanitize before parsing to remove NULL bytes and surrogates
+    raw_args = _sanitize_llm_output(raw_args)
 
     try:
         parsed1: Any = json.loads(raw_args)
