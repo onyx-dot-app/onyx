@@ -28,6 +28,7 @@ def test_bedrock_llm_configuration(client: TestClient) -> None:
         },
         "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
         "api_key_changed": True,
+        "custom_config_changed": True,
     }
 
     # Send the test request
@@ -54,6 +55,7 @@ def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
         },
         "model_configurations": [{"name": _DEFAULT_BEDROCK_MODEL, "is_visible": True}],
         "api_key_changed": True,
+        "custom_config_changed": True,
     }
 
     # Send the test request
