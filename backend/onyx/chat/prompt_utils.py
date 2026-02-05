@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
@@ -52,7 +53,7 @@ def calculate_reserved_tokens(
     persona_system_prompt: str,
     token_counter: Callable[[str], int],
     files: list[FileDescriptor] | None = None,
-    memories: list[str] | None = None,
+    user_memory_context: UserMemoryContext | None = None,
 ) -> int:
     """
     Calculate reserved token count for system prompt and user files.
@@ -66,7 +67,7 @@ def calculate_reserved_tokens(
         persona_system_prompt: Custom agent system prompt (can be empty string)
         token_counter: Function that counts tokens in text
         files: List of file descriptors from the chat message (optional)
-        memories: List of memory strings (optional)
+        user_memory_context: User memory context (optional)
 
     Returns:
         Total reserved token count
@@ -77,7 +78,7 @@ def calculate_reserved_tokens(
     fake_system_prompt = build_system_prompt(
         base_system_prompt=base_system_prompt,
         datetime_aware=True,
-        memories=memories,
+        user_memory_context=user_memory_context,
         tools=None,
         should_cite_documents=True,
         include_all_guidance=True,
@@ -133,7 +134,7 @@ def build_reminder_message(
 def build_system_prompt(
     base_system_prompt: str,
     datetime_aware: bool = False,
-    memories: list[str] | None = None,
+    user_memory_context: UserMemoryContext | None = None,
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
@@ -157,13 +158,15 @@ def build_system_prompt(
     )
 
     company_context = get_company_context()
-    if company_context or memories:
+    if company_context or user_memory_context:
         system_prompt += USER_INFO_HEADER
         if company_context:
             system_prompt += company_context
-        if memories:
+        if user_memory_context:
             system_prompt += "\n".join(
-                "- " + memory.strip() for memory in memories if memory.strip()
+                "- " + memory.strip()
+                for memory in user_memory_context.as_formatted_list()
+                if memory.strip()
             )
 
     # Append citation guidance after company context if placeholder was not present
