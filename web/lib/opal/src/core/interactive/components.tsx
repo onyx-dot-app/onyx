@@ -238,7 +238,7 @@ export interface InteractiveBaseProps
 function InteractiveBase({
   ref,
   variant = "standard",
-  subvariant = "ghost",
+  subvariant = "primary",
   group,
   static: isStatic,
   transient,
@@ -255,27 +255,39 @@ function InteractiveBase({
   const dataAttrs = {
     "data-variant": variant,
     "data-subvariant": subvariant,
-    ...(isStatic && { "data-static": "true" as const }),
-    ...(transient && { "data-pressed": "true" as const }),
-    ...(disabled && { "data-disabled": "true" as const }),
+    "data-static": isStatic ? "true" : undefined,
+    "data-pressed": transient ? "true" : undefined,
+    "data-disabled": disabled ? "true" : undefined,
   };
 
   if (href) {
-    const { children, ...rest } = props;
+    const { children, onClick, ...rest } = props;
     return (
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
-        href={href}
+        href={disabled ? undefined : href}
         className={classes}
         {...dataAttrs}
         {...rest}
+        onClick={
+          disabled ? (e: React.MouseEvent) => e.preventDefault() : onClick
+        }
       >
         {children}
       </a>
     );
   }
 
-  return <Slot ref={ref} className={classes} {...dataAttrs} {...props} />;
+  const { onClick, ...slotProps } = props;
+  return (
+    <Slot
+      ref={ref}
+      className={classes}
+      {...dataAttrs}
+      {...slotProps}
+      onClick={disabled ? undefined : onClick}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
