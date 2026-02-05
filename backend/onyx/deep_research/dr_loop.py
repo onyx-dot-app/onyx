@@ -161,6 +161,7 @@ def generate_final_report(
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
             pre_answer_processing_time=pre_answer_processing_time,
+            timeout_override=300,  # 5 minute read timeout for long report generation
         )
 
         # Save citation mapping to state_container so citations are persisted
