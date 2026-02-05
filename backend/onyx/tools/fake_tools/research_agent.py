@@ -73,7 +73,7 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-RESEARCH_CYCLE_CAP = 3
+RESEARCH_CYCLE_CAP = 8
 # 30 minute timeout per research agent
 RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
 RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
@@ -264,12 +264,9 @@ def run_research_agent_call(
                     break
 
                 if research_cycle_count == RESEARCH_CYCLE_CAP:
-                    # For the last cycle, do not use any more searches, only reason or generate a report
-                    current_tools = [
-                        tool
-                        for tool in tools
-                        if tool.name not in {SearchTool.NAME, WebSearchTool.NAME}
-                    ]
+                    # Auto-generate report on last cycle
+                    logger.debug("Auto-generating intermediate report on last cycle.")
+                    break
 
                 tools_by_name = {tool.name: tool for tool in current_tools}
 
@@ -386,13 +383,6 @@ def run_research_agent_call(
                     ]
 
                 just_ran_web_search = False
-
-                if any(
-                    tool_call.tool_name in {SearchTool.NAME, WebSearchTool.NAME}
-                    for tool_call in tool_calls
-                ):
-                    # Only the search actions increment the cycle for the max cycle count
-                    research_cycle_count += 1
 
                 special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
                 if special_tool_calls.generate_report_tool_call:
@@ -593,6 +583,7 @@ def run_research_agent_call(
                 # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
                 most_recent_reasoning = None
                 llm_cycle_count += 1
+                research_cycle_count += 1
 
             # If we've run out of cycles, just try to generate a report from everything so far
             final_report = generate_intermediate_report(
