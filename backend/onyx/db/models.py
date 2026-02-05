@@ -2648,7 +2648,9 @@ class SearchQuery(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("user.id"))
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE")
+    )
     query: Mapped[str] = mapped_column(String)
     query_expansions: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
