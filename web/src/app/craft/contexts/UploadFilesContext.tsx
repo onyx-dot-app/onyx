@@ -15,6 +15,7 @@ import {
   deleteFile as deleteFileApi,
   fetchDirectoryListing,
 } from "@/app/craft/services/apiServices";
+import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 /**
  * Upload File Status - tracks the state of files being uploaded
@@ -326,6 +327,11 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   );
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
+  // Get triggerFilesRefresh from the store to refresh the file explorer
+  const triggerFilesRefresh = useBuildSessionStore(
+    (state) => state.triggerFilesRefresh
+  );
+
   // =========================================================================
   // Refs for race condition protection
   // =========================================================================
@@ -424,11 +430,17 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
                 };
           })
         );
+
+        // Refresh file explorer if any uploads succeeded
+        const anySucceeded = results.some((r) => r.success);
+        if (anySucceeded) {
+          triggerFilesRefresh(sessionId);
+        }
       } finally {
         isUploadingPendingRef.current = false;
       }
     },
-    []
+    [triggerFilesRefresh]
   );
 
   /**
@@ -704,6 +716,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
             }
           })
         );
+
+        // Refresh file explorer if any uploads succeeded
+        const anySucceeded = results.some((r) => r.success);
+        if (anySucceeded) {
+          triggerFilesRefresh(sessionId);
+        }
       } else {
         // No session yet - mark as PENDING (effect will auto-upload when session available)
         setCurrentMessageFiles((prev) =>
@@ -717,7 +735,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       return [...failedFiles, ...optimisticFiles];
     },
-    [activeSessionId, currentMessageFiles]
+    [activeSessionId, currentMessageFiles, triggerFilesRefresh]
   );
 
   /**
@@ -758,6 +776,8 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
             .then(() => {
               // Deletion succeeded - remove from active deletions
               activeDeletionsRef.current.delete(fileId);
+              // Refresh file explorer
+              triggerFilesRefresh(activeSessionId);
             })
             .catch((error) => {
               console.error(
@@ -783,7 +803,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         }
       }, 0);
     },
-    [activeSessionId]
+    [activeSessionId, triggerFilesRefresh]
   );
 
   /**
