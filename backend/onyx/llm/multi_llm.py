@@ -315,7 +315,7 @@ class LitellmLLM(LLM):
                         "summary": "auto",
                     }
 
-            if is_claude_model:
+            elif is_claude_model:
                 budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                     reasoning_effort
                 )
