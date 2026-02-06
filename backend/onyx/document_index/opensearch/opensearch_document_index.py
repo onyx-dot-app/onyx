@@ -835,10 +835,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         logger.debug(
             f"[OpenSearchDocumentIndex] Indexing {len(chunks)} raw chunks for index {self._index_name}."
         )
-        for chunk in chunks:
-            # Do not raise if the document already exists, just update. This is
-            # because the document may already have been indexed during the
-            # OpenSearch transition period.
-            self._os_client.index_document(
-                document=chunk, tenant_state=self._tenant_state, update_if_exists=True
-            )
+        # Do not raise if the document already exists, just update. This is
+        # because the document may already have been indexed during the
+        # OpenSearch transition period.
+        self._os_client.bulk_index_documents(
+            documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
+        )

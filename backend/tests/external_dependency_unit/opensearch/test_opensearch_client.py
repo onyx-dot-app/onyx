@@ -299,6 +299,41 @@ class TestOpenSearchClient:
         # Under test and postcondition.
         # Should not raise.
         test_client.index_document(document=doc, tenant_state=tenant_state)
+        # Should not raise if we supply update_if_exists.
+        test_client.index_document(
+            document=doc, tenant_state=tenant_state, update_if_exists=True
+        )
+
+    def test_bulk_index_documents(
+        self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests bulk indexing documents."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        docs = [
+            _create_test_document_chunk(
+                document_id=f"test-doc-{i}",
+                chunk_index=i,
+                content=f"Test content for indexing {i}",
+                tenant_state=tenant_state,
+            )
+            for i in range(500)
+        ]
+
+        # Under test and postcondition.
+        # Should not raise.
+        test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+        # Should not raise if we supply update_if_exists.
+        test_client.bulk_index_documents(
+            documents=docs, tenant_state=tenant_state, update_if_exists=True
+        )
 
     def test_index_duplicate_document(
         self, test_client: OpenSearchClient, monkeypatch: pytest.MonkeyPatch
