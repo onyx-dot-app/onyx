@@ -441,10 +441,8 @@ async def _connect_oauth(
 
     db.commit()
 
-    connection_config_dict = (
-        connection_config.config.get_value(apply_mask=False)
-        if connection_config.config
-        else {}
+    connection_config_dict = extract_connection_data(
+        connection_config, apply_mask=False
     )
     is_connected = (
         MCPOAuthKeys.CLIENT_INFO.value in connection_config_dict
