@@ -40,7 +40,6 @@ interface OpenRouterFormValues extends BaseLLMFormValues {
 async function fetchOpenRouterModels(params: {
   apiBase: string;
   apiKey: string;
-  providerName?: string;
 }): Promise<{ models: ModelConfiguration[]; error?: string }> {
   if (!params.apiBase || !params.apiKey) {
     return {
@@ -58,7 +57,6 @@ async function fetchOpenRouterModels(params: {
       body: JSON.stringify({
         api_base: params.apiBase,
         api_key: params.apiKey,
-        provider_name: params.providerName,
       }),
     });
 
@@ -92,6 +90,7 @@ async function fetchOpenRouterModels(params: {
 
 export function OpenRouterForm({
   existingLlmProvider,
+  defaultLlmModel,
   shouldMarkAsDefault,
 }: LLMProviderFormProps) {
   const [fetchedModels, setFetchedModels] = useState<ModelConfiguration[]>([]);
@@ -118,10 +117,22 @@ export function OpenRouterForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
+
+        const isAutoMode = existingLlmProvider?.is_auto_mode ?? true;
+        const autoModelDefault =
+          wellKnownLLMProvider?.recommended_default_model?.name;
+
+        const defaultModel = shouldMarkAsDefault
+          ? isAutoMode
+            ? autoModelDefault
+            : defaultLlmModel?.model_name
+          : undefined;
+
         const initialValues: OpenRouterFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
-            modelConfigurations
+            modelConfigurations,
+            defaultModel
           ),
           api_key: existingLlmProvider?.api_key ?? "",
           api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
@@ -166,41 +177,30 @@ export function OpenRouterForm({
                     : existingLlmProvider?.model_configurations ||
                       modelConfigurations;
 
+                console.log("currentModels", currentModels);
+                console.log("modelConfigurations", modelConfigurations);
+                console.log("fetchedModels", fetchedModels);
+
                 const isFetchDisabled =
                   !formikProps.values.api_base || !formikProps.values.api_key;
 
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
-
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
-
                     <TextFormField
-                      name="api_base"
+                      name="api_base_url"
                       label="API Base URL"
-                      subtext="The base URL for OpenRouter API."
-                      placeholder={DEFAULT_API_BASE}
+                      subtext="Paste your OpenRouter compatible endpoint URL or use OpenRouter API directly."
                     />
 
-                    <FetchModelsButton
-                      onFetch={() =>
-                        fetchOpenRouterModels({
-                          apiBase: formikProps.values.api_base,
-                          apiKey: formikProps.values.api_key,
-                          providerName: existingLlmProvider?.name,
-                        })
-                      }
-                      isDisabled={isFetchDisabled}
-                      disabledHint={
-                        !formikProps.values.api_key
-                          ? "Enter your API key first."
-                          : !formikProps.values.api_base
-                            ? "Enter the API base URL."
-                            : undefined
-                      }
-                      onModelsFetched={setFetchedModels}
-                      autoFetchOnInitialLoad={!!existingLlmProvider}
+                    <PasswordInputTypeInField
+                      name="api_key"
+                      label="API Key"
+                      subtext="Paste your API key from OpenRouter to access your models."
                     />
+
+                    <Separator />
+
+                    <DisplayNameField />
 
                     <Separator />
 
@@ -208,10 +208,8 @@ export function OpenRouterForm({
                       modelConfigurations={currentModels}
                       formikProps={formikProps}
                       noModelConfigurationsMessage={
-                        "Fetch available models first, then you'll be able to select " +
-                        "the models you want to make available in Onyx."
+                        "No models available. Provide a valid base URL and key."
                       }
-                      recommendedDefaultModel={null}
                       shouldShowAutoUpdateToggle={false}
                     />
 

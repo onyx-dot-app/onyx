@@ -25,9 +25,16 @@ import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import { useEffect, useState } from "react";
 import { fetchOllamaModels } from "../utils";
+import Tabs from "@/refresh-components/Tabs";
+import Separator from "@/refresh-components/Separator";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
 const DEFAULT_API_BASE = "http://127.0.0.1:11434";
+
+enum OllamaHostingTab {
+  SelfHosted = "self-hosted",
+  Cloud = "cloud",
+}
 
 interface OllamaFormValues extends BaseLLMFormValues {
   api_base: string;
@@ -60,6 +67,9 @@ function OllamaFormContent({
   isFormValid,
 }: OllamaFormContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const [activeTab, setActiveTab] = useState<OllamaHostingTab>(
+    OllamaHostingTab.SelfHosted
+  );
 
   useEffect(() => {
     if (formikProps.values.api_base) {
@@ -93,27 +103,48 @@ function OllamaFormContent({
 
   return (
     <Form className={LLM_FORM_CLASS_NAME}>
-      <DisplayNameField disabled={!!existingLlmProvider} />
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as OllamaHostingTab)}
+      >
+        <Tabs.List>
+          <Tabs.Trigger value={OllamaHostingTab.SelfHosted}>
+            Self-hosted Ollama
+          </Tabs.Trigger>
+          <Tabs.Trigger value={OllamaHostingTab.Cloud}>
+            Ollama Cloud
+          </Tabs.Trigger>
+        </Tabs.List>
 
-      <TextFormField
-        name="api_base"
-        label="API Base URL"
-        subtext="The base URL for your Ollama instance (e.g., http://127.0.0.1:11434)"
-        placeholder={DEFAULT_API_BASE}
-      />
+        <Tabs.Content value={OllamaHostingTab.SelfHosted}>
+          <TextFormField
+            name="api_base"
+            label="API Base URL"
+            subtext="Your self-hosted Ollama API base URL."
+            placeholder="Your Ollama API base URL."
+          />
+        </Tabs.Content>
 
-      <PasswordInputTypeInField
-        name="custom_config.OLLAMA_API_KEY"
-        label="API Key (Optional)"
-        subtext="Optional API key for Ollama Cloud (https://ollama.com). Leave blank for local instances."
-      />
+        <Tabs.Content value={OllamaHostingTab.Cloud}>
+          <TextFormField
+            name="api_key"
+            label="API Key"
+            subtext="Paste your API key from Ollama Cloud to access your models."
+          />
+        </Tabs.Content>
+      </Tabs>
+
+      <Separator />
+
+      <DisplayNameField />
+
+      <Separator />
 
       <DisplayModels
         modelConfigurations={currentModels}
         formikProps={formikProps}
         noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
         isLoading={isLoadingModels}
-        recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
       />
 

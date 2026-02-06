@@ -240,7 +240,6 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   };
 
   const onSetDefault = (modelName: string) => {
-    console.log("onSetDefault", modelName);
     formikProps.setFieldValue("default_model_name", modelName);
   };
 
@@ -285,17 +284,6 @@ export function DisplayModels<T extends BaseLLMFormValues>({
     return 0;
   });
 
-  if (modelConfigurations.length === 0) {
-    return (
-      <GeneralLayouts.Section gap={0.75} alignItems="stretch">
-        <DisplayModelHeader
-          alternativeText={noModelConfigurationsMessage ?? "No models found"}
-          showActions={false}
-        />
-      </GeneralLayouts.Section>
-    );
-  }
-
   // For auto mode display
   const visibleModels = modelConfigurations.filter((m) => m.is_visible);
 
@@ -307,13 +295,13 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   );
 
   return (
-    <GeneralLayouts.Section gap={0.75} alignItems="stretch">
+    <Card variant="borderless" alignItems="stretch">
       <DisplayModelHeader
         onSelectAll={handleSelectAll}
         onRefresh={handleRefresh}
       />
-      <Card padding={0} gap={0}>
-        <Card variant="borderless" gap={0.25}>
+      {modelConfigurations.length > 0 ? (
+        <Card variant="borderless" padding={0} gap={0}>
           {isAutoMode && shouldShowAutoUpdateToggle ? (
             // Auto mode: read-only display
             <>
@@ -330,36 +318,6 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                   />
                 );
               })}
-
-              {moreAutoModels.length > 0 && (
-                <Collapsible
-                  open={moreModelsOpen}
-                  onOpenChange={setMoreModelsOpen}
-                >
-                  <CollapsibleTrigger asChild>
-                    <Card variant="borderless" padding={0}>
-                      <MoreModelsButton isOpen={moreModelsOpen} />
-                    </Card>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <GeneralLayouts.Section gap={0.25} alignItems="start">
-                      {moreAutoModels.map((model) => {
-                        const isDefault = model.name === defaultModelName;
-                        return (
-                          <ModelRow
-                            key={model.name}
-                            modelName={model.name}
-                            modelDisplayName={model.display_name}
-                            isSelected={true}
-                            isDefault={isDefault}
-                            onCheckChange={() => {}}
-                          />
-                        );
-                      })}
-                    </GeneralLayouts.Section>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
             </>
           ) : (
             // Manual mode: checkbox selection
@@ -388,64 +346,64 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                   />
                 );
               })}
-
-              {moreModels.length > 0 && (
-                <Collapsible
-                  open={moreModelsOpen}
-                  onOpenChange={setMoreModelsOpen}
-                >
-                  <CollapsibleTrigger asChild>
-                    <Card variant="borderless" padding={0}>
-                      <MoreModelsButton isOpen={moreModelsOpen} />
-                    </Card>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <GeneralLayouts.Section gap={0.25} alignItems="start">
-                      {moreModels.map((modelConfiguration) => {
-                        const isSelected = selectedModels.includes(
-                          modelConfiguration.name
-                        );
-                        const isDefault =
-                          defaultModelName === modelConfiguration.name;
-
-                        return (
-                          <ModelRow
-                            key={modelConfiguration.name}
-                            modelName={modelConfiguration.name}
-                            modelDisplayName={modelConfiguration.display_name}
-                            isSelected={isSelected}
-                            isDefault={isDefault}
-                            onCheckChange={(checked) =>
-                              handleCheckboxChange(
-                                modelConfiguration.name,
-                                checked
-                              )
-                            }
-                            onSetDefault={() =>
-                              onSetDefault(modelConfiguration.name)
-                            }
-                          />
-                        );
-                      })}
-                    </GeneralLayouts.Section>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
             </>
           )}
-        </Card>
 
-        {/* Auto update toggle */}
-        {shouldShowAutoUpdateToggle && (
-          <Card variant="borderless" padding={0.75} gap={0.75}>
-            <Separator noPadding />
-            <AutoModeToggle
-              isAutoMode={isAutoMode}
-              onToggle={handleToggleAutoMode}
-            />
-          </Card>
-        )}
-      </Card>
-    </GeneralLayouts.Section>
+          {moreModels.length > 0 && (
+            <Collapsible open={moreModelsOpen} onOpenChange={setMoreModelsOpen}>
+              <CollapsibleTrigger asChild>
+                <Card variant="borderless" padding={0}>
+                  <MoreModelsButton isOpen={moreModelsOpen} />
+                </Card>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <GeneralLayouts.Section gap={0.25} alignItems="start">
+                  {moreModels.map((modelConfiguration) => {
+                    const isSelected = selectedModels.includes(
+                      modelConfiguration.name
+                    );
+                    const isDefault =
+                      defaultModelName === modelConfiguration.name;
+
+                    return (
+                      <ModelRow
+                        key={modelConfiguration.name}
+                        modelName={modelConfiguration.name}
+                        modelDisplayName={modelConfiguration.display_name}
+                        isSelected={isSelected}
+                        isDefault={isDefault}
+                        onCheckChange={(checked) =>
+                          handleCheckboxChange(modelConfiguration.name, checked)
+                        }
+                        onSetDefault={() =>
+                          onSetDefault(modelConfiguration.name)
+                        }
+                      />
+                    );
+                  })}
+                </GeneralLayouts.Section>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {/* Auto update toggle */}
+          {shouldShowAutoUpdateToggle && (
+            <Card variant="borderless" padding={0.75} gap={0.75}>
+              <Separator noPadding />
+              <AutoModeToggle
+                isAutoMode={isAutoMode}
+                onToggle={handleToggleAutoMode}
+              />
+            </Card>
+          )}
+        </Card>
+      ) : (
+        <Card>
+          <Text text03 secondaryBody>
+            {noModelConfigurationsMessage ?? "No models found"}
+          </Text>
+        </Card>
+      )}
+    </Card>
   );
 }

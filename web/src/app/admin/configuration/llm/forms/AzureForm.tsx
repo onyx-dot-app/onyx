@@ -24,6 +24,7 @@ import {
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 import Separator from "@/refresh-components/Separator";
+import { DisplayModels } from "./components/DisplayModels";
 
 export const AZURE_PROVIDER_NAME = "azure";
 const AZURE_DISPLAY_NAME = "Azure OpenAI";
@@ -140,19 +141,32 @@ export function AzureForm({
               {(formikProps) => {
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
-
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
-
                     <TextFormField
                       name="target_uri"
                       label="Target URI"
                       placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                      subtext="The complete target URI for your deployment from the Azure AI portal."
+                      subtext="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
+                    />
+
+                    <PasswordInputTypeInField
+                      name="api_key"
+                      label="API Key"
+                      subtext="Paste your API key from Azure OpenAI to access your models."
                     />
 
                     <Separator />
-                    <SingleDefaultModelField placeholder="E.g. gpt-4o" />
+
+                    <DisplayNameField disabled={!!existingLlmProvider} />
+
+                    <Separator noPadding />
+
+                    <DisplayModels
+                      modelConfigurations={modelConfigurations}
+                      formikProps={formikProps}
+                      shouldShowAutoUpdateToggle={false}
+                      noModelConfigurationsMessage="No models available. Provide a valid base URL or key."
+                    />
+
                     <Separator />
 
                     <AdvancedOptions formikProps={formikProps} />
