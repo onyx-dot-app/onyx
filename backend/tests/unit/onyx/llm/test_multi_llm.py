@@ -15,6 +15,7 @@ from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import FunctionCall
 from onyx.llm.models import LanguageModelInput
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolCall
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
@@ -432,6 +433,32 @@ def test_vertex_stream_omits_stream_options() -> None:
 
         kwargs = mock_completion.call_args.kwargs
         assert "stream_options" not in kwargs
+
+
+def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-5.2",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.OPENAI,
+            model_name="gpt-5.2",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"]["effort"] == "medium"
 
 
 def test_vertex_opus_4_5_omits_reasoning_effort() -> None:

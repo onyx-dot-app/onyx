@@ -345,7 +345,7 @@ class LitellmLLM(LLM):
                 ]:
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
                 else:
-                    optional_kwargs["reasoning_effort"] = ReasoningEffort.LOW.value
+                    optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
