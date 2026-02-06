@@ -473,8 +473,12 @@ def test_openai_chat_omits_reasoning_params() -> None:
 
     with (
         patch("litellm.completion") as mock_completion,
-        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
-        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
+        patch(
+            "onyx.llm.multi_llm.model_is_reasoning_model", return_value=True
+        ) as mock_is_reasoning,
+        patch(
+            "onyx.llm.multi_llm.is_true_openai_model", return_value=True
+        ) as mock_is_openai,
     ):
         mock_response = litellm.ModelResponse(
             id="chatcmpl-123",
@@ -499,6 +503,8 @@ def test_openai_chat_omits_reasoning_params() -> None:
         assert kwargs["model"] == "openai/responses/gpt-5-chat"
         assert "reasoning" not in kwargs
         assert "reasoning_effort" not in kwargs
+        assert mock_is_reasoning.called
+        assert mock_is_openai.called
 
 
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
