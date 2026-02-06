@@ -194,6 +194,7 @@ export interface ApiWebappInfoResponse {
   has_webapp: boolean;
   webapp_url: string | null;
   status: string;
+  ready: boolean;
 }
 
 export interface FileSystemEntry {

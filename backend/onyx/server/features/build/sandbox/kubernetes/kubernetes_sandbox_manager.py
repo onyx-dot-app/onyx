@@ -1672,10 +1672,6 @@ echo "SNAPSHOT_RESTORED"
             )
             logger.info(f"[SNAPSHOT_RESTORE] NextJS start output: {resp2}")
 
-            # Wait for NextJS to be ready before returning, so the frontend
-            # can immediately load the preview iframe without hitting a 502
-            self._wait_for_nextjs_ready(pod_name, nextjs_port)
-
             logger.info(
                 f"[SNAPSHOT_RESTORE] Done for session {session_id} on port {nextjs_port}"
             )
