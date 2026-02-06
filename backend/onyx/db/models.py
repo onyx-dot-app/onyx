@@ -147,6 +147,15 @@ class EncryptedString(TypeDecorator):
             )
         return None
 
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
+
 
 class EncryptedJson(TypeDecorator):
     impl = LargeBinary
@@ -177,6 +186,15 @@ class EncryptedJson(TypeDecorator):
                 is_json=True,
             )
         return None
+
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
 
 
 class NullFilteredString(TypeDecorator):
