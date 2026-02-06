@@ -440,6 +440,7 @@ const ChatButton = memo(
             transient={active}
             rightChildren={rightMenu}
             focused={renaming}
+            nested={!!project}
           >
             {renaming ? (
               <ButtonRenaming
