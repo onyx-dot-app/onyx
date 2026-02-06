@@ -207,7 +207,8 @@ class LangfuseTracingProcessor(TracingProcessor):
 
             # Build trace_context for thread-safe parent linking
             # This uses immutable string IDs instead of mutable span objects
-            trace_context: dict[str, str] = {"trace_id": langfuse_trace_id}
+            # Type is Any to satisfy SDK's TraceContext type while passing a dict
+            trace_context: Any = {"trace_id": langfuse_trace_id}
             if parent_langfuse_id:
                 trace_context["parent_span_id"] = parent_langfuse_id
 
@@ -244,6 +245,7 @@ class LangfuseTracingProcessor(TracingProcessor):
             else:
                 langfuse_span = client.start_observation(
                     name=data.type if hasattr(data, "type") else "unknown",
+                    as_type="span",
                     trace_context=trace_context,
                     metadata=trace_metadata,
                 )

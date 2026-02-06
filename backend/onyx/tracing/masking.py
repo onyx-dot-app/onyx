@@ -13,7 +13,10 @@ def _truncate_str(s: str) -> str:
     """Truncate a string that exceeds MASKING_LENGTH."""
     tail = MASKING_LENGTH // 5
     head = MASKING_LENGTH - tail
-    return f"{s[:head]}...{s[-tail:]}[TRUNCATED {len(s)} chars to {MASKING_LENGTH}]"
+    # Handle edge case where tail is 0 (when MASKING_LENGTH < 5)
+    # s[-0:] returns the entire string, so we must check explicitly
+    tail_part = s[-tail:] if tail > 0 else ""
+    return f"{s[:head]}...{tail_part}[TRUNCATED {len(s)} chars to {MASKING_LENGTH}]"
 
 
 def mask_sensitive_data(data: Any) -> Any:
