@@ -103,6 +103,8 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
 )
 
 # Service account for init container (has IRSA for S3 access)
+# Note: With Mountpoint S3 CSI Driver, this service account is used by the pod
+# for IRSA authentication to access S3 directly via the CSI driver.
 SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
     "SANDBOX_FILE_SYNC_SERVICE_ACCOUNT", "sandbox-file-sync"
 )

@@ -562,9 +562,6 @@ class OnyxCeleryTask:
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 
-    # Sandbox file sync
-    SANDBOX_FILE_SYNC = "sandbox_file_sync"
-
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"
     )

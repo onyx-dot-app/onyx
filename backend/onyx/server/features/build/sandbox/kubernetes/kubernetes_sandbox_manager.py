@@ -39,7 +39,6 @@ import binascii
 import io
 import json
 import mimetypes
-import os
 import re
 import shlex
 import tarfile
@@ -147,52 +146,6 @@ NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
 """
-
-
-def _get_local_aws_credential_env_vars() -> list[client.V1EnvVar]:
-    """Get AWS credential environment variables from local environment.
-
-    Checks for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally
-    AWS_SESSION_TOKEN and AWS_DEFAULT_REGION in the local environment.
-    If credentials are found, returns V1EnvVar objects to pass them to containers.
-
-    This allows using local AWS credentials for development/testing while
-    IRSA (IAM Roles for Service Accounts) handles credentials in production EKS.
-
-    Returns:
-        List of V1EnvVar objects for AWS credentials, empty if not set locally.
-    """
-    env_vars: list[client.V1EnvVar] = []
-
-    aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
-    aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-
-    # Only add credentials if both required values are present
-    if aws_access_key and aws_secret_key:
-        env_vars.append(client.V1EnvVar(name="AWS_ACCESS_KEY_ID", value=aws_access_key))
-        env_vars.append(
-            client.V1EnvVar(name="AWS_SECRET_ACCESS_KEY", value=aws_secret_key)
-        )
-
-        # Optional: session token for temporary credentials
-        aws_session_token = os.environ.get("AWS_SESSION_TOKEN")
-        if aws_session_token:
-            env_vars.append(
-                client.V1EnvVar(name="AWS_SESSION_TOKEN", value=aws_session_token)
-            )
-
-        # Optional: default region
-        aws_region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get(
-            "AWS_REGION"
-        )
-        if aws_region:
-            env_vars.append(
-                client.V1EnvVar(name="AWS_DEFAULT_REGION", value=aws_region)
-            )
-
-        logger.info("Using local AWS credentials for sandbox init container")
-
-    return env_vars
 
 
 class KubernetesSandboxManager(SandboxManager):
@@ -345,77 +298,20 @@ class KubernetesSandboxManager(SandboxManager):
         """Create Pod specification for sandbox (user-level).
 
         Creates pod with:
-        - files/ directory synced from S3 (shared across sessions)
-        - sessions/ directory for per-session workspaces
+        - files/ directory mounted from S3 via Mountpoint CSI Driver
+        - sessions/ directory for per-session workspaces (EmptyDir)
+
+        The Mountpoint S3 CSI Driver mounts S3 directly as a FUSE filesystem,
+        providing direct read access to user's knowledge files without needing
+        a sidecar sync container.
 
         NOTE: Session-specific setup is done via setup_session_workspace().
         """
         pod_name = self._get_pod_name(sandbox_id)
 
-        # File-sync sidecar container for S3 file sync (knowledge files only)
-        # Runs as sidecar (not init container) so we can trigger incremental syncs
-        # via kubectl exec after new documents are indexed
-        file_sync_container = client.V1Container(
-            name="file-sync",
-            image="peakcom/s5cmd:v2.3.0",
-            env=_get_local_aws_credential_env_vars(),
-            command=["/bin/sh", "-c"],
-            args=[
-                f"""
-# Handle SIGTERM for fast container termination
-trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
-
-# Initial sync on startup - sync knowledge files for this user/tenant
-echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
-echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
-
-# s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-# Capture both stdout and stderr to see all messages including errors
-sync_exit_code=0
-sync_output=$(mktemp)
-/s5cmd --log debug --stat sync \
-    "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" \
-    /workspace/files/ 2>&1 | tee "$sync_output" || sync_exit_code=$?
-
-echo "=== S3 sync finished with exit code: $sync_exit_code ==="
-
-# Count files synced
-file_count=$(find /workspace/files -type f | wc -l)
-echo "Total files in /workspace/files: $file_count"
-
-# Show summary of any errors from the output
-if [ $sync_exit_code -ne 0 ]; then
-    echo "=== Errors/warnings from sync ==="
-    grep -iE "error|warn|fail" "$sync_output" || echo "No errors found"
-    echo "=========================="
-fi
-rm -f "$sync_output"
-
-# Exit codes 0 and 1 are considered success (1 = success with warnings)
-if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
-    echo "Sync complete (exit $sync_exit_code), staying alive for incremental syncs"
-else
-    echo "ERROR: Sync failed with exit code: $sync_exit_code"
-    exit $sync_exit_code
-fi
-
-# Stay alive - incremental sync commands will be executed via kubectl exec
-# Use 'wait' so shell can respond to signals while sleeping
-while true; do
-    sleep 30 &
-    wait $!
-done
-"""
-            ],
-            volume_mounts=[
-                client.V1VolumeMount(name="files", mount_path="/workspace/files"),
-            ],
-            resources=client.V1ResourceRequirements(
-                # Reduced resources since sidecar is mostly idle (sleeping)
-                requests={"cpu": "250m", "memory": "256Mi"},
-                limits={"cpu": "4000m", "memory": "6Gi"},
-            ),
-        )
+        # S3 prefix for user's knowledge files
+        # Format: {tenant_id}/knowledge/{user_id}/
+        s3_prefix = f"{tenant_id}/knowledge/{user_id}/"
 
         # Main sandbox container
         # Note: Container ports are informational only in K8s. Each session's Next.js
@@ -465,25 +361,39 @@ done
             ),
         )
 
-        # Volumes - workspace holds sessions/, files is shared read-only
+        # Volumes - workspace holds sessions/, files is mounted from S3 via CSI
         volumes = [
             client.V1Volume(
                 name="workspace",
                 # Increased size: holds sessions/ directory with per-session outputs
                 empty_dir=client.V1EmptyDirVolumeSource(size_limit="50Gi"),
             ),
+            # Mountpoint S3 CSI Driver volume for user's knowledge files
+            # Mounts S3 directly as a FUSE filesystem - no sync needed
             client.V1Volume(
                 name="files",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
+                csi=client.V1CSIVolumeSource(
+                    driver="s3.csi.aws.com",
+                    read_only=True,
+                    volume_attributes={
+                        "bucketName": self._s3_bucket,
+                        # Use pod's service account for IRSA authentication
+                        "authenticationSource": "pod",
+                        # Mount only this user's knowledge files subdirectory
+                        # --prefix: S3 path prefix to mount
+                        # --read-only: sandbox files are read-only
+                        # Default caching for better performance on repeated access
+                        "mountOptions": f"--prefix={s3_prefix} --read-only",
+                    },
+                ),
             ),
         ]
 
         # Pod spec
-        # Note: file_sync_container runs as sidecar (not init container) so we can
-        # trigger incremental S3 syncs via kubectl exec after new documents are indexed
+        # Uses Mountpoint S3 CSI Driver for direct S3 access - no sidecar needed
         pod_spec = client.V1PodSpec(
             service_account_name=self._file_sync_service_account,
-            containers=[sandbox_container, file_sync_container],
+            containers=[sandbox_container],
             volumes=volumes,
             restart_policy="Never",
             termination_grace_period_seconds=10,  # Fast pod termination
@@ -1897,52 +1807,6 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             Internal cluster URL for the Next.js server on the specified port
         """
         return self._get_nextjs_url(str(sandbox_id), port)
-
-    def sync_files(
-        self,
-        sandbox_id: UUID,
-        user_id: UUID,
-        tenant_id: str,
-    ) -> bool:
-        """Sync files from S3 to the running pod via the file-sync sidecar.
-
-        Executes `s5cmd sync` in the file-sync sidecar container to download
-        any new or changed files from S3 to /workspace/files/.
-
-        This is safe to call multiple times - s5cmd sync is idempotent.
-
-        Args:
-            sandbox_id: The sandbox UUID
-            user_id: The user ID (for S3 path construction)
-            tenant_id: The tenant ID (for S3 path construction)
-
-        Returns:
-            True if sync was successful, False otherwise.
-        """
-        pod_name = self._get_pod_name(str(sandbox_id))
-
-        # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-        # --stat shows transfer statistics for monitoring
-        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
-        sync_command = [
-            "/bin/sh",
-            "-c",
-            f'/s5cmd --log debug --stat sync "{s3_path}" /workspace/files/; '
-            f'echo "Files in workspace: $(find /workspace/files -type f | wc -l)"',
-        ]
-        resp = k8s_stream(
-            self._stream_core_api.connect_get_namespaced_pod_exec,
-            pod_name,
-            self._namespace,
-            container="file-sync",  # Execute in sidecar, not sandbox container
-            command=sync_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        logger.debug(f"File sync response: {resp}")
-        return True
 
     def _ensure_agents_md_attachments_section(
         self, sandbox_id: UUID, session_id: UUID

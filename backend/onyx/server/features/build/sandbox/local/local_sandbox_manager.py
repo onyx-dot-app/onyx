@@ -1099,25 +1099,3 @@ class LocalSandboxManager(SandboxManager):
             URL to access the webapp (e.g., http://localhost:3015)
         """
         return f"http://localhost:{port}"
-
-    def sync_files(
-        self,
-        sandbox_id: UUID,
-        user_id: UUID,  # noqa: ARG002
-        tenant_id: str,  # noqa: ARG002
-    ) -> bool:
-        """No-op for local mode - files are directly accessible via symlink.
-
-        In local mode, the sandbox's files/ directory is a symlink to the
-        local persistent document storage, so no sync is needed.
-
-        Args:
-            sandbox_id: The sandbox UUID (unused)
-            user_id: The user ID (unused)
-            tenant_id: The tenant ID (unused)
-
-        Returns:
-            True (always succeeds since no sync is needed)
-        """
-        logger.debug(f"sync_files called for local sandbox {sandbox_id} - no-op")
-        return True
