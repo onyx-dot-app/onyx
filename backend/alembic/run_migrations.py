@@ -173,7 +173,7 @@ def main() -> int:
 
         if not tenant_schemas:
             print(
-                "No tenant schemas found. " "Is MULTI_TENANT=true set?",
+                "No tenant schemas found. Is MULTI_TENANT=true set?",
                 file=sys.stderr,
             )
             return 1
