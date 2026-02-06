@@ -46,7 +46,7 @@ def make_mock_sensitive_value(value: dict[str, Any] | str | None) -> MagicMock:
 
     mock = MagicMock(spec=SensitiveValue)
     mock.get_value.return_value = value
-    mock.__bool__ = lambda self: True
+    mock.__bool__ = lambda self: True  # noqa: ARG005
     return mock
 
 

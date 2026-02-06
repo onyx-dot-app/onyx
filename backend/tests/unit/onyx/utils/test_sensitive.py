@@ -62,7 +62,7 @@ class TestSensitiveValueString:
         )
         result = sensitive.get_value(
             apply_mask=True,
-            mask_fn=lambda x: "REDACTED",
+            mask_fn=lambda x: "REDACTED",  # noqa: ARG005
         )
         assert result == "REDACTED"
 

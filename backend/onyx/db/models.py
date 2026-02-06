@@ -126,7 +126,7 @@ class EncryptedString(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(
-        self, value: str | SensitiveValue[str] | None, dialect: Dialect
+        self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
             # Handle both raw strings and SensitiveValue wrappers
@@ -137,7 +137,7 @@ class EncryptedString(TypeDecorator):
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect
+        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
     ) -> SensitiveValue[str] | None:
         if value is not None:
             return SensitiveValue(
@@ -156,7 +156,7 @@ class EncryptedJson(TypeDecorator):
     def process_bind_param(
         self,
         value: dict[str, Any] | SensitiveValue[dict[str, Any]] | None,
-        dialect: Dialect,
+        dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
             # Handle both raw dicts and SensitiveValue wrappers
@@ -168,7 +168,7 @@ class EncryptedJson(TypeDecorator):
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect
+        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
     ) -> SensitiveValue[dict[str, Any]] | None:
         if value is not None:
             return SensitiveValue(
