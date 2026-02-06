@@ -435,9 +435,44 @@ class LitellmLLM(LLM):
 
         from onyx.llm.model_response import from_litellm_model_response
 
-        # Create an isolated HTTP handler for this request to avoid
-        # connection pool conflicts when multiple threads call concurrently.
-        client = HTTPHandler()
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # We create an isolated HTTPHandler ONLY for true OpenAI models (not OpenAI-compatible
+        # providers like glm-4.7, DeepSeek, etc.). This distinction is critical:
+        #
+        # 1. WHY ONLY TRUE OPENAI MODELS:
+        #    - True OpenAI models use litellm's "responses API" path which expects HTTPHandler
+        #    - OpenAI-compatible providers (model_provider="openai" with non-OpenAI models)
+        #      use the standard completion path which expects OpenAI SDK client objects
+        #    - Passing HTTPHandler to OpenAI-compatible providers causes:
+        #      AttributeError: 'HTTPHandler' object has no attribute 'api_key'
+        #      (because _get_openai_client() calls openai_client.api_key on line ~929)
+        #
+        # 2. WHY ISOLATED HTTPHandler FOR OPENAI:
+        #    - Prevents "Bad file descriptor" errors when multiple threads stream concurrently
+        #    - Shared connection pools can have stale connections or abandoned streams that
+        #      corrupt the pool state for other threads
+        #    - Each request gets its own fresh httpx.Client via HTTPHandler
+        #
+        # 3. WHY OTHER PROVIDERS DON'T NEED THIS:
+        #    - Other providers (Anthropic, Bedrock, etc.) use litellm.module_level_client
+        #      which handles concurrency appropriately
+        #    - httpx.Client itself IS thread-safe for concurrent requests
+        #    - The issue is specific to OpenAI's responses API path and connection reuse
+        #
+        # 4. PITFALL - is_true_openai_model() CHECK:
+        #    - Must use is_true_openai_model() NOT just check model_provider == "openai"
+        #    - Many OpenAI-compatible providers set model_provider="openai" but are NOT true
+        #      OpenAI models (glm-4.7, DeepSeek, local proxies, etc.)
+        #    - is_true_openai_model() checks both provider AND model name patterns
+        #
+        # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
+        # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
+        # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
+        client = None
+        if is_true_openai_model(self.config.model_provider, self.config.model_name):
+            client = HTTPHandler(timeout=timeout_override or self._timeout)
+
         try:
             response = cast(
                 LiteLLMModelResponse,
@@ -464,7 +499,8 @@ class LitellmLLM(LLM):
 
             return model_response
         finally:
-            client.close()
+            if client is not None:
+                client.close()
 
     def stream(
         self,
@@ -479,20 +515,42 @@ class LitellmLLM(LLM):
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
+
         from onyx.llm.model_response import from_litellm_model_response_stream
 
-        # Create an isolated HTTP handler for this streaming request to avoid
-        # "Bad file descriptor" errors from connection pool conflicts when
-        # multiple threads stream concurrently (e.g., during deep research).
-        # Must use litellm's HTTPHandler wrapper, not raw httpx.Client, as
-        # litellm's response_api_handler checks for this specific type.
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # See invoke() method for full explanation. Key points for streaming:
         #
-        # Note: If callers abandon this generator without fully consuming it,
-        # client.close() in the finally block won't run until GC. This is
-        # acceptable because CPython's refcounting typically finalizes the
-        # generator promptly when it goes out of scope, and httpx connections
-        # have their own timeouts as a fallback.
-        client = HTTPHandler()
+        # 1. SAME RESTRICTIONS APPLY:
+        #    - HTTPHandler ONLY for true OpenAI models (use is_true_openai_model())
+        #    - OpenAI-compatible providers will fail with AttributeError on api_key
+        #
+        # 2. STREAMING-SPECIFIC CONCERNS:
+        #    - "Bad file descriptor" errors are MORE common during streaming because:
+        #      a) Streams hold connections open longer, increasing conflict window
+        #      b) Multiple concurrent streams (e.g., deep research) share the pool
+        #      c) Abandoned/interrupted streams can leave connections in bad state
+        #
+        # 3. ABANDONED STREAM PITFALL:
+        #    - If callers abandon this generator without fully consuming it (e.g.,
+        #      early return, exception, or break), the finally block won't execute
+        #      until the generator is garbage collected
+        #    - This is acceptable because:
+        #      a) CPython's refcounting typically finalizes generators promptly
+        #      b) Each HTTPHandler has its own isolated connection pool
+        #      c) httpx has built-in connection timeouts as a fallback
+        #    - If abandoned streams become problematic, consider using contextlib
+        #      or explicit stream.close() at call sites
+        #
+        # 4. WHY NOT USE SHARED HTTPHandler:
+        #    - litellm's InMemoryCache (used for client caching) is NOT thread-safe
+        #    - Shared pools can have connections corrupted by other threads
+        #    - Per-request HTTPHandler eliminates cross-thread interference
+        client = None
+        if is_true_openai_model(self.config.model_provider, self.config.model_name):
+            client = HTTPHandler(timeout=timeout_override or self._timeout)
+
         try:
             response = cast(
                 LiteLLMCustomStreamWrapper,
@@ -520,4 +578,5 @@ class LitellmLLM(LLM):
 
                 yield model_response
         finally:
-            client.close()
+            if client is not None:
+                client.close()
