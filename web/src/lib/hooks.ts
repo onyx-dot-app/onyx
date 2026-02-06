@@ -735,9 +735,16 @@ export function useLlmManager(
 
   const [temperature, setTemperature] = useState<number>(() => {
     if (currentChatSession?.current_temperature_override != null) {
+      // Derive Anthropic check from chat session since currentLlm isn't populated yet
+      const sessionModel = currentChatSession.current_alternate_model
+        ? parseLlmDescriptor(currentChatSession.current_alternate_model)
+        : null;
+      const isAnthropicModel = sessionModel
+        ? isAnthropic(sessionModel.provider, sessionModel.modelName)
+        : false;
       return Math.min(
         currentChatSession.current_temperature_override,
-        isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0
+        isAnthropicModel ? 1.0 : 2.0
       );
     } else if (
       liveAssistant?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)
@@ -748,8 +755,20 @@ export function useLlmManager(
   });
 
   const maxTemperature = useMemo(() => {
-    return isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0;
-  }, [currentLlm]);
+    // Check currentLlm first, fall back to chat session model if currentLlm isn't populated
+    if (currentLlm.provider) {
+      return isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0;
+    }
+    const sessionModel = currentChatSession?.current_alternate_model
+      ? parseLlmDescriptor(currentChatSession.current_alternate_model)
+      : null;
+    if (sessionModel?.provider) {
+      return isAnthropic(sessionModel.provider, sessionModel.modelName)
+        ? 1.0
+        : 2.0;
+    }
+    return 2.0; // Default max when no model info available
+  }, [currentLlm, currentChatSession]);
 
   useEffect(() => {
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
