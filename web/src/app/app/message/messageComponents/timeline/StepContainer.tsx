@@ -22,8 +22,6 @@ export interface StepContainerProps {
   collapsible?: boolean;
   /** Collapse button shown only when renderer supports collapsible mode */
   supportsCollapsible?: boolean;
-  /** Additional class names */
-  className?: string;
   /** Last step (no bottom connector) */
   isLastStep?: boolean;
   /** First step (top padding instead of connector) */
@@ -52,7 +50,6 @@ export function StepContainer({
   supportsCollapsible = false,
   isLastStep = false,
   isFirstStep = false,
-  className,
   hideHeader = false,
   isHover = false,
   collapsedIcon: CollapsedIconComponent,
@@ -91,12 +88,11 @@ export function StepContainer({
   );
 
   if (!withRail) {
-    return <div className={cn("flex w-full", className)}>{content}</div>;
+    return <div className="flex w-full">{content}</div>;
   }
 
   return (
     <TimelineRow
-      className={className}
       railVariant="rail"
       icon={iconNode}
       showIcon={!hideHeader && Boolean(StepIconComponent)}

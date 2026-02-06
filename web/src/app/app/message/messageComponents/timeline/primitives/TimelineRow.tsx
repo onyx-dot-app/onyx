@@ -1,5 +1,4 @@
 import React from "react";
-import { cn } from "@/lib/utils";
 import { TimelineIconColumn, TimelineRailVariant } from "./TimelineIconColumn";
 
 /**
@@ -22,9 +21,6 @@ export interface TimelineRowProps {
   isFirst?: boolean;
   isLast?: boolean;
   isHover?: boolean;
-  className?: string;
-  iconColumnClassName?: string;
-  contentClassName?: string;
   children?: React.ReactNode;
 }
 
@@ -40,13 +36,10 @@ export function TimelineRow({
   isFirst = false,
   isLast = false,
   isHover = false,
-  className,
-  iconColumnClassName,
-  contentClassName,
   children,
 }: TimelineRowProps) {
   return (
-    <div className={cn("flex w-full", className)}>
+    <div className="flex w-full">
       {railVariant !== "none" && (
         <TimelineIconColumn
           variant={railVariant === "spacer" ? "spacer" : "rail"}
@@ -56,10 +49,9 @@ export function TimelineRow({
           isFirst={isFirst}
           isLast={isLast}
           isHover={isHover}
-          className={iconColumnClassName}
         />
       )}
-      <div className={cn("flex-1", contentClassName)}>{children}</div>
+      <div className="flex-1">{children}</div>
     </div>
   );
 }

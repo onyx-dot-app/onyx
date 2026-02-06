@@ -34,20 +34,18 @@ import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/
 // =============================================================================
 
 interface TimelineContainerProps {
-  className?: string;
   agent: FullChatState["assistant"];
   headerContent?: React.ReactNode;
   children?: React.ReactNode;
 }
 
 function TimelineContainer({
-  className,
   agent,
   headerContent,
   children,
 }: TimelineContainerProps) {
   return (
-    <TimelineRoot className={className}>
+    <TimelineRoot>
       <TimelineHeaderRow left={<AgentAvatar agent={agent} size={24} />}>
         {headerContent}
       </TimelineHeaderRow>
@@ -79,8 +77,6 @@ export interface AgentTimelineProps {
   collapsible?: boolean;
   /** Title of the button to toggle the timeline */
   buttonTitle?: string;
-  /** Additional class names */
-  className?: string;
   /** Test ID for e2e testing */
   "data-testid"?: string;
   /** Processing duration in seconds (for completed messages) */
@@ -110,7 +106,6 @@ function areAgentTimelinePropsEqual(
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
-    prev.className === next.className &&
     prev.chatState === next.chatState &&
     prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
@@ -127,7 +122,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   hasDisplayContent = false,
   collapsible = true,
   buttonTitle,
-  className,
   "data-testid": testId,
   processingDurationSeconds,
   isGeneratingImage = false,
@@ -291,7 +285,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   if (uiState === TimelineUIState.EMPTY) {
     return (
       <TimelineContainer
-        className={className}
         agent={chatState.assistant}
         headerContent={
           <div className="flex w-full h-full items-center pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
@@ -311,14 +304,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Display content only (no timeline steps) - but show header for image generation
   if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
-    return (
-      <TimelineContainer className={className} agent={chatState.assistant} />
-    );
+    return <TimelineContainer agent={chatState.assistant} />;
   }
 
   return (
     <TimelineContainer
-      className={className}
       agent={chatState.assistant}
       headerContent={
         <div

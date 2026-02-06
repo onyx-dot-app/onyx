@@ -21,7 +21,6 @@ export interface TimelineIconColumnProps {
    * - compact: uses first-step spacer height for hidden headers.
    */
   iconRowVariant?: "default" | "compact";
-  className?: string;
 }
 
 /**
@@ -36,19 +35,13 @@ export function TimelineIconColumn({
   icon,
   showIcon = true,
   iconRowVariant = "default",
-  className,
 }: TimelineIconColumnProps) {
   if (variant === "spacer") {
-    return <div className={cn("w-[var(--timeline-rail-width)]", className)} />;
+    return <div className="w-[var(--timeline-rail-width)]" />;
   }
 
   return (
-    <div
-      className={cn(
-        "relative flex flex-col items-center w-[var(--timeline-rail-width)]",
-        className
-      )}
-    >
+    <div className="relative flex flex-col items-center w-[var(--timeline-rail-width)]">
       <div
         className={cn(
           "flex items-center justify-center shrink-0 pt-1",

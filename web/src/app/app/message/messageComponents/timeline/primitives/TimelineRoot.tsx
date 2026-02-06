@@ -1,10 +1,8 @@
 import React from "react";
-import { cn } from "@/lib/utils";
 import { getTimelineStyles, TimelineTokens } from "./tokens";
 
 export interface TimelineRootProps {
   children: React.ReactNode;
-  className?: string;
   tokens?: Partial<TimelineTokens>;
 }
 
@@ -13,17 +11,10 @@ export interface TimelineRootProps {
  * It sets CSS variables derived from TimelineTokens so rail width, header height,
  * and padding stay consistent across the timeline.
  */
-export function TimelineRoot({
-  children,
-  className,
-  tokens,
-}: TimelineRootProps) {
+export function TimelineRoot({ children, tokens }: TimelineRootProps) {
   return (
     <div
-      className={cn(
-        "flex flex-col pl-[var(--timeline-agent-message-padding-left)]",
-        className
-      )}
+      className="flex flex-col pl-[var(--timeline-agent-message-padding-left)]"
       style={getTimelineStyles(tokens)}
     >
       {children}

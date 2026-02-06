@@ -35,8 +35,6 @@ export interface ParallelTimelineTabsProps {
   isLastTurnGroup: boolean;
   /** Whether this is the first turn group (affects connector line) */
   isFirstTurnGroup: boolean;
-  /** Additional class names */
-  className?: string;
 }
 
 export function ParallelTimelineTabs({
@@ -46,7 +44,6 @@ export function ParallelTimelineTabs({
   stopReason,
   isLastTurnGroup,
   isFirstTurnGroup,
-  className,
 }: ParallelTimelineTabsProps) {
   const [activeTab, setActiveTab] = useState(turnGroup.steps[0]?.key ?? "");
   const [isExpanded, setIsExpanded] = useState(true);
@@ -97,7 +94,7 @@ export function ParallelTimelineTabs({
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <div
-        className={cn("flex flex-col w-full", className)}
+        className="flex flex-col w-full"
         onMouseEnter={() => setIsHover(true)}
         onMouseLeave={() => setIsHover(false)}
       >
