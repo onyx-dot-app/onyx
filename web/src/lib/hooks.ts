@@ -667,7 +667,7 @@ export function useLlmManager(
         }
       }
 
-      // If we have parsed provider info, try to find that specific provider first.
+      // If we have parsed provider info, try to find that specific provider.
       // This ensures we don't incorrectly match a model to the wrong provider
       // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
       if (model.provider && model.provider.length > 0) {
@@ -685,17 +685,18 @@ export function useLlmManager(
             provider: matchingProvider.provider,
           };
         }
-      }
+        // Provider info was present but not found - fall through to default
+      } else {
+        // Only search by model name when no provider info was parsed
+        const provider = llmProviders.find((p) =>
+          p.model_configurations
+            .map((modelConfiguration) => modelConfiguration.name)
+            .includes(model.modelName)
+        );
 
-      // Fall back to searching by model name only if no provider info was available
-      const provider = llmProviders.find((p) =>
-        p.model_configurations
-          .map((modelConfiguration) => modelConfiguration.name)
-          .includes(model.modelName)
-      );
-
-      if (provider) {
-        return { ...model, provider: provider.provider, name: provider.name };
+        if (provider) {
+          return { ...model, provider: provider.provider, name: provider.name };
+        }
       }
     }
 
