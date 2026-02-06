@@ -45,13 +45,13 @@ export function TimelineIconColumn({
   return (
     <div
       className={cn(
-        "relative flex flex-col items-center w-[var(--timeline-rail-width)] border border-pink-500",
+        "relative flex flex-col items-center w-[var(--timeline-rail-width)]",
         className
       )}
     >
       <div
         className={cn(
-          "flex items-center justify-center shrink-0 border border-yellow-500",
+          "flex items-center justify-center shrink-0",
           iconRowVariant === "compact"
             ? "h-[var(--timeline-first-top-spacer-height)]"
             : "h-[var(--timeline-step-header-height)]"

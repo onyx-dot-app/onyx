@@ -15,10 +15,12 @@ export interface TimelineTokens {
   branchIconWrapperSize: string;
   branchIconSize: string;
   contentPaddingLeft: string;
-  contentPaddingRight: string;
+  stepHeaderRightSectionWidth: string;
   contentPaddingBottom: string;
   headerPaddingLeft: string;
   headerPaddingRight: string;
+  agentMessagePaddingLeft: string;
+  timelineCommonTextPadding: string;
 }
 
 /**
@@ -43,10 +45,12 @@ export const timelineTokenDefaults: TimelineTokens = {
   branchIconWrapperSize: "1.25rem",
   branchIconSize: "0.75rem",
   contentPaddingLeft: "0.5rem",
-  contentPaddingRight: "2rem",
+  stepHeaderRightSectionWidth: "2.125rem",
   contentPaddingBottom: "0.5rem",
   headerPaddingLeft: "0.5rem",
   headerPaddingRight: "0.25rem",
+  agentMessagePaddingLeft: "0.12rem",
+  timelineCommonTextPadding: "0.12rem",
 };
 
 /**
@@ -67,9 +71,12 @@ export function getTimelineStyles(
     "--timeline-branch-icon-wrapper-size": merged.branchIconWrapperSize,
     "--timeline-branch-icon-size": merged.branchIconSize,
     "--timeline-content-padding-left": merged.contentPaddingLeft,
-    "--timeline-content-padding-right": merged.contentPaddingRight,
+    "--timeline-step-header-right-section-width":
+      merged.stepHeaderRightSectionWidth,
     "--timeline-content-padding-bottom": merged.contentPaddingBottom,
     "--timeline-header-padding-left": merged.headerPaddingLeft,
     "--timeline-header-padding-right": merged.headerPaddingRight,
+    "--timeline-agent-message-padding-left": merged.agentMessagePaddingLeft,
+    "--timeline-common-text-padding": merged.timelineCommonTextPadding,
   } as React.CSSProperties;
 }

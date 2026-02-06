@@ -46,45 +46,50 @@ export function TimelineStepContent({
   const showCollapseControls = collapsible && supportsCollapsible && onToggle;
 
   return (
-    <div className={cn("flex flex-col border border-green-500", className)}>
+    <div className={cn("flex flex-col px-1 pb-1", className)}>
       {!hideHeader && header && (
         <div
           className={cn(
-            "flex items-center border border-red-500 justify-between h-[var(--timeline-step-header-height)] pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]",
+            "flex items-center justify-between h-[var(--timeline-step-header-height)] pl-1",
             headerClassName
           )}
         >
-          <Text as="p" mainUiMuted text04>
-            {header}
-          </Text>
+          <div className="pt-1 pl-[var(--timeline-common-text-padding)] w-full">
+            <Text as="p" mainUiMuted text04>
+              {header}
+            </Text>
+          </div>
 
-          {showCollapseControls &&
-            (buttonTitle ? (
-              <Button
-                tertiary
-                onClick={onToggle}
-                rightIcon={
-                  isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
-                }
-              >
-                {buttonTitle}
-              </Button>
-            ) : (
-              <IconButton
-                tertiary
-                onClick={onToggle}
-                icon={
-                  isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
-                }
-              />
-            ))}
+          <div className="h-full w-[var(--timeline-step-header-right-section-width)] p-0.5 flex items-center justify-center">
+            {showCollapseControls &&
+              (buttonTitle ? (
+                <Button
+                  tertiary
+                  onClick={onToggle}
+                  rightIcon={
+                    isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
+                  }
+                >
+                  {buttonTitle}
+                </Button>
+              ) : (
+                <IconButton
+                  tertiary
+                  onClick={onToggle}
+                  icon={
+                    isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
+                  }
+                />
+              ))}
+          </div>
         </div>
       )}
 
       <div
         className={cn(
-          "pl-[var(--timeline-content-padding-left)] pb-[var(--timeline-content-padding-bottom)] border border-blue-500",
-          !noPaddingRight && "pr-[var(--timeline-content-padding-right)]",
+          "pl-1 pb-1",
+          !noPaddingRight &&
+            "pr-[var(--timeline-step-header-right-section-width)]",
           bodyClassName
         )}
       >

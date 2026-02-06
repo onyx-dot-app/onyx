@@ -38,11 +38,14 @@ export const CompletedHeader = React.memo(function CompletedHeader({
     <div
       role="button"
       onClick={onToggle}
-      className="flex items-center justify-between w-full rounded-12 p-1"
+      className="flex items-center justify-between w-full"
     >
-      <Text as="p" mainUiAction text03>
-        {isExpanded ? durationText : imageText ?? durationText}
-      </Text>
+      <div className="px-1.5 py-0.5">
+        <Text as="p" mainUiAction text03>
+          {isExpanded ? durationText : imageText ?? durationText}
+        </Text>
+      </div>
+
       {collapsible && totalSteps > 0 && (
         <Button
           tertiary

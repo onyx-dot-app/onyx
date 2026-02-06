@@ -323,7 +323,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       headerContent={
         <div
           className={cn(
-            "flex flex-1 min-w-0 h-full items-center justify-between pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)] hover:bg-background-tint-00 rounded-t-12 transition-colors duration-300",
+            "flex flex-1 min-w-0 h-full items-center justify-between p-1 hover:bg-background-tint-00 rounded-t-12 transition-colors duration-300",
             showTintedBackground && "bg-background-tint-00",
             showRoundedBottom && "rounded-b-12"
           )}

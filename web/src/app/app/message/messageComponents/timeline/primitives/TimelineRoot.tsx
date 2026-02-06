@@ -20,7 +20,10 @@ export function TimelineRoot({
 }: TimelineRootProps) {
   return (
     <div
-      className={cn("flex flex-col", className)}
+      className={cn(
+        "flex flex-col pl-[var(--timeline-agent-message-padding-left)]",
+        className
+      )}
       style={getTimelineStyles(tokens)}
     >
       {children}
