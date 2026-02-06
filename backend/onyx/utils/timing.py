@@ -3,6 +3,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from functools import wraps
+from inspect import signature
 from typing import Any
 from typing import cast
 from typing import TypeVar
@@ -22,25 +23,56 @@ def log_function_time(
     print_only: bool = False,
     debug_only: bool = False,
     include_args: bool = False,
+    include_args_subset: dict[str, Callable[[Any], Any]] | None = None,
 ) -> Callable[[F], F]:
+    """Decorates a function to log the time it takes to execute.
+
+    Args:
+        func_name: The name of the function to log. If None uses func.__name__.
+            Defaults to None.
+        print_only: If False, also sends the log to telemetry. Defaults to
+            False.
+        debug_only: If True, logs at the debug level. If False, logs at the
+            notice level. Defaults to False.
+        include_args: Whether to include the full args and kwargs in the log.
+            Clobbers include_args_subset if True. Defaults to False.
+        include_args_subset: An optional dict mapping arg names to callables to
+            apply the arg value before logging. Only args supplied in the dict
+            will be logged. Clobbered by include_args if True. Defaults to None.
+
+    Returns:
+        The decorated function.
+    """
+
     def decorator(func: F) -> F:
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
-            user = kwargs.get("user")
             result = func(*args, **kwargs)
             elapsed_time = time.time() - start_time
             elapsed_time_str = f"{elapsed_time:.3f}"
             log_name = func_name or func.__name__
-            args_str = f" args={args} kwargs={kwargs}" if include_args else ""
-            final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds"
+            args_str = ""
+            if include_args:
+                args_str = f" args={args} kwargs={kwargs}"
+            elif include_args_subset:
+                sig = signature(func)
+                bind = sig.bind(*args, **kwargs)
+                bind.apply_defaults()
+                for arg in include_args_subset:
+                    if arg in bind.arguments:
+                        arg_val = include_args_subset[arg](bind.arguments[arg])
+                        args_str += f" {arg}={arg_val}"
+            final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds."
             if debug_only:
                 logger.debug(final_log)
             else:
-                # These are generally more important logs so the level is a bit higher
+                # These are generally more important logs so the level is a bit
+                # higher.
                 logger.notice(final_log)
 
             if not print_only:
+                user = kwargs.get("user")
                 optional_telemetry(
                     record_type=RecordType.LATENCY,
                     data={"function": log_name, "latency": str(elapsed_time_str)},

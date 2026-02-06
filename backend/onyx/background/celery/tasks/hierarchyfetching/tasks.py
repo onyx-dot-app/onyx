@@ -322,7 +322,7 @@ def _run_hierarchy_extraction(
     bind=True,
 )
 def connector_hierarchy_fetching_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     *,
     cc_pair_id: int,
     tenant_id: str,

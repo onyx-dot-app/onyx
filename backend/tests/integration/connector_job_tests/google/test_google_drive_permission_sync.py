@@ -108,8 +108,8 @@ def google_drive_test_env_setup() -> Generator[
 
 @pytest.mark.xfail(reason="Needs to be tested for flakiness")
 def test_google_permission_sync(
-    reset: None,
-    vespa_client: vespa_fixture,
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,  # noqa: ARG001
     google_drive_test_env_setup: tuple[
         GoogleDriveService, str, DATestCCPair, DATestUser, DATestUser, DATestUser
     ],

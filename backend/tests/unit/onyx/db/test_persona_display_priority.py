@@ -20,7 +20,7 @@ def test_update_display_priority_updates_subset(
     user = MagicMock()
     monkeypatch.setattr(
         "onyx.db.persona.get_raw_personas_for_user",
-        lambda user, db_session, **kwargs: [persona_a, persona_b],
+        lambda user, db_session, **kwargs: [persona_a, persona_b],  # noqa: ARG005
     )
 
     # Under test
@@ -41,7 +41,7 @@ def test_update_display_priority_invalid_ids(monkeypatch: pytest.MonkeyPatch) ->
     user = MagicMock()
     monkeypatch.setattr(
         "onyx.db.persona.get_raw_personas_for_user",
-        lambda user, db_session, **kwargs: [persona_a],
+        lambda user, db_session, **kwargs: [persona_a],  # noqa: ARG005
     )
 
     # Under test

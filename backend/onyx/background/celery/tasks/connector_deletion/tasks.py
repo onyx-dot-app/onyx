@@ -366,7 +366,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
 
 
 def monitor_connector_deletion_taskset(
-    tenant_id: str, key_bytes: bytes, r: Redis
+    tenant_id: str, key_bytes: bytes, r: Redis  # noqa: ARG001
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)

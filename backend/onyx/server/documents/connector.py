@@ -567,7 +567,7 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -629,7 +629,7 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """

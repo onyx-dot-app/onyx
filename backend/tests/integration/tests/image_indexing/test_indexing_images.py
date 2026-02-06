@@ -25,7 +25,7 @@ DOCX_FILE_NAME = "three_images.docx"
 
 
 def test_image_indexing(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     vespa_client: vespa_fixture,
 ) -> None:
@@ -118,7 +118,7 @@ def test_image_indexing(
 
 
 def test_docx_image_indexing(
-    reset: None,
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     vespa_client: vespa_fixture,
 ) -> None:

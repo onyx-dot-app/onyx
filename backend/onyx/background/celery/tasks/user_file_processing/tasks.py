@@ -168,7 +168,9 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
     bind=True,
     ignore_result=True,
 )
-def process_single_user_file(self: Task, *, user_file_id: str, tenant_id: str) -> None:
+def process_single_user_file(
+    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
+) -> None:
     task_logger.info(f"process_single_user_file - Starting id={user_file_id}")
     start = time.monotonic()
 
@@ -391,7 +393,7 @@ def check_for_user_file_delete(self: Task, *, tenant_id: str) -> None:
     ignore_result=True,
 )
 def process_single_user_file_delete(
-    self: Task, *, user_file_id: str, tenant_id: str
+    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
 ) -> None:
     """Process a single user file delete."""
     task_logger.info(f"process_single_user_file_delete - Starting id={user_file_id}")
@@ -542,7 +544,7 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
     ignore_result=True,
 )
 def process_single_user_file_project_sync(
-    self: Task, *, user_file_id: str, tenant_id: str
+    self: Task, *, user_file_id: str, tenant_id: str  # noqa: ARG001
 ) -> None:
     """Process a single user file project sync."""
     task_logger.info(

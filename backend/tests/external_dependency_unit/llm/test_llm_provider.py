@@ -80,7 +80,7 @@ class TestLLMConfigurationEndpoint:
     def test_successful_llm_test_with_new_provider(
         self,
         db_session: Session,
-        provider_name: str,
+        provider_name: str,  # noqa: ARG002
     ) -> None:
         """
         Test that a successful LLM test returns normally (no exception).
@@ -131,7 +131,7 @@ class TestLLMConfigurationEndpoint:
     def test_failed_llm_test_raises_http_exception(
         self,
         db_session: Session,
-        provider_name: str,
+        provider_name: str,  # noqa: ARG002
     ) -> None:
         """
         Test that a failed LLM test raises an HTTPException with status 400.
@@ -141,7 +141,7 @@ class TestLLMConfigurationEndpoint:
         """
         error_message = "Invalid API key: Authentication failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:
+        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 
@@ -584,7 +584,7 @@ class TestDefaultProviderEndpoint:
         provider_name = f"test-provider-{uuid4().hex[:8]}"
         error_message = "Connection to LLM provider failed"
 
-        def mock_test_llm_failure(llm: LLM) -> str | None:
+        def mock_test_llm_failure(llm: LLM) -> str | None:  # noqa: ARG001
             """Mock test_llm that always fails."""
             return error_message
 

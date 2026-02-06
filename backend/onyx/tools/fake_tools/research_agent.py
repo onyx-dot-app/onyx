@@ -138,6 +138,7 @@ def generate_intermediate_report(
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
+            timeout_override=300,  # 5 minute read timeout for long report generation
         )
 
         while True:
@@ -617,8 +618,8 @@ def run_research_agent_call(
 
 
 def _on_research_agent_timeout(
-    index: int,
-    func: Callable[..., Any],
+    index: int,  # noqa: ARG001
+    func: Callable[..., Any],  # noqa: ARG001
     args: tuple[Any, ...],
 ) -> ResearchAgentCallResult:
     """Callback for handling research agent timeouts.

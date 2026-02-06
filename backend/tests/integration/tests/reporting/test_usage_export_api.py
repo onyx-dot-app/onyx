@@ -22,7 +22,9 @@ from tests.integration.common_utils.test_models import DATestUser
     reason="Usage export is an enterprise feature",
 )
 class TestUsageExportAPI:
-    def test_generate_usage_report(self, reset: None, admin_user: DATestUser) -> None:
+    def test_generate_usage_report(
+        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+    ) -> None:
         # Seed some chat history data for the report
         seed_chat_history(num_sessions=10, num_messages=4, days=30)
 
@@ -71,7 +73,7 @@ class TestUsageExportAPI:
         assert new_report["report_name"].endswith(".zip")
 
     def test_generate_usage_report_with_date_range(
-        self, reset: None, admin_user: DATestUser
+        self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Seed some chat history data
         seed_chat_history(num_sessions=20, num_messages=4, days=60)
@@ -129,7 +131,7 @@ class TestUsageExportAPI:
         assert new_report["period_to"] is not None
 
     def test_generate_usage_report_invalid_dates(
-        self, reset: None, admin_user: DATestUser
+        self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Test with invalid date format
         response = requests.post(
@@ -142,7 +144,9 @@ class TestUsageExportAPI:
         )
         assert response.status_code == 400
 
-    def test_fetch_usage_reports(self, reset: None, admin_user: DATestUser) -> None:
+    def test_fetch_usage_reports(
+        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+    ) -> None:
         # First generate a report to ensure we have at least one
         seed_chat_history(num_sessions=5, num_messages=4, days=30)
 
@@ -196,7 +200,9 @@ class TestUsageExportAPI:
         report_metadata = UsageReportMetadata(**first_report)
         assert report_metadata.report_name.endswith(".zip")
 
-    def test_read_usage_report(self, reset: None, admin_user: DATestUser) -> None:
+    def test_read_usage_report(
+        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+    ) -> None:
         # First generate a report
         seed_chat_history(num_sessions=5, num_messages=4, days=30)
 
@@ -301,7 +307,9 @@ class TestUsageExportAPI:
                     int(first_row["number_of_tokens"]) >= 0
                 ), "number_of_tokens should be non-negative"
 
-    def test_read_nonexistent_report(self, reset: None, admin_user: DATestUser) -> None:
+    def test_read_nonexistent_report(
+        self, reset: None, admin_user: DATestUser  # noqa: ARG002
+    ) -> None:
         # Try to download a report that doesn't exist
         response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report/nonexistent_report.zip",
@@ -310,7 +318,7 @@ class TestUsageExportAPI:
         assert response.status_code == 404
 
     def test_non_admin_cannot_generate_report(
-        self, reset: None, basic_user: DATestUser
+        self, reset: None, basic_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Try to generate a report as non-admin
         response = requests.post(
@@ -321,7 +329,7 @@ class TestUsageExportAPI:
         assert response.status_code == 403
 
     def test_non_admin_cannot_fetch_reports(
-        self, reset: None, basic_user: DATestUser
+        self, reset: None, basic_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Try to fetch reports as non-admin
         response = requests.get(
@@ -331,7 +339,7 @@ class TestUsageExportAPI:
         assert response.status_code == 403
 
     def test_non_admin_cannot_download_report(
-        self, reset: None, basic_user: DATestUser
+        self, reset: None, basic_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Try to download a report as non-admin
         response = requests.get(
@@ -341,7 +349,7 @@ class TestUsageExportAPI:
         assert response.status_code == 403
 
     def test_concurrent_report_generation(
-        self, reset: None, admin_user: DATestUser
+        self, reset: None, admin_user: DATestUser  # noqa: ARG002
     ) -> None:
         # Seed some data
         seed_chat_history(num_sessions=10, num_messages=4, days=30)

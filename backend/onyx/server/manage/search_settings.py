@@ -33,9 +33,9 @@ logger = setup_logger()
 
 @router.post("/set-new-search-settings")
 def set_new_search_settings(
-    search_settings_new: SearchSettingsCreationRequest,
+    search_settings_new: SearchSettingsCreationRequest,  # noqa: ARG001
     _: User = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
+    db_session: Session = Depends(get_session),  # noqa: ARG001
 ) -> IdReturn:
     """Creates a new EmbeddingModel row and cancels the previous secondary indexing if any
     Gives an error if the same model name is used as the current or secondary index

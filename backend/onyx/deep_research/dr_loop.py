@@ -161,6 +161,7 @@ def generate_final_report(
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
             pre_answer_processing_time=pre_answer_processing_time,
+            timeout_override=300,  # 5 minute read timeout for long report generation
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -186,7 +187,7 @@ def run_deep_research_llm_loop(
     state_container: ChatStateContainer,
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
-    custom_agent_prompt: str | None,
+    custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
     db_session: Session,

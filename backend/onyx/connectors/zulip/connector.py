@@ -192,7 +192,9 @@ class ZulipConnector(LoadConnector, PollConnector):
             anchor = str(message.id)
 
     def _poll_source(
-        self, start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
+        self,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,  # noqa: ARG002
     ) -> GenerateDocumentsOutput:
         # Since Zulip doesn't support searching by timestamp,
         # we have to always start from the newest message

@@ -239,7 +239,7 @@ class LocalFileConnector(LoadConnector):
     def __init__(
         self,
         file_locations: list[Path | str],
-        file_names: list[str] | None = None,
+        file_names: list[str] | None = None,  # noqa: ARG002
         zip_metadata: dict[str, Any] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:

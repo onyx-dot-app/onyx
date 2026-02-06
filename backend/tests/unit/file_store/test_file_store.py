@@ -104,7 +104,9 @@ class TestExternalStorageFileStore:
             assert call_kwargs["aws_secret_access_key"] == "test-secret"
             assert call_kwargs["region_name"] == "us-west-2"
 
-    def test_s3_client_initialization_with_iam_role(self, db_session: Session) -> None:
+    def test_s3_client_initialization_with_iam_role(
+        self, db_session: Session  # noqa: ARG002
+    ) -> None:
         """Test S3 client initialization with IAM role (no explicit credentials)"""
         with patch("boto3.client") as mock_boto3:
             file_store = S3BackedFileStore(
@@ -194,7 +196,10 @@ class TestExternalStorageFileStore:
 
     @patch("boto3.client")
     def test_s3_save_file_mock(
-        self, mock_boto3: MagicMock, db_session: Session, sample_file_io: BytesIO
+        self,
+        mock_boto3: MagicMock,
+        db_session: Session,  # noqa: ARG002
+        sample_file_io: BytesIO,
     ) -> None:
         """Test S3 file saving with mocked S3 client"""
         # Setup S3 mock

@@ -67,8 +67,8 @@ from tests.external_dependency_unit.mock_search_provider import use_mock_web_pro
 
 def test_stream_chat_with_answer(
     db_session: Session,
-    full_deployment_setup: None,
-    mock_external_deps: None,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """Test that the stream chat with answer endpoint returns a valid answer."""
     ensure_default_llm_provider(db_session)
@@ -114,8 +114,8 @@ def test_stream_chat_with_answer(
 
 def test_stream_chat_with_answer_create_chat(
     db_session: Session,
-    full_deployment_setup: None,
-    mock_external_deps: None,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     ensure_default_llm_provider(db_session)
     test_user = create_test_user(
@@ -165,8 +165,8 @@ def test_stream_chat_with_answer_create_chat(
 
 def test_stream_chat_with_search_and_openurl_tools(
     db_session: Session,
-    full_deployment_setup: None,
-    mock_external_deps: None,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     ensure_default_llm_provider(db_session)
     test_user = create_test_user(
@@ -411,8 +411,8 @@ def test_stream_chat_with_search_and_openurl_tools(
 
 def test_image_generation_tool_no_reasoning(
     db_session: Session,
-    full_deployment_setup: None,
-    mock_external_deps: None,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     ensure_default_llm_provider(db_session)
     test_user = create_test_user(db_session, email_prefix="test_image_generation_tool")
@@ -538,8 +538,8 @@ def test_image_generation_tool_no_reasoning(
 
 def test_parallel_internal_and_web_search_tool_calls(
     db_session: Session,
-    full_deployment_setup: None,
-    mock_external_deps: None,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """
     User asks a question

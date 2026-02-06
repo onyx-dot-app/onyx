@@ -604,7 +604,7 @@ class VespaDocumentIndex(DocumentIndex):
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 100,
-        dirty: bool | None = None,
+        dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
 

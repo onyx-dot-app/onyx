@@ -20,9 +20,9 @@ from onyx.llm.interfaces import LLM
 def run_functions_tuples_sequential(
     functions_with_args: list[tuple[Callable, tuple]],
     allow_failures: bool = False,
-    max_workers: int | None = None,
-    timeout: float | None = None,
-    timeout_callback: Callable | None = None,
+    max_workers: int | None = None,  # noqa: ARG001
+    timeout: float | None = None,  # noqa: ARG001
+    timeout_callback: Callable | None = None,  # noqa: ARG001
 ) -> list[Any]:
     """
     A sequential replacement for run_functions_tuples_in_parallel.
@@ -112,29 +112,33 @@ def use_mock_search_pipeline(
     """
     controller = SearchPipelineController()
 
-    def mock_check_connectors_exist(db_session: Session) -> bool:
+    def mock_check_connectors_exist(db_session: Session) -> bool:  # noqa: ARG001
         return len(connectors) > 0
 
-    def mock_check_federated_connectors_exist(db_session: Session) -> bool:
+    def mock_check_federated_connectors_exist(
+        db_session: Session,  # noqa: ARG001
+    ) -> bool:
         # For now, federated connectors are not mocked as available
         return False
 
-    def mock_check_user_files_exist(db_session: Session) -> bool:
+    def mock_check_user_files_exist(db_session: Session) -> bool:  # noqa: ARG001
         # For now, user files are not mocked as available
         return False
 
-    def mock_fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
+    def mock_fetch_unique_document_sources(
+        db_session: Session,  # noqa: ARG001
+    ) -> list[DocumentSource]:
         return connectors
 
     def override_search_pipeline(
         chunk_search_request: ChunkSearchRequest,
-        document_index: DocumentIndex,
-        user: User | None,
-        persona: Persona | None,
-        db_session: Session,
-        auto_detect_filters: bool = False,
-        llm: LLM | None = None,
-        project_id: int | None = None,
+        document_index: DocumentIndex,  # noqa: ARG001
+        user: User | None,  # noqa: ARG001
+        persona: Persona | None,  # noqa: ARG001
+        db_session: Session,  # noqa: ARG001
+        auto_detect_filters: bool = False,  # noqa: ARG001
+        llm: LLM | None = None,  # noqa: ARG001
+        project_id: int | None = None,  # noqa: ARG001
     ) -> list[InferenceChunk]:
         return controller.get_search_results(chunk_search_request.query)
 

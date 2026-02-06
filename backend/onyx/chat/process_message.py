@@ -741,7 +741,7 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
-    processing_start_time: float | None = None,
+    processing_start_time: float | None = None,  # noqa: ARG001
 ) -> None:
     chat_session_id = assistant_message.chat_session_id
 

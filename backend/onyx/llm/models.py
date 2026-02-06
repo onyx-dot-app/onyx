@@ -28,8 +28,9 @@ class ReasoningEffort(str, Enum):
 
 
 # OpenAI reasoning effort mapping
+# Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.AUTO: "auto",
+    ReasoningEffort.AUTO: "medium",  # Default to medium when auto is requested
     ReasoningEffort.OFF: "none",
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
