@@ -270,6 +270,8 @@ def create_credential(
     )
 
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -310,6 +312,8 @@ def alter_credential(
 
     credential.user_id = user.id
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -327,6 +331,8 @@ def update_credential(
     credential.user_id = user.id if user is not None else None
 
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -342,6 +348,8 @@ def update_credential_json(
 
     credential.credential_json = credential_json  # type: ignore[assignment]
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 

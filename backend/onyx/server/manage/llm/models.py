@@ -191,7 +191,7 @@ class LLMProviderView(LLMProvider):
             name=llm_provider_model.name,
             provider=provider,
             api_key=(
-                llm_provider_model.api_key.get_value(apply_mask=True)
+                llm_provider_model.api_key.get_value(apply_mask=False)
                 if llm_provider_model.api_key
                 else None
             ),
