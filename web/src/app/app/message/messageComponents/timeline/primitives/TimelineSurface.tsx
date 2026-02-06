@@ -24,6 +24,10 @@ export function TimelineSurface({
   roundedBottom = false,
   background = "tint",
 }: TimelineSurfaceProps) {
+  if (React.Children.count(children) === 0) {
+    return null;
+  }
+
   const baseBackground = background === "tint" ? "bg-background-tint-00" : "";
   const hoverBackground =
     background === "tint" && isHover ? "bg-background-tint-02" : "";

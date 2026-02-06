@@ -18,6 +18,7 @@ import {
   isResearchAgentPackets,
   isSearchToolPackets,
   stepSupportsCollapsedStreaming,
+  stepHasCollapsedStreamingContent,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { StreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/StreamingHeader";
 import { CompletedHeader } from "@/app/app/message/messageComponents/timeline/headers/CompletedHeader";
@@ -171,6 +172,16 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     return stepSupportsCollapsedStreaming(parallelActiveStep.packets);
   }, [parallelActiveStep]);
 
+  const lastStepHasCollapsedContent = useMemo(() => {
+    if (!lastStep) return false;
+    return stepHasCollapsedStreamingContent(lastStep.packets);
+  }, [lastStep]);
+
+  const parallelActiveStepHasCollapsedContent = useMemo(() => {
+    if (!parallelActiveStep) return false;
+    return stepHasCollapsedStreamingContent(parallelActiveStep.packets);
+  }, [parallelActiveStep]);
+
   // Derive all UI state from inputs
   const {
     uiState,
@@ -191,8 +202,10 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepSupportsCollapsedStreaming,
+    lastStepHasCollapsedContent,
     lastStepIsResearchAgent,
     parallelActiveStepSupportsCollapsedStreaming,
+    parallelActiveStepHasCollapsedContent,
     isGeneratingImage,
     finalAnswerComing,
   });

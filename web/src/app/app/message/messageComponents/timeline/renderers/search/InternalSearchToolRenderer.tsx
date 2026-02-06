@@ -77,7 +77,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
       {
         icon: SvgSearchMenu,
         status: null,
-        content: <div />,
+        content: <></>,
         supportsCollapsible: true,
         timelineLayout: "timeline",
       },
@@ -94,7 +94,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text02 className="text-sm mb-1">
+            <Text as="p" text04 mainUiMuted className="=mb-1">
               {queriesHeader}
             </Text>
             <SearchChipList
