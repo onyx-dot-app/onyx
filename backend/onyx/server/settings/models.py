@@ -59,8 +59,8 @@ class Settings(BaseModel):
 
     # Enterprise features flag - set by license enforcement at runtime
     # When LICENSE_ENFORCEMENT_ENABLED=true, this reflects license status
-    # When LICENSE_ENFORCEMENT_ENABLED=false, defaults to True (legacy behavior)
-    ee_features_enabled: bool = True
+    # When LICENSE_ENFORCEMENT_ENABLED=false, defaults to False
+    ee_features_enabled: bool = False
 
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False
