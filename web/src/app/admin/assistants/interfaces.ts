@@ -44,8 +44,7 @@ export interface MinimalPersonaSnapshot {
   // Unique sources from all knowledge (document sets + hierarchy nodes)
   // Used to populate source filters in chat
   knowledge_sources?: ValidSources[];
-  llm_model_version_override?: string;
-  llm_model_provider_override?: string;
+  default_model_configuration_id?: number;
 
   uploaded_image_id?: string;
   icon_name?: string;

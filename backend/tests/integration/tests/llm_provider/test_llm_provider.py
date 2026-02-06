@@ -96,6 +96,8 @@ def assert_response_is_equivalent(
     for name in actual_by_name:
         actual_config = actual_by_name[name]
         expected_config = expected_by_name[name]
+        assert "id" in actual_config, f"Config {name} is missing id"
+        del actual_config["id"]  # This will not be in the expected config
         assert actual_config == expected_config, (
             f"Config mismatch for {name}:\n"
             f"Actual: {actual_config}\n"

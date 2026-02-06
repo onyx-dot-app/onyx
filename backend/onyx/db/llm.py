@@ -22,6 +22,7 @@ from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import ModelConfigurationView
 from shared_configs.enums import EmbeddingProvider
 
 
@@ -163,15 +164,16 @@ def validate_persona_ids_exist(
 
 
 def get_personas_using_provider(
-    db_session: Session, provider_name: str
+    db_session: Session, provider: LLMProviderModel
 ) -> list[Persona]:
-    """Get all non-deleted personas that use a specific LLM provider."""
     return list(
         db_session.scalars(
-            select(Persona).where(
-                Persona.llm_model_provider_override == provider_name,
-                Persona.deleted == False,  # noqa: E712
+            select(Persona)
+            .join(
+                ModelConfiguration,
+                Persona.default_model_configuration_id == ModelConfiguration.id,
             )
+            .where(ModelConfiguration.llm_provider_id == provider.id)
         ).all()
     )
 
@@ -462,6 +464,37 @@ def fetch_llm_provider_view(
     return LLMProviderView.from_model(provider_model)
 
 
+def fetch_model_configuration_view(
+    db_session: Session, model_configuration_id: int
+) -> ModelConfigurationView | None:
+    model_configuration_model = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.id == model_configuration_id
+        )
+    )
+
+    if not model_configuration_model:
+        return None
+
+    return ModelConfigurationView.from_model(
+        model_configuration_model=model_configuration_model,
+        provider=model_configuration_model.llm_provider.provider,
+    )
+
+
+def fetch_llm_provider_view_from_model_id(
+    db_session: Session, model_configuration_id: int
+) -> LLMProviderView | None:
+    model_configuration_model = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.id == model_configuration_id
+        )
+    )
+    if not model_configuration_model:
+        return None
+    return LLMProviderView.from_model(model_configuration_model.llm_provider)
+
+
 def remove_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> None:
@@ -486,9 +519,9 @@ def remove_llm_provider(db_session: Session, provider_id: int) -> None:
 
     # Clear the provider override from any personas using it
     # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
+    personas_using_provider = get_personas_using_provider(db_session, provider)
     for persona in personas_using_provider:
-        persona.llm_model_provider_override = None
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
@@ -510,9 +543,9 @@ def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> Non
 
     # Clear the provider override from any personas using it
     # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
+    personas_using_provider = get_personas_using_provider(db_session, provider)
     for persona in personas_using_provider:
-        persona.llm_model_provider_override = None
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(

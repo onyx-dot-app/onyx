@@ -451,37 +451,59 @@ export default function AgentEditorPage({
   const deleteAgentModal = useCreateModal();
 
   // LLM Model Selection
-  const getCurrentLlm = useCallback(
-    (values: any, llmProviders: any) =>
-      values.llm_model_version_override && values.llm_model_provider_override
-        ? (() => {
-            const provider = llmProviders?.find(
-              (p: any) => p.name === values.llm_model_provider_override
-            );
-            return structureValue(
-              values.llm_model_provider_override,
-              provider?.provider || "",
-              values.llm_model_version_override
-            );
-          })()
-        : null,
+  const findProviderAndModel = useCallback(
+    (
+      providers: any[] | undefined,
+      modelPredicate: (m: any) => boolean,
+      providerPredicate?: (p: any) => boolean
+    ) => {
+      const candidateProviders = providerPredicate
+        ? providers?.filter(providerPredicate)
+        : providers;
+      const provider = candidateProviders?.find(
+        (p: any) => p.model_configurations?.find(modelPredicate)
+      );
+      const model = provider?.model_configurations?.find(modelPredicate);
+      return { provider, model };
+    },
     []
   );
 
+  const getCurrentLlm = useCallback(
+    (values: any, llmProviders: any) =>
+      values.default_model_configuration_id
+        ? (() => {
+            const { provider, model } = findProviderAndModel(
+              llmProviders,
+              (m: any) => m.id === values.default_model_configuration_id
+            );
+            return structureValue(
+              provider?.name || "",
+              provider?.provider || "",
+              model?.name || ""
+            );
+          })()
+        : null,
+    [findProviderAndModel]
+  );
+
   const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
+    (selected: string | null, setFieldValue: any, llmProviders: any) => {
       if (selected === null) {
-        setFieldValue("llm_model_version_override", null);
-        setFieldValue("llm_model_provider_override", null);
+        setFieldValue("default_model_configuration_id", null);
       } else {
         const { modelName, name } = parseLlmDescriptor(selected);
         if (modelName && name) {
-          setFieldValue("llm_model_version_override", modelName);
-          setFieldValue("llm_model_provider_override", name);
+          const { model } = findProviderAndModel(
+            llmProviders,
+            (m: any) => m.name === modelName,
+            (p: any) => p.name === name
+          );
+          setFieldValue("default_model_configuration_id", model?.id || null);
         }
       }
     },
-    []
+    [findProviderAndModel]
   );
 
   // Hooks for Knowledge section
@@ -572,10 +594,8 @@ export default function AgentEditorPage({
     selected_sources: [] as ValidSources[],
 
     // Advanced
-    llm_model_provider_override:
-      existingAgent?.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      existingAgent?.llm_model_version_override ?? null,
+    default_model_configuration_id:
+      existingAgent?.default_model_configuration_id ?? null,
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
@@ -696,8 +716,7 @@ export default function AgentEditorPage({
       ),
 
     // Advanced
-    llm_model_provider_override: Yup.string().nullable().optional(),
-    llm_model_version_override: Yup.string().nullable().optional(),
+    default_model_configuration_id: Yup.number().nullable().optional(),
     knowledge_cutoff_date: Yup.date().nullable().optional(),
     replace_base_system_prompt: Yup.boolean(),
     reminders: Yup.string().optional(),
@@ -798,8 +817,8 @@ export default function AgentEditorPage({
         // recency_bias: ...,
         // llm_filter_extraction: ...,
         llm_relevance_filter: false,
-        llm_model_provider_override: values.llm_model_provider_override || null,
-        llm_model_version_override: values.llm_model_version_override || null,
+        default_model_configuration_id:
+          values.default_model_configuration_id || null,
         starter_messages: finalStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,
@@ -1399,7 +1418,11 @@ export default function AgentEditorPage({
                                     llmProviders
                                   )}
                                   onSelect={(selected) =>
-                                    onLlmSelect(selected, setFieldValue)
+                                    onLlmSelect(
+                                      selected,
+                                      setFieldValue,
+                                      llmProviders
+                                    )
                                   }
                                 />
                               </InputLayouts.Horizontal>

@@ -144,6 +144,7 @@ export function ModelConfigurationField({
               <CreateButton
                 onClick={() => {
                   arrayHelpers.push({
+                    id: -1,
                     name: "",
                     is_visible: true,
                     // Use null so Yup.number().nullable() accepts empty inputs
