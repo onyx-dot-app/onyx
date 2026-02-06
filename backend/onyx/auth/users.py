@@ -1328,10 +1328,6 @@ async def optional_user(
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
 
-    tenant_id = get_current_tenant_id()
-    if user is None and anonymous_user_enabled(tenant_id=tenant_id):
-        return get_anonymous_user()
-
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         return user
