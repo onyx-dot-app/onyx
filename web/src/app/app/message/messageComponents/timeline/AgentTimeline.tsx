@@ -182,6 +182,23 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     return stepHasCollapsedStreamingContent(parallelActiveStep.packets);
   }, [parallelActiveStep]);
 
+  const stoppedStepsCount = useMemo(() => {
+    if (!stopPacketSeen || !userStopped) {
+      return totalSteps;
+    }
+
+    let count = 0;
+    for (const turnGroup of turnGroups) {
+      for (const step of turnGroup.steps) {
+        if (stepHasCollapsedStreamingContent(step.packets)) {
+          count += 1;
+        }
+      }
+    }
+
+    return count;
+  }, [stopPacketSeen, userStopped, totalSteps, turnGroups]);
+
   // Derive all UI state from inputs
   const {
     uiState,
@@ -209,6 +226,18 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     isGeneratingImage,
     finalAnswerComing,
   });
+
+  const headerIsInteractive = useMemo(() => {
+    if (!collapsible) {
+      return false;
+    }
+
+    if (uiState === TimelineUIState.STOPPED) {
+      return stoppedStepsCount > 0;
+    }
+
+    return totalSteps > 0;
+  }, [collapsible, uiState, stoppedStepsCount, totalSteps]);
 
   // Determine render type override for collapsed streaming view
   const collapsedRenderTypeOverride = useMemo(() => {
@@ -251,7 +280,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       case TimelineUIState.STOPPED:
         return (
           <StoppedHeader
-            totalSteps={totalSteps}
+            totalSteps={stoppedStepsCount}
             collapsible={collapsible}
             isExpanded={isExpanded}
             onToggle={handleToggle}
@@ -289,6 +318,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     buttonTitle,
     streamingStartTime,
     totalSteps,
+    stoppedStepsCount,
     processingDurationSeconds,
     generatedImageCount,
     toolProcessingDuration,
@@ -326,7 +356,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       headerContent={
         <div
           className={cn(
-            "flex flex-1 min-w-0 h-full items-center justify-between p-1 hover:bg-background-tint-00 rounded-t-12 transition-colors duration-300",
+            "flex flex-1 min-w-0 h-full items-center justify-between p-1 rounded-t-12 transition-colors duration-300",
+            headerIsInteractive && "hover:bg-background-tint-00",
             showTintedBackground && "bg-background-tint-00",
             showRoundedBottom && "rounded-b-12"
           )}

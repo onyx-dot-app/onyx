@@ -49,6 +49,8 @@ export function ParallelTimelineTabs({
   const [isExpanded, setIsExpanded] = useState(true);
   const [isHover, setIsHover] = useState(false);
   const handleToggle = useCallback(() => setIsExpanded((prev) => !prev), []);
+  const handleHeaderEnter = useCallback(() => setIsHover(true), []);
+  const handleHeaderLeave = useCallback(() => setIsHover(false), []);
   const noopComplete = useCallback(() => {}, []);
 
   const topSpacerVariant = isFirstTurnGroup ? "first" : "none";
@@ -93,11 +95,7 @@ export function ParallelTimelineTabs({
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
-      <div
-        className="flex flex-col w-full"
-        onMouseEnter={() => setIsHover(true)}
-        onMouseLeave={() => setIsHover(false)}
-      >
+      <div className="flex flex-col w-full">
         <TimelineRow
           railVariant="rail"
           isFirst={isFirstTurnGroup}
@@ -122,7 +120,11 @@ export function ParallelTimelineTabs({
           >
             <TimelineTopSpacer variant={topSpacerVariant} />
 
-            <div className="flex items-center min-h-[var(--timeline-step-header-height)] pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
+            <div
+              className="flex items-center min-h-[var(--timeline-step-header-height)] pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]"
+              onMouseEnter={handleHeaderEnter}
+              onMouseLeave={handleHeaderLeave}
+            >
               <Tabs.List
                 variant="pill"
                 enableScrollArrows
