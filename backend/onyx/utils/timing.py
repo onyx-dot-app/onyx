@@ -54,7 +54,7 @@ def log_function_time(
             log_name = func_name or func.__name__
             args_str = ""
             if include_args:
-                args_str = f"args={args} kwargs={kwargs}"
+                args_str = f" args={args} kwargs={kwargs}"
             elif include_args_subset:
                 sig = signature(func)
                 bind = sig.bind(*args, **kwargs)
@@ -62,10 +62,8 @@ def log_function_time(
                 for arg in include_args_subset:
                     if arg in bind.arguments:
                         arg_val = include_args_subset[arg](bind.arguments[arg])
-                        args_str += (
-                            f" {arg}={arg_val}" if args_str else f"{arg}={arg_val}"
-                        )
-            final_log = f"{log_name} {args_str} took {elapsed_time_str} seconds."
+                        args_str += f" {arg}={arg_val}"
+            final_log = f"{log_name}{args_str} took {elapsed_time_str} seconds."
             if debug_only:
                 logger.debug(final_log)
             else:
