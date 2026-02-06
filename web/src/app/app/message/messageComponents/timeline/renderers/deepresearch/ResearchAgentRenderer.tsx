@@ -194,7 +194,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col pl-[var(--timeline-common-text-padding)">
+            <div className="flex flex-col pl-[var(--timeline-common-text-padding)]">
               <Text as="p" text04 mainUiMuted className="mb-1">
                 Research Report
               </Text>

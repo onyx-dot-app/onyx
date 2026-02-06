@@ -38,6 +38,11 @@ export const stepHasCollapsedStreamingContent = (
     packets.map((packet) => packet.obj.type as PacketType)
   );
 
+  // Errors should render even if no deltas arrived
+  if (packetTypes.has(PacketType.ERROR)) {
+    return true;
+  }
+
   // Search tools need actual query/doc deltas before showing content
   if (
     packetTypes.has(PacketType.SEARCH_TOOL_QUERIES_DELTA) ||

@@ -94,7 +94,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text04 mainUiMuted className="=mb-1">
+            <Text as="p" text04 mainUiMuted className="mb-1">
               {queriesHeader}
             </Text>
             <SearchChipList
