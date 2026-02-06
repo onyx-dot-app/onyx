@@ -102,6 +102,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         group="group/AgentCard"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        variant="none"
         static
       >
         <Card padding={0} gap={0} height="full">

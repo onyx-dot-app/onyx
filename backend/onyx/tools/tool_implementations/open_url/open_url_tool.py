@@ -522,7 +522,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             # Track if timeout occurred for error reporting
             timeout_occurred = [False]  # Using list for mutability in closure
 
-            def _timeout_handler(index: int, func: Any, args: tuple[Any, ...]) -> None:
+            def _timeout_handler(
+                index: int, func: Any, args: tuple[Any, ...]  # noqa: ARG001
+            ) -> None:
                 timeout_occurred[0] = True
                 return None
 
@@ -759,7 +761,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         crawled_sections: list[InferenceSection],
         url_to_doc_id: dict[str, str],
         all_urls: list[str],
-        failed_web_urls: list[str],
+        failed_web_urls: list[str],  # noqa: ARG002
     ) -> list[InferenceSection]:
         """Merge indexed and crawled results, preferring indexed when available.
 

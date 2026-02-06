@@ -450,7 +450,7 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ARG002
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size

@@ -27,12 +27,12 @@ def test_fetch_url_pdf_with_content_type(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(
         crawler_module,
         "ssrf_safe_get",
-        lambda *args, **kwargs: response,
+        lambda *args, **kwargs: response,  # noqa: ARG005
     )
     monkeypatch.setattr(
         crawler_module,
         "extract_pdf_text",
-        lambda *args, **kwargs: ("pdf text", {"Title": "Doc Title"}),
+        lambda *args, **kwargs: ("pdf text", {"Title": "Doc Title"}),  # noqa: ARG005
     )
 
     result = crawler._fetch_url("https://example.com/report.pdf")
@@ -53,12 +53,12 @@ def test_fetch_url_pdf_with_signature(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         crawler_module,
         "ssrf_safe_get",
-        lambda *args, **kwargs: response,
+        lambda *args, **kwargs: response,  # noqa: ARG005
     )
     monkeypatch.setattr(
         crawler_module,
         "extract_pdf_text",
-        lambda *args, **kwargs: ("pdf text", {}),
+        lambda *args, **kwargs: ("pdf text", {}),  # noqa: ARG005
     )
 
     result = crawler._fetch_url("https://example.com/files/file.pdf")
@@ -81,7 +81,7 @@ def test_fetch_url_decodes_html_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         crawler_module,
         "ssrf_safe_get",
-        lambda *args, **kwargs: response,
+        lambda *args, **kwargs: response,  # noqa: ARG005
     )
 
     result = crawler._fetch_url("https://example.com/page.html")
@@ -102,7 +102,7 @@ def test_fetch_url_pdf_exceeds_size_limit(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(
         crawler_module,
         "ssrf_safe_get",
-        lambda *args, **kwargs: response,
+        lambda *args, **kwargs: response,  # noqa: ARG005
     )
 
     result = crawler._fetch_url("https://example.com/large.pdf")
@@ -124,12 +124,12 @@ def test_fetch_url_pdf_within_size_limit(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(
         crawler_module,
         "ssrf_safe_get",
-        lambda *args, **kwargs: response,
+        lambda *args, **kwargs: response,  # noqa: ARG005
     )
     monkeypatch.setattr(
         crawler_module,
         "extract_pdf_text",
-        lambda *args, **kwargs: ("pdf text", {"Title": "Doc Title"}),
+        lambda *args, **kwargs: ("pdf text", {"Title": "Doc Title"}),  # noqa: ARG005
     )
 
     result = crawler._fetch_url("https://example.com/small.pdf")
@@ -151,7 +151,7 @@ def test_fetch_url_html_exceeds_size_limit(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(
         crawler_module,
         "ssrf_safe_get",
-        lambda *args, **kwargs: response,
+        lambda *args, **kwargs: response,  # noqa: ARG005
     )
 
     result = crawler._fetch_url("https://example.com/large.html")
@@ -174,7 +174,7 @@ def test_fetch_url_html_within_size_limit(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(
         crawler_module,
         "ssrf_safe_get",
-        lambda *args, **kwargs: response,
+        lambda *args, **kwargs: response,  # noqa: ARG005
     )
 
     result = crawler._fetch_url("https://example.com/small.html")

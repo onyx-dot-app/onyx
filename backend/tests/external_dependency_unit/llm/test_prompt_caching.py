@@ -151,7 +151,7 @@ def _validate_vertex_credentials_file(credentials_path: Path) -> None:
     reason="OpenAI API key not available",
 )
 def test_openai_prompt_caching_reduces_costs(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that OpenAI prompt caching reduces costs on subsequent calls.
 
@@ -275,7 +275,7 @@ def test_openai_prompt_caching_reduces_costs(
     reason="Anthropic API key not available",
 )
 def test_anthropic_prompt_caching_reduces_costs(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that Anthropic prompt caching reduces costs on subsequent calls.
 
@@ -399,7 +399,7 @@ def test_anthropic_prompt_caching_reduces_costs(
 )
 @pytest.mark.skip(reason="Vertex AI prompt caching is disabled for now")
 def test_google_genai_prompt_caching_reduces_costs(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that Litellm Gemini prompt caching reduces costs on subsequent calls.
 
@@ -574,7 +574,7 @@ def test_google_genai_prompt_caching_reduces_costs(
     reason="OpenAI API key not available",
 )
 def test_prompt_caching_with_conversation_history(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that prompt caching works with multi-turn conversations.
 
@@ -689,7 +689,7 @@ def test_prompt_caching_with_conversation_history(
     reason="OpenAI API key not available",
 )
 def test_no_caching_without_process_with_prompt_cache(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test baseline: without using process_with_prompt_cache, no special caching occurs.
 

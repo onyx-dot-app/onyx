@@ -599,6 +599,7 @@ def run_llm_step_pkt_generator(
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
+    timeout_override: int | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -687,6 +688,7 @@ def run_llm_step_pkt_generator(
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
+            timeout_override=timeout_override,
         ):
             if packet.usage:
                 usage = packet.usage
@@ -1026,6 +1028,7 @@ def run_llm_step(
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
+    timeout_override: int | None = None,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -1048,6 +1051,7 @@ def run_llm_step(
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
         pre_answer_processing_time=pre_answer_processing_time,
+        timeout_override=timeout_override,
     )
 
     while True:

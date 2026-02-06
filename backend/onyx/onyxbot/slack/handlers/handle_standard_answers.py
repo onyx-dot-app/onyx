@@ -35,12 +35,12 @@ def handle_standard_answers(
 
 
 def _handle_standard_answers(
-    message_info: SlackMessageInfo,
-    receiver_ids: list[str] | None,
-    slack_channel_config: SlackChannelConfig,
-    logger: OnyxLoggingAdapter,
-    client: WebClient,
-    db_session: Session,
+    message_info: SlackMessageInfo,  # noqa: ARG001
+    receiver_ids: list[str] | None,  # noqa: ARG001
+    slack_channel_config: SlackChannelConfig,  # noqa: ARG001
+    logger: OnyxLoggingAdapter,  # noqa: ARG001
+    client: WebClient,  # noqa: ARG001
+    db_session: Session,  # noqa: ARG001
 ) -> bool:
     """
     Standard Answers are a paid Enterprise Edition feature. This is the fallback

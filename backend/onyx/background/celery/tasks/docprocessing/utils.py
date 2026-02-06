@@ -57,7 +57,7 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         # TODO: Pass index_attempt_id to the callback and check cancellation using the db
         return bool(self.redis_connector.stop.fenced)
 
-    def progress(self, tag: str, amount: int) -> None:
+    def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
         """Amount isn't used yet."""
 
         # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside

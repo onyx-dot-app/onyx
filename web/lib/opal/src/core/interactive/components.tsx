@@ -9,16 +9,27 @@ import type { WithoutStyles } from "@opal/types";
 // ---------------------------------------------------------------------------
 
 /**
- * Background color variant for interactive elements.
+ * Variant for interactive elements.
  *
- * Each variant defines a base background tint and corresponding hover/active
- * state colors, providing visual hierarchy across the UI:
+ * Determines the semantic color palette used for the interactive element:
  *
- * - `"primary"` — Lightest tint (`tint-00`), used for primary surfaces
- * - `"secondary"` — Medium tint (`tint-01`), used for secondary/nested surfaces
- * - `"tertiary"` — Darker tint (`tint-02`), used for tertiary/emphasized surfaces
+ * - `"none"` — No background styling; defers to child component's background
+ * - `"standard"` — Uses theme primary colors (default brand colors)
+ * - `"action"` — Uses action/link colors (blue)
+ * - `"danger"` — Uses danger colors (red) for destructive actions
  */
-export type InteractiveBaseVariant = "primary" | "secondary" | "tertiary";
+export type InteractiveBaseVariant = "none" | "standard" | "action" | "danger";
+
+/**
+ * Subvariant for interactive elements.
+ *
+ * Determines the background fill treatment of the element:
+ *
+ * - `"primary"` — Solid filled background with prominent appearance
+ * - `"secondary"` — Subtle tinted background (`tint-01`)
+ * - `"ghost"` — Transparent background, visible only on hover
+ */
+export type InteractiveBaseSubvariant = "primary" | "secondary" | "ghost";
 
 /**
  * Height presets for `Interactive.Container`.
@@ -83,15 +94,29 @@ export interface InteractiveBaseProps
   ref?: React.Ref<HTMLElement>;
 
   /**
-   * Background color variant controlling the base tint and hover/active states.
+   * Variant determining the semantic color palette.
    *
-   * - `"primary"` — Base `tint-00`, hover `tint-02`, active `tint-00`
-   * - `"secondary"` — Base `tint-01`, hover `tint-02`, active `tint-00`
-   * - `"tertiary"` — Base `tint-02`, hover `tint-03`, active `tint-00`
+   * - `"none"` — No background styling; defers to child component's background
+   * - `"standard"` — Uses theme primary colors (default)
+   * - `"action"` — Uses action/link colors (blue)
+   * - `"danger"` — Uses danger colors (red)
+   *
+   * @default "standard"
+   */
+  variant?: InteractiveBaseVariant;
+
+  /**
+   * Subvariant determining the background fill treatment.
+   *
+   * Ignored when `variant` is `"none"`.
+   *
+   * - `"primary"` — Solid filled background with prominent appearance
+   * - `"secondary"` — Subtle tinted background (`tint-01`)
+   * - `"ghost"` — Transparent background, visible only on hover
    *
    * @default "primary"
    */
-  variant?: InteractiveBaseVariant;
+  subvariant?: InteractiveBaseSubvariant;
 
   /**
    * Tailwind group class to apply (e.g. `"group/AgentCard"`).
@@ -138,6 +163,36 @@ export interface InteractiveBaseProps
    * @default false
    */
   transient?: boolean;
+
+  /**
+   * When `true`, disables the interactive element.
+   *
+   * Sets `data-disabled` and `aria-disabled` attributes. CSS uses `data-disabled`
+   * to apply disabled styles (muted colors, `cursor-not-allowed`). Click handlers
+   * and `href` navigation are blocked in JS, but hover events still fire to
+   * support tooltips explaining why the element is disabled.
+   *
+   * @default false
+   */
+  disabled?: boolean;
+
+  /**
+   * URL to navigate to when clicked.
+   *
+   * When provided, renders an `<a>` wrapper element instead of using Radix Slot.
+   * The `<a>` receives all interactive styling (hover/active/transient states)
+   * and children are rendered inside it.
+   *
+   * @example
+   * ```tsx
+   * <Interactive.Base href="/settings">
+   *   <Interactive.Container border>
+   *     <span>Go to Settings</span>
+   *   </Interactive.Container>
+   * </Interactive.Base>
+   * ```
+   */
+  href?: string;
 }
 
 /**
@@ -146,10 +201,12 @@ export interface InteractiveBaseProps
  * `Interactive.Base` is the lowest-level building block for any clickable
  * element in the design system. It applies:
  *
- * 1. The `.interactive` CSS class (flex layout, pointer cursor, no text selection)
- * 2. `data-variant` attribute for variant-specific background colors
+ * 1. The `.interactive` CSS class (flex layout, pointer cursor, color transitions)
+ * 2. `data-interactive-base-variant` and `data-interactive-base-subvariant`
+ *    attributes for variant-specific background colors (omitted when `variant="none"`)
  * 3. `data-static` attribute when hover feedback is disabled
  * 4. `data-pressed` attribute for forced pressed state
+ * 5. `data-disabled` attribute for disabled styling
  *
  * All props are merged onto the single child element via Radix `Slot`, meaning
  * the child element *becomes* the interactive surface (no wrapper div).
@@ -157,10 +214,15 @@ export interface InteractiveBaseProps
  * @example
  * ```tsx
  * // Basic usage with a container
- * <Interactive.Base variant="secondary">
+ * <Interactive.Base variant="standard" subvariant="primary">
  *   <Interactive.Container border>
  *     <span>Click me</span>
  *   </Interactive.Container>
+ * </Interactive.Base>
+ *
+ * // Wrapping a component that controls its own background
+ * <Interactive.Base variant="none" onClick={handleClick}>
+ *   <Card>Card controls its own background</Card>
  * </Interactive.Base>
  *
  * // With group hover for child visibility
@@ -175,26 +237,72 @@ export interface InteractiveBaseProps
  * <Interactive.Base static>
  *   <Card>Content that doesn't highlight on hover</Card>
  * </Interactive.Base>
+ *
+ * // As a link
+ * <Interactive.Base href="/settings">
+ *   <Interactive.Container border>
+ *     <span>Go to Settings</span>
+ *   </Interactive.Container>
+ * </Interactive.Base>
  * ```
  *
  * @see InteractiveBaseProps for detailed prop documentation
  */
 function InteractiveBase({
   ref,
-  variant = "primary",
+  variant = "standard",
+  subvariant = "primary",
   group,
   static: isStatic,
   transient,
+  disabled,
+  href,
   ...props
 }: InteractiveBaseProps) {
-  const classes = cn("interactive", !props.onClick && "cursor-default", group);
+  const classes = cn(
+    "interactive",
+    !props.onClick && !href && "!cursor-default !select-auto",
+    group
+  );
+
   const dataAttrs = {
-    "data-variant": variant,
-    ...(isStatic && { "data-static": "true" as const }),
-    ...(transient && { "data-pressed": "true" as const }),
+    "data-interactive-base-variant": variant !== "none" ? variant : undefined,
+    "data-interactive-base-subvariant":
+      variant !== "none" ? subvariant : undefined,
+    "data-static": isStatic ? "true" : undefined,
+    "data-pressed": transient ? "true" : undefined,
+    "data-disabled": disabled ? "true" : undefined,
+    "aria-disabled": disabled || undefined,
   };
 
-  return <Slot ref={ref} className={classes} {...dataAttrs} {...props} />;
+  if (href) {
+    const { children, onClick, ...rest } = props;
+    return (
+      <a
+        ref={ref as React.Ref<HTMLAnchorElement>}
+        href={disabled ? undefined : href}
+        className={classes}
+        {...dataAttrs}
+        {...rest}
+        onClick={
+          disabled ? (e: React.MouseEvent) => e.preventDefault() : onClick
+        }
+      >
+        {children}
+      </a>
+    );
+  }
+
+  const { onClick, ...slotProps } = props;
+  return (
+    <Slot
+      ref={ref}
+      className={classes}
+      {...dataAttrs}
+      {...slotProps}
+      onClick={disabled ? undefined : onClick}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +385,7 @@ export interface InteractiveContainerProps
  * </Interactive.Base>
  *
  * // Compact, borderless container with no padding
- * <Interactive.Base variant="secondary">
+ * <Interactive.Base variant="standard" subvariant="ghost">
  *   <Interactive.Container
  *     heightVariant="compact"
  *     roundingVariant="compact"
@@ -441,7 +549,7 @@ function InteractiveChevronContainer({
  * ```tsx
  * import { Interactive } from "@opal/core";
  *
- * <Interactive.Base variant="secondary" onClick={handleClick}>
+ * <Interactive.Base variant="standard" subvariant="ghost" onClick={handleClick}>
  *   <Interactive.Container border>
  *     <span>Clickable card</span>
  *   </Interactive.Container>

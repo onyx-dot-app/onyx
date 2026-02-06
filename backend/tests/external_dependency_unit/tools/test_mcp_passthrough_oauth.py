@@ -373,11 +373,11 @@ class TestMCPPassThroughOAuth:
         mocked_response = {"result": "mocked_response"}
 
         def mock_call_mcp_tool(
-            server_url: str,
-            tool_name: str,
-            kwargs: dict[str, Any],
+            server_url: str,  # noqa: ARG001
+            tool_name: str,  # noqa: ARG001
+            kwargs: dict[str, Any],  # noqa: ARG001
             connection_headers: dict[str, str],
-            transport: MCPTransport,
+            transport: MCPTransport,  # noqa: ARG001
         ) -> dict[str, Any]:
             captured_headers.update(connection_headers)
             return mocked_response

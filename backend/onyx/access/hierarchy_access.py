@@ -4,7 +4,9 @@ from onyx.db.models import User
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 
-def _get_user_external_group_ids(db_session: Session, user: User) -> list[str]:
+def _get_user_external_group_ids(
+    db_session: Session, user: User  # noqa: ARG001
+) -> list[str]:
     return []
 
 

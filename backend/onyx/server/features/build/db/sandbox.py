@@ -138,7 +138,9 @@ def get_idle_sandboxes(
     return list(db_session.execute(stmt).scalars().all())
 
 
-def get_running_sandbox_count_by_tenant(db_session: Session, tenant_id: str) -> int:
+def get_running_sandbox_count_by_tenant(
+    db_session: Session, tenant_id: str  # noqa: ARG001
+) -> int:
     """Get count of running sandboxes for a tenant (for limit enforcement).
 
     Note: tenant_id parameter is kept for API compatibility but is not used
@@ -193,7 +195,7 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
 
 
 def delete_old_snapshots(
-    db_session: Session, tenant_id: str, retention_days: int
+    db_session: Session, tenant_id: str, retention_days: int  # noqa: ARG001
 ) -> int:
     """Delete snapshots older than retention period, return count deleted.
 

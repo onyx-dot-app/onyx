@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
-from onyx.configs.chat_configs import QA_TIMEOUT
+from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
@@ -45,7 +45,6 @@ from onyx.llm.well_known_providers.constants import (
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.special_types import JSON_ro
 
 logger = setup_logger()
 
@@ -82,10 +81,6 @@ def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     return [prompt.model_dump(exclude_none=True)]
 
 
-def _prompt_as_json(prompt: LanguageModelInput) -> JSON_ro:
-    return cast(JSON_ro, _prompt_to_dicts(prompt))
-
-
 class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
@@ -107,12 +102,14 @@ class LitellmLLM(LLM):
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
     ):
+        # Timeout in seconds for each socket read operation (i.e., max time between
+        # receiving data chunks/tokens). This is NOT a total request timeout - a
+        # request can run indefinitely as long as data keeps arriving within this
+        # window. If the LLM pauses for longer than this timeout between chunks,
+        # a ReadTimeout is raised.
         self._timeout = timeout
         if timeout is None:
-            if model_is_reasoning_model(model_name, model_provider):
-                self._timeout = QA_TIMEOUT * 10  # Reasoning models are slow
-            else:
-                self._timeout = QA_TIMEOUT
+            self._timeout = LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
@@ -318,7 +315,7 @@ class LitellmLLM(LLM):
                         "summary": "auto",
                     }
 
-            if is_claude_model:
+            elif is_claude_model:
                 budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                     reasoning_effort
                 )
@@ -348,7 +345,7 @@ class LitellmLLM(LLM):
                 ]:
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
                 else:
-                    optional_kwargs["reasoning_effort"] = ReasoningEffort.LOW.value
+                    optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -433,33 +430,77 @@ class LitellmLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> ModelResponse:
+        from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.model_response import from_litellm_model_response
 
-        response = cast(
-            LiteLLMModelResponse,
-            self._completion(
-                prompt=prompt,
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=False,
-                structured_response_format=structured_response_format,
-                timeout_override=timeout_override,
-                max_tokens=max_tokens,
-                parallel_tool_calls=True,
-                reasoning_effort=reasoning_effort,
-                user_identity=user_identity,
-            ),
-        )
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # We create an isolated HTTPHandler ONLY for true OpenAI models (not OpenAI-compatible
+        # providers like glm-4.7, DeepSeek, etc.). This distinction is critical:
+        #
+        # 1. WHY ONLY TRUE OPENAI MODELS:
+        #    - True OpenAI models use litellm's "responses API" path which expects HTTPHandler
+        #    - OpenAI-compatible providers (model_provider="openai" with non-OpenAI models)
+        #      use the standard completion path which expects OpenAI SDK client objects
+        #    - Passing HTTPHandler to OpenAI-compatible providers causes:
+        #      AttributeError: 'HTTPHandler' object has no attribute 'api_key'
+        #      (because _get_openai_client() calls openai_client.api_key on line ~929)
+        #
+        # 2. WHY ISOLATED HTTPHandler FOR OPENAI:
+        #    - Prevents "Bad file descriptor" errors when multiple threads stream concurrently
+        #    - Shared connection pools can have stale connections or abandoned streams that
+        #      corrupt the pool state for other threads
+        #    - Each request gets its own fresh httpx.Client via HTTPHandler
+        #
+        # 3. WHY OTHER PROVIDERS DON'T NEED THIS:
+        #    - Other providers (Anthropic, Bedrock, etc.) use litellm.module_level_client
+        #      which handles concurrency appropriately
+        #    - httpx.Client itself IS thread-safe for concurrent requests
+        #    - The issue is specific to OpenAI's responses API path and connection reuse
+        #
+        # 4. PITFALL - is_true_openai_model() CHECK:
+        #    - Must use is_true_openai_model() NOT just check model_provider == "openai"
+        #    - Many OpenAI-compatible providers set model_provider="openai" but are NOT true
+        #      OpenAI models (glm-4.7, DeepSeek, local proxies, etc.)
+        #    - is_true_openai_model() checks both provider AND model name patterns
+        #
+        # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
+        # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
+        # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
+        client = None
+        if is_true_openai_model(self.config.model_provider, self.config.model_name):
+            client = HTTPHandler(timeout=timeout_override or self._timeout)
 
-        model_response = from_litellm_model_response(response)
+        try:
+            response = cast(
+                LiteLLMModelResponse,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=False,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
 
-        # Track LLM cost for Onyx-managed API keys
-        if model_response.usage:
-            self._track_llm_cost(model_response.usage)
+            model_response = from_litellm_model_response(response)
 
-        return model_response
+            # Track LLM cost for Onyx-managed API keys
+            if model_response.usage:
+                self._track_llm_cost(model_response.usage)
+
+            return model_response
+        finally:
+            if client is not None:
+                client.close()
 
     def stream(
         self,
@@ -474,20 +515,42 @@ class LitellmLLM(LLM):
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
+
         from onyx.llm.model_response import from_litellm_model_response_stream
 
-        # Create an isolated HTTP handler for this streaming request to avoid
-        # "Bad file descriptor" errors from connection pool conflicts when
-        # multiple threads stream concurrently (e.g., during deep research).
-        # Must use litellm's HTTPHandler wrapper, not raw httpx.Client, as
-        # litellm's response_api_handler checks for this specific type.
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # See invoke() method for full explanation. Key points for streaming:
         #
-        # Note: If callers abandon this generator without fully consuming it,
-        # client.close() in the finally block won't run until GC. This is
-        # acceptable because CPython's refcounting typically finalizes the
-        # generator promptly when it goes out of scope, and httpx connections
-        # have their own timeouts as a fallback.
-        client = HTTPHandler()
+        # 1. SAME RESTRICTIONS APPLY:
+        #    - HTTPHandler ONLY for true OpenAI models (use is_true_openai_model())
+        #    - OpenAI-compatible providers will fail with AttributeError on api_key
+        #
+        # 2. STREAMING-SPECIFIC CONCERNS:
+        #    - "Bad file descriptor" errors are MORE common during streaming because:
+        #      a) Streams hold connections open longer, increasing conflict window
+        #      b) Multiple concurrent streams (e.g., deep research) share the pool
+        #      c) Abandoned/interrupted streams can leave connections in bad state
+        #
+        # 3. ABANDONED STREAM PITFALL:
+        #    - If callers abandon this generator without fully consuming it (e.g.,
+        #      early return, exception, or break), the finally block won't execute
+        #      until the generator is garbage collected
+        #    - This is acceptable because:
+        #      a) CPython's refcounting typically finalizes generators promptly
+        #      b) Each HTTPHandler has its own isolated connection pool
+        #      c) httpx has built-in connection timeouts as a fallback
+        #    - If abandoned streams become problematic, consider using contextlib
+        #      or explicit stream.close() at call sites
+        #
+        # 4. WHY NOT USE SHARED HTTPHandler:
+        #    - litellm's InMemoryCache (used for client caching) is NOT thread-safe
+        #    - Shared pools can have connections corrupted by other threads
+        #    - Per-request HTTPHandler eliminates cross-thread interference
+        client = None
+        if is_true_openai_model(self.config.model_provider, self.config.model_name):
+            client = HTTPHandler(timeout=timeout_override or self._timeout)
+
         try:
             response = cast(
                 LiteLLMCustomStreamWrapper,
@@ -515,4 +578,5 @@ class LitellmLLM(LLM):
 
                 yield model_response
         finally:
-            client.close()
+            if client is not None:
+                client.close()

@@ -230,7 +230,7 @@ class ImageGenerationTool(Tool[None]):
     def run(
         self,
         placement: Placement,
-        override_kwargs: None = None,
+        override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
     ) -> ToolResponse:
         if PROMPT_FIELD not in llm_kwargs:

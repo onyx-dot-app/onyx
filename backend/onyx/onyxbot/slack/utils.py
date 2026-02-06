@@ -227,7 +227,7 @@ def respond_in_thread_or_channel(
     receiver_ids: list[str] | None = None,
     metadata: Metadata | None = None,
     unfurl: bool = True,
-    send_as_ephemeral: bool | None = True,
+    send_as_ephemeral: bool | None = True,  # noqa: ARG001
 ) -> list[str]:
     if not text and not blocks:
         raise ValueError("One of `text` or `blocks` must be provided")

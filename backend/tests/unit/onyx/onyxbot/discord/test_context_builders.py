@@ -91,7 +91,7 @@ class TestThreadContextBuilder:
             mock_message(content="Reply 2", message_id=2),
         ]
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history
@@ -129,7 +129,7 @@ class TestThreadContextBuilder:
             side_effect=discord.NotFound(MagicMock(), "")
         )
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history
@@ -165,7 +165,7 @@ class TestThreadContextBuilder:
             side_effect=discord.NotFound(MagicMock(), "")
         )
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history
@@ -195,7 +195,7 @@ class TestThreadContextBuilder:
             side_effect=discord.NotFound(MagicMock(), "")
         )
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history
@@ -223,7 +223,7 @@ class TestThreadContextBuilder:
         # Set up mock before calling function so we can verify it wasn't called
         thread.parent.fetch_message = AsyncMock()
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history
@@ -253,7 +253,7 @@ class TestThreadContextBuilder:
             side_effect=discord.NotFound(MagicMock(), "Not found")
         )
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history
@@ -284,7 +284,7 @@ class TestThreadContextBuilder:
         thread.parent = MagicMock(spec=discord.TextChannel)
         thread.parent.fetch_message = AsyncMock(return_value=starter)
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history
@@ -483,7 +483,7 @@ class TestCombinedContext:
             mock_message(content="Thread msg 2", message_id=2),
         ]
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(thread_messages)
 
         thread.history = history
@@ -522,7 +522,7 @@ class TestCombinedContext:
 
         messages = [mock_message(content="Thread msg")]
 
-        def history(**kwargs: Any) -> AsyncIteratorMock:
+        def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
             return AsyncIteratorMock(messages)
 
         thread.history = history

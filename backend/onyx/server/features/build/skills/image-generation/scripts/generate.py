@@ -43,7 +43,7 @@ def generate_image(
     output_path: str,
     model: str = "gemini-3-pro-image-preview",
     input_image: str | None = None,
-    aspect_ratio: str | None = None,
+    aspect_ratio: str | None = None,  # noqa: ARG001
     num_images: int = 1,
 ) -> list[str]:
     """

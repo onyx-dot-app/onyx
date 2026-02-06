@@ -49,7 +49,7 @@ def get_mcp_servers_by_owner(owner_email: str, db_session: Session) -> list[MCPS
 
 
 def get_mcp_servers_for_persona(
-    persona_id: int, db_session: Session, user: User
+    persona_id: int, db_session: Session, user: User  # noqa: ARG001
 ) -> list[MCPServer]:
     """Get all MCP servers associated with a persona via its tools"""
     # Get the persona and its tools
