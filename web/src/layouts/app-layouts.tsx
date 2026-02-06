@@ -322,7 +322,10 @@ function Header() {
             !classification && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
-                  <Interactive.Base subvariant="secondary">
+                  <Interactive.Base
+                    subvariant="secondary"
+                    transient={modePopoverOpen}
+                  >
                     <Interactive.ChevronContainer>
                       <LineItemLayout
                         icon={
