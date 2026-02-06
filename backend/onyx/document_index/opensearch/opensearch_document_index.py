@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 import httpx
+from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
@@ -71,6 +72,10 @@ from shared_configs.model_server_models import Embedding
 
 
 logger = setup_logger(__name__)
+
+
+class ChunkCountNotFoundError(ValueError):
+    """Raised when a document has no chunk count."""
 
 
 def generate_opensearch_filtered_access_control_list(
@@ -357,7 +362,21 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             ),
         )
 
-        return self._real_index.update([update_request])
+        try:
+            self._real_index.update([update_request])
+        except NotFoundError:
+            logger.exception(
+                f"Tried to update document {doc_id} but at least one of its chunks was not found in OpenSearch. "
+                "This is likely due to it not having been indexed yet. Skipping update for now..."
+            )
+            return
+        except ChunkCountNotFoundError:
+            logger.exception(
+                f"Tried to update document {doc_id} but its chunk count is not known. We tolerate this for now "
+                "but this will not be an acceptable state once OpenSearch is the primary document index and the "
+                "indexing/updating race condition is fixed."
+            )
+            return
 
     def id_based_retrieval(
         self,
@@ -474,7 +493,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 similarity part of the search.
 
         Raises:
-            RuntimeError: There was an error verifying or creating the index or
+            Exception: There was an error verifying or creating the index or
                 search pipelines.
         """
         logger.debug(
@@ -584,7 +603,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 Defaults to None.
 
         Raises:
-            RuntimeError: Failed to delete some or all of the chunks for the
+            Exception: Failed to delete some or all of the chunks for the
                 document.
 
         Returns:
@@ -623,7 +642,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 apply to all of the specified documents in each update request.
 
         Raises:
-            RuntimeError: Failed to update some or all of the chunks for the
+            Exception: Failed to update some or all of the chunks for the
                 specified documents.
         """
         logger.debug(
@@ -678,7 +697,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     # since been deprecated and should no longer be the case
                     # here.
                     # TODO(andrei): Fix the aforementioned race condition.
-                    raise ValueError(
+                    raise ChunkCountNotFoundError(
                         f"Tried to update document {doc_id} but its chunk count is not known. Older versions of the "
                         "application used to permit this but is not a supported state for a document when using OpenSearch. "
                         "The document was likely just added to the indexing pipeline and the chunk count will be updated shortly."

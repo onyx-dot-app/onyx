@@ -288,6 +288,16 @@ class SqlEngine:
                 cls._engine.dispose()
                 cls._engine = None
 
+    @classmethod
+    @contextmanager
+    def scoped_engine(cls, **init_kwargs: Any) -> Generator[None, None, None]:
+        """Context manager that initializes the engine and guarantees cleanup."""
+        cls.init_engine(**init_kwargs)
+        try:
+            yield
+        finally:
+            cls.reset_engine()
+
 
 def get_sqlalchemy_engine() -> Engine:
     return SqlEngine.get_engine()

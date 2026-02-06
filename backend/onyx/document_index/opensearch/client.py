@@ -5,7 +5,7 @@ from typing import Generic
 from typing import TypeVar
 
 from opensearchpy import OpenSearch
-from opensearchpy.exceptions import TransportError
+from opensearchpy import TransportError
 from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 

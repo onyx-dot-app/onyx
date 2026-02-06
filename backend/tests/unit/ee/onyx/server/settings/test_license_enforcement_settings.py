@@ -24,27 +24,36 @@ class TestApplyLicenseStatusToSettings:
     """Tests for apply_license_status_to_settings function."""
 
     @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", False)
-    def test_enforcement_disabled_returns_unchanged(
+    def test_enforcement_disabled_enables_ee_features(
         self, base_settings: Settings
     ) -> None:
-        """Critical: When LICENSE_ENFORCEMENT_ENABLED=False, settings remain unchanged.
+        """When LICENSE_ENFORCEMENT_ENABLED=False, EE features are enabled.
 
-        This is the key behavior that allows disabling enforcement for rollback.
+        If we're running the EE apply function, EE code was loaded via
+        ENABLE_PAID_ENTERPRISE_EDITION_FEATURES, so features should be on.
         """
         from ee.onyx.server.settings.api import apply_license_status_to_settings
 
+        assert base_settings.ee_features_enabled is False
         result = apply_license_status_to_settings(base_settings)
         assert result.application_status == ApplicationStatus.ACTIVE
+        assert result.ee_features_enabled is True
+
+    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.server.settings.api.MULTI_TENANT", True)
+    def test_multi_tenant_enables_ee_features(self, base_settings: Settings) -> None:
+        """Cloud mode always enables EE features."""
+        from ee.onyx.server.settings.api import apply_license_status_to_settings
+
+        result = apply_license_status_to_settings(base_settings)
+        assert result.ee_features_enabled is True
 
     @pytest.mark.parametrize(
-        "license_status,expected_status",
+        "license_status,expected_app_status,expected_ee_enabled",
         [
-            (None, ApplicationStatus.ACTIVE),  # No license = allow community features
-            (
-                ApplicationStatus.GATED_ACCESS,
-                ApplicationStatus.GATED_ACCESS,
-            ),  # Gated status propagated
-            (ApplicationStatus.ACTIVE, ApplicationStatus.ACTIVE),  # Active stays active
+            (None, ApplicationStatus.ACTIVE, False),
+            (ApplicationStatus.GATED_ACCESS, ApplicationStatus.GATED_ACCESS, False),
+            (ApplicationStatus.ACTIVE, ApplicationStatus.ACTIVE, True),
         ],
     )
     @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
@@ -56,10 +65,11 @@ class TestApplyLicenseStatusToSettings:
         mock_get_metadata: MagicMock,
         mock_get_tenant: MagicMock,
         license_status: ApplicationStatus | None,
-        expected_status: ApplicationStatus,
+        expected_app_status: ApplicationStatus,
+        expected_ee_enabled: bool,
         base_settings: Settings,
     ) -> None:
-        """Self-hosted: license status is propagated to settings correctly."""
+        """Self-hosted: license status controls both application_status and ee_features_enabled."""
         from ee.onyx.server.settings.api import apply_license_status_to_settings
 
         mock_get_tenant.return_value = "test_tenant"
@@ -71,19 +81,20 @@ class TestApplyLicenseStatusToSettings:
             mock_get_metadata.return_value = mock_metadata
 
         result = apply_license_status_to_settings(base_settings)
-        assert result.application_status == expected_status
+        assert result.application_status == expected_app_status
+        assert result.ee_features_enabled is expected_ee_enabled
 
     @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
-    def test_redis_error_fails_open(
+    def test_redis_error_disables_ee_features(
         self,
         mock_get_metadata: MagicMock,
         mock_get_tenant: MagicMock,
         base_settings: Settings,
     ) -> None:
-        """Redis errors should not block users - fail open."""
+        """Redis errors fail closed - disable EE features."""
         from ee.onyx.server.settings.api import apply_license_status_to_settings
 
         mock_get_tenant.return_value = "test_tenant"
@@ -91,3 +102,12 @@ class TestApplyLicenseStatusToSettings:
 
         result = apply_license_status_to_settings(base_settings)
         assert result.application_status == ApplicationStatus.ACTIVE
+        assert result.ee_features_enabled is False
+
+
+class TestSettingsDefaultEEDisabled:
+    """Verify the Settings model defaults ee_features_enabled to False."""
+
+    def test_default_ee_features_disabled(self) -> None:
+        settings = Settings()
+        assert settings.ee_features_enabled is False
