@@ -175,6 +175,8 @@ class LangfuseTracingProcessor(TracingProcessor):
         """
         try:
             data = span.span_data
+            # Declare as Any since different code paths return different observation types
+            langfuse_span: Any = None
 
             # Get Langfuse IDs and metadata under lock for thread-safe access
             with self._lock:
@@ -215,26 +217,26 @@ class LangfuseTracingProcessor(TracingProcessor):
             # Create spans using trace_context (thread-safe ID-based approach)
             # In Langfuse SDK v3, use start_observation with as_type parameter
             if isinstance(data, GenerationSpanData):
-                langfuse_span = client.start_observation(
+                langfuse_span = client.start_observation(  # type: ignore[call-overload]
+                    trace_context=trace_context,
                     name=self._get_generation_name(data),
                     as_type="generation",
-                    trace_context=trace_context,
+                    metadata=trace_metadata,
                     model=data.model,
                     model_parameters=self._get_model_parameters(data),
-                    metadata=trace_metadata,
                 )
             elif isinstance(data, FunctionSpanData):
                 langfuse_span = client.start_observation(
+                    trace_context=trace_context,
                     name=data.name,
                     as_type="tool",
-                    trace_context=trace_context,
                     metadata=trace_metadata,
                 )
             elif isinstance(data, AgentSpanData):
                 langfuse_span = client.start_observation(
+                    trace_context=trace_context,
                     name=data.name,
                     as_type="agent",
-                    trace_context=trace_context,
                     metadata={
                         **(trace_metadata or {}),
                         "tools": data.tools,
@@ -244,9 +246,9 @@ class LangfuseTracingProcessor(TracingProcessor):
                 )
             else:
                 langfuse_span = client.start_observation(
+                    trace_context=trace_context,
                     name=data.type if hasattr(data, "type") else "unknown",
                     as_type="span",
-                    trace_context=trace_context,
                     metadata=trace_metadata,
                 )
 
