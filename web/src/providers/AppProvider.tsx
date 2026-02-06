@@ -67,7 +67,7 @@ import { AuthTypeMetadata } from "@/lib/userSS";
 import { AppSidebarProvider } from "@/providers/AppSidebarProvider";
 import { AppModeProvider } from "@/providers/AppModeProvider";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
-import { QueryControllerProvider } from "./QueryControllerProvider";
+import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 
 interface AppProviderProps {
   children: React.ReactNode;

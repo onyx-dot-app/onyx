@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import { eeGated } from "@/ce";
-import { EEQueryControllerProvider } from "@/ee/providers/QueryControllerProvider";
+import { QueryControllerProvider as EEQueryControllerProvider } from "@/ee/providers/QueryControllerProvider";
 import { SearchDocWithContent, BaseFilters } from "@/lib/search/interfaces";
 
 export type QueryClassification = "search" | "chat" | null;
@@ -39,8 +39,8 @@ export const QueryControllerContext = createContext<QueryControllerValue>({
   submit: async (_q, onChat) => {
     onChat(_q);
   },
-  refineSearch: async () => {},
-  reset: () => {},
+  refineSearch: async () => undefined,
+  reset: () => undefined,
 });
 
 export function useQueryController(): QueryControllerValue {

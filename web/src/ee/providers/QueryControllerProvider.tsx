@@ -17,13 +17,13 @@ import {
   QueryControllerValue,
 } from "@/providers/QueryControllerProvider";
 
-interface EEQueryControllerProviderProps {
+interface QueryControllerProviderProps {
   children: React.ReactNode;
 }
 
-export function EEQueryControllerProvider({
+export function QueryControllerProvider({
   children,
-}: EEQueryControllerProviderProps) {
+}: QueryControllerProviderProps) {
   const { appMode, setAppMode } = useAppMode();
   const appFocus = useAppFocus();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();

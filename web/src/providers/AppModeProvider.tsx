@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 import { eeGated } from "@/ce";
-import { EEAppModeProvider } from "@/ee/providers/AppModeProvider";
+import { AppModeProvider as EEAppModeProvider } from "@/ee/providers/AppModeProvider";
 
 export type AppMode = "auto" | "search" | "chat";
 
@@ -13,7 +13,7 @@ interface AppModeContextValue {
 
 export const AppModeContext = createContext<AppModeContextValue>({
   appMode: "chat",
-  setAppMode: () => {},
+  setAppMode: () => undefined,
 });
 
 export function useAppMode(): AppModeContextValue {
