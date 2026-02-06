@@ -203,6 +203,15 @@ def create_tenant(company_name: str, api_url: str) -> Optional[TenantData]:
 
         logger.info(f"✓ Created tenant {tenant_id} for {company_name} (admin: {email})")
 
+        # Run Alembic migrations to ensure the tenant schema is fully up-to-date
+        from ee.onyx.server.tenants.schema_management import run_alembic_migrations
+
+        try:
+            run_alembic_migrations(tenant_id)
+            logger.info(f"✓ Migrations complete for {tenant_id}")
+        except Exception as e:
+            logger.warning(f"⚠ Migration failed for {tenant_id}: {e}")
+
         return TenantData(
             tenant_id=tenant_id,
             admin_user_id=user_id,
@@ -219,18 +228,29 @@ def create_tenant(company_name: str, api_url: str) -> Optional[TenantData]:
 
 
 def seed_chat_history_for_tenant(
-    tenant_id: str, num_sessions: int, num_messages: int, num_days: int
+    tenant_id: str,
+    user_id: str,
+    num_sessions: int,
+    num_messages: int,
+    num_days: int,
 ) -> None:
     """Seed chat history for a specific tenant."""
     logger.info(
         f"Seeding {num_sessions} chat sessions with {num_messages} messages each for tenant {tenant_id}"
     )
 
+    from uuid import UUID as UUIDType
+
+    user_uuid = UUIDType(user_id)
+
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         # Create chat sessions
         for i in range(num_sessions):
             create_chat_session(
-                db_session, f"test_session_{i}_{uuid4().hex[:8]}", None, None
+                db_session,
+                f"test_session_{i}_{uuid4().hex[:8]}",
+                user_uuid,
+                0,  # default "Assistant" persona
             )
 
         db_session.commit()
@@ -580,6 +600,7 @@ def main() -> None:
             try:
                 seed_chat_history_for_tenant(
                     tenant.tenant_id,
+                    tenant.admin_user_id,
                     args.sessions_per_tenant,
                     args.messages_per_session,
                     args.days_of_history,
