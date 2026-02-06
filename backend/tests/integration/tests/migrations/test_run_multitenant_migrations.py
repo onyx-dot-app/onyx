@@ -1,12 +1,12 @@
 """
 Black-box integration tests for the parallel alembic migration runner
-(backend/alembic/run_migrations.py).
+(backend/alembic/run_multitenant_migrations.py).
 
 The script is invoked as a subprocess — the same way it would be used in
 production.  Tests verify exit codes and stdout messages.
 
 Usage:
-    pytest tests/integration/tests/migrations/test_run_migrations.py -v
+    pytest tests/integration/tests/migrations/test_run_multitenant_migrations.py -v
 """
 
 from __future__ import annotations
@@ -38,10 +38,10 @@ def _run_script(
     *extra_args: str,
     env_override: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run ``python alembic/run_migrations.py`` from the backend/ directory."""
+    """Run ``python alembic/run_multitenant_migrations.py`` from the backend/ directory."""
     env = {**os.environ, **(env_override or {})}
     return subprocess.run(
-        [sys.executable, "alembic/run_migrations.py", *extra_args],
+        [sys.executable, "alembic/run_multitenant_migrations.py", *extra_args],
         cwd=_BACKEND_DIR,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -65,7 +65,7 @@ def current_head_rev() -> str:
     """Get the head revision from the alembic script directory.
 
     Runs ``alembic heads`` as a subprocess — the same source of truth that
-    ``run_migrations.py`` uses internally.
+    ``run_multitenant_migrations.py`` uses internally.
     """
     result = subprocess.run(
         ["alembic", "heads", "--resolve-dependencies"],
