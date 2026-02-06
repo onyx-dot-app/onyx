@@ -94,7 +94,7 @@ export function EEQueryControllerProvider({
         setAppMode("search");
       }
     },
-    []
+    [setAppMode]
   );
 
   /**
