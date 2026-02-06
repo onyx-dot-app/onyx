@@ -1230,6 +1230,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         // Call restore endpoint (blocks until complete)
         sessionData = await restoreSession(sessionId);
         console.log(`Session ${sessionId} restored successfully`);
+
+        // Clear the "creating" loading indicator so subsequent logic
+        // doesn't mistake this for an active streaming session.
+        updateSessionData(sessionId, { status: "idle" });
       }
 
       // Now fetch messages and artifacts
@@ -1282,6 +1286,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox: sessionData.sandbox,
         error: null,
         isLoaded: true,
+        // After restore, bump webappNeedsRefresh so OutputPanel's SWR refetches
+        // webapp-info. Done here (not earlier) so all session data is set atomically.
+        ...(needsRestore
+          ? {
+              webappNeedsRefresh:
+                (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+            }
+          : {}),
       });
     } catch (err) {
       console.error("Failed to load session:", err);

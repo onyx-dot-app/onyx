@@ -376,16 +376,15 @@ def restore_session(
     lock_key = f"sandbox_restore:{sandbox.id}"
     lock = redis_client.lock(lock_key, timeout=RESTORE_LOCK_TIMEOUT_SECONDS)
 
-    # blocking=True means wait if another restore is in progress
+    # Non-blocking: if another restore is already running, return 409 immediately
+    # instead of making the user wait. The frontend will retry.
     logger.info(f"[RESTORE] Acquiring Redis lock: {lock_key}")
-    acquired = lock.acquire(
-        blocking=True, blocking_timeout=RESTORE_LOCK_TIMEOUT_SECONDS
-    )
+    acquired = lock.acquire(blocking=False)
     if not acquired:
-        logger.error(f"[RESTORE] Failed to acquire lock {lock_key}")
+        logger.info(f"[RESTORE] Lock {lock_key} held by another request, returning 409")
         raise HTTPException(
-            status_code=503,
-            detail="Restore operation timed out waiting for lock",
+            status_code=409,
+            detail="Restore already in progress",
         )
 
     logger.info("[RESTORE] Lock acquired, proceeding with restore")

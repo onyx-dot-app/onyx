@@ -590,6 +590,104 @@ done
             ),
         )
 
+    def _ensure_service_exists(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+    ) -> None:
+        """Ensure a ClusterIP service exists for the sandbox pod.
+
+        Handles the case where a service is in Terminating state (has a
+        deletion_timestamp) by waiting for deletion and recreating it.
+        This prevents a race condition where provision reuses an existing pod
+        but the old service is still being deleted.
+        """
+        service_name = self._get_service_name(str(sandbox_id))
+
+        try:
+            svc = self._core_api.read_namespaced_service(
+                name=service_name,
+                namespace=self._namespace,
+            )
+            # Service exists - check if it's being deleted
+            if svc.metadata.deletion_timestamp:
+                logger.info(
+                    f"Service {service_name} is terminating, waiting for deletion"
+                )
+                self._wait_for_resource_deletion("service", service_name)
+                # Now create a fresh service
+                service = self._create_sandbox_service(sandbox_id, tenant_id)
+                self._core_api.create_namespaced_service(
+                    namespace=self._namespace,
+                    body=service,
+                )
+                logger.info(f"Recreated Service {service_name} after termination")
+            else:
+                logger.debug(f"Service {service_name} already exists and is active")
+
+        except ApiException as e:
+            if e.status == 404:
+                # Service doesn't exist, create it
+                logger.info(f"Creating missing Service {service_name}")
+                service = self._create_sandbox_service(sandbox_id, tenant_id)
+                try:
+                    self._core_api.create_namespaced_service(
+                        namespace=self._namespace,
+                        body=service,
+                    )
+                except ApiException as svc_e:
+                    if svc_e.status != 409:  # Ignore AlreadyExists
+                        raise
+                    logger.debug(
+                        f"Service {service_name} was created by another request"
+                    )
+            else:
+                raise
+
+    def _wait_for_nextjs_ready(
+        self,
+        pod_name: str,
+        port: int,
+        timeout_seconds: int = 30,
+    ) -> None:
+        """Poll until the NextJS dev server responds on the given port.
+
+        Execs a curl loop inside the sandbox container. Logs a warning
+        if the server doesn't become ready within the timeout but does
+        NOT raise — the frontend will retry on its own.
+        """
+        check_script = (
+            f"for i in $(seq 1 {timeout_seconds}); do "
+            f"  if curl -s -o /dev/null -w '' http://localhost:{port}/ --max-time 1 2>/dev/null; then "
+            f'    echo "NEXTJS_READY"; exit 0; '
+            f"  fi; "
+            f"  sleep 1; "
+            f"done; "
+            f'echo "NEXTJS_TIMEOUT"'
+        )
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", check_script],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+            if "NEXTJS_READY" in resp:
+                logger.info(f"[SNAPSHOT_RESTORE] NextJS ready on port {port}")
+            else:
+                logger.warning(
+                    f"[SNAPSHOT_RESTORE] NextJS not ready after {timeout_seconds}s "
+                    f"on port {port}, continuing anyway"
+                )
+        except Exception as e:
+            logger.warning(f"[SNAPSHOT_RESTORE] Failed to check NextJS readiness: {e}")
+
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.
 
@@ -805,34 +903,15 @@ done
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
-        service_name = self._get_service_name(str(sandbox_id))
+        self._get_service_name(str(sandbox_id))
 
         # Check if pod already exists and is healthy (idempotency check)
         if self._pod_exists_and_healthy(pod_name):
             logger.info(
                 f"Pod {pod_name} already exists and is healthy, reusing existing pod"
             )
-            # Ensure service exists too
-            try:
-                self._core_api.read_namespaced_service(
-                    name=service_name,
-                    namespace=self._namespace,
-                )
-            except ApiException as e:
-                if e.status == 404:
-                    # Service doesn't exist, create it
-                    logger.debug(f"Creating missing Service {service_name}")
-                    service = self._create_sandbox_service(sandbox_id, tenant_id)
-                    try:
-                        self._core_api.create_namespaced_service(
-                            namespace=self._namespace,
-                            body=service,
-                        )
-                    except ApiException as svc_e:
-                        if svc_e.status != 409:  # Ignore AlreadyExists
-                            raise
-                else:
-                    raise
+            # Ensure service exists and is not terminating
+            self._ensure_service_exists(sandbox_id, tenant_id)
 
             # Wait for pod to be ready if it's still pending
             logger.info(f"Waiting for existing pod {pod_name} to become ready...")
@@ -887,20 +966,8 @@ done
                 else:
                     raise
 
-            # 2. Create Service (idempotent - ignore 409)
-            logger.debug(f"Creating Service {service_name}")
-            service = self._create_sandbox_service(sandbox_id, tenant_id)
-            try:
-                self._core_api.create_namespaced_service(
-                    namespace=self._namespace,
-                    body=service,
-                )
-            except ApiException as e:
-                if e.status != 409:  # Ignore AlreadyExists
-                    raise
-                logger.warning(
-                    f"During provisioning, discovered that service {service_name} already exists. Reusing"
-                )
+            # 2. Create Service (handles terminating services)
+            self._ensure_service_exists(sandbox_id, tenant_id)
 
             # 3. Wait for pod to be ready
             logger.info(f"Waiting for pod {pod_name} to become ready...")
@@ -1604,6 +1671,11 @@ echo "SNAPSHOT_RESTORED"
                 tty=False,
             )
             logger.info(f"[SNAPSHOT_RESTORE] NextJS start output: {resp2}")
+
+            # Wait for NextJS to be ready before returning, so the frontend
+            # can immediately load the preview iframe without hitting a 502
+            self._wait_for_nextjs_ready(pod_name, nextjs_port)
+
             logger.info(
                 f"[SNAPSHOT_RESTORE] Done for session {session_id} on port {nextjs_port}"
             )
