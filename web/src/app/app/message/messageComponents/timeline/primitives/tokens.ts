@@ -11,14 +11,13 @@ export interface TimelineTokens {
   topConnectorHeight: string;
   firstTopSpacerHeight: string;
   iconSize: string;
-  iconWrapperSize: string;
   branchIconWrapperSize: string;
   branchIconSize: string;
-  contentPaddingLeft: string;
   stepHeaderRightSectionWidth: string;
-  contentPaddingBottom: string;
   headerPaddingLeft: string;
   headerPaddingRight: string;
+  headerTextPaddingX: string;
+  headerTextPaddingY: string;
   agentMessagePaddingLeft: string;
   timelineCommonTextPadding: string;
 }
@@ -41,14 +40,13 @@ export const timelineTokenDefaults: TimelineTokens = {
   topConnectorHeight: "0.5rem",
   firstTopSpacerHeight: "0.25rem",
   iconSize: "0.75rem",
-  iconWrapperSize: "2rem",
   branchIconWrapperSize: "1.25rem",
   branchIconSize: "0.75rem",
-  contentPaddingLeft: "0.5rem",
   stepHeaderRightSectionWidth: "2.125rem",
-  contentPaddingBottom: "0.5rem",
   headerPaddingLeft: "0.5rem",
   headerPaddingRight: "0.25rem",
+  headerTextPaddingX: "0.375rem",
+  headerTextPaddingY: "0.125rem",
   agentMessagePaddingLeft: "0.12rem",
   timelineCommonTextPadding: "0.12rem",
 };
@@ -67,15 +65,14 @@ export function getTimelineStyles(
     "--timeline-top-connector-height": merged.topConnectorHeight,
     "--timeline-first-top-spacer-height": merged.firstTopSpacerHeight,
     "--timeline-icon-size": merged.iconSize,
-    "--timeline-icon-wrapper-size": merged.iconWrapperSize,
     "--timeline-branch-icon-wrapper-size": merged.branchIconWrapperSize,
     "--timeline-branch-icon-size": merged.branchIconSize,
-    "--timeline-content-padding-left": merged.contentPaddingLeft,
     "--timeline-step-header-right-section-width":
       merged.stepHeaderRightSectionWidth,
-    "--timeline-content-padding-bottom": merged.contentPaddingBottom,
     "--timeline-header-padding-left": merged.headerPaddingLeft,
     "--timeline-header-padding-right": merged.headerPaddingRight,
+    "--timeline-header-text-padding-x": merged.headerTextPaddingX,
+    "--timeline-header-text-padding-y": merged.headerTextPaddingY,
     "--timeline-agent-message-padding-left": merged.agentMessagePaddingLeft,
     "--timeline-common-text-padding": merged.timelineCommonTextPadding,
   } as React.CSSProperties;

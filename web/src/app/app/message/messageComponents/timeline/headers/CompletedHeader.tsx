@@ -40,7 +40,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       onClick={onToggle}
       className="flex items-center justify-between w-full"
     >
-      <div className="px-1.5 py-0.5">
+      <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
         <Text as="p" mainUiAction text03>
           {isExpanded ? durationText : imageText ?? durationText}
         </Text>

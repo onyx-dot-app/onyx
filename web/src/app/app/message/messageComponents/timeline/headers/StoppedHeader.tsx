@@ -22,11 +22,14 @@ export const StoppedHeader = React.memo(function StoppedHeader({
     <div
       role="button"
       onClick={onToggle}
-      className="flex items-center justify-between w-full rounded-12 p-1"
+      className="flex items-center justify-between w-full rounded-12"
     >
-      <Text as="p" mainUiAction text03>
-        Interrupted Thinking
-      </Text>
+      <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+        <Text as="p" mainUiAction text03>
+          Interrupted Thinking
+        </Text>
+      </div>
+
       {collapsible && totalSteps > 0 && (
         <Button
           tertiary
