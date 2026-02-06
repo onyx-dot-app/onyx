@@ -1329,11 +1329,7 @@ async def optional_user(
 ) -> User | None:
 
     tenant_id = get_current_tenant_id()
-    if (
-        user is not None
-        and user.is_anonymous
-        and anonymous_user_enabled(tenant_id=tenant_id)
-    ):
+    if user is None and anonymous_user_enabled(tenant_id=tenant_id):
         return get_anonymous_user()
 
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
