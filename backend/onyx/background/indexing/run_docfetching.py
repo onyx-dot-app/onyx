@@ -683,10 +683,6 @@ def connector_document_extraction(
                     # skip chunking/embedding/Vespa but still track documents in DB
 
                     # IMPORTANT: Write to S3 FIRST, before marking as indexed in DB.
-                    # This ensures that if the S3 write fails or times out, the docs
-                    # won't be marked as indexed and will be retried on the next sync.
-                    # Previously, docs were marked as indexed before S3 write, causing
-                    # ~65k docs to be lost when a sync timed out mid-batch.
 
                     # Write documents to persistent file system
                     # Use creator_id for user-segregated storage paths (sandbox isolation)
