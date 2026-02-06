@@ -72,7 +72,9 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
-import SearchUI from "@/sections/SearchUI";
+import { eeGated } from "@/ce";
+import EESearchUI from "@/ee/sections/SearchUI";
+const SearchUI = eeGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 import { useAppMode } from "@/providers/AppModeProvider";
 
