@@ -303,7 +303,16 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center px-4 h-[4.25rem]">
+      <div
+        className={cn(
+          "w-full flex flex-row justify-center items-center px-4 h-[3.3rem]",
+          // # Note (@raunakab):
+          //
+          // We add an additional top margin to align this header with the `LogoSection` inside of the App-Sidebar.
+          // For more information, check out `SidebarWrapper.tsx`.
+          "mt-2"
+        )}
+      >
         {/*
           Left:
           - (mobile) sidebar toggle
