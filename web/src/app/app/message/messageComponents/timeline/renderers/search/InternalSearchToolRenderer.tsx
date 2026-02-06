@@ -79,6 +79,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
         status: null,
         content: <div />,
         supportsCollapsible: true,
+        timelineLayout: "timeline",
       },
     ]);
   }
@@ -90,6 +91,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
         icon: null,
         status: null,
         supportsCollapsible: true,
+        timelineLayout: "content",
         content: (
           <div className="flex flex-col">
             <Text as="p" text02 className="text-sm mb-1">
@@ -125,6 +127,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
           icon: null,
           status: queriesHeader,
           supportsCollapsible: true,
+          timelineLayout: "content",
           content: (
             <SearchChipList
               items={queries}
@@ -147,6 +150,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
         icon: null,
         status: "Reading",
         supportsCollapsible: true,
+        timelineLayout: "content",
         content: (
           <SearchChipList
             items={results}
@@ -174,6 +178,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
       icon: SvgSearchMenu,
       status: queriesHeader,
       supportsCollapsible: true,
+      timelineLayout: "timeline",
       content: (
         <div className="flex flex-col">
           {!isCompact && (

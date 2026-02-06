@@ -56,6 +56,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         status: null,
         content: <div />,
         supportsCollapsible: false,
+        timelineLayout: "timeline",
       },
     ]);
   }
@@ -67,6 +68,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         icon: null,
         status: null,
         supportsCollapsible: false,
+        timelineLayout: "content",
         content: (
           <div className="flex flex-col">
             <Text as="p" text02 className="text-sm mb-1">
@@ -95,6 +97,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         icon: null,
         status: queriesHeader,
         supportsCollapsible: false,
+        timelineLayout: "content",
         content: (
           <SearchChipList
             items={queries}
@@ -129,6 +132,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         />
       ),
       supportsCollapsible: false,
+      timelineLayout: "timeline",
     },
   ]);
 };

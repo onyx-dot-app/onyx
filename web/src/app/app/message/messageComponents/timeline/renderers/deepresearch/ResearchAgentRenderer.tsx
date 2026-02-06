@@ -1,6 +1,5 @@
-import React, { useMemo, useCallback, FunctionComponent } from "react";
+import React, { useMemo, useCallback } from "react";
 import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
-import { IconProps } from "@opal/types";
 
 import {
   PacketType,
@@ -20,6 +19,7 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
+import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -208,6 +208,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             </div>
           ),
           supportsCollapsible: true,
+          timelineLayout: "content",
         },
       ]);
     }
@@ -243,6 +244,7 @@ export const ResearchAgentRenderer: MessageRenderer<
                     </>
                   ),
                   supportsCollapsible: true,
+                  timelineLayout: "content",
                 },
               ])
             }
@@ -268,6 +270,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             </div>
           ),
           supportsCollapsible: true,
+          timelineLayout: "content",
         },
       ]);
     }
@@ -278,6 +281,7 @@ export const ResearchAgentRenderer: MessageRenderer<
         status: null,
         content: <></>,
         supportsCollapsible: true,
+        timelineLayout: "content",
       },
     ]);
   }
@@ -329,31 +333,14 @@ export const ResearchAgentRenderer: MessageRenderer<
               isHover={isHover}
             >
               {(results: TimelineRendererOutput) => (
-                <>
-                  {results.map((result, resultIndex) => (
-                    <StepContainer
-                      key={resultIndex}
-                      stepIcon={
-                        result.icon as FunctionComponent<IconProps> | undefined
-                      }
-                      header={result.status}
-                      isExpanded={result.isExpanded}
-                      onToggle={result.onToggle}
-                      collapsible={true}
-                      isLastStep={
-                        resultIndex === results.length - 1 && isLastNestedStep
-                      }
-                      isFirstStep={
-                        !researchTask && index === 0 && resultIndex === 0
-                      }
-                      isHover={result.isHover}
-                      supportsCollapsible={result.supportsCollapsible}
-                      noPaddingRight={isReasoning}
-                    >
-                      {result.content}
-                    </StepContainer>
-                  ))}
-                </>
+                <TimelineStepComposer
+                  results={results}
+                  isLastStep={isLastNestedStep}
+                  isFirstStep={!researchTask && index === 0}
+                  isSingleStep={false}
+                  collapsible={true}
+                  noPaddingRight={isReasoning}
+                />
               )}
             </TimelineRendererComponent>
           );
@@ -387,6 +374,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       status: null,
       content: researchAgentContent,
       supportsCollapsible: true,
+      timelineLayout: "content",
     },
   ]);
 };

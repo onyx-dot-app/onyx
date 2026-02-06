@@ -26,6 +26,8 @@ import { ParallelStreamingHeader } from "@/app/app/message/messageComponents/tim
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
+import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
+import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineHeaderRow";
 
 // =============================================================================
 // Private Wrapper Components
@@ -38,22 +40,21 @@ interface TimelineContainerProps {
   children?: React.ReactNode;
 }
 
-const TimelineContainer: React.FC<TimelineContainerProps> = ({
+function TimelineContainer({
   className,
   agent,
   headerContent,
   children,
-}) => (
-  <div className={cn("flex flex-col", className)}>
-    <div className="flex w-full h-9">
-      <div className="flex justify-center items-center size-9">
-        <AgentAvatar agent={agent} size={24} />
-      </div>
-      {headerContent}
-    </div>
-    {children}
-  </div>
-);
+}: TimelineContainerProps) {
+  return (
+    <TimelineRoot className={className}>
+      <TimelineHeaderRow left={<AgentAvatar agent={agent} size={24} />}>
+        {headerContent}
+      </TimelineHeaderRow>
+      {children}
+    </TimelineRoot>
+  );
+}
 
 // =============================================================================
 // Main Component
@@ -293,7 +294,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         className={className}
         agent={chatState.assistant}
         headerContent={
-          <div className="flex w-full h-full items-center px-2">
+          <div className="flex w-full h-full items-center pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
             <Text
               as="p"
               mainUiAction
@@ -322,7 +323,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       headerContent={
         <div
           className={cn(
-            "flex flex-1 min-w-0 h-full items-center justify-between pl-2 hover:bg-background-tint-00 rounded-t-12 transition-colors duration-300",
+            "flex flex-1 min-w-0 h-full items-center justify-between pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)] hover:bg-background-tint-00 rounded-t-12 transition-colors duration-300",
             showTintedBackground && "bg-background-tint-00",
             showRoundedBottom && "rounded-b-12"
           )}

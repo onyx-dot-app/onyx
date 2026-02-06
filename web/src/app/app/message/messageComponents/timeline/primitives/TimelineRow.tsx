@@ -1,0 +1,67 @@
+import React from "react";
+import { cn } from "@/lib/utils";
+import { TimelineIconColumn, TimelineRailVariant } from "./TimelineIconColumn";
+
+/**
+ * TimelineRowRailVariant controls how the left column is rendered.
+ * - rail: normal icon + connector column.
+ * - spacer: empty column that preserves rail width.
+ * - none: no left column at all.
+ */
+export type TimelineRowRailVariant = TimelineRailVariant | "none";
+
+export interface TimelineRowProps {
+  railVariant?: TimelineRowRailVariant;
+  icon?: React.ReactNode;
+  showIcon?: boolean;
+  /**
+   * Controls the height of the icon row within the rail.
+   * Use compact when the header is hidden to keep alignment stable.
+   */
+  iconRowVariant?: "default" | "compact";
+  isFirst?: boolean;
+  isLast?: boolean;
+  isHover?: boolean;
+  className?: string;
+  iconColumnClassName?: string;
+  contentClassName?: string;
+  children?: React.ReactNode;
+}
+
+/**
+ * TimelineRow composes the rail column + content column.
+ * It is the base layout primitive for all timeline rows.
+ */
+export function TimelineRow({
+  railVariant = "rail",
+  icon,
+  showIcon = true,
+  iconRowVariant = "default",
+  isFirst = false,
+  isLast = false,
+  isHover = false,
+  className,
+  iconColumnClassName,
+  contentClassName,
+  children,
+}: TimelineRowProps) {
+  return (
+    <div className={cn("flex w-full", className)}>
+      {railVariant !== "none" && (
+        <TimelineIconColumn
+          variant={railVariant === "spacer" ? "spacer" : "rail"}
+          icon={icon}
+          showIcon={showIcon}
+          iconRowVariant={iconRowVariant}
+          isFirst={isFirst}
+          isLast={isLast}
+          isHover={isHover}
+          className={iconColumnClassName}
+        />
+      )}
+      <div className={cn("flex-1", contentClassName)}>{children}</div>
+    </div>
+  );
+}
+
+export default TimelineRow;
