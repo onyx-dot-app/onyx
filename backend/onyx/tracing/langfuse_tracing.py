@@ -11,31 +11,15 @@ def setup_langfuse_if_creds_available() -> None:
         logger.info("Langfuse credentials not provided, skipping Langfuse setup")
         return
 
-    # Lazy imports to avoid loading OpenTelemetry/OpenInference when not needed
-    from typing import cast
-
-    import nest_asyncio  # type: ignore
+    # Lazy imports to avoid loading when not needed
     from langfuse import get_client
-    from openinference.instrumentation import OITracer
-    from openinference.instrumentation import TraceConfig
-    from opentelemetry import trace as trace_api
 
-    from onyx.tracing.framework import set_trace_processors
-    from onyx.tracing.openinference_tracing_processor import (
-        OpenInferenceTracingProcessor,
-    )
+    from onyx.tracing.framework import add_trace_processor
+    from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 
-    nest_asyncio.apply()
-    config = TraceConfig()
-    tracer_provider = trace_api.get_tracer_provider()
-    tracer = OITracer(
-        trace_api.get_tracer(__name__, tracer_provider=tracer_provider),
-        config=config,
-    )
+    # Initialize Langfuse client
+    client = get_client()
 
-    set_trace_processors(
-        [OpenInferenceTracingProcessor(cast(trace_api.Tracer, tracer))]
-    )
-    # This is poorly named -- it actually is a get or create client for langfuse.
-    # Langfuse with silently fail without this function call.
-    _ = get_client()
+    # Add Langfuse processor to handle traces
+    # This processor uses our internal trace IDs directly, ensuring they match
+    add_trace_processor(LangfuseTracingProcessor(client=client))

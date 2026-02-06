@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -376,15 +377,42 @@ def run_llm_loop(
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
     include_citations: bool = True,
+    assistant_message: Any | None = None,
 ) -> None:
+    # Generate deterministic trace_id if assistant_message is available
+    # This allows us to reconstruct the trace_id later without storing it in DB
+    from onyx.tracing.framework.util import generate_deterministic_trace_id
+
+    deterministic_trace_id: str | None = None
+    if assistant_message and assistant_message.id and chat_session_id:
+        deterministic_trace_id = generate_deterministic_trace_id(
+            str(chat_session_id), assistant_message.id
+        )
+        logger.debug(
+            f"Generated deterministic trace_id {deterministic_trace_id} for "
+            f"message {assistant_message.id} in session {chat_session_id}"
+        )
+    else:
+        if assistant_message:
+            logger.warning(
+                "assistant_message provided but missing id or chat_session_id, "
+                "falling back to random trace_id"
+            )
+
+    trace_metadata = {
+        "tenant_id": get_current_tenant_id(),
+        "chat_session_id": chat_session_id,
+    }
+    if user_identity:
+        trace_metadata["user_id"] = str(user_identity.user_id)
+
     with trace(
         "run_llm_loop",
+        trace_id=deterministic_trace_id,  # Pass deterministic ID if available
         group_id=chat_session_id,
-        metadata={
-            "tenant_id": get_current_tenant_id(),
-            "chat_session_id": chat_session_id,
-        },
+        metadata=trace_metadata,
     ):
+
         # Fix some LiteLLM issues,
         from onyx.llm.litellm_singleton.config import (
             initialize_litellm,
