@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
-"""Parallel Alembic Migration Runner"""
+"""Parallel Alembic Migration Runner
+
+Upgrades tenant schemas to head in batched, parallel alembic subprocesses.
+Each subprocess handles a batch of schemas (via ``-x schemas=a,b,c``),
+reducing per-process overhead compared to one-schema-per-process.
+
+Usage examples::
+
+    # defaults: 6 workers, 50 schemas/batch
+    python alembic/run_multitenant_migrations.py
+
+    # custom settings
+    python alembic/run_multitenant_migrations.py -j 8 -b 100
+"""
 from __future__ import annotations
 
 import argparse
 import subprocess
 import sys
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, NamedTuple
 
@@ -18,34 +33,62 @@ from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from shared_configs.configs import TENANT_ID_PREFIX
 
 
+# ---------------------------------------------------------------------------
+# Data types
+# ---------------------------------------------------------------------------
+
+
 class Args(NamedTuple):
     jobs: int
+    batch_size: int
 
 
-class MigrationResult(NamedTuple):
-    schema: str
+class BatchResult(NamedTuple):
+    schemas: list[str]
     success: bool
     output: str
+    elapsed_sec: float
 
 
-def run_alembic_for_schema(schema: str) -> MigrationResult:
+# ---------------------------------------------------------------------------
+# Core functions
+# ---------------------------------------------------------------------------
+
+
+def run_alembic_for_batch(schemas: list[str]) -> BatchResult:
+    """Run ``alembic upgrade head`` for a batch of schemas in one subprocess.
+
+    If the batch fails, it is automatically retried with ``-x continue=true``
+    so that the remaining schemas in the batch still get migrated.  The retry
+    output (which contains alembic's per-schema error messages) is returned
+    for diagnosis.
     """
-    Run alembic upgrade for a single schema in a subprocess.
-    """
-    cmd = ["alembic", "-x", f"schemas={schema}", "upgrade", "head"]
+    csv = ",".join(schemas)
+    base_cmd = ["alembic", "-x", f"schemas={csv}"]
 
-    try:
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=True,
-        )
-        return MigrationResult(schema, True, result.stdout or "Success")
-    except subprocess.CalledProcessError as e:
-        error_msg = f"Exit code {e.returncode}\n{e.stdout or ''}"
-        return MigrationResult(schema, False, error_msg)
+    start = time.monotonic()
+    result = subprocess.run(
+        [*base_cmd, "upgrade", "head"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+    if result.returncode == 0:
+        elapsed = time.monotonic() - start
+        return BatchResult(schemas, True, result.stdout or "", elapsed)
+
+    # At least one schema failed.  Re-run with continue=true so the
+    # remaining schemas still get migrated.  The output will contain
+    # clear error messages for the problematic schema(s).
+    retry = subprocess.run(
+        [*base_cmd, "-x", "continue=true", "upgrade", "head"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    elapsed = time.monotonic() - start
+    return BatchResult(schemas, False, retry.stdout or "", elapsed)
 
 
 def get_head_revision() -> str | None:
@@ -105,42 +148,117 @@ def get_schemas_needing_migration(
     return needs_migration
 
 
-def run_migrations_parallel(schemas: List[str], max_workers: int) -> bool:
+def run_migrations_parallel(
+    schemas: list[str],
+    max_workers: int,
+    batch_size: int,
+) -> bool:
+    """Chunk *schemas* into batches and run them in parallel.
+
+    A background monitor thread prints a status line every 60 s listing
+    which batches are still in-flight, making it easy to spot hung tenants.
     """
-    Run alembic migrations for multiple schemas in parallel.
-    Returns True if all succeeded.
-    """
+    batches = [schemas[i : i + batch_size] for i in range(0, len(schemas), batch_size)]
+    total_batches = len(batches)
+    print(
+        f"{len(schemas)} schemas in {total_batches} batch(es) "
+        f"with {max_workers} workers (batch size: {batch_size})...",
+        flush=True,
+    )
     all_success = True
-    completed = 0
-    total = len(schemas)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks
-        future_to_schema = {
-            executor.submit(run_alembic_for_schema, schema): schema
-            for schema in schemas
-        }
+    # Thread-safe tracking of in-flight batches for the monitor thread.
+    in_flight: dict[int, list[str]] = {}
+    prev_in_flight: set[int] = set()
+    lock = threading.Lock()
+    stop_event = threading.Event()
 
-        # Process results as they complete
-        for future in as_completed(future_to_schema):
-            schema = future_to_schema[future]
-            completed += 1
+    def _monitor() -> None:
+        """Print a status line every 60 s listing batches still in-flight.
 
-            try:
-                result = future.result()
+        Only prints batches that were also present in the previous tick,
+        making it easy to spot batches that are stuck.
+        """
+        nonlocal prev_in_flight
+        while not stop_event.wait(60):
+            with lock:
+                if not in_flight:
+                    prev_in_flight = set()
+                    continue
+                current = set(in_flight)
+                stuck = current & prev_in_flight
+                prev_in_flight = current
 
-                if result.success:
-                    print(f"[{completed}/{total}] ✓ {schema}")
-                else:
-                    print(f"[{completed}/{total}] ✗ {schema} failed:")
-                    print(f"    {result.output.replace(chr(10), chr(10) + '    ')}")
+                if not stuck:
+                    continue
+
+                schemas = [s for idx in sorted(stuck) for s in in_flight[idx]]
+                print(
+                    f"⏳ batch(es) still running since last check "
+                    f"({', '.join(str(i + 1) for i in sorted(stuck))}): "
+                    + ", ".join(schemas),
+                    flush=True,
+                )
+
+    monitor_thread = threading.Thread(target=_monitor, daemon=True)
+    monitor_thread.start()
+
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+
+            def _run(batch_idx: int, batch: list[str]) -> BatchResult:
+                with lock:
+                    in_flight[batch_idx] = batch
+                print(
+                    f"Batch {batch_idx + 1}/{total_batches} started "
+                    f"({len(batch)} schemas): {', '.join(batch)}",
+                    flush=True,
+                )
+                result = run_alembic_for_batch(batch)
+                with lock:
+                    in_flight.pop(batch_idx, None)
+                return result
+
+            future_to_idx = {
+                executor.submit(_run, i, b): i for i, b in enumerate(batches)
+            }
+
+            for future in as_completed(future_to_idx):
+                batch_idx = future_to_idx[future]
+                try:
+                    result = future.result()
+                    status = "✓" if result.success else "✗"
+
+                    print(
+                        f"Batch {batch_idx + 1}/{total_batches} "
+                        f"{status} {len(result.schemas)} schemas "
+                        f"in {result.elapsed_sec:.1f}s",
+                        flush=True,
+                    )
+
+                    if not result.success:
+                        # Print last 20 lines of retry output for diagnosis
+                        tail = result.output.strip().splitlines()[-20:]
+                        for line in tail:
+                            print(f"    {line}", flush=True)
+                        all_success = False
+
+                except Exception as e:
+                    print(
+                        f"Batch {batch_idx + 1}/{total_batches} " f"✗ exception: {e}",
+                        flush=True,
+                    )
                     all_success = False
-
-            except Exception as e:
-                print(f"[{completed}/{total}] ✗ {schema} exception: {e}")
-                all_success = False
+    finally:
+        stop_event.set()
+        monitor_thread.join(timeout=2)
 
     return all_success
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 
 def parse_args() -> Args:
@@ -153,10 +271,18 @@ def parse_args() -> Args:
         type=int,
         default=6,
         metavar="N",
-        help="Number of parallel migrations (default: 6)",
+        help="Number of parallel alembic processes (default: 6)",
+    )
+    parser.add_argument(
+        "-b",
+        "--batch-size",
+        type=int,
+        default=50,
+        metavar="N",
+        help="Schemas per alembic process (default: 50)",
     )
     args = parser.parse_args()
-    return Args(jobs=args.jobs)
+    return Args(jobs=args.jobs, batch_size=args.batch_size)
 
 
 def main() -> int:
@@ -189,10 +315,14 @@ def main() -> int:
 
     print(
         f"{len(schemas_to_migrate)}/{len(tenant_schemas)} tenants need "
-        f"migration (head: {head_rev}). Running with {args.jobs} workers...\n"
+        f"migration (head: {head_rev})."
     )
 
-    success = run_migrations_parallel(schemas_to_migrate, max_workers=args.jobs)
+    success = run_migrations_parallel(
+        schemas_to_migrate,
+        max_workers=args.jobs,
+        batch_size=args.batch_size,
+    )
 
     print(f"\n{'All migrations successful' if success else 'Some migrations failed'}")
     return 0 if success else 1

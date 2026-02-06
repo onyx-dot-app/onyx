@@ -151,14 +151,18 @@ def test_at_head_schema_is_skipped(tenant_schema_at_head: str) -> None:
     result = _run_script(
         "-j",
         "1",
+        "-b",
+        "50",
         env_override={"MULTI_TENANT": "true"},
     )
     assert result.returncode == 0
-    # Our at-head schema should not appear in any ✓/✗ migration result lines.
-    migration_lines = [
-        line for line in result.stdout.splitlines() if "✓" in line or "✗" in line
+    # Our at-head schema should not appear in any batch "started" lines.
+    batch_start_lines = [
+        line
+        for line in result.stdout.splitlines()
+        if "Batch" in line and "started" in line
     ]
-    for line in migration_lines:
+    for line in batch_start_lines:
         assert tenant_schema_at_head not in line
 
 
@@ -171,19 +175,23 @@ def test_detects_schemas_needing_migration(
     result = _run_script(
         "-j",
         "1",
+        "-b",
+        "50",
         env_override={"MULTI_TENANT": "true"},
     )
     assert result.returncode == 0, f"Script failed:\n{result.stdout}"
     assert "tenants need migration" in result.stdout
     assert "All migrations successful" in result.stdout
 
-    # The empty schema should have been upgraded successfully.
-    assert f"✓ {tenant_schema_empty}" in result.stdout
+    # The empty schema should appear in the batch that was started.
+    assert tenant_schema_empty in result.stdout
 
-    # The at-head schema should NOT appear in any migration result lines
-    # (the ✓ / ✗ lines that indicate an alembic upgrade was attempted).
-    migration_lines = [
-        line for line in result.stdout.splitlines() if "✓" in line or "✗" in line
+    # The at-head schema should NOT appear in any batch "started" lines
+    # (it was filtered out by get_schemas_needing_migration).
+    batch_start_lines = [
+        line
+        for line in result.stdout.splitlines()
+        if "Batch" in line and "started" in line
     ]
-    for line in migration_lines:
+    for line in batch_start_lines:
         assert tenant_schema_at_head not in line
