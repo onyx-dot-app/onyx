@@ -651,6 +651,7 @@ export function useLlmManager(
 
     if (modelName) {
       const model = parseLlmDescriptor(modelName);
+      // If we have no parsed modelName, try to find the provider by the raw modelName string
       if (!(model.modelName && model.modelName.length > 0)) {
         const provider = llmProviders.find((p) =>
           p.model_configurations
@@ -666,6 +667,27 @@ export function useLlmManager(
         }
       }
 
+      // If we have parsed provider info, try to find that specific provider first.
+      // This ensures we don't incorrectly match a model to the wrong provider
+      // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
+      if (model.provider && model.provider.length > 0) {
+        const matchingProvider = llmProviders.find(
+          (p) =>
+            p.provider === model.provider &&
+            p.model_configurations
+              .map((modelConfiguration) => modelConfiguration.name)
+              .includes(model.modelName)
+        );
+        if (matchingProvider) {
+          return {
+            ...model,
+            name: matchingProvider.name,
+            provider: matchingProvider.provider,
+          };
+        }
+      }
+
+      // Fall back to searching by model name only if no provider info was available
       const provider = llmProviders.find((p) =>
         p.model_configurations
           .map((modelConfiguration) => modelConfiguration.name)
