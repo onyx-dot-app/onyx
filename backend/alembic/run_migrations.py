@@ -167,9 +167,7 @@ def main() -> int:
         print("Could not determine head revision.", file=sys.stderr)
         return 1
 
-    SqlEngine.init_engine(pool_size=5, max_overflow=2)
-
-    try:
+    with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
         tenant_ids = get_all_tenant_ids()
         tenant_schemas = [tid for tid in tenant_ids if tid.startswith(TENANT_ID_PREFIX)]
 
@@ -178,10 +176,6 @@ def main() -> int:
             return 0
 
         schemas_to_migrate = get_schemas_needing_migration(tenant_schemas, head_rev)
-    finally:
-        # CRITICAL: Dispose engine before spawning subprocesses
-        # This ensures no lingering connections that might interfere
-        SqlEngine.reset_engine()
 
     if not schemas_to_migrate:
         print(
