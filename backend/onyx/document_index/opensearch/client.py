@@ -346,7 +346,7 @@ class OpenSearchClient:
         Retries on 429 too many requests.
 
         Args:
-            document: The document to index. In Onyx this is a chunk of a
+            documents: The documents to index. In Onyx this is a chunk of a
                 document, OpenSearch simply refers to this as a document as
                 well.
             tenant_state: The tenant state of the caller.
