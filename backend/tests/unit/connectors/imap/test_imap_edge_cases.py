@@ -11,6 +11,7 @@ These tests verify handling of malformed or unusual email messages:
 
 import email
 from datetime import datetime
+from datetime import timezone
 from email.message import Message
 
 import pytest
@@ -306,12 +307,12 @@ class TestMissingDateHeader:
             message_id="<test@example.com>",
         )
         
-        before = datetime.now()
+        before = datetime.now(timezone.utc)
         headers = EmailHeaders.from_email_msg(email_msg=msg)
-        after = datetime.now()
+        after = datetime.now(timezone.utc)
         
-        # Date should be set to approximately now
-        assert before.replace(tzinfo=None) <= headers.date.replace(tzinfo=None) <= after.replace(tzinfo=None)
+        # Date should be set to approximately now (all timezone-aware UTC)
+        assert before <= headers.date <= after
     
     def test_invalid_date_format(self) -> None:
         """Email with unparseable Date should use current time."""
@@ -326,12 +327,12 @@ Test body
 """
         msg = email.message_from_bytes(raw_email)
         
-        before = datetime.now()
+        before = datetime.now(timezone.utc)
         headers = EmailHeaders.from_email_msg(email_msg=msg)
-        after = datetime.now()
+        after = datetime.now(timezone.utc)
         
-        # Should fall back to current time
-        assert before.replace(tzinfo=None) <= headers.date.replace(tzinfo=None) <= after.replace(tzinfo=None)
+        # Should fall back to current time (all timezone-aware UTC)
+        assert before <= headers.date <= after
     
     def test_valid_date_is_preserved(self) -> None:
         """Email with valid Date should preserve it."""
