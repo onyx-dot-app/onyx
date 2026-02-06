@@ -53,8 +53,8 @@ def _ee_side_effect(
     Returns callables for: [is_tenant_gated, get_cached_license_metadata].
     """
     return [
-        lambda *a, **kw: is_gated,
-        lambda *a, **kw: metadata,
+        lambda *_a, **_kw: is_gated,
+        lambda *_a, **_kw: metadata,
     ]
 
 
@@ -95,7 +95,7 @@ class TestCheckTenantGated:
 
     def _call(
         self,
-        mock_fetch_ee: MagicMock,
+        _mock_fetch_ee: MagicMock,
         event: dict | None = None,
     ) -> tuple[bool, MagicMock]:
         """Call _check_tenant_gated with a fresh client + request."""
@@ -282,13 +282,13 @@ class TestHandleMessageSeatCheck:
     @patch(f"{_HANDLE_MSG}.get_user_by_email", return_value=None)
     def test_new_user_blocked_when_seats_exceeded(
         self,
-        mock_get_user: MagicMock,
+        _mock_get_user: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_respond: MagicMock,
-        db_session: MagicMock,
+        _db_session: MagicMock,
     ) -> None:
         seat_result = MagicMock(available=False, error_message="Seat limit exceeded")
-        mock_fetch_ee.return_value = lambda **kw: seat_result
+        mock_fetch_ee.return_value = lambda **_kw: seat_result
 
         result = self._call_handle_message()
 
@@ -305,10 +305,10 @@ class TestHandleMessageSeatCheck:
         self,
         mock_get_user: MagicMock,
         mock_fetch_ee: MagicMock,
-        mock_add_user: MagicMock,
-        mock_standard: MagicMock,
-        mock_regular: MagicMock,
-        db_session: MagicMock,
+        _mock_add_user: MagicMock,
+        _mock_standard: MagicMock,
+        _mock_regular: MagicMock,
+        _db_session: MagicMock,
     ) -> None:
         mock_get_user.return_value = MagicMock()  # User exists
 
@@ -323,14 +323,14 @@ class TestHandleMessageSeatCheck:
     @patch(f"{_HANDLE_MSG}.get_user_by_email", return_value=None)
     def test_new_user_allowed_when_seats_available(
         self,
-        mock_get_user: MagicMock,
+        _mock_get_user: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_add_user: MagicMock,
-        mock_standard: MagicMock,
-        mock_regular: MagicMock,
+        _mock_standard: MagicMock,
+        _mock_regular: MagicMock,
         db_session: MagicMock,
     ) -> None:
-        mock_fetch_ee.return_value = lambda **kw: MagicMock(available=True)
+        mock_fetch_ee.return_value = lambda **_kw: MagicMock(available=True)
 
         self._call_handle_message(email="new@test.com")
 
@@ -343,15 +343,15 @@ class TestHandleMessageSeatCheck:
     @patch(f"{_HANDLE_MSG}.get_user_by_email", return_value=None)
     def test_noop_seat_check_allows_new_user(
         self,
-        mock_get_user: MagicMock,
+        _mock_get_user: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_add_user: MagicMock,
-        mock_standard: MagicMock,
-        mock_regular: MagicMock,
+        _mock_standard: MagicMock,
+        _mock_regular: MagicMock,
         db_session: MagicMock,
     ) -> None:
         """CE mode: noop returns None, user is allowed."""
-        mock_fetch_ee.return_value = lambda **kw: None
+        mock_fetch_ee.return_value = lambda **_kw: None
 
         self._call_handle_message(email="new@test.com")
 
