@@ -231,6 +231,8 @@ async def upload_license(
         license_data = content.decode("utf-8").strip()
         # Strip PEM-style delimiters if present (used in .lic file format)
         license_data = _strip_pem_delimiters(license_data)
+        # Remove any stray whitespace/newlines from user input
+        license_data = license_data.strip()
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid license file format")
 
