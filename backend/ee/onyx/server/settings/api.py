@@ -64,13 +64,18 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     For multi-tenant (cloud), the settings already have the correct status
     from the control plane, so no override is needed.
 
-    If LICENSE_ENFORCEMENT_ENABLED is false, settings are returned unchanged,
-    allowing the product to function normally without license checks.
+    If LICENSE_ENFORCEMENT_ENABLED is false, ee_features_enabled is set to True
+    (since EE code was loaded via ENABLE_PAID_ENTERPRISE_EDITION_FEATURES).
     """
     if not LICENSE_ENFORCEMENT_ENABLED:
+        # License enforcement disabled - EE code is loaded via
+        # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES, so EE features are on
+        settings.ee_features_enabled = True
         return settings
 
     if MULTI_TENANT:
+        # Cloud mode - EE features always available (gating handled by is_tenant_gated)
+        settings.ee_features_enabled = True
         return settings
 
     tenant_id = get_current_tenant_id()
