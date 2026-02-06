@@ -438,7 +438,7 @@ class OpenSearchClient:
                     f'Unknown OpenSearch deletion result: "{result_string}".'
                 )
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(print_only=True, debug_only=True)
     def delete_by_query(self, query_body: dict[str, Any]) -> int:
         """Deletes documents by a query.
 
@@ -477,7 +477,14 @@ class OpenSearchClient:
         )
         return num_deleted
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(
+        print_only=True,
+        debug_only=True,
+        include_args_subset={
+            "document_chunk_id": str,
+            "properties_to_update": lambda x: x.keys(),
+        },
+    )
     def update_document(
         self, document_chunk_id: str, properties_to_update: dict[str, Any]
     ) -> None:
@@ -602,7 +609,7 @@ class OpenSearchClient:
         if not result.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete search pipeline {pipeline_id}.")
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(print_only=True, debug_only=True)
     def search(
         self, body: dict[str, Any], search_pipeline_id: str | None
     ) -> list[SearchHit[DocumentChunk]]:
@@ -658,7 +665,7 @@ class OpenSearchClient:
         )
         return search_hits
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(print_only=True, debug_only=True)
     def search_for_document_ids(self, body: dict[str, Any]) -> list[str]:
         """Searches the index and returns only document chunk IDs.
 
