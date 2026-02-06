@@ -61,3 +61,22 @@ eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="""
 
         assert _strip_pem_delimiters(begin_only) == begin_only.strip()
         assert _strip_pem_delimiters(end_only) == end_only.strip()
+
+    def test_trailing_newlines_stripped_from_raw_input(self) -> None:
+        """Raw license strings with trailing newlines from user paste are cleaned."""
+        content = "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==\n\n"
+
+        result = _strip_pem_delimiters(content)
+
+        assert result == "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
+
+    def test_trailing_newlines_stripped_after_pem(self) -> None:
+        """Inner content with trailing newlines after PEM stripping is cleaned."""
+        content = """-----BEGIN ONYX LICENSE-----
+eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ==
+
+-----END ONYX LICENSE-----"""
+
+        result = _strip_pem_delimiters(content)
+
+        assert result == "eyJwYXlsb2FkIjogeyJ2ZXJzaW9uIjogIjEuMCJ9fQ=="
