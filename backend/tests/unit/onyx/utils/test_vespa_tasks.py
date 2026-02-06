@@ -14,7 +14,7 @@ class _StubRedisDocumentSet:
         parts = key.split("_")
         return parts[-1] if len(parts) == 3 else None
 
-    def __init__(self, tenant_id: str, object_id: str) -> None:
+    def __init__(self, tenant_id: str, object_id: str) -> None:  # noqa: ARG002
         self.taskset_key = f"documentset_taskset_{object_id}"
         self._payload = 0
 
@@ -38,15 +38,15 @@ def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool
     monkeypatch.setattr(
         vespa_tasks,
         "get_document_set_by_id",
-        lambda db_session, document_set_id: document_set,
+        lambda db_session, document_set_id: document_set,  # noqa: ARG005
     )
 
-    def _delete(document_set_row: Any, db_session: Any) -> None:
+    def _delete(document_set_row: Any, db_session: Any) -> None:  # noqa: ARG001
         calls["deleted"] = True
 
     monkeypatch.setattr(vespa_tasks, "delete_document_set", _delete)
 
-    def _mark(document_set_id: Any, db_session: Any) -> None:
+    def _mark(document_set_id: Any, db_session: Any) -> None:  # noqa: ARG001
         calls["synced"] = True
 
     monkeypatch.setattr(vespa_tasks, "mark_document_set_as_synced", _mark)
@@ -54,7 +54,7 @@ def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool
     monkeypatch.setattr(
         vespa_tasks,
         "update_sync_record_status",
-        lambda db_session, entity_id, sync_type, sync_status, num_docs_synced: None,
+        lambda db_session, entity_id, sync_type, sync_status, num_docs_synced: None,  # noqa: ARG005
     )
 
     return calls
@@ -71,7 +71,7 @@ def test_monitor_preserves_federated_only_document_set(monkeypatch: Any) -> None
     vespa_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_1",
-        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]
+        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]  # noqa: ARG005
         db_session=SimpleNamespace(),  # type: ignore[arg-type]
     )
 
@@ -90,7 +90,7 @@ def test_monitor_deletes_document_set_with_no_connectors(monkeypatch: Any) -> No
     vespa_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_2",
-        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]
+        r=SimpleNamespace(scard=lambda key: 0),  # type: ignore[arg-type]  # noqa: ARG005
         db_session=SimpleNamespace(),  # type: ignore[arg-type]
     )
 

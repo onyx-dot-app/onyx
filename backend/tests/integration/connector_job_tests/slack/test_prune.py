@@ -26,8 +26,8 @@ from tests.integration.connector_job_tests.slack.slack_api_utils import SlackMan
 
 @pytest.mark.xfail(reason="flaky - see DAN-986 for details", strict=False)
 def test_slack_prune(
-    reset: None,
-    vespa_client: vespa_fixture,
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,  # noqa: ARG001
     slack_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     public_channel, private_channel = slack_test_setup

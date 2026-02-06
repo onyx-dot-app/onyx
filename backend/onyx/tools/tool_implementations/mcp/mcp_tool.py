@@ -108,7 +108,7 @@ class MCPTool(Tool[None]):
     def run(
         self,
         placement: Placement,
-        override_kwargs: None = None,
+        override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the MCP tool by calling the MCP server"""

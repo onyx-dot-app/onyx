@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from types import SimpleNamespace
 
 from sqlalchemy import text
@@ -10,8 +11,29 @@ from alembic import command
 from alembic.config import Config
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from shared_configs.configs import TENANT_ID_PREFIX
 
 logger = logging.getLogger(__name__)
+
+# Regex pattern for valid tenant IDs:
+# - UUID format: tenant_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# - AWS instance ID format: tenant_i-xxxxxxxxxxxxxxxxx
+# Also useful for not accidentally dropping `public` schema
+TENANT_ID_PATTERN = re.compile(
+    rf"^{re.escape(TENANT_ID_PREFIX)}("
+    r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"  # UUID
+    r"|i-[a-f0-9]+"  # AWS instance ID
+    r")$"
+)
+
+
+def validate_tenant_id(tenant_id: str) -> bool:
+    """Validate that tenant_id matches expected format.
+
+    This is important for SQL injection prevention since schema names
+    cannot be parameterized in SQL and must be formatted directly.
+    """
+    return bool(TENANT_ID_PATTERN.match(tenant_id))
 
 
 def run_alembic_migrations(schema_name: str) -> None:
@@ -67,13 +89,18 @@ def create_schema_if_not_exists(tenant_id: str) -> bool:
 
 
 def drop_schema(tenant_id: str) -> None:
-    if not tenant_id.isidentifier():
-        raise ValueError("Invalid tenant_id.")
+    """Drop a tenant's schema.
+
+    Uses strict regex validation to reject unexpected formats early,
+    preventing SQL injection since schema names cannot be parameterized.
+    """
+    if not validate_tenant_id(tenant_id):
+        raise ValueError(f"Invalid tenant_id format: {tenant_id}")
+
     with get_sqlalchemy_engine().connect() as connection:
-        connection.execute(
-            text("DROP SCHEMA IF EXISTS %(schema_name)s CASCADE"),
-            {"schema_name": tenant_id},
-        )
+        with connection.begin():
+            # Use string formatting with validated tenant_id (safe after validation)
+            connection.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
 
 
 def get_current_alembic_version(tenant_id: str) -> str:

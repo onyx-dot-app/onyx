@@ -129,7 +129,7 @@ def test_gmail_checkpoint_progression() -> None:
             *,
             userId: str,
             fields: str,
-            q: str | None = None,
+            q: str | None = None,  # noqa: ARG002
             pageToken: str | None = None,
             **_: object,
         ) -> MockRequest:

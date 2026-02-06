@@ -16,12 +16,18 @@ import Truncated from "@/refresh-components/texts/Truncated";
 import Separator from "@/refresh-components/Separator";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import Popover from "@/refresh-components/Popover";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import SelectButton from "@/refresh-components/buttons/SelectButton";
+import Divider from "@/refresh-components/Divider";
 import {
   SvgFolder,
   SvgChevronRight,
   SvgFileText,
   SvgEye,
   SvgXCircle,
+  SvgCheck,
+  SvgArrowUpDown,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
@@ -31,6 +37,9 @@ import {
   DocumentPageCursor,
   HierarchyItem,
   HierarchyBreadcrumbProps,
+  DocumentSortField,
+  DocumentSortDirection,
+  FolderPosition,
 } from "@/lib/hierarchy/interfaces";
 import {
   fetchHierarchyNodes,
@@ -165,6 +174,14 @@ export default function SourceHierarchyBrowser({
   // Search state
   const [searchValue, setSearchValue] = useState("");
 
+  // Sort state
+  const [sortField, setSortField] = useState<DocumentSortField>("last_updated");
+  const [sortDirection, setSortDirection] =
+    useState<DocumentSortDirection>("desc");
+  const [folderPosition, setFolderPosition] =
+    useState<FolderPosition>("on_top");
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+
   // View selected only filter state
   const [viewSelectedOnly, setViewSelectedOnly] = useState(false);
 
@@ -210,7 +227,7 @@ export default function SourceHierarchyBrowser({
     loadNodes();
   }, [source]);
 
-  // Load documents when current path changes
+  // Load documents when current path or sort options change
   useEffect(() => {
     const loadDocuments = async () => {
       // Skip if no nodes loaded yet (still loading hierarchy)
@@ -241,6 +258,9 @@ export default function SourceHierarchyBrowser({
         const response = await fetchHierarchyNodeDocuments({
           parent_hierarchy_node_id: parentNodeId,
           cursor: null,
+          sort_field: sortField,
+          sort_direction: sortDirection,
+          folder_position: folderPosition,
         });
 
         setDocuments(response.documents);
@@ -254,7 +274,14 @@ export default function SourceHierarchyBrowser({
     };
 
     loadDocuments();
-  }, [currentParentId, allNodes, nodesError]);
+  }, [
+    currentParentId,
+    allNodes,
+    nodesError,
+    sortField,
+    sortDirection,
+    folderPosition,
+  ]);
 
   // Load more documents (for infinite scroll)
   const loadMoreDocuments = useCallback(async () => {
@@ -267,6 +294,9 @@ export default function SourceHierarchyBrowser({
       const response = await fetchHierarchyNodeDocuments({
         parent_hierarchy_node_id: currentParentId,
         cursor: nextCursor,
+        sort_field: sortField,
+        sort_direction: sortDirection,
+        folder_position: folderPosition,
       });
 
       setDocuments((prev) => [...prev, ...response.documents]);
@@ -277,7 +307,15 @@ export default function SourceHierarchyBrowser({
     } finally {
       setIsLoadingDocuments(false);
     }
-  }, [currentParentId, nextCursor, hasMoreDocuments, isLoadingDocuments]);
+  }, [
+    currentParentId,
+    nextCursor,
+    hasMoreDocuments,
+    isLoadingDocuments,
+    sortField,
+    sortDirection,
+    folderPosition,
+  ]);
 
   // Infinite scroll handler
   const handleScroll = useCallback(() => {
@@ -327,8 +365,42 @@ export default function SourceHierarchyBrowser({
       type: "document",
       data: doc,
     }));
-    return [...folderItems, ...documentItems];
-  }, [childFolders, documents]);
+
+    // Sort folders based on the sort field and direction
+    const sortedFolders = [...folderItems].sort((a, b) => {
+      const aTitle = a.data.title.toLowerCase();
+      const bTitle = b.data.title.toLowerCase();
+      if (sortField === "name") {
+        return sortDirection === "asc"
+          ? aTitle.localeCompare(bTitle)
+          : bTitle.localeCompare(aTitle);
+      }
+      // For last_updated, folders don't have timestamps, so sort by name
+      return aTitle.localeCompare(bTitle);
+    });
+
+    // Handle folder position
+    if (folderPosition === "on_top") {
+      return [...sortedFolders, ...documentItems];
+    }
+
+    // Mixed: interleave folders with documents based on sort order
+    // Since folders don't have last_modified, we treat them as coming first in the sort
+    // when sorting by last_updated, or we sort them alphabetically with docs by name
+    if (sortField === "name") {
+      const combined = [...sortedFolders, ...documentItems];
+      return combined.sort((a, b) => {
+        const aTitle = a.data.title.toLowerCase();
+        const bTitle = b.data.title.toLowerCase();
+        return sortDirection === "asc"
+          ? aTitle.localeCompare(bTitle)
+          : bTitle.localeCompare(aTitle);
+      });
+    }
+
+    // For last_updated with mixed, put folders at the end since they don't have timestamps
+    return [...documentItems, ...sortedFolders];
+  }, [childFolders, documents, sortField, sortDirection, folderPosition]);
 
   // Filter items by search and view selected mode
   const filteredItems = useMemo(() => {
@@ -658,36 +730,96 @@ export default function SourceHierarchyBrowser({
           )}
         </TableLayouts.CheckboxCell>
         <TableLayouts.TableCell flex>
-          <GeneralLayouts.Section
-            flexDirection="row"
-            justifyContent="start"
-            alignItems="center"
-            gap={0.25}
-            height="auto"
-          >
-            <Text secondaryBody text03>
-              Name
-            </Text>
-            <Text text03 secondaryBody>
-              ↕
-            </Text>
-          </GeneralLayouts.Section>
+          <Text secondaryBody text03>
+            Name
+          </Text>
         </TableLayouts.TableCell>
         <TableLayouts.TableCell width={8}>
-          <GeneralLayouts.Section
-            flexDirection="row"
-            justifyContent="start"
-            alignItems="center"
-            gap={0.25}
-            height="auto"
-          >
-            <Text secondaryBody text03>
-              Last Updated
-            </Text>
-            <Text text03 secondaryBody>
-              ↕
-            </Text>
-          </GeneralLayouts.Section>
+          <Popover open={sortDropdownOpen} onOpenChange={setSortDropdownOpen}>
+            <Popover.Trigger asChild>
+              <div>
+                <SelectButton
+                  rightIcon={SvgArrowUpDown}
+                  transient={sortDropdownOpen}
+                  onClick={() => setSortDropdownOpen(true)}
+                >
+                  {sortField === "name" ? "Name" : "Last Updated"}
+                </SelectButton>
+              </div>
+            </Popover.Trigger>
+            <Popover.Content align="end" sideOffset={4} width="lg">
+              <Popover.Menu>
+                {/* Sort by section */}
+                <Divider showTitle text="Sort by" dividerLine={false} />
+                <LineItem
+                  selected={sortField === "name"}
+                  onClick={() => setSortField("name")}
+                  rightChildren={
+                    sortField === "name" ? <SvgCheck size={16} /> : undefined
+                  }
+                >
+                  Name
+                </LineItem>
+                <LineItem
+                  selected={sortField === "last_updated"}
+                  onClick={() => setSortField("last_updated")}
+                  rightChildren={
+                    sortField === "last_updated" ? (
+                      <SvgCheck size={16} />
+                    ) : undefined
+                  }
+                >
+                  Last Updated
+                </LineItem>
+                {/* Sorting Order section */}
+                <Divider showTitle text="Sorting Order" dividerLine={false} />
+                <LineItem
+                  selected={sortDirection === "desc"}
+                  onClick={() => setSortDirection("desc")}
+                  rightChildren={
+                    sortDirection === "desc" ? (
+                      <SvgCheck size={16} />
+                    ) : undefined
+                  }
+                >
+                  {sortField === "name" ? "Z to A" : "Recent to Old"}
+                </LineItem>
+                <LineItem
+                  selected={sortDirection === "asc"}
+                  onClick={() => setSortDirection("asc")}
+                  rightChildren={
+                    sortDirection === "asc" ? <SvgCheck size={16} /> : undefined
+                  }
+                >
+                  {sortField === "name" ? "A to Z" : "Old to Recent"}
+                </LineItem>
+                {/* Folders section */}
+                <Divider showTitle text="Folders" dividerLine={false} />
+                <LineItem
+                  selected={folderPosition === "on_top"}
+                  onClick={() => setFolderPosition("on_top")}
+                  rightChildren={
+                    folderPosition === "on_top" ? (
+                      <SvgCheck size={16} />
+                    ) : undefined
+                  }
+                >
+                  On top
+                </LineItem>
+                <LineItem
+                  selected={folderPosition === "mixed"}
+                  onClick={() => setFolderPosition("mixed")}
+                  rightChildren={
+                    folderPosition === "mixed" ? (
+                      <SvgCheck size={16} />
+                    ) : undefined
+                  }
+                >
+                  Mixed with Files
+                </LineItem>
+              </Popover.Menu>
+            </Popover.Content>
+          </Popover>
         </TableLayouts.TableCell>
       </TableLayouts.TableRow>
 

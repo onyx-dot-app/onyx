@@ -15,7 +15,7 @@ import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import Dropzone from "react-dropzone";
-import AppInputBar, { ChatInputBarHandle } from "@/sections/input/AppInputBar";
+import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
 import useTags from "@/hooks/useTags";
@@ -25,7 +25,7 @@ import { AppPopup } from "@/app/app/components/AppPopup";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
-import TextView from "@/components/chat/TextView";
+import TextViewModal from "@/sections/modals/TextViewModal";
 import Modal from "@/refresh-components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
@@ -287,7 +287,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
 
-  const chatInputBarRef = useRef<ChatInputBarHandle>(null);
+  const chatInputBarRef = useRef<AppInputBarHandle>(null);
 
   const filterManager = useFilters();
 
@@ -695,7 +695,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       )}
 
       {presentingDocument && (
-        <TextView
+        <TextViewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />
@@ -786,10 +786,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </Fade>
                 </div>
 
-                {/* ── Middle-center: ChatInputBar ── */}
+                {/* ── Middle-center: AppInputBar ── */}
                 <div className="row-start-2 flex flex-col items-center">
                   <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
-                    {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
+                    {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
                       <div className="absolute top-[-3.5rem] self-center">
                         <IconButton
@@ -819,12 +819,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {/*
                       # Note (@raunakab)
 
-                      `shadow-01` on ChatInputBar extends ~14px below the element
+                      `shadow-01` on AppInputBar extends ~14px below the element
                       (2px offset + 12px blur). Because the content area in `Root`
                       (app-layouts.tsx) uses `overflow-auto`, shadows that exceed
                       the container bounds are clipped.
 
-                      The animated spacer divs above and below the ChatInputBar
+                      The animated spacer divs above and below the AppInputBar
                       provide 14px of breathing room so the shadow renders fully.
                       They transition between h-0 and h-[14px] depending on whether
                       the classification is "search" (spacer above) or "chat"

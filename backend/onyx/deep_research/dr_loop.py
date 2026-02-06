@@ -99,6 +99,7 @@ MAX_ORCHESTRATOR_CYCLES_REASONING = 4
 
 def generate_final_report(
     history: list[ChatMessageSimple],
+    research_plan: str,
     llm: LLM,
     token_counter: Callable[[str], int],
     state_container: ChatStateContainer,
@@ -125,9 +126,10 @@ def generate_final_report(
             token_count=token_counter(final_report_prompt),
             message_type=MessageType.SYSTEM,
         )
+        final_reminder = USER_FINAL_REPORT_QUERY.format(research_plan=research_plan)
         reminder_message = ChatMessageSimple(
-            message=USER_FINAL_REPORT_QUERY,
-            token_count=token_counter(USER_FINAL_REPORT_QUERY),
+            message=final_reminder,
+            token_count=token_counter(final_reminder),
             message_type=MessageType.USER,
         )
         final_report_history = construct_message_history(
@@ -159,6 +161,7 @@ def generate_final_report(
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
             pre_answer_processing_time=pre_answer_processing_time,
+            timeout_override=300,  # 5 minute read timeout for long report generation
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -184,7 +187,7 @@ def run_deep_research_llm_loop(
     state_container: ChatStateContainer,
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
-    custom_agent_prompt: str | None,
+    custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
     db_session: Session,
@@ -368,6 +371,8 @@ def run_deep_research_llm_loop(
             llm_step_result = cast(LlmStepResult, llm_step_result)
 
             research_plan = llm_step_result.answer
+            if research_plan is None:
+                raise RuntimeError("Deep Research failed to generate a research plan")
             span.span_data.output = research_plan if research_plan else None
 
         #########################################################
@@ -428,6 +433,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -512,7 +518,7 @@ def run_deep_research_llm_loop(
                     # Even for the reasoning tool, this should be plenty
                     # The generation here should never be very long as it's just the tool calls.
                     # This prevents timeouts where the model gets into an endless loop of null or bad tokens.
-                    max_tokens=1000,
+                    max_tokens=1024,
                 )
                 if has_reasoned:
                     reasoning_cycles += 1
@@ -533,6 +539,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -554,6 +561,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -626,6 +634,7 @@ def run_deep_research_llm_loop(
                         )
                         report_reasoned = generate_final_report(
                             history=simple_chat_history,
+                            research_plan=research_plan,
                             llm=llm,
                             token_counter=token_counter,
                             state_container=state_container,

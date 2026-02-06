@@ -6,7 +6,7 @@ import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
-import AppInputBar, { ChatInputBarHandle } from "@/sections/input/AppInputBar";
+import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -46,7 +46,7 @@ import {
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import TextView from "@/components/chat/TextView";
+import TextViewModal from "@/sections/modals/TextViewModal";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -161,7 +161,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Refs
   const inputRef = useRef<HTMLDivElement>(null);
-  const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
+  const chatInputBarRef = useRef<AppInputBarHandle | null>(null);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
   // Access chat state from store
@@ -253,7 +253,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [handleMessageSpecificFileUpload]
   );
 
-  // Handle submit from ChatInputBar
+  // Handle submit from AppInputBar
   const handleChatInputSubmit = useCallback(
     (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
@@ -389,7 +389,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
-            {/* ChatInputBar container - absolutely positioned when in chat, centered when no messages */}
+            {/* AppInputBar container - absolutely positioned when in chat, centered when no messages */}
             <div
               ref={inputRef}
               className={cn(
@@ -452,7 +452,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Text/document preview modal */}
       {presentingDocument && (
-        <TextView
+        <TextViewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />

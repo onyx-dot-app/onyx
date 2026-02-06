@@ -2,6 +2,10 @@
   "name": "@onyx/opal",
   "version": "0.0.1",
   "exports": {
+    "./core": {
+      "types": "./src/core/index.ts",
+      "default": "./src/core/index.ts"
+    },
     "./icons": {
       "types": "./src/icons/index.ts",
       "default": "./src/icons/index.ts"
@@ -9,6 +13,10 @@
     "./types": {
       "types": "./src/types.ts",
       "default": "./src/types.ts"
+    },
+    "./utils": {
+      "types": "./src/utils.ts",
+      "default": "./src/utils.ts"
     }
   }
 }

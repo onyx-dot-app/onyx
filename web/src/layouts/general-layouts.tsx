@@ -109,6 +109,23 @@ export interface SectionProps
 
   ref?: React.Ref<HTMLDivElement>;
 }
+
+/**
+ * WARNING: Do NOT wrap Section with the `<Disabled>` component.
+ *
+ * The `<Disabled>` component uses Radix Slot which injects a `className` prop.
+ * Since `Section` spreads `...rest` after setting its own `className`, the injected
+ * className will overwrite all layout classes (flex, flex-col, etc.), breaking the layout.
+ *
+ * To disable content within a Section, wrap the individual children instead:
+ * ```tsx
+ * <Section>
+ *   <Disabled disabled={!isEnabled}>
+ *     <Button>...</Button>
+ *   </Disabled>
+ * </Section>
+ * ```
+ */
 function Section({
   flexDirection = "column",
   justifyContent = "center",

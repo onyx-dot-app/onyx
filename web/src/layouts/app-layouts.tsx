@@ -47,10 +47,7 @@ import FrostedDiv from "@/refresh-components/FrostedDiv";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import {
-  Hoverable,
-  ChevronHoverableContainer,
-} from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/core";
 import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -325,19 +322,8 @@ function Header() {
             !classification && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
-                  <Hoverable
-                    asChild
-                    variant="secondary"
-                    // # NOTE (@raunakab):
-                    //
-                    // This was previously `transient={!!classification}` (essentially, always make this button transient when a query-classification is present).
-                    // However, this lead to a slight UI glitch in Auto-Mode when transitioning from the "New Session" to a "Chat".
-                    // This button would flash transient, and then disappear (since `ChatUI` does not render this app-mode-toggle).
-                    //
-                    // Therefore, we apply the milder condition, `classification === "search"`, instead.
-                    transient={classification === "search"}
-                  >
-                    <ChevronHoverableContainer>
+                  <Interactive.Base subvariant="secondary">
+                    <Interactive.ChevronContainer>
                       <LineItemLayout
                         icon={
                           effectiveMode === "auto"
@@ -356,8 +342,8 @@ function Header() {
                         variant="secondary"
                         center
                       />
-                    </ChevronHoverableContainer>
-                  </Hoverable>
+                    </Interactive.ChevronContainer>
+                  </Interactive.Base>
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">
                   <Popover.Menu>
@@ -494,16 +480,17 @@ function Footer() {
         // # Note (from @raunakab):
         //
         // The conditional rendering of vertical padding based on the current page is intentional.
-        // The `ChatInputBar` has `shadow-01` applied, which extends ~14px below it.
+        // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
         // Because the content area in `Root` uses `overflow-auto`, the shadow would be
         // clipped at the container boundary — causing a visible rendering artefact.
         //
-        // To fix this, `ChatInputBar` has `mb-[14px]` to give the shadow breathing room.
-        // However, that extra margin adds visible space between the input and the Footer.
-        // To compensate, we remove the Footer's top padding when `appFocus.isChat()`.
+        // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
+        // give the shadow breathing room. However, that extra space adds visible gap
+        // between the input and the Footer. To compensate, we remove the Footer's top
+        // padding when `appFocus.isChat()`.
         //
-        // There is a corresponding note inside `ChatInputBar.tsx` explaining the `mb-[14px]`.
-        // Please refer to that note as well.
+        // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
+        // explaining this. Please refer to those notes as well.
         appFocus.isChat() ? "pb-2" : "py-2"
       )}
     >

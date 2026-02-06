@@ -16,8 +16,6 @@ Ephemeral VM with Python 3.11 and Node v22. Virtual environment at `.venv/` incl
 
 Install packages: `pip install <pkg>` or `npm install <pkg>` (from `outputs/web`).
 
-{{ATTACHMENTS_SECTION}}
-
 {{ORG_INFO_SECTION}}
 
 ## Skills

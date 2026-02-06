@@ -735,7 +735,7 @@ class VespaIndex(DocumentIndex):
         chunk_requests: list[VespaChunkRequest],
         filters: IndexFilters,
         batch_retrieval: bool = False,
-        get_large_chunks: bool = False,
+        get_large_chunks: bool = False,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
@@ -769,11 +769,11 @@ class VespaIndex(DocumentIndex):
         query_embedding: Embedding,
         final_keywords: list[str] | None,
         filters: IndexFilters,
-        hybrid_alpha: float,
-        time_decay_multiplier: float,
+        hybrid_alpha: float,  # noqa: ARG002
+        time_decay_multiplier: float,  # noqa: ARG002
         num_to_retrieve: int,
         ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,
-        title_content_ratio: float | None = TITLE_CONTENT_RATIO,
+        title_content_ratio: float | None = TITLE_CONTENT_RATIO,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         tenant_state = TenantState(
             tenant_id=get_current_tenant_id(),
@@ -809,7 +809,7 @@ class VespaIndex(DocumentIndex):
     def admin_retrieval(
         self,
         query: str,
-        query_embedding: Embedding,
+        query_embedding: Embedding,  # noqa: ARG002
         filters: IndexFilters,
         num_to_retrieve: int = NUM_RETURNED_HITS,
     ) -> list[InferenceChunk]:

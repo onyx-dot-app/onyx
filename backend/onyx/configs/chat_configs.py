@@ -19,7 +19,11 @@ FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
 # Currently only applies to search flow not chat
 CONTEXT_CHUNKS_ABOVE = int(os.environ.get("CONTEXT_CHUNKS_ABOVE") or 1)
 CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
-QA_TIMEOUT = int(os.environ.get("QA_TIMEOUT") or "60")  # 60 seconds
+# Fairly long but this is to account for edge cases where the LLM pauses for much longer than usual
+# The alternative is to fail the request completely so this is intended to be fairly lenient.
+LLM_SOCKET_READ_TIMEOUT = int(
+    os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
+)  # 60 seconds
 # Weighting factor between Vector and Keyword Search, 1 for completely vector search
 HYBRID_ALPHA = max(0, min(1, float(os.environ.get("HYBRID_ALPHA") or 0.5)))
 HYBRID_ALPHA_KEYWORD = max(

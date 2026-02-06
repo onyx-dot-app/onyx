@@ -251,7 +251,7 @@ def full_deployment_setup() -> Generator[None, None, None]:
 
 @pytest.fixture(scope="module")
 def db_session(
-    full_deployment_setup: None,
+    full_deployment_setup: None,  # noqa: ARG001
 ) -> Generator[Session, None, None]:
     """
     NOTE: We deliberately duplicate this logic from
@@ -267,7 +267,7 @@ def db_session(
 @pytest.fixture(scope="module")
 def vespa_document_index(
     db_session: Session,
-    full_deployment_setup: None,
+    full_deployment_setup: None,  # noqa: ARG001
 ) -> Generator[VespaDocumentIndex, None, None]:
     """Creates a Vespa document index for the test tenant."""
     active = get_active_search_settings(db_session)
@@ -281,7 +281,7 @@ def vespa_document_index(
 @pytest.fixture(scope="module")
 def opensearch_client(
     db_session: Session,
-    full_deployment_setup: None,
+    full_deployment_setup: None,  # noqa: ARG001
 ) -> Generator[OpenSearchClient, None, None]:
     """Creates an OpenSearch client for the test tenant."""
     active = get_active_search_settings(db_session)
@@ -300,7 +300,7 @@ def opensearch_available(
 
 @pytest.fixture(scope="module")
 def vespa_available(
-    full_deployment_setup: None,
+    full_deployment_setup: None,  # noqa: ARG001
 ) -> Generator[None, None, None]:
     """Verifies Vespa is running, fails the test if not."""
     # Try 90 seconds for testing in CI.
@@ -398,8 +398,8 @@ class TestCheckForDocumentsForOpenSearchMigrationTask:
         self,
         db_session: Session,
         test_documents: list[Document],
-        clean_migration_tables: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that migration records are created for documents in the DB."""
         # Under test.
@@ -425,8 +425,8 @@ class TestCheckForDocumentsForOpenSearchMigrationTask:
         self,
         db_session: Session,
         test_documents: list[Document],
-        clean_migration_tables: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that pagination picks up from the last migrated document ID."""
         # Precondition.
@@ -461,8 +461,8 @@ class TestCheckForDocumentsForOpenSearchMigrationTask:
         self,
         db_session: Session,
         test_documents: list[Document],
-        clean_migration_tables: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """
         Tests that task runs successfully when all documents already have
@@ -483,7 +483,7 @@ class TestCheckForDocumentsForOpenSearchMigrationTask:
 
     def test_returns_none_when_feature_disabled(
         self,
-        disable_opensearch_indexing_for_onyx: None,
+        disable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that task returns None when feature is disabled."""
         # Under test.
@@ -498,8 +498,8 @@ class TestCheckForDocumentsForOpenSearchMigrationTask:
         self,
         db_session: Session,
         test_documents: list[Document],
-        clean_migration_tables: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that counter increments when no records to populate."""
         # Precondition.
@@ -536,10 +536,10 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         vespa_document_index: VespaDocumentIndex,
         opensearch_client: OpenSearchClient,
         test_embedding_dimension: int,
-        clean_migration_tables: None,
-        clean_vespa: None,
-        clean_opensearch: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        clean_vespa: None,  # noqa: ARG002
+        clean_opensearch: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests successful migration of a document from Vespa to OpenSearch."""
         # Precondition.
@@ -605,10 +605,10 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         vespa_document_index: VespaDocumentIndex,
         opensearch_client: OpenSearchClient,
         test_embedding_dimension: int,
-        clean_migration_tables: None,
-        clean_vespa: None,
-        clean_opensearch: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        clean_vespa: None,  # noqa: ARG002
+        clean_opensearch: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that documents are marked as FAILED when migration fails."""
         # Precondition.
@@ -688,8 +688,8 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         self,
         db_session: Session,
         test_documents: list[Document],
-        clean_migration_tables: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """
         Tests that documents are marked as PERMANENTLY_FAILED after max
@@ -734,8 +734,8 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         self,
         db_session: Session,
         test_documents: list[Document],
-        clean_migration_tables: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that migration fails if document has no chunk_count."""
         # Precondition.
@@ -770,7 +770,7 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
 
     def test_returns_none_when_feature_disabled(
         self,
-        disable_opensearch_indexing_for_onyx: None,
+        disable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that task returns None when feature is disabled."""
         # Under test.
@@ -784,8 +784,8 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
     def test_increments_counter_when_no_documents_to_migrate(
         self,
         db_session: Session,
-        clean_migration_tables: None,
-        enable_opensearch_indexing_for_onyx: None,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """Tests that counter increments when no documents need migration."""
         # Precondition.

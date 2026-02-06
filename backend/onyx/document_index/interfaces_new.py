@@ -52,6 +52,11 @@ class TenantState(BaseModel):
     tenant_id: str
     multitenant: bool
 
+    def __str__(self) -> str:
+        return (
+            f"TenantState(tenant_id={self.tenant_id}, multitenant={self.multitenant})"
+        )
+
     @model_validator(mode="after")
     def check_tenant_id_is_set_in_multitenant_mode(self) -> Self:
         if self.multitenant and not self.tenant_id:

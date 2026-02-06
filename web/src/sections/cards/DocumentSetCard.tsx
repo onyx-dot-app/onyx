@@ -4,7 +4,7 @@ import { DocumentSetSummary } from "@/lib/types";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { SvgFiles } from "@opal/icons";
-import { Hoverable, HoverableContainer } from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 
@@ -29,19 +29,19 @@ export default function DocumentSetCard({
       disabled={!disabled || !disabledTooltip}
     >
       <div className="max-w-[12rem]">
-        <Hoverable
-          asChild
+        <Interactive.Base
           onClick={
             disabled || isSelected === undefined
               ? undefined
               : () => onSelectToggle?.(!isSelected)
           }
-          disableHover={disabled || isSelected === undefined}
+          variant="none"
+          static={disabled || isSelected === undefined}
         >
-          <HoverableContainer
-            border
+          <Interactive.Container
             data-testid={`document-set-card-${documentSet.id}`}
-            heightVariant="auto"
+            border
+            heightVariant="full"
             paddingVariant="none"
           >
             <AttachmentItemLayout
@@ -65,8 +65,8 @@ export default function DocumentSetCard({
               }
             />
             <Spacer horizontal rem={0.5} />
-          </HoverableContainer>
-        </Hoverable>
+          </Interactive.Container>
+        </Interactive.Base>
       </div>
     </SimpleTooltip>
   );

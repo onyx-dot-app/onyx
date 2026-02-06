@@ -31,6 +31,14 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `createImageGenerationConfig(id, model, provider, isDefault)` - Creates an image generation config (enables image gen tool)
  * - `deleteImageGenerationConfig(id)` - Deletes an image generation config
  *
+ * **Chat Sessions:**
+ * - `createChatSession(description, personaId?)` - Creates a chat session with a description
+ * - `deleteChatSession(chatId)` - Deletes a chat session
+ *
+ * **Projects:**
+ * - `createProject(name)` - Creates a project with a name
+ * - `deleteProject(projectId)` - Deletes a project
+ *
  * **Usage Example:**
  * ```typescript
  * const client = new OnyxApiClient(page);
@@ -926,5 +934,82 @@ export class OnyxApiClient {
       response,
       `Failed to update channel ${channelConfigId}`
     );
+  }
+
+  // === Chat Session Methods ===
+
+  /**
+   * Creates a chat session with a specific description.
+   *
+   * @param description - The description/title for the chat session
+   * @param personaId - The persona/assistant ID to use (defaults to 0)
+   * @returns The chat session ID
+   * @throws Error if the chat session creation fails
+   */
+  async createChatSession(
+    description: string,
+    personaId: number = 0
+  ): Promise<string> {
+    const response = await this.post("/chat/create-chat-session", {
+      persona_id: personaId,
+      description,
+    });
+    const data = await this.handleResponse<{ chat_session_id: string }>(
+      response,
+      "Failed to create chat session"
+    );
+    this.log(
+      `Created chat session: ${description} (ID: ${data.chat_session_id})`
+    );
+    return data.chat_session_id;
+  }
+
+  /**
+   * Deletes a chat session.
+   *
+   * @param chatId - The chat session ID to delete
+   */
+  async deleteChatSession(chatId: string): Promise<void> {
+    const response = await this.delete(`/chat/delete-chat-session/${chatId}`);
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete chat session ${chatId}`
+    );
+    this.log(`Deleted chat session: ${chatId}`);
+  }
+
+  // === Project Methods ===
+
+  /**
+   * Creates a project with a specific name.
+   *
+   * @param name - The name for the project
+   * @returns The project ID
+   * @throws Error if the project creation fails
+   */
+  async createProject(name: string): Promise<number> {
+    const response = await this.post(
+      `/user/projects/create?name=${encodeURIComponent(name)}`
+    );
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create project"
+    );
+    this.log(`Created project: ${name} (ID: ${data.id})`);
+    return data.id;
+  }
+
+  /**
+   * Deletes a project.
+   *
+   * @param projectId - The project ID to delete
+   */
+  async deleteProject(projectId: number): Promise<void> {
+    const response = await this.delete(`/user/projects/${projectId}`);
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete project ${projectId}`
+    );
+    this.log(`Deleted project: ${projectId}`);
   }
 }

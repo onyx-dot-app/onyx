@@ -173,6 +173,8 @@ export default function BillingPage() {
           refreshLicense();
           // Refresh the page to update settings (including ee_features_enabled)
           router.refresh();
+          // Navigate to billing details now that the license is active
+          changeView("details");
         } catch (error) {
           console.error("Failed to sync license after billing return:", error);
         }
@@ -217,6 +219,8 @@ export default function BillingPage() {
     refreshBilling();
     // Refresh the page to update settings (including ee_features_enabled)
     router.refresh();
+    // Navigate to billing details now that the license is active
+    changeView("details");
   };
 
   // View configuration

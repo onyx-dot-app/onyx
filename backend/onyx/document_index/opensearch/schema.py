@@ -164,6 +164,13 @@ class DocumentChunk(BaseModel):
         )
     )
 
+    def __str__(self) -> str:
+        return (
+            f"DocumentChunk(document_id={self.document_id}, chunk_index={self.chunk_index}, "
+            f"content length={len(self.content)}, content vector length={len(self.content_vector)}, "
+            f"tenant_id={self.tenant_id.tenant_id})"
+        )
+
     @model_validator(mode="after")
     def check_title_and_title_vector_are_consistent(self) -> Self:
         # title and title_vector should both either be None or not.
@@ -197,7 +204,9 @@ class DocumentChunk(BaseModel):
 
     @field_serializer("last_updated", mode="wrap")
     def serialize_datetime_fields_to_epoch_seconds(
-        self, value: datetime | None, handler: SerializerFunctionWrapHandler
+        self,
+        value: datetime | None,
+        handler: SerializerFunctionWrapHandler,  # noqa: ARG002
     ) -> int | None:
         """
         Serializes datetime fields to seconds since the Unix epoch.
@@ -231,7 +240,7 @@ class DocumentChunk(BaseModel):
 
     @field_serializer("tenant_id", mode="wrap")
     def serialize_tenant_state(
-        self, value: TenantState, handler: SerializerFunctionWrapHandler
+        self, value: TenantState, handler: SerializerFunctionWrapHandler  # noqa: ARG002
     ) -> str | None:
         """
         Serializes tenant_state to the tenant str if multitenant, or None if

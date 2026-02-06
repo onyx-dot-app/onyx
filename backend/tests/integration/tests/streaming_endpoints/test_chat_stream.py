@@ -60,7 +60,9 @@ def test_send_two_messages(basic_user: DATestUser) -> None:
     ), "Chat session should have 1 system message, 2 user messages, and 2 assistant messages"
 
 
-def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -> None:
+def test_send_message_simple_with_history(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     LLMProviderManager.create(user_performing_action=admin_user)
 
     test_chat_session = ChatSessionManager.create(user_performing_action=admin_user)
@@ -76,7 +78,9 @@ def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -
 
 
 def test_send_message__basic_searches(
-    reset: None, admin_user: DATestUser, document_builder: DocumentBuilderType
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    document_builder: DocumentBuilderType,
 ) -> None:
     MESSAGE = "run a search for 'test'. Use the internal search tool."
     SHORT_DOC_CONTENT = "test"
@@ -116,7 +120,7 @@ def test_send_message__basic_searches(
 
 
 def test_send_message_disconnect_and_cleanup(
-    reset: None, admin_user: DATestUser
+    reset: None, admin_user: DATestUser  # noqa: ARG001
 ) -> None:
     """
     Test that when a client disconnects mid-stream:

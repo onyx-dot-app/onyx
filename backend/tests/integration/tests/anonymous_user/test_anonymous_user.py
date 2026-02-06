@@ -4,7 +4,7 @@ from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_limited(reset: None) -> None:
+def test_limited(reset: None) -> None:  # noqa: ARG001
     """Verify that with a limited role key, limited endpoints are accessible and
     others are not."""
 

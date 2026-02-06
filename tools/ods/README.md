@@ -22,6 +22,9 @@ source .venv/bin/activate
 
 Some commands require external tools to be installed and configured:
 
+- **Docker** - Required for `compose` command
+  - Install from [docker.com](https://docs.docker.com/get-docker/)
+
 - **GitHub CLI** (`gh`) - Required for `run-ci` and `cherry-pick` commands
   - Install from [cli.github.com](https://cli.github.com/)
   - Authenticate with `gh auth login`
@@ -55,6 +58,41 @@ ods completion bash | sudo tee /etc/bash_completion.d/ods > /dev/null
 _Note: bash completion requires the [bash-completion](https://github.com/scop/bash-completion/) package be installed._
 
 ## Commands
+
+### `compose` - Launch Docker Containers
+
+Launch Onyx docker containers using docker compose.
+
+```shell
+ods compose [profile]
+```
+
+**Profiles:**
+
+- `dev` - Use dev configuration (exposes service ports for development)
+- `multitenant` - Use multitenant configuration
+
+**Examples:**
+
+```shell
+# Start containers with default configuration
+ods compose
+
+# Start containers with dev configuration
+ods compose dev
+
+# Start containers with multitenant configuration
+ods compose multitenant
+
+# Stop running containers
+ods compose --down
+ods compose dev --down
+
+# Start without waiting for services to be healthy
+ods compose --wait=false
+```
+
+By default, `--wait` is enabled, which waits for services to be healthy before returning.
 
 ### `db` - Database Administration
 

@@ -41,7 +41,7 @@ class TestTagRaceCondition:
     """Tests for tag creation race condition handling."""
 
     def test_concurrent_tag_creation_single_tag(
-        self, db_session: Session, tenant_context: None
+        self, db_session: Session, tenant_context: None  # noqa: ARG002
     ) -> None:
         """
         Test that multiple concurrent calls to create_or_add_document_tag
@@ -119,7 +119,7 @@ class TestTagRaceCondition:
         assert len(tag_count) == 1, f"Expected 1 tag, found {len(tag_count)}"
 
     def test_concurrent_tag_list_creation(
-        self, db_session: Session, tenant_context: None
+        self, db_session: Session, tenant_context: None  # noqa: ARG002
     ) -> None:
         """
         Test that multiple concurrent calls to create_or_add_document_tag_list
@@ -197,7 +197,7 @@ class TestTagRaceCondition:
         ), f"Expected {len(test_tag_values)} tags, found {len(tags)}"
 
     def test_concurrent_mixed_tag_operations(
-        self, db_session: Session, tenant_context: None
+        self, db_session: Session, tenant_context: None  # noqa: ARG002
     ) -> None:
         """
         Test that concurrent single tag and tag list operations on the same

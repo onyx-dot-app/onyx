@@ -20,7 +20,7 @@ from onyx.evals.eval import run_eval
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
 from onyx.evals.provider import get_provider
-from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
+from onyx.tracing.setup import setup_tracing
 
 
 def setup_session_factory() -> None:
@@ -95,9 +95,9 @@ def run_local(
     configure_logging_for_evals(
         verbose=verbose,
     )
-    # Only setup Braintrust if not running in local-only mode
+    # Only setup tracing if not running in local-only mode
     if not local_only:
-        setup_braintrust_if_creds_available()
+        setup_tracing()
 
     if search_permissions_email is None:
         raise ValueError("search_permissions_email is required for local evaluation")

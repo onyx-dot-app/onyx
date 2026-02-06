@@ -61,7 +61,7 @@ async def test_get_or_create_user_updates_expiry(
     monkeypatch.setattr(
         users_module,
         "SQLAlchemyUserAdminDB",
-        lambda *args, **kwargs: MagicMock(),
+        lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
     result = await users_module._get_or_create_user_from_jwt(
@@ -109,7 +109,7 @@ async def test_get_or_create_user_skips_inactive(
     monkeypatch.setattr(
         users_module,
         "SQLAlchemyUserAdminDB",
-        lambda *args, **kwargs: MagicMock(),
+        lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
     result = await users_module._get_or_create_user_from_jwt(
@@ -150,14 +150,14 @@ async def test_get_or_create_user_handles_race_conditions(
             self.get_calls += 1
             return inactive_user
 
-        async def create(self, *args: Any, **kwargs: Any) -> MagicMock:
+        async def create(self, *args: Any, **kwargs: Any) -> MagicMock:  # noqa: ARG002
             raise users_module.exceptions.UserAlreadyExists()
 
     monkeypatch.setattr(users_module, "UserManager", StubUserManager)
     monkeypatch.setattr(
         users_module,
         "SQLAlchemyUserAdminDB",
-        lambda *args, **kwargs: MagicMock(),
+        lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
     result = await users_module._get_or_create_user_from_jwt(
@@ -195,7 +195,7 @@ async def test_get_or_create_user_provisions_new_user(
         async def get_by_email(self, _email: str) -> MagicMock:
             raise users_module.exceptions.UserNotExists()
 
-        async def create(self, user_create, safe=False, request=None):  # type: ignore[no-untyped-def]
+        async def create(self, user_create, safe=False, request=None):  # type: ignore[no-untyped-def]  # noqa: ARG002
             recorded["user_create"] = user_create
             recorded["request"] = request
             return created_user
@@ -204,7 +204,7 @@ async def test_get_or_create_user_provisions_new_user(
     monkeypatch.setattr(
         users_module,
         "SQLAlchemyUserAdminDB",
-        lambda *args, **kwargs: MagicMock(),
+        lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
     request = MagicMock()

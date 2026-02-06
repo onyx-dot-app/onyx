@@ -102,7 +102,7 @@ def _build_group_member_email_map(
 
 
 def jira_group_sync(
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     """
