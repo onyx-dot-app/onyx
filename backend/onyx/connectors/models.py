@@ -187,7 +187,7 @@ class DocumentBase(BaseModel):
 
     # only filled in EE for connectors w/ permission sync enabled
     external_access: ExternalAccess | None = None
-    doc_metadata: dict[str, str | list[str]] | None = None
+    doc_metadata: dict[str, Any] | None = None
 
     # Parent hierarchy node raw ID - the folder/space/page containing this document
     # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
