@@ -1459,7 +1459,7 @@ echo "SNAPSHOT_CREATED"
         exec_command = [
             "/bin/sh",
             "-c",
-            f'[ -d "{session_path}" ] && echo "EXISTS" || echo "NOT_EXISTS"',
+            f'[ -d "{session_path}" ] && echo "WORKSPACE_FOUND" || echo "WORKSPACE_MISSING"',
         ]
 
         try:
@@ -1475,7 +1475,12 @@ echo "SNAPSHOT_CREATED"
                 tty=False,
             )
 
-            return "EXISTS" in resp
+            result = "WORKSPACE_FOUND" in resp
+            logger.info(
+                f"[WORKSPACE_CHECK] session={session_id}, "
+                f"path={session_path}, raw_resp={resp!r}, result={result}"
+            )
+            return result
 
         except ApiException as e:
             logger.warning(
