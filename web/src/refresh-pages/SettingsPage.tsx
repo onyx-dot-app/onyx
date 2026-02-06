@@ -1446,7 +1446,11 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Interactive.Base key={pat.id} static variant="secondary">
+                      <Interactive.Base
+                        key={pat.id}
+                        subvariant="secondary"
+                        static
+                      >
                         <Interactive.Container
                           paddingVariant="none"
                           heightVariant="full"
