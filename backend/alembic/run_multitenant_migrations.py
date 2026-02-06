@@ -282,6 +282,10 @@ def parse_args() -> Args:
         help="Schemas per alembic process (default: 50)",
     )
     args = parser.parse_args()
+    if args.jobs < 1:
+        parser.error("--jobs must be >= 1")
+    if args.batch_size < 1:
+        parser.error("--batch-size must be >= 1")
     return Args(jobs=args.jobs, batch_size=args.batch_size)
 
 
