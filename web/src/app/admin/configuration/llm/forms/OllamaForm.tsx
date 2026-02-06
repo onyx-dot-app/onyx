@@ -29,7 +29,6 @@ import Tabs from "@/refresh-components/Tabs";
 import Separator from "@/refresh-components/Separator";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
-const DEFAULT_API_BASE = "http://127.0.0.1:11434";
 
 enum OllamaHostingTab {
   SelfHosted = "self-hosted",
@@ -134,16 +133,16 @@ function OllamaFormContent({
         </Tabs.Content>
       </Tabs>
 
-      <Separator />
+      <Separator noPadding />
 
       <DisplayNameField />
 
-      <Separator />
+      <Separator noPadding />
 
       <DisplayModels
         modelConfigurations={currentModels}
         formikProps={formikProps}
-        noModelConfigurationsMessage="No models found. Please provide a valid API base URL."
+        noModelConfigurationsMessage="No models found. Please provide a valid base URL or key."
         isLoading={isLoadingModels}
         shouldShowAutoUpdateToggle={false}
       />
@@ -194,7 +193,7 @@ export function OllamaForm({
             existingLlmProvider,
             modelConfigurations
           ),
-          api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+          api_base: existingLlmProvider?.api_base ?? "",
           custom_config: {
             OLLAMA_API_KEY:
               (existingLlmProvider?.custom_config?.OLLAMA_API_KEY as string) ??

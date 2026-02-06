@@ -177,10 +177,6 @@ export function OpenRouterForm({
                     : existingLlmProvider?.model_configurations ||
                       modelConfigurations;
 
-                console.log("currentModels", currentModels);
-                console.log("modelConfigurations", modelConfigurations);
-                console.log("fetchedModels", fetchedModels);
-
                 const isFetchDisabled =
                   !formikProps.values.api_base || !formikProps.values.api_key;
 

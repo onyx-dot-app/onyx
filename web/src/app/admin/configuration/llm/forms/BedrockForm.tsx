@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
+import InputSelectField from "@/refresh-components/form/InputSelectField";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   LLMProviderFormProps,
   LLMProviderView,
@@ -32,6 +34,11 @@ import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import Tabs from "@/refresh-components/Tabs";
 import { cn } from "@/lib/utils";
+import * as InputLayouts from "@/layouts/input-layouts";
+import Message from "@/refresh-components/messages/Message";
+import { Card } from "@/refresh-components/cards";
+import { SvgInfo, SvgInfoSmall } from "@opal/icons";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "Amazon Bedrock";
@@ -57,6 +64,13 @@ const AWS_REGION_OPTIONS = [
 const AUTH_METHOD_IAM = "iam";
 const AUTH_METHOD_ACCESS_KEY = "access_key";
 const AUTH_METHOD_LONG_TERM_API_KEY = "long_term_api_key";
+
+// Auth method options
+const AUTH_METHOD_OPTIONS = [
+  { name: "IAM Role", value: AUTH_METHOD_IAM },
+  { name: "Access Key", value: AUTH_METHOD_ACCESS_KEY },
+  { name: "Long-term API Key", value: AUTH_METHOD_LONG_TERM_API_KEY },
+];
 
 // Field name constants
 const FIELD_AWS_REGION_NAME = "custom_config.AWS_REGION_NAME";
@@ -135,99 +149,91 @@ function BedrockFormInternals({
   const isFetchDisabled =
     !formikProps.values.custom_config?.AWS_REGION_NAME || !isAuthComplete;
 
+  const authDisplay = () => {
+    if (authMethod === AUTH_METHOD_IAM) {
+      return (
+        <>
+          <Card variant="secondary">
+            <GeneralLayouts.Section
+              flexDirection="row"
+              alignItems="center"
+              justifyContent="start"
+            >
+              <SvgInfo className="w-4 h-4" />
+              <Text as="p" text03>
+                Onyx will use the IAM role attached to the environment it's
+                running in to authenticate.
+              </Text>
+            </GeneralLayouts.Section>
+          </Card>
+        </>
+      );
+    } else if (authMethod === AUTH_METHOD_ACCESS_KEY) {
+      return (
+        <>
+          <TextFormField
+            name={FIELD_AWS_ACCESS_KEY_ID}
+            label="Access Key ID"
+            placeholder=""
+          />
+          <PasswordInputTypeInField
+            name={FIELD_AWS_SECRET_ACCESS_KEY}
+            label="Secret Access Key"
+            placeholder=""
+          />
+        </>
+      );
+    } else if (authMethod === AUTH_METHOD_LONG_TERM_API_KEY) {
+      return (
+        <>
+          <PasswordInputTypeInField
+            name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
+            label="Long-term API Key"
+            placeholder=""
+          />
+        </>
+      );
+    }
+  };
+
   return (
     <Form className={cn(LLM_FORM_CLASS_NAME, "w-full")}>
-      <DisplayNameField disabled={!!existingLlmProvider} />
-
-      <SelectorFormField
-        name={FIELD_AWS_REGION_NAME}
-        label="AWS Region"
-        subtext="Region where your Amazon Bedrock models are hosted."
-        options={AWS_REGION_OPTIONS}
-      />
-
-      <div>
-        <Text as="p" mainUiAction>
-          Authentication Method
-        </Text>
+      <InputSelectField name={FIELD_AWS_REGION_NAME}>
+        <Text as="p">AWS Region Name</Text>
+        <InputSelect.Trigger placeholder="Select AWS region" />
+        <InputSelect.Content>
+          {AWS_REGION_OPTIONS.map((option) => (
+            <InputSelect.Item key={option.value} value={option.value}>
+              {option.name}
+            </InputSelect.Item>
+          ))}
+        </InputSelect.Content>
         <Text as="p" secondaryBody text03>
-          Choose how Onyx should authenticate with Bedrock.
+          Region where your Amazon Bedrock models are hosted. See full list of
+          regions supported at AWS.
         </Text>
-        <Tabs
-          value={authMethod || AUTH_METHOD_ACCESS_KEY}
-          onValueChange={(value) =>
-            formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
-          }
-        >
-          <Tabs.List>
-            <Tabs.Trigger value={AUTH_METHOD_IAM}>IAM Role</Tabs.Trigger>
-            <Tabs.Trigger value={AUTH_METHOD_ACCESS_KEY}>
-              Access Key
-            </Tabs.Trigger>
-            <Tabs.Trigger value={AUTH_METHOD_LONG_TERM_API_KEY}>
-              Long-term API Key
-            </Tabs.Trigger>
-          </Tabs.List>
+      </InputSelectField>
 
-          <Tabs.Content value={AUTH_METHOD_IAM}>
-            <Text as="p" text03>
-              Uses the IAM role attached to your AWS environment. Recommended
-              for EC2, ECS, Lambda, or other AWS services.
-            </Text>
-          </Tabs.Content>
+      <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
+        <Text as="p">Authentication Method</Text>
+        <InputSelect.Trigger placeholder="Select authentication method" />
+        <InputSelect.Content>
+          {AUTH_METHOD_OPTIONS.map((option) => (
+            <InputSelect.Item key={option.value} value={option.value}>
+              {option.name}
+            </InputSelect.Item>
+          ))}
+        </InputSelect.Content>
+        <Text as="p" secondaryBody text03>
+          See documentation for more instructions.
+        </Text>
+      </InputSelectField>
 
-          <Tabs.Content value={AUTH_METHOD_ACCESS_KEY}>
-            <div className="flex flex-col gap-4 w-full">
-              <TextFormField
-                name={FIELD_AWS_ACCESS_KEY_ID}
-                label="AWS Access Key ID"
-                placeholder="AKIAIOSFODNN7EXAMPLE"
-              />
-              <PasswordInputTypeInField
-                name={FIELD_AWS_SECRET_ACCESS_KEY}
-                label="AWS Secret Access Key"
-                placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-              />
-            </div>
-          </Tabs.Content>
+      {authDisplay()}
 
-          <Tabs.Content value={AUTH_METHOD_LONG_TERM_API_KEY}>
-            <div className="flex flex-col gap-4 w-full">
-              <PasswordInputTypeInField
-                name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                label="AWS Bedrock Long-term API Key"
-                placeholder="Your long-term API key"
-              />
-            </div>
-          </Tabs.Content>
-        </Tabs>
-      </div>
+      <Separator noPadding />
 
-      <FetchModelsButton
-        onFetch={() =>
-          fetchBedrockModels({
-            aws_region_name:
-              formikProps.values.custom_config?.AWS_REGION_NAME ?? "",
-            aws_access_key_id:
-              formikProps.values.custom_config?.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key:
-              formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
-            aws_bearer_token_bedrock:
-              formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-            provider_name: existingLlmProvider?.name,
-          })
-        }
-        isDisabled={isFetchDisabled}
-        disabledHint={
-          !formikProps.values.custom_config?.AWS_REGION_NAME
-            ? "Select an AWS region."
-            : !isAuthComplete
-              ? 'Complete the "Authentication Method" section.'
-              : undefined
-        }
-        onModelsFetched={setFetchedModels}
-        autoFetchOnInitialLoad={!!existingLlmProvider}
-      />
+      <DisplayNameField />
 
       <Separator />
 
@@ -235,10 +241,8 @@ function BedrockFormInternals({
         modelConfigurations={currentModels}
         formikProps={formikProps}
         noModelConfigurationsMessage={
-          "Fetch available models first, then you'll be able to select " +
-          "the models you want to make available in Onyx."
+          "No models available. Provide a valid region and key."
         }
-        recommendedDefaultModel={null}
         shouldShowAutoUpdateToggle={false}
       />
 

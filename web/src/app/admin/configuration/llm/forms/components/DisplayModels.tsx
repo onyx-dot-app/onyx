@@ -19,6 +19,7 @@ import {
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import { SvgEmpty } from "@opal/icons";
 
 interface AutoModeToggleProps {
   isAutoMode: boolean;
@@ -59,14 +60,14 @@ interface DisplayModelHeaderProps {
   alternativeText?: string;
   onSelectAll?: () => void;
   onRefresh?: () => void;
-  showActions?: boolean;
+  showSelectAll?: boolean;
 }
 
 function DisplayModelHeader({
   alternativeText,
   onSelectAll,
   onRefresh,
-  showActions = true,
+  showSelectAll = true,
 }: DisplayModelHeaderProps) {
   return (
     <GeneralLayouts.Section
@@ -75,7 +76,7 @@ function DisplayModelHeader({
       alignItems="center"
     >
       <GeneralLayouts.Section gap={0} alignItems="start" width="fit">
-        <Text as="p" mainContentEmphasis>
+        <Text as="p" mainContentBody>
           Models
         </Text>
         <Text as="p" secondaryBody text03>
@@ -83,20 +84,20 @@ function DisplayModelHeader({
             "Select models to make available for this provider."}
         </Text>
       </GeneralLayouts.Section>
-      {showActions && (
-        <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
+      <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
+        {showSelectAll && (
           <Button main tertiary onClick={onSelectAll}>
             Select All
           </Button>
-          <IconButton
-            icon={SvgRefreshCw}
-            main
-            internal
-            onClick={onRefresh}
-            tooltip="Refresh models"
-          />
-        </GeneralLayouts.Section>
-      )}
+        )}
+        <IconButton
+          icon={SvgRefreshCw}
+          main
+          internal
+          onClick={onRefresh}
+          tooltip="Refresh models"
+        />
+      </GeneralLayouts.Section>
     </GeneralLayouts.Section>
   );
 }
@@ -212,17 +213,6 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   const isAutoMode = formikProps.values.is_auto_mode;
   const defaultModelName = formikProps.values.default_model_name;
 
-  if (isLoading) {
-    return (
-      <GeneralLayouts.Section gap={0.75} alignItems="stretch">
-        <DisplayModelHeader showActions={false} />
-        <Card padding={0.75}>
-          <SimpleLoader />
-        </Card>
-      </GeneralLayouts.Section>
-    );
-  }
-
   const handleCheckboxChange = (modelName: string, checked: boolean) => {
     if (!checked && modelName === defaultModelName) {
       return;
@@ -295,10 +285,11 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   );
 
   return (
-    <Card variant="borderless" alignItems="stretch">
+    <Card variant="borderless">
       <DisplayModelHeader
         onSelectAll={handleSelectAll}
         onRefresh={handleRefresh}
+        showSelectAll={modelConfigurations.length > 0}
       />
       {modelConfigurations.length > 0 ? (
         <Card variant="borderless" padding={0} gap={0}>
@@ -398,10 +389,18 @@ export function DisplayModels<T extends BaseLLMFormValues>({
           )}
         </Card>
       ) : (
-        <Card>
-          <Text text03 secondaryBody>
-            {noModelConfigurationsMessage ?? "No models found"}
-          </Text>
+        <Card variant="tertiary">
+          <GeneralLayouts.Section
+            gap={0.5}
+            flexDirection="row"
+            alignItems="center"
+            justifyContent="start"
+          >
+            <SvgEmpty className="w-4 h-4 line-item-icon-muted" />
+            <Text text03 secondaryBody>
+              {noModelConfigurationsMessage ?? "No models found"}
+            </Text>
+          </GeneralLayouts.Section>
         </Card>
       )}
     </Card>
