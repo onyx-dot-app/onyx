@@ -37,6 +37,7 @@ from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
+from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -671,9 +672,12 @@ def get_current_token_creation_jwt(user: User, request: Request) -> datetime | N
         return None
 
     try:
-        # Decode without verification — we only need the ``iat`` claim and
-        # the token was already verified by the auth layer.
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = jwt.decode(
+            token,
+            USER_AUTH_SECRET,
+            algorithms=["HS256"],
+            audience=["fastapi-users:auth"],
+        )
         iat = payload.get("iat")
         if iat is None:
             return None
