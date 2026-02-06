@@ -47,7 +47,7 @@ class TenantUsageLimitOverrides(BaseModel):
 
 
 def get_tenant_usage_limit_overrides(
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
 ) -> TenantUsageLimitOverrides | None:
     """
     Get the usage limit overrides for a specific tenant.

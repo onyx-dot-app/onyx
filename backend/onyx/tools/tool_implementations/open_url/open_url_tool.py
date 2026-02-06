@@ -320,14 +320,10 @@ def _convert_sections_to_llm_string_with_citations(
         }
         if updated_at_str is not None:
             result["updated_at"] = updated_at_str
-        result["source_type"] = chunk.source_type.value
         if chunk.source_links:
             link = next(iter(chunk.source_links.values()), None)
             if link:
                 result["url"] = link
-
-        if "url" not in result:
-            result["document_identifier"] = document_id
 
         if chunk.metadata:
             result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
@@ -526,7 +522,9 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             # Track if timeout occurred for error reporting
             timeout_occurred = [False]  # Using list for mutability in closure
 
-            def _timeout_handler(index: int, func: Any, args: tuple[Any, ...]) -> None:
+            def _timeout_handler(
+                index: int, func: Any, args: tuple[Any, ...]  # noqa: ARG001
+            ) -> None:
                 timeout_occurred[0] = True
                 return None
 
@@ -763,7 +761,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         crawled_sections: list[InferenceSection],
         url_to_doc_id: dict[str, str],
         all_urls: list[str],
-        failed_web_urls: list[str],
+        failed_web_urls: list[str],  # noqa: ARG002
     ) -> list[InferenceSection]:
         """Merge indexed and crawled results, preferring indexed when available.
 

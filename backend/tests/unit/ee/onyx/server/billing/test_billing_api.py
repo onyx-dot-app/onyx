@@ -118,7 +118,7 @@ class TestCreateCustomerPortalSession:
         self,
         mock_get_license: MagicMock,
         mock_get_tenant: MagicMock,
-        mock_service: AsyncMock,
+        mock_service: AsyncMock,  # noqa: ARG002
     ) -> None:
         """Should reject self-hosted without license."""
         from fastapi import HTTPException

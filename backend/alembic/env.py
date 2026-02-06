@@ -57,7 +57,7 @@ if USE_IAM_AUTH:
 
 
 def include_object(
-    object: SchemaItem,
+    object: SchemaItem,  # noqa: ARG001
     name: str | None,
     type_: Literal[
         "schema",
@@ -67,8 +67,8 @@ def include_object(
         "unique_constraint",
         "foreign_key_constraint",
     ],
-    reflected: bool,
-    compare_to: SchemaItem | None,
+    reflected: bool,  # noqa: ARG001
+    compare_to: SchemaItem | None,  # noqa: ARG001
 ) -> bool:
     if type_ == "table" and name in EXCLUDE_TABLES:
         return False
@@ -244,7 +244,7 @@ def do_run_migrations(
 
 
 def provide_iam_token_for_alembic(
-    dialect: Any, conn_rec: Any, cargs: Any, cparams: Any
+    dialect: Any, conn_rec: Any, cargs: Any, cparams: Any  # noqa: ARG001
 ) -> None:
     if USE_IAM_AUTH:
         # Database connection settings

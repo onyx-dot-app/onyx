@@ -69,55 +69,10 @@ CONNECTOR_INFO: dict[str, ConnectorInfoEntry] = {
 }
 DEFAULT_SCAN_DEPTH = 1
 
-# Content for the attachments section when user has uploaded files
-# NOTE: This is duplicated from agent_instructions.py to avoid circular imports
-ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
-
-The `attachments/` directory contains files that the user has explicitly
-uploaded during this session. **These files are critically important** and
-should be treated as high-priority context.
-
-### Why Attachments Matter
-
-- The user deliberately chose to upload these files, signaling they are directly relevant to the task
-- These files often contain the specific data, requirements, or examples the user wants you to work with
-- They may include spreadsheets, documents, images, or code that should inform your work
-
-### Required Actions
-
-**At the start of every task, you MUST:**
-
-1. **Check for attachments**: List the contents of `attachments/` to see what the user has provided
-2. **Read and analyze each file**: Thoroughly examine every attachment to understand its contents and relevance
-3. **Reference attachment content**: Use the information from attachments to inform your responses and outputs
-
-### File Handling
-
-- Uploaded files may be in various formats: CSV, JSON, PDF, images, text files, etc.
-- For spreadsheets and data files, examine the structure, columns, and sample data
-- For documents, extract key information and requirements
-- For images, analyze and describe their content
-- For code files, understand the logic and patterns
-
-**Do NOT ignore user uploaded files.** They are there for a reason and likely
-contain exactly what you need to complete the task successfully."""
-
 
 def _normalize_connector_name(name: str) -> str:
     """Normalize a connector directory name for lookup."""
     return name.lower().replace(" ", "_").replace("-", "_")
-
-
-def build_attachments_section(attachments_path: Path) -> str:
-    """Return attachments section if files exist, empty string otherwise."""
-    if not attachments_path.exists():
-        return ""
-    try:
-        if any(attachments_path.iterdir()):
-            return ATTACHMENTS_SECTION_CONTENT
-    except Exception:
-        pass
-    return ""
 
 
 def _scan_directory_to_depth(
@@ -232,27 +187,33 @@ def build_knowledge_sources_section(files_path: Path) -> str:
 
 
 def main() -> None:
-    """Main entry point for container startup script."""
+    """Main entry point for container startup script.
+
+    Is called by the container startup script to scan /workspace/files and populate
+    the knowledge sources section.
+    """
     # Read template from environment variable
     template = os.environ.get("AGENT_INSTRUCTIONS", "")
     if not template:
         print("Warning: No AGENT_INSTRUCTIONS template provided", file=sys.stderr)
         template = "# Agent Instructions\n\nNo instructions provided."
 
-    # Scan files directory
+    # Scan files directory - check /workspace/files first, then /workspace/demo_data
     files_path = Path("/workspace/files")
-    knowledge_sources_section = build_knowledge_sources_section(files_path)
+    demo_data_path = Path("/workspace/demo_data")
 
-    # Check attachments directory
-    attachments_path = Path("/workspace/attachments")
-    attachments_section = build_attachments_section(attachments_path)
+    # Use demo_data if files doesn't exist or is empty
+    if not files_path.exists() or not any(files_path.iterdir()):
+        if demo_data_path.exists():
+            files_path = demo_data_path
+
+    knowledge_sources_section = build_knowledge_sources_section(files_path)
 
     # Replace placeholders
     content = template
     content = content.replace(
         "{{KNOWLEDGE_SOURCES_SECTION}}", knowledge_sources_section
     )
-    content = content.replace("{{ATTACHMENTS_SECTION}}", attachments_section)
 
     # Write AGENTS.md
     output_path = Path("/workspace/AGENTS.md")
@@ -268,7 +229,9 @@ def main() -> None:
                 if d.is_dir() and not d.name.startswith(".")
             ]
         )
-    print(f"Generated AGENTS.md with {source_count} knowledge sources")
+    print(
+        f"Generated AGENTS.md with {source_count} knowledge sources from {files_path}"
+    )
 
 
 if __name__ == "__main__":

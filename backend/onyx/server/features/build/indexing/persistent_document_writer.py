@@ -15,6 +15,7 @@ Both modes use consistent tenant/user-segregated paths for multi-tenant isolatio
 
 import hashlib
 import json
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -48,16 +49,24 @@ def sanitize_path_component(component: str, replace_slash: bool = True) -> str:
     Returns:
         Sanitized path component safe for use in file paths or S3 keys
     """
+    # First, normalize Unicode to decomposed form and remove combining characters
+    # This handles cases like accented characters, while also filtering format chars
+    normalized = unicodedata.normalize("NFKD", component)
+
+    # Filter out Unicode format/control characters (categories Cf, Cc)
+    # This removes invisible chars like U+2060 (WORD JOINER), zero-width spaces, etc.
+    sanitized = "".join(
+        c for c in normalized if unicodedata.category(c) not in ("Cf", "Cc")
+    )
+
     # Replace spaces with underscores
-    sanitized = component.replace(" ", "_")
+    sanitized = sanitized.replace(" ", "_")
     # Replace problematic characters
     if replace_slash:
         sanitized = sanitized.replace("/", "_")
     sanitized = sanitized.replace("\\", "_").replace(":", "_")
     sanitized = sanitized.replace("<", "_").replace(">", "_").replace("|", "_")
     sanitized = sanitized.replace('"', "_").replace("?", "_").replace("*", "_")
-    # Also handle null bytes and other control characters
-    sanitized = "".join(c for c in sanitized if ord(c) >= 32)
     return sanitized.strip() or "unnamed"
 
 
@@ -269,7 +278,7 @@ class S3PersistentDocumentWriter:
     s3://{bucket}/{tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/document.json
 
     This matches the location that KubernetesSandboxManager reads from when
-    provisioning sandboxes (via the init container's aws s3 sync command).
+    provisioning sandboxes (via the sidecar container's s5cmd sync command).
     """
 
     def __init__(self, tenant_id: str, user_id: str):
@@ -338,7 +347,7 @@ class S3PersistentDocumentWriter:
         {tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/
 
         This matches the path that KubernetesSandboxManager syncs from:
-        aws s3 sync "s3://{bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
+        s5cmd sync "s3://{bucket}/{tenant_id}/knowledge/{user_id}/*" /workspace/files/
         """
         # Tenant and user segregation (matches K8s sandbox init container path)
         parts = [self.tenant_id, "knowledge", self.user_id]

@@ -63,7 +63,7 @@ class UserFileIndexingAdapter:
         self.db_session = db_session
 
     def prepare(
-        self, documents: list[Document], ignore_time_skip: bool
+        self, documents: list[Document], ignore_time_skip: bool  # noqa: ARG002
     ) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
             updatable_docs=documents, id_to_boost_map={}  # TODO(subash): add boost map
@@ -237,8 +237,8 @@ class UserFileIndexingAdapter:
     def post_index(
         self,
         context: DocumentBatchPrepareContext,
-        updatable_chunk_data: list[UpdatableChunkData],
-        filtered_documents: list[Document],
+        updatable_chunk_data: list[UpdatableChunkData],  # noqa: ARG002
+        filtered_documents: list[Document],  # noqa: ARG002
         result: BuildMetadataAwareChunksResult,
     ) -> None:
         user_file_ids = [doc.id for doc in context.updatable_docs]

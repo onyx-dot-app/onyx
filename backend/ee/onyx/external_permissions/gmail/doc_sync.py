@@ -39,8 +39,8 @@ def _get_slim_doc_generator(
 
 def gmail_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[ElementExternalAccess, None, None]:
     """

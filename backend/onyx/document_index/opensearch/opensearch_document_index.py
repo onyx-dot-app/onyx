@@ -240,10 +240,10 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         self,
         index_name: str,
         secondary_index_name: str | None,
-        large_chunks_enabled: bool,
-        secondary_large_chunks_enabled: bool | None,
+        large_chunks_enabled: bool,  # noqa: ARG002
+        secondary_large_chunks_enabled: bool | None,  # noqa: ARG002
         multitenant: bool = False,
-        httpx_client: httpx.Client | None = None,
+        httpx_client: httpx.Client | None = None,  # noqa: ARG002
     ) -> None:
         super().__init__(
             index_name=index_name,
@@ -279,8 +279,8 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         self,
         primary_embedding_dim: int,
         primary_embedding_precision: EmbeddingPrecision,
-        secondary_index_embedding_dim: int | None,
-        secondary_index_embedding_precision: EmbeddingPrecision | None,
+        secondary_index_embedding_dim: int | None,  # noqa: ARG002
+        secondary_index_embedding_precision: EmbeddingPrecision | None,  # noqa: ARG002
     ) -> None:
         # Only handle primary index for now, ignore secondary.
         return self._real_index.verify_and_create_index_if_necessary(
@@ -320,7 +320,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         self,
         doc_id: str,
         *,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002
         chunk_count: int | None,
     ) -> int:
         return self._real_index.delete(doc_id, chunk_count)
@@ -329,7 +329,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         self,
         doc_id: str,
         *,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002
         chunk_count: int | None,
         fields: VespaDocumentFields | None,
         user_fields: VespaDocumentUserFields | None,
@@ -364,7 +364,7 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         chunk_requests: list[VespaChunkRequest],
         filters: IndexFilters,
         batch_retrieval: bool = False,
-        get_large_chunks: bool = False,
+        get_large_chunks: bool = False,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         section_requests = [
             DocumentSectionRequest(
@@ -386,10 +386,10 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         final_keywords: list[str] | None,
         filters: IndexFilters,
         hybrid_alpha: float,
-        time_decay_multiplier: float,
+        time_decay_multiplier: float,  # noqa: ARG002
         num_to_retrieve: int,
-        ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,
-        title_content_ratio: float | None = TITLE_CONTENT_RATIO,
+        ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,  # noqa: ARG002
+        title_content_ratio: float | None = TITLE_CONTENT_RATIO,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         # Determine query type based on hybrid_alpha.
         if hybrid_alpha >= 0.8:
@@ -458,7 +458,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self._os_client = OpenSearchClient(index_name=self._index_name)
 
     def verify_and_create_index_if_necessary(
-        self, embedding_dim: int, embedding_precision: EmbeddingPrecision
+        self,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,  # noqa: ARG002
     ) -> None:
         """Verifies and creates the index if necessary.
 
@@ -518,7 +520,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def index(
         self,
         chunks: list[DocMetadataAwareIndexChunk],
-        indexing_metadata: IndexingMetadata,
+        indexing_metadata: IndexingMetadata,  # noqa: ARG002
     ) -> list[DocumentInsertionRecord]:
         logger.debug(
             f"[OpenSearchDocumentIndex] Indexing {len(chunks)} chunks for index {self._index_name}."
@@ -566,7 +568,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return document_indexing_results
 
-    def delete(self, document_id: str, chunk_count: int | None = None) -> int:
+    def delete(
+        self, document_id: str, chunk_count: int | None = None  # noqa: ARG002
+    ) -> int:
         """Deletes all chunks for a given document.
 
         Does nothing if the specified document ID does not exist.
@@ -701,7 +705,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         filters: IndexFilters,
         # TODO(andrei): Remove this from the new interface at some point; we
         # should not be exposing this.
-        batch_retrieval: bool = False,
+        batch_retrieval: bool = False,  # noqa: ARG002
         # TODO(andrei): Add a param for whether to retrieve hidden docs.
     ) -> list[InferenceChunk]:
         """
@@ -751,7 +755,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         query_embedding: Embedding,
         # TODO(andrei): This param is not great design, get rid of it.
         final_keywords: list[str] | None,
-        query_type: QueryType,
+        query_type: QueryType,  # noqa: ARG002
         filters: IndexFilters,
         num_to_retrieve: int,
     ) -> list[InferenceChunk]:
@@ -796,7 +800,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 10,
-        dirty: bool | None = None,
+        dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         logger.debug(
             f"[OpenSearchDocumentIndex] Randomly retrieving {num_to_retrieve} chunks for index {self._index_name}."

@@ -213,7 +213,7 @@ def process_attachment(
 
 
 def _process_image_attachment(
-    confluence_client: "OnyxConfluence",
+    confluence_client: "OnyxConfluence",  # noqa: ARG001
     attachment: dict[str, Any],
     raw_bytes: bytes,
     media_type: str,

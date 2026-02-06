@@ -449,7 +449,9 @@ def get_persona_snapshots_for_user(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.hierarchy_nodes),
-        selectinload(Persona.attached_documents),
+        selectinload(Persona.attached_documents).selectinload(
+            Document.parent_hierarchy_node
+        ),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -605,7 +607,9 @@ def get_persona_snapshots_paginated(
     stmt = stmt.options(
         selectinload(Persona.tools),
         selectinload(Persona.hierarchy_nodes),
-        selectinload(Persona.attached_documents),
+        selectinload(Persona.attached_documents).selectinload(
+            Document.parent_hierarchy_node
+        ),
         selectinload(Persona.labels),
         selectinload(Persona.document_sets),
         selectinload(Persona.user),
@@ -968,7 +972,9 @@ def upsert_persona(
         existing_persona.icon_name = icon_name
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
-        existing_persona.labels = labels or []
+        if label_ids is not None:
+            existing_persona.labels.clear()
+            existing_persona.labels = labels or []
         existing_persona.is_default_persona = (
             is_default_persona
             if is_default_persona is not None

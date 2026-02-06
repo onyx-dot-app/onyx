@@ -1627,8 +1627,16 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     if (session) {
       // Increment refresh counter to trigger files list refresh
       // Using a counter ensures each write/edit triggers a new refresh
+      // Also collapse the attachments directory to show fresh state
+      const collapsedExpandedPaths = session.filesTabState.expandedPaths.filter(
+        (path) => path !== "attachments" && !path.startsWith("attachments/")
+      );
       get().updateSessionData(sessionId, {
         filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
+        filesTabState: {
+          ...session.filesTabState,
+          expandedPaths: collapsedExpandedPaths,
+        },
       });
     }
   },

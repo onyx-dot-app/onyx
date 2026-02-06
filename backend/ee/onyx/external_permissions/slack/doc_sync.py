@@ -103,7 +103,7 @@ def _fetch_channel_permissions(
 
 def _get_slack_document_access(
     slack_connector: SlackConnector,
-    channel_permissions: dict[str, ExternalAccess],
+    channel_permissions: dict[str, ExternalAccess],  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     slim_doc_generator = slack_connector.retrieve_all_slim_docs_perm_sync(
@@ -136,8 +136,8 @@ def _get_slack_document_access(
 
 def slack_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """

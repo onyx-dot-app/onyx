@@ -146,7 +146,9 @@ class MediaWikiConnector(LoadConnector, PollConnector):
                 continue
             self.pages.append(pywikibot.Page(self.site, page))
 
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+    def load_credentials(
+        self, credentials: dict[str, Any]  # noqa: ARG002
+    ) -> dict[str, Any] | None:
         """Load credentials for a MediaWiki site.
 
         Note:

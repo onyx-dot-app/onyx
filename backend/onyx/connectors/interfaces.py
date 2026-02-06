@@ -89,7 +89,7 @@ class BaseConnector(abc.ABC, Generic[CT]):
         based on the application level image analysis setting."""
 
     @classmethod
-    def normalize_url(cls, url: str) -> "NormalizationResult":
+    def normalize_url(cls, url: str) -> "NormalizationResult":  # noqa: ARG003
         """Normalize a URL to match the canonical Document.id format used during ingestion.
 
         Connectors that use URLs as document IDs should override this method.

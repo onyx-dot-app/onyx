@@ -15,7 +15,9 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 
-def add_onyx_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> None:
+def add_onyx_tenant_id_middleware(
+    app: FastAPI, logger: logging.LoggerAdapter  # noqa: ARG001
+) -> None:
     @app.middleware("http")
     async def set_tenant_id(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -29,7 +31,7 @@ def add_onyx_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -
 
 
 def add_onyx_request_id_middleware(
-    app: FastAPI, prefix: str, logger: logging.LoggerAdapter
+    app: FastAPI, prefix: str, logger: logging.LoggerAdapter  # noqa: ARG001
 ) -> None:
     @app.middleware("http")
     async def set_request_id(

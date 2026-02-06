@@ -3,7 +3,7 @@ import { PacketType } from "@/app/app/services/streamingModels";
 import { GroupedPacket } from "./packetProcessor";
 import { TurnGroup, TransformedStep } from "../transformers";
 
-// Delay between different packet types (ms)
+// Delay between steps (ms)
 const PACING_DELAY_MS = 200;
 
 /**
@@ -69,13 +69,13 @@ function createInitialPacingState(): PacingState {
 }
 
 /**
- * Hook that adds pacing delays when packet types change during streaming.
- * Creates visual breathing room between different agent activities.
+ * Hook that adds pacing delays between steps during streaming.
+ * Creates visual breathing room between agent activities.
  *
  * Architecture:
  * - Pacing state in ref: no re-renders for internal tracking
  * - useState only for revealTrigger: forces re-render when content should update
- * - Timer-based delays: 200ms between different packet types
+ * - Timer-based delays: 200ms between all steps
  *
  * @param toolTurnGroups - Turn groups from packet processor
  * @param displayGroups - Display content groups (MESSAGE_START/DELTA)
@@ -126,28 +126,20 @@ export function usePacedTurnGroups(
     toolTurnGroups.length > 0;
 
   // Handle revealing the next pending step
-  // Uses a while loop to reveal all consecutive steps of the same type in a single pass
+  // Reveals ONE step per timer fire, always with delay between steps
   const revealNextPendingStep = useCallback(() => {
     const state = stateRef.current;
 
-    // Reveal all consecutive steps of the same type in a single pass
-    while (state.pendingSteps.length > 0) {
+    if (state.pendingSteps.length > 0) {
       const stepToReveal = state.pendingSteps.shift()!;
       state.revealedStepKeys.add(stepToReveal.key);
       state.lastRevealedPacketType = getStepPacketType(stepToReveal);
 
-      // Check if next step has different type - if so, schedule delay and exit
+      // Schedule next step if more pending (always delay, regardless of type)
       if (state.pendingSteps.length > 0) {
-        const nextType = getStepPacketType(state.pendingSteps[0]!);
-        if (nextType !== state.lastRevealedPacketType) {
-          state.pacingTimer = setTimeout(
-            revealNextPendingStep,
-            PACING_DELAY_MS
-          );
-          setRevealTrigger((t) => t + 1);
-          return;
-        }
-        // Same type - continue loop to reveal next immediately
+        state.pacingTimer = setTimeout(revealNextPendingStep, PACING_DELAY_MS);
+        setRevealTrigger((t) => t + 1);
+        return;
       }
     }
 
@@ -251,36 +243,12 @@ export function usePacedTurnGroups(
         continue;
       }
 
-      // Same type as last revealed (or pending) - handle based on current state
-      const effectiveLastType =
-        state.pendingSteps.length > 0
-          ? getStepPacketType(
-              state.pendingSteps[state.pendingSteps.length - 1]!
-            )
-          : state.lastRevealedPacketType;
+      // All subsequent steps - queue for paced reveal
+      state.pendingSteps.push(step);
 
-      if (stepType === effectiveLastType) {
-        // Same type
-        if (state.pendingSteps.length === 0 && !state.pacingTimer) {
-          // Nothing pending, no timer - reveal immediately
-          state.revealedStepKeys.add(step.key);
-          state.lastRevealedPacketType = stepType;
-          setRevealTrigger((t) => t + 1);
-        } else {
-          // Add to pending queue (will be revealed when timer fires or queue processes)
-          state.pendingSteps.push(step);
-        }
-      } else {
-        // Different type - queue for paced reveal
-        state.pendingSteps.push(step);
-
-        // Start timer if not already running
-        if (!state.pacingTimer && state.pendingSteps.length === 1) {
-          state.pacingTimer = setTimeout(
-            revealNextPendingStep,
-            PACING_DELAY_MS
-          );
-        }
+      // Start timer if not already running
+      if (!state.pacingTimer && state.pendingSteps.length === 1) {
+        state.pacingTimer = setTimeout(revealNextPendingStep, PACING_DELAY_MS);
       }
     }
 

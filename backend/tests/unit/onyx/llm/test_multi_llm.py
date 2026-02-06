@@ -15,6 +15,7 @@ from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import FunctionCall
 from onyx.llm.models import LanguageModelInput
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolCall
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
@@ -249,7 +250,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             max_tokens=None,
-            client=None,
+            client=ANY,  # HTTPHandler instance created per-request
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
@@ -434,6 +435,32 @@ def test_vertex_stream_omits_stream_options() -> None:
         assert "stream_options" not in kwargs
 
 
+def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-5.2",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.OPENAI,
+            model_name="gpt-5.2",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"]["effort"] == "medium"
+
+
 def test_vertex_opus_4_5_omits_reasoning_effort() -> None:
     llm = LitellmLLM(
         api_key="test_key",
@@ -457,6 +484,54 @@ def test_vertex_opus_4_5_omits_reasoning_effort() -> None:
 
         kwargs = mock_completion.call_args.kwargs
         assert "reasoning_effort" not in kwargs
+
+
+def test_openai_chat_omits_reasoning_params() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-5-chat",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.OPENAI,
+            model_name="gpt-5-chat",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch(
+            "onyx.llm.multi_llm.model_is_reasoning_model", return_value=True
+        ) as mock_is_reasoning,
+        patch(
+            "onyx.llm.multi_llm.is_true_openai_model", return_value=True
+        ) as mock_is_openai,
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-5-chat",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        llm.invoke(messages)
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["model"] == "openai/responses/gpt-5-chat"
+        assert "reasoning" not in kwargs
+        assert "reasoning_effort" not in kwargs
+        assert mock_is_reasoning.called
+        assert mock_is_openai.called
 
 
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:

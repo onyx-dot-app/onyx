@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Disabled } from "@/refresh-components/Disabled";
 import Text from "@/refresh-components/texts/Text";
 import {
   WorkArea,
@@ -30,20 +31,21 @@ function SelectableButton({
 }: SelectableButtonProps) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={cn(
-          "w-full px-6 py-3 rounded-12 border transition-colors",
-          disabled && "opacity-50 cursor-not-allowed",
-          selected
-            ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
-            : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
-        )}
-      >
-        <Text mainUiAction>{children}</Text>
-      </button>
+      <Disabled disabled={disabled} allowClick>
+        <button
+          type="button"
+          onClick={onClick}
+          disabled={disabled}
+          className={cn(
+            "w-full px-6 py-3 rounded-12 border transition-colors",
+            selected
+              ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
+              : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
+          )}
+        >
+          <Text mainUiAction>{children}</Text>
+        </button>
+      </Disabled>
       {subtext && (
         <Text figureSmallLabel text02>
           {subtext}

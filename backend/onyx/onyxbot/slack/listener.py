@@ -533,7 +533,9 @@ class SlackbotHandler:
                 f"{pod_id=} {tenant_id=} {slack_bot_id=}"
             )
 
-    def shutdown(self, signum: int | None, frame: FrameType | None) -> None:
+    def shutdown(
+        self, signum: int | None, frame: FrameType | None  # noqa: ARG002
+    ) -> None:
         if not self.running:
             return
 

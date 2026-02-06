@@ -40,7 +40,7 @@ def export_query_history_task(
     end: datetime,
     start_time: datetime,
     # Need to include the tenant_id since the TenantAwareTask needs this
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
 ) -> None:
     if not self.request.id:
         raise RuntimeError("No task id defined for this task; cannot identify it")

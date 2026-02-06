@@ -18,7 +18,7 @@ class NoOpPromptCacheProvider(PromptCacheProvider):
         cacheable_prefix: LanguageModelInput | None,
         suffix: LanguageModelInput,
         continuation: bool,
-        cache_metadata: CacheMetadata | None,
+        cache_metadata: CacheMetadata | None,  # noqa: ARG002
     ) -> LanguageModelInput:
         """Return messages unchanged (no caching support).
 
@@ -42,8 +42,8 @@ class NoOpPromptCacheProvider(PromptCacheProvider):
 
     def extract_cache_metadata(
         self,
-        response: dict,
-        cache_key: str,
+        response: dict,  # noqa: ARG002
+        cache_key: str,  # noqa: ARG002
     ) -> CacheMetadata | None:
         """No cache metadata to extract."""
         return None

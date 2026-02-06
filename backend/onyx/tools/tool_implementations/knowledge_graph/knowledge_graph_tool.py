@@ -45,7 +45,7 @@ class KnowledgeGraphTool(Tool[None]):
         return self._DISPLAY_NAME
 
     @classmethod
-    def is_available(cls, db_session: Session) -> bool:
+    def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
         """Available only if KG is enabled and exposed."""
         kg_configs = get_kg_config_settings()
         return kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED

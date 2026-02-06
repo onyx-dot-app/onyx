@@ -34,7 +34,7 @@ GITHUB_DOC_SYNC_LABEL = "github_doc_sync"
 def github_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[DocExternalAccess, None, None]:
     """

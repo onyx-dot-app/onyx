@@ -8,6 +8,7 @@ import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */
@@ -234,8 +235,8 @@ export function useBuildSessionController({
   ]);
 
   // Effect: Re-validate pre-provisioned session on tab focus (multi-tab support)
-  // The backend's createSession does "get or create empty session" - it returns
-  // the same session if still valid, or a new one if consumed by another tab.
+  // Uses checkPreProvisionedSession API to validate without resetting state,
+  // which prevents unnecessary cascading effects when session is still valid.
   useEffect(() => {
     const handleFocus = async () => {
       const { preProvisioning } = useBuildSessionStore.getState();
@@ -244,16 +245,41 @@ export function useBuildSessionController({
       if (preProvisioning.status === "ready") {
         const cachedSessionId = preProvisioning.sessionId;
 
-        // Reset to idle and re-provision - backend will return same session if
-        // still valid, or create new one if it was consumed by another tab
-        useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
-        const newSessionId = await useBuildSessionStore
-          .getState()
-          .ensurePreProvisionedSession();
+        try {
+          // Check if session is still valid WITHOUT resetting state
+          const { valid } = await checkPreProvisionedSession(cachedSessionId);
 
-        if (newSessionId && newSessionId !== cachedSessionId) {
-          console.info(
-            `[PreProvision] Session changed on focus: ${cachedSessionId} -> ${newSessionId}`
+          if (!valid) {
+            // Session was consumed by another tab - now reset and re-provision
+            console.info(
+              `[PreProvision] Session ${cachedSessionId.slice(
+                0,
+                8
+              )} invalidated on focus, re-provisioning...`
+            );
+            useBuildSessionStore.setState({
+              preProvisioning: { status: "idle" },
+            });
+            const newSessionId = await useBuildSessionStore
+              .getState()
+              .ensurePreProvisionedSession();
+
+            if (newSessionId) {
+              console.info(
+                `[PreProvision] Session changed on focus: ${cachedSessionId.slice(
+                  0,
+                  8
+                )} -> ${newSessionId.slice(0, 8)}`
+              );
+            }
+          }
+          // If valid, do nothing - keep the current session
+        } catch (error) {
+          // On error, log but don't reset - better to keep potentially stale session
+          // than to cause UI flicker on network blip
+          console.warn(
+            "[PreProvision] Failed to validate session on focus:",
+            error
           );
         }
       }
