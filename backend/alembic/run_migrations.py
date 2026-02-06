@@ -87,14 +87,16 @@ def get_schemas_needing_migration(
             if not is_valid_schema_name(schema):
                 raise ValueError(f"Invalid schema name: {schema}")
 
-        # Single query to get every schema's current revision at once
+        # Single query to get every schema's current revision at once.
+        # Use integer tags instead of interpolating schema names into
+        # string literals to avoid quoting issues.
+        schema_list = list(schemas_with_table)
         union_parts = [
-            f"SELECT '{schema}' AS schema_name, version_num "
-            f'FROM "{schema}".alembic_version'
-            for schema in schemas_with_table
+            f'SELECT {i} AS idx, version_num FROM "{schema}".alembic_version'
+            for i, schema in enumerate(schema_list)
         ]
         rows = conn.execute(text(" UNION ALL ".join(union_parts)))
-        version_by_schema = {row[0]: row[1] for row in rows}
+        version_by_schema = {schema_list[row[0]]: row[1] for row in rows}
 
         needs_migration.extend(
             s for s in schemas_with_table if version_by_schema.get(s) != head_rev
