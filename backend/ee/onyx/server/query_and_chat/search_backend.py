@@ -23,11 +23,8 @@ from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.llm.factory import get_default_llm
-from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -46,16 +43,9 @@ def search_flow_classification(
     if len(query) > 200:
         return SearchFlowClassificationResponse(is_search_flow=False)
 
-    llm = get_default_llm()
-
-    check_llm_cost_limit_for_provider(
-        db_session=db_session,
-        tenant_id=get_current_tenant_id(),
-        llm_provider_api_key=llm.config.api_key,
-    )
-
     try:
-        is_search_flow = classify_is_search_flow(query=query, llm=llm)
+        # Uses HuggingFace classifier model via model server
+        is_search_flow = classify_is_search_flow(query=query)
     except Exception as e:
         logger.exception(
             "Search flow classification failed; defaulting to chat flow",
