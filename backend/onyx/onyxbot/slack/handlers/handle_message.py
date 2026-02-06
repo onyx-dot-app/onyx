@@ -8,6 +8,7 @@ from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.users import add_slack_user_if_not_exists
+from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
 from onyx.onyxbot.slack.handlers.handle_regular_answer import (
     handle_regular_answer,
@@ -22,6 +23,7 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import slack_usage_report
 from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
 
 logger_base = setup_logger()
@@ -212,6 +214,35 @@ def handle_message(
 
     with get_session_with_current_tenant() as db_session:
         if message_info.email:
+            existing_user = get_user_by_email(message_info.email, db_session)
+            if existing_user is None:
+                # New user — check seat availability before creating
+                check_seat_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "check_seat_availability",
+                    None,
+                )
+                # noop returns None when called; real function returns SeatAvailabilityResult
+                seat_result = check_seat_fn(db_session=db_session)
+                if seat_result is not None and not seat_result.available:
+                    logger.info(
+                        f"Blocked new Slack user {message_info.email}: "
+                        f"{seat_result.error_message}"
+                    )
+                    respond_in_thread_or_channel(
+                        client=client,
+                        channel=channel,
+                        thread_ts=message_info.msg_to_respond,
+                        text=(
+                            "We weren't able to respond because your organization "
+                            "has reached its user seat limit. Since this is your "
+                            "first time interacting with the bot, a new account "
+                            "could not be created for you. Please contact your "
+                            "Onyx administrator to add more seats."
+                        ),
+                    )
+                    return False
+
             add_slack_user_if_not_exists(db_session, message_info.email)
 
         # first check if we need to respond with a standard answer

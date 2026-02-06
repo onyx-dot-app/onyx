@@ -382,7 +382,23 @@ class SlackbotHandler:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
         # 2) Make sure tenants we're handling still have Slack bots
+        #    and haven't been suspended (gated)
         for tenant_id in list(self.tenant_ids):
+            if tenant_id in gated_tenants:
+                logger.info(
+                    f"Tenant {tenant_id} is now gated (suspended). Disconnecting."
+                )
+                self._remove_tenant(tenant_id)
+                if tenant_id in self.redis_locks and not DEV_MODE:
+                    try:
+                        self.redis_locks[tenant_id].release()
+                        del self.redis_locks[tenant_id]
+                    except Exception as e:
+                        logger.error(
+                            f"Error releasing lock for gated tenant {tenant_id}: {e}"
+                        )
+                continue
+
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(
                 tenant_id or POSTGRES_DEFAULT_SCHEMA
             )
@@ -670,15 +686,6 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
 
             event_user = event.get("user", "")
             event_bot_id = event.get("bot_id", "")
-
-            # temporary debugging
-            if tenant_id == "tenant_i-04224818da13bf695":
-                logger.warning(
-                    f"{tenant_id=} "
-                    f"{bot_token_user_id=} "
-                    f"{bot_token_bot_id=} "
-                    f"{event=}"
-                )
 
             is_dm = event.get("channel_type") == "im"
             if bot_token_user_id and f"<@{bot_token_user_id}>" in msg:
@@ -1069,6 +1076,78 @@ def view_routing(req: SocketModeRequest, client: TenantSocketModeClient) -> None
             return process_feedback(req, client)
 
 
+def _extract_channel_from_request(req: SocketModeRequest) -> str | None:
+    """Best-effort channel extraction from any Slack request type."""
+    if req.type == "events_api":
+        return cast(dict[str, Any], req.payload.get("event", {})).get("channel")
+    elif req.type == "slash_commands":
+        return req.payload.get("channel_id")
+    elif req.type == "interactive":
+        container = req.payload.get("container", {})
+        return container.get("channel_id") or req.payload.get("channel", {}).get("id")
+    return None
+
+
+def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) -> bool:
+    """Check if the current tenant is gated (suspended or license expired).
+
+    Multi-tenant: checks the gated tenants Redis set (populated by control plane).
+    Self-hosted: checks the cached license metadata for expiry.
+
+    Returns True if blocked.
+    """
+    from onyx.server.settings.models import ApplicationStatus
+
+    # Multi-tenant path: control plane marks gated tenants in Redis
+    is_gated: bool = fetch_ee_implementation_or_noop(
+        "onyx.server.tenants.product_gating",
+        "is_tenant_gated",
+        False,
+    )(get_current_tenant_id())
+
+    # Self-hosted path: check license metadata cache
+    if not is_gated:
+        get_cached_metadata = fetch_ee_implementation_or_noop(
+            "onyx.db.license",
+            "get_cached_license_metadata",
+            None,
+        )
+        metadata = get_cached_metadata()
+        if metadata is not None:
+            if metadata.status == ApplicationStatus.GATED_ACCESS:
+                is_gated = True
+
+    if not is_gated:
+        return False
+
+    # Only notify once per user action:
+    # - Skip bot messages (avoids feedback loop from our own response)
+    # - Skip app_mention events (Slack fires both app_mention AND message
+    #   for @mentions; we respond on the message event only)
+    event = req.payload.get("event", {}) if req.type == "events_api" else {}
+    is_bot_event = bool(
+        event.get("bot_id")
+        or event.get("bot_profile")
+        or event.get("subtype") == "bot_message"
+    )
+    is_duplicate_mention = event.get("type") == "app_mention"
+    if not is_bot_event and not is_duplicate_mention:
+        channel = _extract_channel_from_request(req)
+        thread_ts = event.get("thread_ts") or event.get("ts")
+        if channel:
+            respond_in_thread_or_channel(
+                client=client.web_client,
+                channel=channel,
+                thread_ts=thread_ts,
+                text=(
+                    "Your organization's subscription has expired. "
+                    "Please contact your Onyx administrator to restore access."
+                ),
+            )
+    logger.info(f"Blocked Slack request for gated tenant {get_current_tenant_id()}")
+    return True
+
+
 def create_process_slack_event() -> (
     Callable[[TenantSocketModeClient, SocketModeRequest], None]
 ):
@@ -1078,6 +1157,9 @@ def create_process_slack_event() -> (
         # Always respond right away, if Slack doesn't receive these frequently enough
         # it will assume the Bot is DEAD!!! :(
         acknowledge_message(req, client)
+
+        if _check_tenant_gated(client, req):
+            return
 
         try:
             if req.type == "interactive":
