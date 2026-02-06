@@ -54,7 +54,7 @@ export function AzureForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName={"Microsoft Azure"}
-      providerDisplayName={AZURE_DISPLAY_NAME}
+      providerDisplayName={existingLlmProvider?.name ?? AZURE_DISPLAY_NAME}
       providerInternalName={"azure"}
       providerEndpoint={AZURE_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}

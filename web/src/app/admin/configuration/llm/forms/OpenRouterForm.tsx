@@ -99,6 +99,7 @@ export function OpenRouterForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName={OPENROUTER_DISPLAY_NAME}
+      providerDisplayName={existingLlmProvider?.name ?? OPENROUTER_DISPLAY_NAME}
       providerEndpoint={OPENROUTER_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
     >

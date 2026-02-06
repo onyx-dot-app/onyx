@@ -17,18 +17,21 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
+import Separator from "@/refresh-components/Separator";
+import Text from "@/refresh-components/texts/Text";
 
 export const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
 
 export function AnthropicForm({
   existingLlmProvider,
+  defaultLlmModel,
   shouldMarkAsDefault,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName="Anthropic"
-      providerDisplayName="Claude"
+      providerDisplayName={existingLlmProvider?.name ?? "Claude"}
       providerInternalName="anthropic"
       providerEndpoint={ANTHROPIC_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
@@ -48,19 +51,28 @@ export function AnthropicForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
+
+        const isAutoMode = existingLlmProvider?.is_auto_mode ?? true;
+        const autoModelDefault =
+          wellKnownLLMProvider?.recommended_default_model?.name ??
+          DEFAULT_DEFAULT_MODEL_NAME;
+
+        const defaultModel = shouldMarkAsDefault
+          ? isAutoMode
+            ? autoModelDefault
+            : defaultLlmModel?.model_name ?? DEFAULT_DEFAULT_MODEL_NAME
+          : undefined;
+
         const initialValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
-            modelConfigurations
+            modelConfigurations,
+            defaultModel
           ),
           api_key: existingLlmProvider?.api_key ?? "",
           api_base: existingLlmProvider?.api_base ?? "",
-          default_model_name:
-            existingLlmProvider?.default_model_name ??
-            wellKnownLLMProvider?.recommended_default_model?.name ??
-            DEFAULT_DEFAULT_MODEL_NAME,
           // Default to auto mode for new Anthropic providers
-          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+          is_auto_mode: isAutoMode,
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({
@@ -94,16 +106,21 @@ export function AnthropicForm({
               {(formikProps) => {
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
+                    <PasswordInputTypeInField name="api_key" label="API Key" />
+
+                    <Text text03 secondaryBody className="mt-[-0.5rem]">
+                      Paste your API key from Anthropic to access your models.
+                    </Text>
+
+                    <Separator noPadding />
+
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
+                    <Separator noPadding />
 
                     <DisplayModels
                       modelConfigurations={modelConfigurations}
                       formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
                       shouldShowAutoUpdateToggle={true}
                     />
 

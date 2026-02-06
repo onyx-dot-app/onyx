@@ -14,10 +14,10 @@ import {
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import LLMFormLayout from "./components/FormLayout";
-import { ProviderIcon } from "../ProviderIcon";
 import Separator from "@/refresh-components/Separator";
 
 export const OPENAI_PROVIDER_NAME = "openai";
+const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
 
 export function OpenAIForm({
   existingLlmProvider,
@@ -27,6 +27,7 @@ export function OpenAIForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName="OpenAI"
+      providerDisplayName={existingLlmProvider?.name ?? "OpenAI"}
       providerEndpoint={OPENAI_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
     >
@@ -45,13 +46,27 @@ export function OpenAIForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
+        const isAutoMode = existingLlmProvider?.is_auto_mode ?? true;
+        const autoModelDefault =
+          wellKnownLLMProvider?.recommended_default_model?.name ??
+          DEFAULT_DEFAULT_MODEL_NAME;
+
+        // We use a default model if we're editting and this provider is the global default
+        // Or we are creating the first provider (and shouldMarkAsDefault is true)
+        const defaultModel = shouldMarkAsDefault
+          ? isAutoMode
+            ? autoModelDefault
+            : defaultLlmModel?.model_name ?? DEFAULT_DEFAULT_MODEL_NAME
+          : undefined;
+
         const initialValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
-            modelConfigurations
+            modelConfigurations,
+            defaultModel
           ),
           api_key: existingLlmProvider?.api_key ?? "",
-          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+          is_auto_mode: isAutoMode,
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({

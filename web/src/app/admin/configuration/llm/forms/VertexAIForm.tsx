@@ -19,6 +19,9 @@ import {
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import Separator from "@/refresh-components/Separator";
+import LLMFormLayout from "./components/FormLayout";
+import { FormField } from "@/refresh-components/form/FormField";
+import InputFile from "@/refresh-components/inputs/InputFile";
 
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
@@ -34,12 +37,13 @@ interface VertexAIFormValues extends BaseLLMFormValues {
 
 export function VertexAIForm({
   existingLlmProvider,
+  defaultLlmModel,
   shouldMarkAsDefault,
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
       providerName={VERTEXAI_DISPLAY_NAME}
-      providerDisplayName="Gemini"
+      providerDisplayName={existingLlmProvider?.name ?? "Gemini"}
       providerInternalName={"vertex_ai"}
       providerEndpoint={VERTEXAI_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
@@ -59,17 +63,26 @@ export function VertexAIForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
+
+        const isAutoMode = existingLlmProvider?.is_auto_mode ?? true;
+        const autoModelDefault =
+          wellKnownLLMProvider?.recommended_default_model?.name ??
+          VERTEXAI_DEFAULT_MODEL;
+
+        const defaultModel = shouldMarkAsDefault
+          ? isAutoMode
+            ? autoModelDefault
+            : defaultLlmModel?.model_name ?? VERTEXAI_DEFAULT_MODEL
+          : undefined;
+
         const initialValues: VertexAIFormValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
-            modelConfigurations
+            modelConfigurations,
+            defaultModel
           ),
-          default_model_name:
-            existingLlmProvider?.default_model_name ??
-            wellKnownLLMProvider?.recommended_default_model?.name ??
-            VERTEXAI_DEFAULT_MODEL,
           // Default to auto mode for new Vertex AI providers
-          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+          is_auto_mode: isAutoMode,
           custom_config: {
             vertex_credentials:
               (existingLlmProvider?.custom_config
@@ -131,30 +144,45 @@ export function VertexAIForm({
               {(formikProps) => {
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
+                    <LLMFormLayout.Body>
+                      <FormField
+                        name="custom_config.vertex_credentials"
+                        state={
+                          formikProps.errors.custom_config?.vertex_credentials
+                            ? "error"
+                            : "idle"
+                        }
+                      >
+                        <FormField.Label>API Key</FormField.Label>
+                        <FormField.Control>
+                          <InputFile
+                            setValue={(value) =>
+                              formikProps.setFieldValue(
+                                "custom_config.vertex_credentials",
+                                value
+                              )
+                            }
+                            error={
+                              !!formikProps.errors.custom_config
+                                ?.vertex_credentials
+                            }
+                            onBlur={formikProps.handleBlur}
+                            showClearButton={true}
+                            disabled={formikProps.isSubmitting}
+                            accept="application/json"
+                            placeholder="Vertex AI API KEY (JSON)"
+                          />
+                        </FormField.Control>
+                      </FormField>
+                    </LLMFormLayout.Body>
+
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <FileUploadFormField
-                      name="custom_config.vertex_credentials"
-                      label="Credentials File"
-                      subtext="Upload your Google Cloud service account JSON credentials file."
-                    />
-
-                    <TextFormField
-                      name="custom_config.vertex_location"
-                      label="Location"
-                      placeholder={VERTEXAI_DEFAULT_LOCATION}
-                      subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
-                      optional
-                    />
-
-                    <Separator />
+                    <Separator noPadding />
 
                     <DisplayModels
                       modelConfigurations={modelConfigurations}
                       formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
                       shouldShowAutoUpdateToggle={true}
                     />
 

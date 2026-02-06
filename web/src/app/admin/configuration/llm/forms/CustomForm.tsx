@@ -44,7 +44,7 @@ export function CustomForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName="LiteLLM"
-      providerDisplayName="LiteLLM Models"
+      providerDisplayName={existingLlmProvider?.name ?? "LiteLLM Models"}
       existingLlmProvider={existingLlmProvider}
     >
       {({

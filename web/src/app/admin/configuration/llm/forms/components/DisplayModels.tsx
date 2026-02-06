@@ -103,16 +103,20 @@ function DisplayModelHeader({
 
 interface ModelRowProps {
   modelName: string;
+  modelDisplayName?: string;
   isSelected: boolean;
   isDefault: boolean;
   onCheckChange: (checked: boolean) => void;
+  onSetDefault?: () => void;
 }
 
 function ModelRow({
   modelName,
+  modelDisplayName,
   isSelected,
   isDefault,
   onCheckChange,
+  onSetDefault,
 }: ModelRowProps) {
   return (
     <Card
@@ -120,7 +124,7 @@ function ModelRow({
       flexDirection="row"
       justifyContent="between"
       alignItems="center"
-      className={"cursor-pointer"}
+      className={cn("cursor-pointer group hover:bg-background-tint-01")}
       padding={0.25}
       onClick={() => onCheckChange(!isSelected)}
     >
@@ -137,19 +141,32 @@ function ModelRow({
         />
         <Text
           as="span"
-          mainUiAction
           className={cn(
             "select-none",
-            isSelected ? "text-action-link-05" : "text-text-03"
+            isSelected ? "text-action-link-04" : "text-text-03"
           )}
         >
-          {modelName}
+          {modelDisplayName ?? modelName}
         </Text>
       </GeneralLayouts.Section>
-      {isDefault && (
+      {isDefault ? (
         <Text as="span" secondaryBody className="text-action-link-05">
           Default Model
         </Text>
+      ) : (
+        onSetDefault && (
+          <Button
+            main
+            tertiary
+            className="opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSetDefault();
+            }}
+          >
+            <Text text03>Set as Default</Text>
+          </Button>
+        )
       )}
     </Card>
   );
@@ -184,17 +201,16 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   noModelConfigurationsMessage,
   isLoading,
   shouldShowAutoUpdateToggle,
-  displayModelName,
 }: {
   formikProps: FormikProps<T>;
   modelConfigurations: ModelConfiguration[];
   noModelConfigurationsMessage?: string;
   isLoading?: boolean;
   shouldShowAutoUpdateToggle: boolean;
-  displayModelName: string | null;
 }) {
   const [moreModelsOpen, setMoreModelsOpen] = useState(false);
   const isAutoMode = formikProps.values.is_auto_mode;
+  const defaultModelName = formikProps.values.default_model_name;
 
   if (isLoading) {
     return (
@@ -208,6 +224,10 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   }
 
   const handleCheckboxChange = (modelName: string, checked: boolean) => {
+    if (!checked && modelName === defaultModelName) {
+      return;
+    }
+
     const currentSelected = formikProps.values.selected_model_names ?? [];
 
     if (checked) {
@@ -217,6 +237,11 @@ export function DisplayModels<T extends BaseLLMFormValues>({
       const newSelected = currentSelected.filter((name) => name !== modelName);
       formikProps.setFieldValue("selected_model_names", newSelected);
     }
+  };
+
+  const onSetDefault = (modelName: string) => {
+    console.log("onSetDefault", modelName);
+    formikProps.setFieldValue("default_model_name", modelName);
   };
 
   const handleToggleAutoMode = () => {
@@ -248,8 +273,8 @@ export function DisplayModels<T extends BaseLLMFormValues>({
   );
 
   const sortedModelConfigurations = [...modelConfigurations].sort((a, b) => {
-    const aIsDefault = a.name === displayModelName;
-    const bIsDefault = b.name === displayModelName;
+    const aIsDefault = a.name === defaultModelName;
+    const bIsDefault = b.name === defaultModelName;
     const aIsSelected = selectedModels.includes(a.name);
     const bIsSelected = selectedModels.includes(b.name);
 
@@ -293,11 +318,12 @@ export function DisplayModels<T extends BaseLLMFormValues>({
             // Auto mode: read-only display
             <>
               {primaryAutoModels.map((model) => {
-                const isDefault = model.name === displayModelName;
+                const isDefault = model.name === defaultModelName;
                 return (
                   <ModelRow
                     key={model.name}
                     modelName={model.name}
+                    modelDisplayName={model.display_name}
                     isSelected={true}
                     isDefault={isDefault}
                     onCheckChange={() => {}}
@@ -318,11 +344,12 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                   <CollapsibleContent>
                     <GeneralLayouts.Section gap={0.25} alignItems="start">
                       {moreAutoModels.map((model) => {
-                        const isDefault = model.name === displayModelName;
+                        const isDefault = model.name === defaultModelName;
                         return (
                           <ModelRow
                             key={model.name}
                             modelName={model.name}
+                            modelDisplayName={model.display_name}
                             isSelected={true}
                             isDefault={isDefault}
                             onCheckChange={() => {}}
@@ -341,16 +368,22 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                 const isSelected = selectedModels.includes(
                   modelConfiguration.name
                 );
-                const isDefault = displayModelName === modelConfiguration.name;
+                const isDefault = defaultModelName === modelConfiguration.name;
 
                 return (
                   <ModelRow
                     key={modelConfiguration.name}
                     modelName={modelConfiguration.name}
+                    modelDisplayName={modelConfiguration.display_name}
                     isSelected={isSelected}
                     isDefault={isDefault}
                     onCheckChange={(checked) =>
                       handleCheckboxChange(modelConfiguration.name, checked)
+                    }
+                    onSetDefault={
+                      onSetDefault
+                        ? () => onSetDefault(modelConfiguration.name)
+                        : undefined
                     }
                   />
                 );
@@ -373,12 +406,13 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                           modelConfiguration.name
                         );
                         const isDefault =
-                          displayModelName === modelConfiguration.name;
+                          defaultModelName === modelConfiguration.name;
 
                         return (
                           <ModelRow
                             key={modelConfiguration.name}
                             modelName={modelConfiguration.name}
+                            modelDisplayName={modelConfiguration.display_name}
                             isSelected={isSelected}
                             isDefault={isDefault}
                             onCheckChange={(checked) =>
@@ -386,6 +420,9 @@ export function DisplayModels<T extends BaseLLMFormValues>({
                                 modelConfiguration.name,
                                 checked
                               )
+                            }
+                            onSetDefault={() =>
+                              onSetDefault(modelConfiguration.name)
                             }
                           />
                         );

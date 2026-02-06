@@ -19,11 +19,6 @@ import { getFormForExistingProvider } from "./forms/getForm";
 import { CustomForm } from "./forms/CustomForm";
 import { DefaultModelSelector } from "./forms/components/DefaultModel";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Card } from "@/refresh-components/cards";
-import { Section } from "@/layouts/general-layouts";
-import { ProviderIcon } from "./ProviderIcon";
-import { SvgSettings } from "@opal/icons";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Separator from "@/refresh-components/Separator";
 
 export function LLMConfiguration() {
@@ -89,39 +84,15 @@ export function LLMConfiguration() {
       </GeneralLayouts.Section>
 
       <div className="grid grid-cols-2 gap-4">
-        <OpenAIForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
-        <AnthropicForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
-        <OllamaForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
-        <VertexAIForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
-        <AzureForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
-        <BedrockForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
-        <OpenRouterForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
+        <OpenAIForm shouldMarkAsDefault={isFirstProvider} />
+        <AnthropicForm shouldMarkAsDefault={isFirstProvider} />
+        <OllamaForm shouldMarkAsDefault={isFirstProvider} />
+        <VertexAIForm shouldMarkAsDefault={isFirstProvider} />
+        <AzureForm shouldMarkAsDefault={isFirstProvider} />
+        <BedrockForm shouldMarkAsDefault={isFirstProvider} />
+        <OpenRouterForm shouldMarkAsDefault={isFirstProvider} />
 
-        <CustomForm
-          shouldMarkAsDefault={isFirstProvider}
-          defaultLlmModel={defaultLlmModel}
-        />
+        <CustomForm shouldMarkAsDefault={isFirstProvider} />
       </div>
     </>
   );

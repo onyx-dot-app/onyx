@@ -7,6 +7,7 @@ import { Section } from "@/layouts/general-layouts";
 import { useMemo } from "react";
 import { LLM_ADMIN_URL } from "../../constants";
 import * as InputLayouts from "@/layouts/input-layouts";
+import { setDefaultLlmModel } from "@/lib/admin/llm/svc";
 
 export function DefaultModelSelector({
   existingLlmProviders,
@@ -27,13 +28,7 @@ export function DefaultModelSelector({
   }, [existingLlmProviders]);
 
   const onModelChange = (provider_id: number, model_name: string) => {
-    fetch(`${LLM_ADMIN_URL}/default`, {
-      method: "POST",
-      body: JSON.stringify({
-        provider_id,
-        model_name,
-      }),
-    });
+    setDefaultLlmModel(provider_id, model_name);
   };
 
   // Create a composite value string for the select (provider_id:model_name)

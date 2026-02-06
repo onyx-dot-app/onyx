@@ -140,6 +140,7 @@ export function OllamaForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName="Ollama"
+      providerDisplayName={existingLlmProvider?.name ?? "Ollama"}
       existingLlmProvider={existingLlmProvider}
     >
       {({

@@ -7,13 +7,15 @@ import { LLM_PROVIDERS_ADMIN_URL, LLM_ADMIN_URL } from "../constants";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
+import { setDefaultLlmModel } from "@/lib/admin/llm/svc";
 
 // Common class names for the Form component across all LLM provider forms
 export const LLM_FORM_CLASS_NAME = "flex flex-col gap-y-4 items-stretch mt-6";
 
 export const buildDefaultInitialValues = (
   existingLlmProvider?: LLMProviderView,
-  modelConfigurations?: ModelConfiguration[]
+  modelConfigurations?: ModelConfiguration[],
+  defaultModelName?: string
 ) => {
   // Auto mode must be explicitly enabled by the user
   // Default to false for new providers, preserve existing value when editing
@@ -32,6 +34,7 @@ export const buildDefaultInitialValues = (
       : modelConfigurations
           ?.filter((modelConfiguration) => modelConfiguration.is_visible)
           .map((modelConfiguration) => modelConfiguration.name) ?? [],
+    default_model_name: defaultModelName,
   };
 };
 
@@ -43,6 +46,7 @@ export const buildDefaultValidationSchema = () => {
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
+    default_model_name: Yup.string().optional(),
   });
 };
 
@@ -80,6 +84,7 @@ export interface BaseLLMFormValues {
   personas: number[];
   selected_model_names: string[];
   custom_config?: Record<string, string>;
+  default_model_name?: string;
 }
 
 export interface SubmitLLMProviderParams<
@@ -102,8 +107,7 @@ export interface SubmitLLMProviderParams<
 
 export const filterModelConfigurations = (
   currentModelConfigurations: ModelConfiguration[],
-  visibleModels: string[],
-  defaultModelName?: string
+  visibleModels: string[]
 ): ModelConfiguration[] => {
   return currentModelConfigurations
     .map(
@@ -115,11 +119,15 @@ export const filterModelConfigurations = (
         display_name: modelConfiguration.display_name,
       })
     )
-    .filter(
-      (modelConfiguration) =>
-        modelConfiguration.name === defaultModelName ||
-        modelConfiguration.is_visible
-    );
+    .filter((modelConfiguration) => modelConfiguration.is_visible);
+};
+
+const getFirstVisibleModelConfiguration = (
+  modelConfigurations: ModelConfiguration[]
+): ModelConfiguration | undefined => {
+  return modelConfigurations.find(
+    (modelConfiguration) => modelConfiguration.is_visible
+  );
 };
 
 // Helper to get model configurations for auto mode
@@ -165,27 +173,10 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   if (values.is_auto_mode) {
     filteredModelConfigurations =
       getAutoModeModelConfigurations(modelConfigurations);
-
-    // In auto mode, use the first recommended model as default if current default isn't in the list
-    const visibleModelNames = new Set(
-      filteredModelConfigurations.map((m) => m.name)
-    );
-
-    filteredModelConfigurations = filterModelConfigurations(
-      modelConfigurations,
-      visibleModels
-    );
-    if (
-      finalDefaultModelName &&
-      !visibleModelNames.has(finalDefaultModelName)
-    ) {
-      finalDefaultModelName = filteredModelConfigurations[0]?.name ?? "";
-    }
   } else {
     filteredModelConfigurations = filterModelConfigurations(
       modelConfigurations,
-      visibleModels,
-      rest.default_model_name as string | undefined
+      visibleModels
     );
   }
 
@@ -206,6 +197,13 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
   if (!isEqual(finalValues, initialValues)) {
     setIsTesting(true);
 
+    const testModel =
+      finalValues.default_model_name ??
+      (filteredModelConfigurations.length > 0
+        ? getFirstVisibleModelConfiguration(filteredModelConfigurations)?.name
+        : modelConfigurations[0]?.name) ??
+      "";
+
     const response = await fetch("/api/admin/llm/test", {
       method: "POST",
       headers: {
@@ -213,7 +211,7 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
       },
       body: JSON.stringify({
         provider: providerName,
-        model: finalDefaultModelName,
+        model: testModel,
         ...finalValues,
       }),
     });
@@ -259,15 +257,12 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     return;
   }
 
-  if (shouldMarkAsDefault) {
+  if (shouldMarkAsDefault && finalValues.default_model_name) {
     const newLlmProvider = (await response.json()) as LLMProviderView;
-    const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
-      method: "POST",
-      body: JSON.stringify({
-        provider_id: newLlmProvider.id,
-        model_name: finalDefaultModelName,
-      }),
-    });
+    const setDefaultResponse = await setDefaultLlmModel(
+      newLlmProvider.id,
+      finalValues.default_model_name
+    );
     if (!setDefaultResponse.ok) {
       const errorMsg = (await setDefaultResponse.json()).detail;
       const fullErrorMsg = `Failed to set provider as default: ${errorMsg}`;
