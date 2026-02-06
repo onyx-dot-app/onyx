@@ -810,13 +810,12 @@ export function useLlmManager(
   ]);
 
   const updateTemperature = (temperature: number) => {
-    if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
-      setTemperature(Math.min(temperature, 1.0));
-    } else {
-      setTemperature(temperature);
-    }
+    const clampedTemp = isAnthropic(currentLlm.provider, currentLlm.modelName)
+      ? Math.min(temperature, 1.0)
+      : temperature;
+    setTemperature(clampedTemp);
     if (chatSession) {
-      updateTemperatureOverrideForChatSession(chatSession.id, temperature);
+      updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
     }
   };
 
