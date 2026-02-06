@@ -287,16 +287,6 @@ def construct_message_history(
             # Can't fit this message, stop truncating
             break
 
-    # Attach project images to the last user message
-    if project_files and project_files.project_image_files:
-        existing_images = last_user_message.image_files or []
-        last_user_message = ChatMessageSimple(
-            message=last_user_message.message,
-            token_count=last_user_message.token_count,
-            message_type=last_user_message.message_type,
-            image_files=existing_images + project_files.project_image_files,
-        )
-
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [project_files],
     # [last_user_message], [messages_after_last_user], [reminder]

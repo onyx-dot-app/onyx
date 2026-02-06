@@ -52,6 +52,32 @@ from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
 
+MAX_IMAGES_PER_LLM_REQUEST = 50
+
+
+def _select_recent_image_indices(
+    history: list[ChatMessageSimple], max_images: int
+) -> dict[int, set[int]]:
+    """Return per-message image indices to keep, preserving newest images."""
+    if max_images <= 0:
+        return {}
+
+    remaining = max_images
+    keep_indices: dict[int, set[int]] = {}
+
+    for msg_index in range(len(history) - 1, -1, -1):
+        msg = history[msg_index]
+        if msg.message_type != MessageType.USER or not msg.image_files:
+            continue
+
+        for img_index in range(len(msg.image_files) - 1, -1, -1):
+            if remaining <= 0:
+                return keep_indices
+            keep_indices.setdefault(msg_index, set()).add(img_index)
+            remaining -= 1
+
+    return keep_indices
+
 
 def _sanitize_llm_output(value: str) -> str:
     """Remove characters that PostgreSQL's text/JSONB types cannot store.
@@ -445,6 +471,9 @@ def translate_history_to_llm_format(
     messages: list[ChatCompletionMessage] = []
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
+    image_keep_indices = _select_recent_image_indices(
+        history, MAX_IMAGES_PER_LLM_REQUEST
+    )
 
     for idx, msg in enumerate(history):
         # if the message is being added to the history
@@ -471,39 +500,49 @@ def translate_history_to_llm_format(
             # Handle user messages with potential images
             if msg.image_files:
                 # Build content parts: text + images
-                content_parts: list[TextContentPart | ImageContentPart] = [
-                    TextContentPart(
-                        type="text",
-                        text=msg.message,
+                keep_indices = image_keep_indices.get(idx)
+                if not keep_indices:
+                    user_msg_text = UserMessage(
+                        role="user",
+                        content=msg.message,
                     )
-                ]
+                    messages.append(user_msg_text)
+                else:
+                    content_parts: list[TextContentPart | ImageContentPart] = [
+                        TextContentPart(
+                            type="text",
+                            text=msg.message,
+                        )
+                    ]
 
-                # Add image parts
-                for img_file in msg.image_files:
-                    if img_file.file_type == ChatFileType.IMAGE:
-                        try:
-                            image_type = get_image_type_from_bytes(img_file.content)
-                            base64_data = img_file.to_base64()
-                            image_url = f"data:{image_type};base64,{base64_data}"
+                    # Add image parts
+                    for img_index, img_file in enumerate(msg.image_files):
+                        if img_index not in keep_indices:
+                            continue
+                        if img_file.file_type == ChatFileType.IMAGE:
+                            try:
+                                image_type = get_image_type_from_bytes(img_file.content)
+                                base64_data = img_file.to_base64()
+                                image_url = f"data:{image_type};base64,{base64_data}"
 
-                            image_part = ImageContentPart(
-                                type="image_url",
-                                image_url=ImageUrlDetail(
-                                    url=image_url,
-                                    detail=None,
-                                ),
-                            )
-                            content_parts.append(image_part)
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to process image file {img_file.file_id}: {e}. "
-                                "Skipping image."
-                            )
-                user_msg = UserMessage(
-                    role="user",
-                    content=content_parts,
-                )
-                messages.append(user_msg)
+                                image_part = ImageContentPart(
+                                    type="image_url",
+                                    image_url=ImageUrlDetail(
+                                        url=image_url,
+                                        detail=None,
+                                    ),
+                                )
+                                content_parts.append(image_part)
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to process image file {img_file.file_id}: {e}. "
+                                    "Skipping image."
+                                )
+                    user_msg = UserMessage(
+                        role="user",
+                        content=content_parts,
+                    )
+                    messages.append(user_msg)
             else:
                 # Simple text-only user message
                 user_msg_text = UserMessage(
