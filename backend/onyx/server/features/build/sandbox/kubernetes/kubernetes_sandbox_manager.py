@@ -369,6 +369,7 @@ echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
 echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
 
 # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
+# Note: no --delete flag on initial sync since destination is empty
 # Capture both stdout and stderr to see all messages including errors
 sync_exit_code=0
 sync_output=$(mktemp)
@@ -2011,6 +2012,7 @@ echo "Session config regeneration complete"
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
+        source: str | None = None,
     ) -> bool:
         """Sync files from S3 to the running pod via the file-sync sidecar.
 
@@ -2023,21 +2025,52 @@ echo "Session config regeneration complete"
             sandbox_id: The sandbox UUID
             user_id: The user ID (for S3 path construction)
             tenant_id: The tenant ID (for S3 path construction)
+            source: Optional source type (e.g., "gmail", "google_drive").
+                    If None, syncs all sources. If specified, only syncs
+                    that source's directory.
 
         Returns:
             True if sync was successful, False otherwise.
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
+        # Build S3 path based on whether source is specified
+        if source:
+            # Sync only the specific source directory
+            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/{source}/*"
+            local_path = f"/workspace/files/{source}/"
+        else:
+            # Sync all sources (original behavior)
+            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
+            local_path = "/workspace/files/"
+
         # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-        # --stat shows transfer statistics for monitoring
-        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
-        sync_command = [
-            "/bin/sh",
-            "-c",
-            f'/s5cmd --log debug --stat sync "{s3_path}" /workspace/files/; '
-            f'echo "Files in workspace: $(find /workspace/files -type f | wc -l)"',
-        ]
+        # --delete: remove files from destination that no longer exist in source
+        # Use same output format as initial sync for consistency
+        source_info = f" source={source}" if source else ""
+        sync_script = f"""
+echo "Starting incremental file sync{source_info}"
+echo "S3 source: {s3_path}"
+sync_exit_code=0
+sync_output=$(mktemp)
+/s5cmd --log debug --stat sync --delete "{s3_path}" {local_path} 2>&1 | tee "$sync_output" || sync_exit_code=$?
+echo "=== S3 sync finished with exit code: $sync_exit_code ==="
+file_count=$(find /workspace/files -type f | wc -l)
+echo "Total files in /workspace/files: $file_count"
+if [ $sync_exit_code -ne 0 ]; then
+    echo "=== Errors/warnings from sync ==="
+    grep -iE "error|warn|fail" "$sync_output" || echo "No errors found"
+    echo "=========================="
+fi
+rm -f "$sync_output"
+# Exit with error code if sync failed (exit codes 0 and 1 are success)
+if [ $sync_exit_code -ne 0 ] && [ $sync_exit_code -ne 1 ]; then
+    echo "SYNC_FAILED"
+    exit $sync_exit_code
+fi
+echo "SYNC_SUCCESS"
+"""
+        sync_command = ["/bin/sh", "-c", sync_script]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
             pod_name,
@@ -2050,6 +2083,11 @@ echo "Session config regeneration complete"
             tty=False,
         )
         logger.debug(f"File sync response: {resp}")
+
+        # Check if sync succeeded based on output markers
+        if "SYNC_FAILED" in resp:
+            logger.warning(f"File sync failed for sandbox {sandbox_id}")
+            return False
         return True
 
     def _ensure_agents_md_attachments_section(
