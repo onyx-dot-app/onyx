@@ -43,7 +43,7 @@ export function TimelineStepContent({
     <div className="flex flex-col px-1 pb-1">
       {!hideHeader && header && (
         <div className="flex items-center justify-between h-[var(--timeline-step-header-height)] pl-1">
-          <div className="pt-1 pl-[var(--timeline-common-text-padding)] w-full">
+          <div className="pt-[var(--timeline-step-top-padding)] pl-[var(--timeline-common-text-padding)] w-full">
             <Text as="p" mainUiMuted text04>
               {header}
             </Text>
@@ -80,7 +80,7 @@ export function TimelineStepContent({
             "pl-1 pb-1",
             !noPaddingRight &&
               "pr-[var(--timeline-step-header-right-section-width)]",
-            hideHeader && "pt-1"
+            hideHeader && "pt-[var(--timeline-step-top-padding)]"
           )}
         >
           {children}

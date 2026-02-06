@@ -18,6 +18,7 @@ export interface TimelineTokens {
   headerPaddingRight: string;
   headerTextPaddingX: string;
   headerTextPaddingY: string;
+  stepTopPadding: string;
   agentMessagePaddingLeft: string;
   timelineCommonTextPadding: string;
 }
@@ -47,6 +48,7 @@ export const timelineTokenDefaults: TimelineTokens = {
   headerPaddingRight: "0.25rem",
   headerTextPaddingX: "0.375rem",
   headerTextPaddingY: "0.125rem",
+  stepTopPadding: "0.25rem",
   agentMessagePaddingLeft: "0.12rem",
   timelineCommonTextPadding: "0.12rem",
 };
@@ -73,6 +75,7 @@ export function getTimelineStyles(
     "--timeline-header-padding-right": merged.headerPaddingRight,
     "--timeline-header-text-padding-x": merged.headerTextPaddingX,
     "--timeline-header-text-padding-y": merged.headerTextPaddingY,
+    "--timeline-step-top-padding": merged.stepTopPadding,
     "--timeline-agent-message-padding-left": merged.agentMessagePaddingLeft,
     "--timeline-common-text-padding": merged.timelineCommonTextPadding,
   } as React.CSSProperties;
