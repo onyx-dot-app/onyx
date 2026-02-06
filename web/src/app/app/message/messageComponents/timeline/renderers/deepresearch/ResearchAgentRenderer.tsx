@@ -194,8 +194,8 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col">
-              <Text as="p" text02 className="text-sm mb-1">
+            <div className="flex flex-col pl-[var(--timeline-common-text-padding)">
+              <Text as="p" text04 mainUiMuted className="mb-1">
                 Research Report
               </Text>
               <ExpandableTextDisplay
@@ -260,7 +260,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col">
+            <div className="flex flex-col pl-[var(--timeline-common-text-padding)]">
               <Text as="p" text04 mainUiMuted>
                 Research Task
               </Text>
@@ -303,9 +303,11 @@ export const ResearchAgentRenderer: MessageRenderer<
           }
           isHover={isHover}
         >
-          <Text as="p" text02 mainUiMuted>
-            {researchTask}
-          </Text>
+          <div className="pl-[var(--timeline-common-text-padding)]">
+            <Text as="p" text02 mainUiMuted>
+              {researchTask}
+            </Text>
+          </div>
         </StepContainer>
       )}
 
@@ -356,12 +358,14 @@ export const ResearchAgentRenderer: MessageRenderer<
           isHover={isHover}
           noPaddingRight={true}
         >
-          <ExpandableTextDisplay
-            title="Research Report"
-            content={fullReportContent}
-            renderContent={renderReport}
-            isStreaming={isReportStreaming}
-          />
+          <div className="pl-[var(--timeline-common-text-padding)]">
+            <ExpandableTextDisplay
+              title="Research Report"
+              content={fullReportContent}
+              renderContent={renderReport}
+              isStreaming={isReportStreaming}
+            />
+          </div>
         </StepContainer>
       )}
     </div>

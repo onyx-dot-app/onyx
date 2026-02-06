@@ -173,13 +173,15 @@ export const ReasoningRenderer: MessageRenderer<
   }
 
   const reasoningContent = (
-    <ExpandableTextDisplay
-      title="Full text"
-      content={content}
-      displayContent={displayContent}
-      renderContent={renderMarkdown}
-      isStreaming={!hasEnd}
-    />
+    <div className="pl-[var(--timeline-common-text-padding)]">
+      <ExpandableTextDisplay
+        title="Full text"
+        content={content}
+        displayContent={displayContent}
+        renderContent={renderMarkdown}
+        isStreaming={!hasEnd}
+      />
+    </div>
   );
 
   return children([
