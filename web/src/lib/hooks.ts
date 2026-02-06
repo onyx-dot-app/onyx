@@ -733,8 +733,6 @@ export function useLlmManager(
   };
 
   const [temperature, setTemperature] = useState<number>(() => {
-    llmUpdate();
-
     if (currentChatSession?.current_temperature_override != null) {
       return Math.min(
         currentChatSession.current_temperature_override,
@@ -1051,7 +1049,12 @@ export function useSourcePreferences({
       }
       setSourcesInitialized(true);
     }
-  }, [availableSources, sourcesInitialized, setSelectedSources]);
+  }, [
+    availableSources,
+    configuredSources,
+    sourcesInitialized,
+    setSelectedSources,
+  ]);
 
   const enableSources = (sources: SourceMetadata[]) => {
     const allSourceMetadata = getConfiguredSources(availableSources);
