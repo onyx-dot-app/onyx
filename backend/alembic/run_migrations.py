@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, NamedTuple
 
@@ -11,6 +12,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
+from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from shared_configs.configs import TENANT_ID_PREFIX
@@ -79,6 +81,11 @@ def get_schemas_needing_migration(
 
         if not schemas_with_table:
             return needs_migration
+
+        # Validate schema names before interpolating into SQL
+        for schema in schemas_with_table:
+            if not is_valid_schema_name(schema):
+                raise ValueError(f"Invalid schema name: {schema}")
 
         # Single query to get every schema's current revision at once
         union_parts = [
@@ -155,7 +162,7 @@ def main() -> int:
 
     head_rev = get_head_revision()
     if head_rev is None:
-        print("Could not determine head revision.")
+        print("Could not determine head revision.", file=sys.stderr)
         return 1
 
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
@@ -172,8 +179,7 @@ def main() -> int:
     finally:
         # CRITICAL: Dispose engine before spawning subprocesses
         # This ensures no lingering connections that might interfere
-        if SqlEngine._engine is not None:
-            SqlEngine._engine.dispose()
+        SqlEngine.reset_engine()
 
     if not schemas_to_migrate:
         print(

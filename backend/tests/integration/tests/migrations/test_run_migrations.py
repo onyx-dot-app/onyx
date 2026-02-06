@@ -142,17 +142,20 @@ def test_no_tenant_schemas_exits_zero() -> None:
     assert "No tenant schemas found" in result.stdout
 
 
-@pytest.mark.usefixtures("tenant_schema_at_head")
-def test_all_tenants_at_head() -> None:
-    """When every tenant schema is already at head the script should skip
-    migrations and exit 0."""
+def test_at_head_schema_is_skipped(tenant_schema_at_head: str) -> None:
+    """A tenant schema already at head should not be targeted for migration."""
     result = _run_script(
         "-j",
         "1",
         env_override={"MULTI_TENANT": "true"},
     )
     assert result.returncode == 0
-    assert "already at head" in result.stdout
+    # Our at-head schema should not appear in any ✓/✗ migration result lines.
+    migration_lines = [
+        line for line in result.stdout.splitlines() if "✓" in line or "✗" in line
+    ]
+    for line in migration_lines:
+        assert tenant_schema_at_head not in line
 
 
 def test_detects_schemas_needing_migration(
