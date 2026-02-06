@@ -37,6 +37,10 @@ export default function SearchCard({
     document.is_internet || document.source_type === ValidSources.Web;
 
   function handleClick() {
+    if (document.link) {
+      window.open(document.link, "_blank", "noopener,noreferrer");
+      return;
+    }
     onDocumentClick({
       document_id: document.document_id,
       semantic_identifier: document.semantic_identifier,
