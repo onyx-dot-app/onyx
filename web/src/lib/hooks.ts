@@ -1077,9 +1077,8 @@ export function useSourcePreferences({
   ]);
 
   const enableSources = (sources: SourceMetadata[]) => {
-    const allSourceMetadata = getConfiguredSources(availableSources);
     setSelectedSources([...sources]);
-    persistSourcePreferencesState(sources, allSourceMetadata);
+    persistSourcePreferencesState(sources, configuredSources);
   };
 
   const enableAllSources = () => {
