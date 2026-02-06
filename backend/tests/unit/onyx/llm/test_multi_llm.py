@@ -435,15 +435,15 @@ def test_vertex_stream_omits_stream_options() -> None:
         assert "stream_options" not in kwargs
 
 
-def test_openai_chat_auto_reasoning_effort_maps_to_medium() -> None:
+def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
         model_provider=LlmProviderNames.OPENAI,
-        model_name="gpt-5.2-chat-latest",
+        model_name="gpt-5.2",
         max_input_tokens=get_max_input_tokens(
             model_provider=LlmProviderNames.OPENAI,
-            model_name="gpt-5.2-chat-latest",
+            model_name="gpt-5.2",
         ),
     )
 
@@ -458,7 +458,7 @@ def test_openai_chat_auto_reasoning_effort_maps_to_medium() -> None:
         list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
 
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["reasoning_effort"] == "medium"
+        assert kwargs["reasoning"]["effort"] == "medium"
 
 
 def test_vertex_opus_4_5_omits_reasoning_effort() -> None:
