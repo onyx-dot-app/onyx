@@ -1,7 +1,18 @@
 """Tests for llm_step.py, specifically sanitization and argument parsing."""
 
+import base64
+from typing import cast
+
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _sanitize_llm_output
+from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.models import ChatLoadedFile
+from onyx.chat.models import ChatMessageSimple
+from onyx.configs.constants import MessageType
+from onyx.file_store.models import ChatFileType
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import ImageContentPart
+from onyx.llm.models import UserMessage
 
 
 class TestSanitizeLlmOutput:
@@ -137,3 +148,86 @@ class TestParseToolArgsToDict:
         json_str = '{"query": "hello 👋 世界"}'
         result = _parse_tool_args_to_dict(json_str)
         assert result == {"query": "hello 👋 世界"}
+
+
+class TestTranslateHistoryToLlmFormat:
+    """Tests for the translate_history_to_llm_format function."""
+
+    def _build_image_file(self, file_id: str, payload: bytes) -> ChatLoadedFile:
+        content = b"\x89PNG\r\n\x1a\n" + payload
+        return ChatLoadedFile(
+            file_id=file_id,
+            content=content,
+            file_type=ChatFileType.IMAGE,
+            filename=None,
+            content_text=None,
+            token_count=1,
+        )
+
+    def _data_uri(self, payload: bytes) -> str:
+        content = b"\x89PNG\r\n\x1a\n" + payload
+        encoded = base64.b64encode(content).decode()
+        return f"data:image/png;base64,{encoded}"
+
+    def _extract_image_urls(self, msg: UserMessage) -> list[str]:
+        if isinstance(msg.content, str):
+            return []
+        return [
+            part.image_url.url
+            for part in msg.content
+            if isinstance(part, ImageContentPart)
+        ]
+
+    def test_limits_images_to_newest_50(self) -> None:
+        """Test that only the newest 50 images are kept across the history."""
+        history: list[ChatMessageSimple] = []
+        for msg_idx in range(3):
+            image_files = [
+                self._build_image_file(
+                    file_id=f"img_{msg_idx}_{img_idx}",
+                    payload=bytes([msg_idx, img_idx]),
+                )
+                for img_idx in range(20)
+            ]
+            history.append(
+                ChatMessageSimple(
+                    message=f"msg {msg_idx}",
+                    token_count=1,
+                    message_type=MessageType.USER,
+                    image_files=image_files,
+                )
+            )
+
+        llm_config = LLMConfig(
+            model_provider="test",
+            model_name="test",
+            temperature=0.0,
+            max_input_tokens=1000,
+        )
+        messages_raw = translate_history_to_llm_format(history, llm_config)
+        assert isinstance(messages_raw, list)
+        messages = cast(list[UserMessage], messages_raw)
+
+        assert len(messages) == 3
+        assert all(isinstance(msg, UserMessage) for msg in messages)
+
+        msg0 = messages[0]
+        msg1 = messages[1]
+        msg2 = messages[2]
+
+        msg0_urls = self._extract_image_urls(msg0)
+        msg1_urls = self._extract_image_urls(msg1)
+        msg2_urls = self._extract_image_urls(msg2)
+
+        assert len(msg0_urls) == 10
+        assert len(msg1_urls) == 20
+        assert len(msg2_urls) == 20
+        assert len(msg0_urls) + len(msg1_urls) + len(msg2_urls) == 50
+
+        expected_msg0 = [self._data_uri(bytes([0, i])) for i in range(10, 20)]
+        expected_msg1 = [self._data_uri(bytes([1, i])) for i in range(20)]
+        expected_msg2 = [self._data_uri(bytes([2, i])) for i in range(20)]
+
+        assert msg0_urls == expected_msg0
+        assert msg1_urls == expected_msg1
+        assert msg2_urls == expected_msg2
