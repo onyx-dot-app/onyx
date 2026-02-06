@@ -277,6 +277,7 @@ class TestHandleMessageSeatCheck:
             feedback_reminder_id=None,
         )
 
+    @pytest.mark.usefixtures("db_session")
     @patch(f"{_HANDLE_MSG}.respond_in_thread_or_channel")
     @patch(f"{_HANDLE_MSG}.fetch_ee_implementation_or_noop")
     @patch(f"{_HANDLE_MSG}.get_user_by_email", return_value=None)
@@ -285,7 +286,6 @@ class TestHandleMessageSeatCheck:
         _mock_get_user: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_respond: MagicMock,
-        _db_session: MagicMock,
     ) -> None:
         seat_result = MagicMock(available=False, error_message="Seat limit exceeded")
         mock_fetch_ee.return_value = lambda **_kw: seat_result
@@ -296,6 +296,7 @@ class TestHandleMessageSeatCheck:
         assert "seat limit" in mock_respond.call_args[1]["text"]
         assert "Onyx administrator" in mock_respond.call_args[1]["text"]
 
+    @pytest.mark.usefixtures("db_session")
     @patch(f"{_HANDLE_MSG}.handle_regular_answer", return_value=False)
     @patch(f"{_HANDLE_MSG}.handle_standard_answers", return_value=False)
     @patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists")
@@ -308,7 +309,6 @@ class TestHandleMessageSeatCheck:
         _mock_add_user: MagicMock,
         _mock_standard: MagicMock,
         _mock_regular: MagicMock,
-        _db_session: MagicMock,
     ) -> None:
         mock_get_user.return_value = MagicMock()  # User exists
 
