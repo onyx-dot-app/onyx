@@ -84,10 +84,13 @@ class EmailHeaders(BaseModel):
                 return None
 
         message_id = _decode(header=Header.MESSAGE_ID_HEADER)
-        # It's possible for the subject line to not exist or be an empty string.
-        subject = _decode(header=Header.SUBJECT_HEADER) or "Unknown Subject"
-        # It's possible for the from header to not exist (e.g., malformed emails).
-        from_ = _decode(header=Header.FROM_HEADER) or "Unknown Sender"
+        # Store original values BEFORE applying fallback defaults
+        # (needed to correctly detect truly empty emails for uuid4 fallback)
+        raw_subject = _decode(header=Header.SUBJECT_HEADER)
+        raw_from = _decode(header=Header.FROM_HEADER)
+        # Apply fallbacks for display/storage
+        subject = raw_subject or "Unknown Subject"
+        from_ = raw_from or "Unknown Sender"
         to = _decode(header=Header.TO_HEADER)
         if not to:
             to = _decode(header=Header.DELIVERED_TO_HEADER)
@@ -99,16 +102,18 @@ class EmailHeaders(BaseModel):
             # Generate a unique ID using multiple fields to reduce collision risk
             # Include: subject, date, from, to, and a hash of the body content
             body_hash = _extract_body_hash(email_msg)
+            
+            # Use ORIGINAL values (before fallback defaults) to detect truly empty emails
             fallback_parts = [
-                subject or "",
+                raw_subject or "",
                 date_str or "",
-                from_ or "",
+                raw_from or "",
                 to or "",
                 body_hash,
             ]
             fallback_content = "-".join(fallback_parts)
             
-            # Check if we have any meaningful content
+            # Check if we have any meaningful content from ORIGINAL fields
             if all(not part for part in fallback_parts):
                 # All fields empty - use random UUID to avoid collisions
                 message_id = f"<generated-{uuid.uuid4()}>"
