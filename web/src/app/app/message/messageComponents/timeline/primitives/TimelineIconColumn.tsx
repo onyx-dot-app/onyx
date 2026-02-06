@@ -51,7 +51,7 @@ export function TimelineIconColumn({
     >
       <div
         className={cn(
-          "flex items-center justify-center shrink-0",
+          "flex items-center justify-center shrink-0 pt-1",
           iconRowVariant === "compact"
             ? "h-[var(--timeline-first-top-spacer-height)]"
             : "h-[var(--timeline-step-header-height)]"

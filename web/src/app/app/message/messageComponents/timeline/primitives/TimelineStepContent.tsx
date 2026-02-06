@@ -85,16 +85,19 @@ export function TimelineStepContent({
         </div>
       )}
 
-      <div
-        className={cn(
-          "pl-1 pb-1",
-          !noPaddingRight &&
-            "pr-[var(--timeline-step-header-right-section-width)]",
-          bodyClassName
-        )}
-      >
-        {children}
-      </div>
+      {children && (
+        <div
+          className={cn(
+            "pl-1 pb-1",
+            !noPaddingRight &&
+              "pr-[var(--timeline-step-header-right-section-width)]",
+            hideHeader && "pt-1",
+            bodyClassName
+          )}
+        >
+          {children}
+        </div>
+      )}
     </div>
   );
 }
