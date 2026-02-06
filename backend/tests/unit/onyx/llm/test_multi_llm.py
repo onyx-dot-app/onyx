@@ -713,3 +713,43 @@ def test_bedrock_model_passes_no_client() -> None:
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["client"] is None
+
+
+def test_azure_openai_model_uses_httphandler_client() -> None:
+    """Test that Azure OpenAI models get an HTTPHandler client passed.
+
+    Azure OpenAI uses the same responses API as OpenAI, so it needs
+    the same HTTPHandler isolation to avoid connection pool conflicts.
+    """
+    from litellm import HTTPHandler
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="gpt-4o",
+        api_base="https://my-resource.openai.azure.com",
+        api_version="2024-02-15-preview",
+        max_input_tokens=128000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(content="Hello", role="assistant"),
+                )
+            ],
+            model="gpt-4o",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        llm.invoke(messages)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert isinstance(kwargs["client"], HTTPHandler)
