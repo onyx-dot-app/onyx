@@ -32,6 +32,8 @@ from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
+from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
@@ -430,8 +432,11 @@ def restore_session(
         # 2. Check if session workspace needs to be loaded
         if sandbox.status == SandboxStatus.RUNNING:
             if not sandbox_manager.session_workspace_exists(sandbox.id, session_id):
-                # Get latest snapshot and restore it
-                snapshot = get_latest_snapshot_for_session(db_session, session_id)
+                # Only Kubernetes backend supports snapshot restoration
+                snapshot = None
+                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
+                    snapshot = get_latest_snapshot_for_session(db_session, session_id)
+
                 if snapshot:
                     # Allocate a new port for the restored session
                     new_port = allocate_nextjs_port(db_session)
@@ -443,6 +448,9 @@ def restore_session(
                         f"from {snapshot.storage_path} with port {new_port}"
                     )
 
+                    # Get LLM config for regenerating session config files
+                    llm_config = session_manager._get_llm_config(None, None)
+
                     try:
                         sandbox_manager.restore_snapshot(
                             sandbox_id=sandbox.id,
@@ -450,6 +458,8 @@ def restore_session(
                             snapshot_storage_path=snapshot.storage_path,
                             tenant_id=tenant_id,
                             nextjs_port=new_port,
+                            llm_config=llm_config,
+                            use_demo_data=session.demo_data_enabled,
                         )
                     except Exception as e:
                         # Clear the port allocation on failure so it can be reused
@@ -461,7 +471,7 @@ def restore_session(
                         db_session.commit()
                         raise
                 else:
-                    # No snapshot - set up fresh workspace
+                    # No snapshot or local backend - set up fresh workspace
                     logger.info(
                         f"No snapshot found for session {session_id}, "
                         f"setting up fresh workspace"
