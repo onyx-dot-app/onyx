@@ -24,6 +24,8 @@ class LLMProviderManager:
         groups: list[int] | None = None,
         personas: list[int] | None = None,
         is_public: bool | None = None,
+        model_configurations: list[dict] | None = None,
+        custom_config: dict | None = None,
         set_as_default: bool = True,
         user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
@@ -33,19 +35,24 @@ class LLMProviderManager:
 
         print(f"Seeding LLM Providers for {email}...")
 
+        # For Ollama, we don't need an API key
+        resolved_api_key = api_key
+        if resolved_api_key is None and provider != "ollama_chat":
+            resolved_api_key = os.environ.get("OPENAI_API_KEY", "")
+
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
             provider=provider or LlmProviderNames.OPENAI,
             default_model_name=default_model_name or "gpt-4o-mini",
-            api_key=api_key or os.environ["OPENAI_API_KEY"],
+            api_key=resolved_api_key,
             api_base=api_base,
             api_version=api_version,
-            custom_config=None,
+            custom_config=custom_config,
             is_public=True if is_public is None else is_public,
             groups=groups or [],
             personas=personas or [],
-            model_configurations=[],
-            api_key_changed=True,
+            model_configurations=model_configurations or [],
+            api_key_changed=True if api_key else False,
         )
 
         llm_response = requests.put(
@@ -72,6 +79,7 @@ class LLMProviderManager:
             personas=response_data.get("personas", []),
             api_base=response_data["api_base"],
             api_version=response_data["api_version"],
+            model_configurations=response_data.get("model_configurations", []),
         )
 
         if set_as_default:

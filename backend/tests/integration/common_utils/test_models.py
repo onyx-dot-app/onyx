@@ -123,6 +123,7 @@ class DATestLLMProvider(BaseModel):
     personas: list[int]
     api_base: str | None = None
     api_version: str | None = None
+    model_configurations: list[dict] = []
 
 
 class DATestImageGenerationConfig(BaseModel):
