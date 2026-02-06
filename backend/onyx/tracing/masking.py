@@ -1,26 +1,33 @@
+"""Shared data masking utilities for tracing processors."""
+
 import os
 import re
 from typing import Any
 
-from onyx.configs.app_configs import BRAINTRUST_API_KEY
-from onyx.configs.app_configs import BRAINTRUST_PROJECT
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
-
-# Set very loosely because some tool call results may be very long.
+# Set loosely because some tool call results may be very long.
 # Ideally we don't pass those to the LLM but it's fine if we want to trace them in full.
-MASKING_LENGTH = int(os.environ.get("BRAINTRUST_MASKING_LENGTH", "500000"))
+MASKING_LENGTH = int(os.environ.get("TRACING_MASKING_LENGTH", "500000"))
 
 
 def _truncate_str(s: str) -> str:
+    """Truncate a string that exceeds MASKING_LENGTH."""
     tail = MASKING_LENGTH // 5
     head = MASKING_LENGTH - tail
-    return f"{s[:head]}…{s[-tail:]}[TRUNCATED {len(s)} chars to {MASKING_LENGTH}]"
+    # Handle edge case where tail is 0 (when MASKING_LENGTH < 5)
+    # s[-0:] returns the entire string, so we must check explicitly
+    tail_part = s[-tail:] if tail > 0 else ""
+    return f"{s[:head]}...{tail_part}[TRUNCATED {len(s)} chars to {MASKING_LENGTH}]"
 
 
-def _mask(data: Any) -> Any:
-    """Mask data if it exceeds the maximum length threshold or contains sensitive information."""
+def mask_sensitive_data(data: Any) -> Any:
+    """Mask data if it exceeds the maximum length threshold or contains sensitive information.
+
+    Handles:
+    - Dictionaries: recursively masks values, redacts keys containing 'private_key' or 'authorization'
+    - Lists: recursively masks each item
+    - Strings: redacts private_key patterns, Authorization Bearer tokens, truncates long strings
+    - Other types: truncates if string representation exceeds threshold
+    """
     # Handle dictionaries recursively
     if isinstance(data, dict):
         masked_dict = {}
@@ -31,12 +38,12 @@ def _mask(data: Any) -> Any:
             ):
                 masked_dict[key] = "***REDACTED***"
             else:
-                masked_dict[key] = _mask(value)
+                masked_dict[key] = mask_sensitive_data(value)
         return masked_dict
 
     # Handle lists recursively
     if isinstance(data, list):
-        return [_mask(item) for item in data]
+        return [mask_sensitive_data(item) for item in data]
 
     # Handle strings
     if isinstance(data, str):
@@ -62,25 +69,3 @@ def _mask(data: Any) -> Any:
     if len(str(data)) <= MASKING_LENGTH:
         return data
     return _truncate_str(str(data))
-
-
-def setup_braintrust_if_creds_available() -> None:
-    """Initialize Braintrust logger and set up global callback handler."""
-    # Check if Braintrust API key is available
-    if not BRAINTRUST_API_KEY:
-        logger.info("Braintrust API key not provided, skipping Braintrust setup")
-        return
-
-    # Lazy imports to avoid loading braintrust when not needed
-    import braintrust
-
-    from onyx.tracing.braintrust_tracing_processor import BraintrustTracingProcessor
-    from onyx.tracing.framework import set_trace_processors
-
-    braintrust_logger = braintrust.init_logger(
-        project=BRAINTRUST_PROJECT,
-        api_key=BRAINTRUST_API_KEY,
-    )
-    braintrust.set_masking_function(_mask)
-    set_trace_processors([BraintrustTracingProcessor(braintrust_logger)])
-    logger.notice("Braintrust tracing initialized")

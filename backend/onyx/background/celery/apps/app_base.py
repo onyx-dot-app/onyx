@@ -43,7 +43,7 @@ from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
-from onyx.tracing.braintrust_tracing import setup_braintrust_if_creds_available
+from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import ColoredFormatter
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import PlainFormatter
@@ -240,8 +240,8 @@ def on_celeryd_init(
         f"Multiprocessing selected start method: {multiprocessing.get_start_method()}"
     )
 
-    # Initialize Braintrust tracing in workers if credentials are available.
-    setup_braintrust_if_creds_available()
+    # Initialize tracing in workers if credentials are available.
+    setup_tracing()
 
 
 def wait_for_redis(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
