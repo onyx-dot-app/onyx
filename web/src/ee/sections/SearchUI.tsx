@@ -6,7 +6,7 @@ import {
   MinimalOnyxDocument,
   SourceMetadata,
 } from "@/lib/search/interfaces";
-import SearchCard from "@/ee/sections/cards/SearchCard";
+import SearchCard from "@/ee/sections/SearchCard";
 import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { getSourceMetadata } from "@/lib/sources";
