@@ -172,8 +172,11 @@ def main() -> int:
         tenant_schemas = [tid for tid in tenant_ids if tid.startswith(TENANT_ID_PREFIX)]
 
         if not tenant_schemas:
-            print("No tenant schemas found.")
-            return 0
+            print(
+                "No tenant schemas found. " "Is MULTI_TENANT=true set?",
+                file=sys.stderr,
+            )
+            return 1
 
         schemas_to_migrate = get_schemas_needing_migration(tenant_schemas, head_rev)
 

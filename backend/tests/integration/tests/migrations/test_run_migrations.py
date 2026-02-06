@@ -137,12 +137,13 @@ def tenant_schema_empty(engine: Engine) -> Generator[str, None, None]:
 # ---------------------------------------------------------------------------
 
 
-def test_no_tenant_schemas_exits_zero() -> None:
+def test_no_tenant_schemas_exits_nonzero() -> None:
     """In non-multi-tenant mode there are no tenant_ schemas, so the script
-    should print a message and exit 0."""
+    should print a hint and exit 1."""
     result = _run_script(env_override={"MULTI_TENANT": "false"})
-    assert result.returncode == 0
+    assert result.returncode == 1
     assert "No tenant schemas found" in result.stdout
+    assert "MULTI_TENANT" in result.stdout
 
 
 def test_at_head_schema_is_skipped(tenant_schema_at_head: str) -> None:
