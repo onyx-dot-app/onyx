@@ -80,13 +80,13 @@ def run_alembic_for_batch(schemas: list[str]) -> BatchResult:
 
     # At least one schema failed.  Print the initial error output, then
     # re-run with continue=true so the remaining schemas still get migrated.
+    if result.stdout:
+        print(f"Initial error output:\n{result.stdout}", file=sys.stderr, flush=True)
     print(
-        f"Batch failed (exit {result.returncode}), retrying with continue=true ...",
+        f"Batch failed (exit {result.returncode}), retrying with 'continue=true'...",
         file=sys.stderr,
         flush=True,
     )
-    if result.stdout:
-        print(result.stdout, file=sys.stderr, end="", flush=True)
 
     retry = subprocess.run(
         [*base_cmd, "-x", "continue=true", "upgrade", "head"],
