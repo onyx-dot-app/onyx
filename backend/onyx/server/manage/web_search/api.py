@@ -382,9 +382,7 @@ def test_content_provider(
             )
         if MULTI_TENANT:
             stored_base_url = (
-                existing_provider.config.get("base_url")
-                if existing_provider.config
-                else None
+                existing_provider.config.base_url if existing_provider.config else None
             )
             request_base_url = request.config.base_url
             if request_base_url != stored_base_url:
