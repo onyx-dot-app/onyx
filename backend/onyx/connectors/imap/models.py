@@ -1,4 +1,5 @@
 import email
+import hashlib
 import uuid
 from datetime import datetime
 from datetime import timezone
@@ -17,6 +18,30 @@ class Header(str, Enum):
     )
     DATE_HEADER = "date"
     MESSAGE_ID_HEADER = "Message-ID"
+
+
+def _extract_body_hash(email_msg: Message, max_chars: int = 1000) -> str:
+    """
+    Extract a hash of the email body (first max_chars characters) for use in
+    generating unique IDs when Message-ID is missing.
+    """
+    try:
+        for part in email_msg.walk():
+            if part.is_multipart():
+                continue
+            raw_payload = part.get_payload(decode=True)
+            if isinstance(raw_payload, bytes):
+                # Try to decode, but use raw bytes if decoding fails
+                try:
+                    charset = part.get_content_charset() or "utf-8"
+                    text = raw_payload.decode(charset, errors="replace")
+                except (LookupError, UnicodeDecodeError):
+                    text = raw_payload.decode("latin-1", errors="replace")
+                # Hash the first max_chars characters
+                return hashlib.sha256(text[:max_chars].encode("utf-8")).hexdigest()[:16]
+        return ""
+    except Exception:
+        return ""
 
 
 class EmailHeaders(BaseModel):
@@ -71,10 +96,20 @@ class EmailHeaders(BaseModel):
 
         # Fallback for missing required fields to handle malformed/old emails
         if message_id is None:
-            # Generate a unique ID based on subject, date, and sender
-            # Include sender to reduce collision risk for similar malformed emails
-            fallback_content = f"{subject or ''}-{date_str or ''}-{from_ or ''}"
-            if fallback_content == "--":
+            # Generate a unique ID using multiple fields to reduce collision risk
+            # Include: subject, date, from, to, and a hash of the body content
+            body_hash = _extract_body_hash(email_msg)
+            fallback_parts = [
+                subject or "",
+                date_str or "",
+                from_ or "",
+                to or "",
+                body_hash,
+            ]
+            fallback_content = "-".join(fallback_parts)
+            
+            # Check if we have any meaningful content
+            if all(not part for part in fallback_parts):
                 # All fields empty - use random UUID to avoid collisions
                 message_id = f"<generated-{uuid.uuid4()}>"
             else:
