@@ -18,7 +18,6 @@ from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.query_and_chat.models import RetrievalDetails
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
@@ -70,9 +69,9 @@ class StreamPacketData(TypedDict, total=False):
 class ChatSessionManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         persona_id: int = 0,
         description: str = "Test chat session",
-        user_performing_action: DATestUser | None = None,
     ) -> DATestChatSession:
         chat_session_creation_req = ChatSessionCreationRequest(
             persona_id=persona_id, description=description
@@ -80,11 +79,7 @@ class ChatSessionManager:
         response = requests.post(
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         chat_session_id = response.json()["chat_session_id"]
@@ -96,8 +91,8 @@ class ChatSessionManager:
     def send_message(
         chat_session_id: UUID,
         message: str,
+        user_performing_action: DATestUser,
         parent_message_id: int | None = None,
-        user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
@@ -126,19 +121,12 @@ class ChatSessionManager:
             forced_tool_ids=forced_tool_ids,
         )
 
-        headers = (
-            user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS
-        )
-        cookies = user_performing_action.cookies if user_performing_action else None
-
         response = requests.post(
             f"{API_SERVER_URL}/chat/send-message",
             json=chat_message_req.model_dump(),
-            headers=headers,
+            headers=user_performing_action.headers,
             stream=True,
-            cookies=cookies,
+            cookies=user_performing_action.cookies,
         )
 
         streamed_response = ChatSessionManager.analyze_response(response)
@@ -167,9 +155,9 @@ class ChatSessionManager:
     def send_message_with_disconnect(
         chat_session_id: UUID,
         message: str,
+        user_performing_action: DATestUser,
         disconnect_after_packets: int = 0,
         parent_message_id: int | None = None,
-        user_performing_action: DATestUser | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         search_doc_ids: list[int] | None = None,
         query_override: str | None = None,
@@ -216,21 +204,14 @@ class ChatSessionManager:
             forced_tool_ids=forced_tool_ids,
         )
 
-        headers = (
-            user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS
-        )
-        cookies = user_performing_action.cookies if user_performing_action else None
-
         packets_received = 0
 
         with requests.post(
             f"{API_SERVER_URL}/chat/send-message",
             json=chat_message_req.model_dump(),
-            headers=headers,
+            headers=user_performing_action.headers,
             stream=True,
-            cookies=cookies,
+            cookies=user_performing_action.cookies,
         ) as response:
             for line in response.iter_lines():
                 if not line:
@@ -345,15 +326,11 @@ class ChatSessionManager:
     @staticmethod
     def get_chat_history(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestChatMessage]:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
@@ -373,7 +350,7 @@ class ChatSessionManager:
     def create_chat_message_feedback(
         message_id: int,
         is_positive: bool,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
         feedback_text: str | None = None,
         predefined_feedback: str | None = None,
     ) -> None:
@@ -385,18 +362,14 @@ class ChatSessionManager:
                 "feedback_text": feedback_text,
                 "predefined_feedback": predefined_feedback,
             },
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
 
     @staticmethod
     def delete(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Delete a chat session and all its related records (messages, agent data, etc.)
@@ -406,18 +379,14 @@ class ChatSessionManager:
         """
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
     @staticmethod
     def soft_delete(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Soft delete a chat session (marks as deleted but keeps in database).
@@ -428,18 +397,14 @@ class ChatSessionManager:
         # or make a direct call with hard_delete=False parameter via a new endpoint
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
     @staticmethod
     def hard_delete(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Hard delete a chat session (completely removes from database).
@@ -448,18 +413,14 @@ class ChatSessionManager:
         """
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
     @staticmethod
     def verify_deleted(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Verify that a chat session has been deleted by attempting to retrieve it.
@@ -468,11 +429,7 @@ class ChatSessionManager:
         """
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         # Chat session should return 404 if it doesn't exist or is deleted
         return response.status_code == 404
@@ -480,7 +437,7 @@ class ChatSessionManager:
     @staticmethod
     def verify_soft_deleted(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Verify that a chat session has been soft deleted (marked as deleted but still in DB).
@@ -490,11 +447,7 @@ class ChatSessionManager:
         # Try to get the chat session with include_deleted=true
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
 
         if response.status_code == 200:
@@ -506,7 +459,7 @@ class ChatSessionManager:
     @staticmethod
     def verify_hard_deleted(
         chat_session: DATestChatSession,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         """
         Verify that a chat session has been hard deleted (completely removed from DB).
@@ -516,11 +469,7 @@ class ChatSessionManager:
         # Try to get the chat session with include_deleted=true
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
 
         # For hard delete, even with include_deleted=true, the record should not exist
