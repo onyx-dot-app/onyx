@@ -126,7 +126,7 @@ def get_idle_sandboxes(
     )
 
     stmt = select(Sandbox).where(
-        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE]),
+        Sandbox.status == SandboxStatus.RUNNING,
         or_(
             Sandbox.last_heartbeat < threshold_time,
             and_(
@@ -147,27 +147,30 @@ def get_running_sandbox_count_by_tenant(
     since Sandbox model no longer has tenant_id. This function returns
     the count of all running sandboxes.
     """
-    stmt = select(func.count(Sandbox.id)).where(
-        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE])
-    )
+    stmt = select(func.count(Sandbox.id)).where(Sandbox.status == SandboxStatus.RUNNING)
     result = db_session.execute(stmt).scalar()
     return result or 0
 
 
-def create_snapshot(
+def create_snapshot__no_commit(
     db_session: Session,
     session_id: UUID,
     storage_path: str,
     size_bytes: int,
 ) -> Snapshot:
-    """Create a snapshot record for a session."""
+    """Create a snapshot record for a session.
+
+    NOTE: Uses flush() instead of commit(). The caller (cleanup task) is
+    responsible for committing after all snapshots + status updates are done,
+    so the entire operation is atomic.
+    """
     snapshot = Snapshot(
         session_id=session_id,
         storage_path=storage_path,
         size_bytes=size_bytes,
     )
     db_session.add(snapshot)
-    db_session.commit()
+    db_session.flush()
     return snapshot
 
 

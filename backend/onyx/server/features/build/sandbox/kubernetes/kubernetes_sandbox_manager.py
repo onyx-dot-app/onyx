@@ -1374,21 +1374,19 @@ echo "Session cleanup complete"
 
         # Exec into pod to create and upload snapshot (outputs + attachments)
         # Uses s5cmd pipe to stream tar.gz directly to S3
-        # Note: attachments/ may not exist if user never uploaded files, so we
-        # use a shell script to only include directories that exist
+        # Only snapshot if outputs/ exists. Include attachments/ only if non-empty.
         exec_command = [
             "/bin/sh",
             "-c",
             f"""
 set -eo pipefail
 cd {safe_session_path}
-dirs=""
-[ -d outputs ] && dirs="$dirs outputs"
-[ -d attachments ] && dirs="$dirs attachments"
-if [ -z "$dirs" ]; then
+if [ ! -d outputs ]; then
     echo "EMPTY_SNAPSHOT"
     exit 0
 fi
+dirs="outputs"
+[ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
 tar -czf - $dirs | /s5cmd pipe {s3_path}
 echo "SNAPSHOT_CREATED"
 """,
@@ -1526,7 +1524,11 @@ echo "SNAPSHOT_CREATED"
 
         s3_path = f"s3://{self._s3_bucket}/{snapshot_storage_path}"
 
-        logger.info(f"Restoring snapshot for session {session_id} from {s3_path}")
+        logger.info(
+            f"[SNAPSHOT_RESTORE] pod={pod_name}, session={session_id}, "
+            f"s3_path={s3_path}, bucket={self._s3_bucket}, "
+            f"storage_path={snapshot_storage_path}"
+        )
 
         # Stream snapshot directly from S3 via s5cmd in file-sync container.
         # Mirrors the upload pattern: upload uses `tar | s5cmd pipe`,
@@ -1536,12 +1538,21 @@ echo "SNAPSHOT_CREATED"
         # container.
         restore_script = f"""
 set -eo pipefail
+echo "DEBUG: Starting restore to {safe_session_path}"
+echo "DEBUG: S3 path = {s3_path}"
 mkdir -p {safe_session_path}
+echo "DEBUG: mkdir done, running s5cmd cat..."
 /s5cmd cat {s3_path} | tar -xzf - -C {safe_session_path}
+echo "DEBUG: tar extraction done"
+echo "DEBUG: Contents of {safe_session_path}:"
+ls -la {safe_session_path}/
 echo "SNAPSHOT_RESTORED"
 """
 
         try:
+            logger.info(
+                "[SNAPSHOT_RESTORE] Executing restore script in file-sync container"
+            )
             resp = k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
@@ -1554,12 +1565,12 @@ echo "SNAPSHOT_RESTORED"
                 tty=False,
             )
 
-            logger.debug(f"Snapshot restore output: {resp}")
+            logger.info(f"[SNAPSHOT_RESTORE] Script output: {resp}")
 
             if "SNAPSHOT_RESTORED" not in resp:
                 raise RuntimeError(f"Snapshot restore may have failed. Output: {resp}")
 
-            logger.info(f"Restored snapshot for session {session_id}")
+            logger.info("[SNAPSHOT_RESTORE] Extraction succeeded, regenerating config")
 
             # Regenerate configuration files that aren't in the snapshot
             # These are regenerated to ensure they match the current system state
@@ -1570,12 +1581,13 @@ echo "SNAPSHOT_RESTORED"
                 nextjs_port=nextjs_port,
                 use_demo_data=use_demo_data,
             )
+            logger.info("[SNAPSHOT_RESTORE] Config regenerated, starting NextJS")
 
             # Start NextJS dev server (check node_modules since restoring from snapshot)
             start_script = _build_nextjs_start_script(
                 safe_session_path, nextjs_port, check_node_modules=True
             )
-            k8s_stream(
+            resp2 = k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
@@ -1586,11 +1598,13 @@ echo "SNAPSHOT_RESTORED"
                 stdout=True,
                 tty=False,
             )
+            logger.info(f"[SNAPSHOT_RESTORE] NextJS start output: {resp2}")
             logger.info(
-                f"Started NextJS server for session {session_id} on port {nextjs_port}"
+                f"[SNAPSHOT_RESTORE] Done for session {session_id} on port {nextjs_port}"
             )
 
         except ApiException as e:
+            logger.error(f"[SNAPSHOT_RESTORE] ApiException: {e}", exc_info=True)
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
     def _regenerate_session_config(

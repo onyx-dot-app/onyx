@@ -608,34 +608,14 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         tenant_id: str,
     ) -> SnapshotResult | None:
-        """Create a snapshot of a session's outputs directory.
+        """Not implemented for local backend - workspaces persist on disk.
 
-        Returns None if snapshots are disabled (local backend).
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to snapshot
-            tenant_id: Tenant identifier for storage path
-
-        Returns:
-            SnapshotResult with storage path and size, or None if
-            snapshots are disabled for this backend
+        Local sandboxes don't use snapshots since the filesystem persists.
+        This should never be called for local backend.
         """
-        session_path = self._get_session_path(sandbox_id, session_id)
-        # SnapshotManager expects string session_id for storage path
-        _, storage_path, size_bytes = self._snapshot_manager.create_snapshot(
-            session_path,
-            str(session_id),
-            tenant_id,
-        )
-
-        logger.info(
-            f"Created snapshot for session {session_id}, size: {size_bytes} bytes"
-        )
-
-        return SnapshotResult(
-            storage_path=storage_path,
-            size_bytes=size_bytes,
+        raise NotImplementedError(
+            "create_snapshot is not supported for local backend. "
+            "Local sandboxes persist on disk and don't use snapshots."
         )
 
     def session_workspace_exists(
@@ -676,7 +656,7 @@ class LocalSandboxManager(SandboxManager):
             "Local sandboxes persist on disk and don't use snapshots."
         )
 
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(self, sandbox_id: UUID) -> bool:
         """Check if the sandbox is healthy (folder exists).
 
         Args:

@@ -200,7 +200,7 @@ class SandboxManager(ABC):
         Returns:
             SnapshotResult with storage path and size, or None if:
             - Snapshots are disabled for this backend
-            - No outputs or attachments exist to snapshot
+            - No outputs directory exists (nothing to snapshot)
 
         Raises:
             RuntimeError: If snapshot creation fails
