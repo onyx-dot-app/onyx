@@ -682,6 +682,28 @@ def connector_document_extraction(
                     # File system only - write directly to persistent storage,
                     # skip chunking/embedding/Vespa but still track documents in DB
 
+                    # IMPORTANT: Write to S3 FIRST, before marking as indexed in DB.
+                    # This ensures that if the S3 write fails or times out, the docs
+                    # won't be marked as indexed and will be retried on the next sync.
+                    # Previously, docs were marked as indexed before S3 write, causing
+                    # ~65k docs to be lost when a sync timed out mid-batch.
+
+                    # Write documents to persistent file system
+                    # Use creator_id for user-segregated storage paths (sandbox isolation)
+                    creator_id = index_attempt.connector_credential_pair.creator_id
+                    if creator_id is None:
+                        raise ValueError(
+                            f"ConnectorCredentialPair {index_attempt.connector_credential_pair.id} "
+                            "must have a creator_id for persistent document storage"
+                        )
+                    user_id_str: str = str(creator_id)
+                    writer = get_persistent_document_writer(
+                        user_id=user_id_str,
+                        tenant_id=tenant_id,
+                    )
+                    written_paths = writer.write_documents(doc_batch_cleaned)
+
+                    # Only after successful S3 write, mark documents as indexed in DB
                     with get_session_with_current_tenant() as db_session:
                         # Create metadata for the batch
                         index_attempt_metadata = IndexAttemptMetadata(
@@ -710,21 +732,6 @@ def connector_document_extraction(
                             db_session=db_session,
                         )
                         db_session.commit()
-
-                    # Write documents to persistent file system
-                    # Use creator_id for user-segregated storage paths (sandbox isolation)
-                    creator_id = index_attempt.connector_credential_pair.creator_id
-                    if creator_id is None:
-                        raise ValueError(
-                            f"ConnectorCredentialPair {index_attempt.connector_credential_pair.id} "
-                            "must have a creator_id for persistent document storage"
-                        )
-                    user_id_str: str = str(creator_id)
-                    writer = get_persistent_document_writer(
-                        user_id=user_id_str,
-                        tenant_id=tenant_id,
-                    )
-                    written_paths = writer.write_documents(doc_batch_cleaned)
 
                     # Update coordination directly (no docprocessing task)
                     with get_session_with_current_tenant() as db_session:
