@@ -245,7 +245,15 @@ class OpenSearchClient:
         # TODO(andrei): Implement this.
         raise NotImplementedError
 
-    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    @log_function_time(
+        print_only=True,
+        debug_only=True,
+        include_args_subset={
+            "document": str,
+            "tenant_state": str,
+            "update_if_exists": str,
+        },
+    )
     def index_document(
         self,
         document: DocumentChunk,
