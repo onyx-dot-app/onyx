@@ -18,7 +18,6 @@ import {
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import Separator from "@/refresh-components/Separator";
-import Text from "@/refresh-components/texts/Text";
 import InputWrapper from "./components/InputWrapper";
 
 export const ANTHROPIC_PROVIDER_NAME = "anthropic";

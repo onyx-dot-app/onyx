@@ -18,7 +18,6 @@ import {
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
-import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
 import {
   isValidAzureTargetUri,
   parseAzureTargetUri,

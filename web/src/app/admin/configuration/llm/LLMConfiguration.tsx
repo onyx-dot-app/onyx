@@ -20,6 +20,7 @@ import { CustomForm } from "./forms/CustomForm";
 import { DefaultModelSelector } from "./forms/components/DefaultModel";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Separator from "@/refresh-components/Separator";
+import { useLlmManager } from "@/lib/hooks";
 
 export function LLMConfiguration() {
   const { data: existingLLMProvidersResponse } = useSWR<
@@ -37,6 +38,8 @@ export function LLMConfiguration() {
     existingLLMProvidersResponse.default_text ?? undefined;
   const isFirstProvider = existingLlmProviders.length === 0;
 
+  const { updateDefaultLlmModel } = useLlmManager();
+
   return (
     <>
       {existingLlmProviders.length > 0 ? (
@@ -44,6 +47,9 @@ export function LLMConfiguration() {
           <DefaultModelSelector
             existingLlmProviders={existingLlmProviders}
             defaultLlmModel={defaultLlmModel ?? null}
+            onModelChange={(provider_id, model_name) =>
+              updateDefaultLlmModel({ provider_id, model_name })
+            }
           />
 
           <GeneralLayouts.Section

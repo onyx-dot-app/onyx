@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Form, Formik, FormikProps } from "formik";
-import { SelectorFormField, TextFormField } from "@/components/Field";
+import { TextFormField } from "@/components/Field";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
@@ -18,7 +18,6 @@ import {
 } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import { FormActionButtons } from "./components/FormActionButtons";
-import { FetchModelsButton } from "./components/FetchModelsButton";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
@@ -29,15 +28,11 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
-import { fetchBedrockModels } from "../utils";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
-import Tabs from "@/refresh-components/Tabs";
 import { cn } from "@/lib/utils";
-import * as InputLayouts from "@/layouts/input-layouts";
-import Message from "@/refresh-components/messages/Message";
 import { Card } from "@/refresh-components/cards";
-import { SvgInfo, SvgInfoSmall } from "@opal/icons";
+import { SvgInfo } from "@opal/icons";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import InputWrapper from "./components/InputWrapper";
 

@@ -5,13 +5,13 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { DefaultModelSelectorProps } from "../../interfaces";
 import { Section } from "@/layouts/general-layouts";
 import { useMemo } from "react";
-import { LLM_ADMIN_URL } from "../../constants";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { setDefaultLlmModel } from "@/lib/admin/llm/svc";
 
 export function DefaultModelSelector({
   existingLlmProviders,
   defaultLlmModel,
+  onModelChange,
 }: DefaultModelSelectorProps) {
   // Flatten all models from all providers into a single list
   const models = useMemo(() => {
@@ -27,8 +27,9 @@ export function DefaultModelSelector({
     );
   }, [existingLlmProviders]);
 
-  const onModelChange = (provider_id: number, model_name: string) => {
+  const modelChangeHandler = (provider_id: number, model_name: string) => {
     setDefaultLlmModel(provider_id, model_name);
+    onModelChange(provider_id, model_name);
   };
 
   // Create a composite value string for the select (provider_id:model_name)
@@ -49,7 +50,7 @@ export function DefaultModelSelector({
     const providerId = parseInt(value.slice(0, separatorIndex), 10);
     const modelName = value.slice(separatorIndex + 1);
 
-    onModelChange(providerId, modelName);
+    modelChangeHandler(providerId, modelName);
   };
 
   return (
