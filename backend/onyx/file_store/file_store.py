@@ -618,7 +618,7 @@ def get_default_file_store() -> FileStore:
     from onyx.configs.app_configs import FILE_STORE_BACKEND
     from onyx.configs.constants import FileStoreType
 
-    if FILE_STORE_BACKEND == FileStoreType.POSTGRES:
+    if FileStoreType(FILE_STORE_BACKEND) == FileStoreType.POSTGRES:
         from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 
         return PostgresBackedFileStore()

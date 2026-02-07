@@ -19,6 +19,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.file_content import delete_file_content_by_file_id
 from onyx.db.file_content import get_file_content_by_file_id
+from onyx.db.file_content import get_file_content_by_file_id_optional
+from onyx.db.file_content import transfer_file_content_file_id
 from onyx.db.file_content import upsert_file_content
 from onyx.db.file_record import delete_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id
@@ -125,6 +127,14 @@ class PostgresBackedFileStore(FileStore):
         with get_session_with_current_tenant_if_none(db_session) as session:
             try:
                 raw_conn = _get_raw_connection(session)
+
+                # Look up existing content so we can unlink the old
+                # Large Object after a successful overwrite.
+                existing = get_file_content_by_file_id_optional(
+                    file_id=file_id, db_session=session
+                )
+                old_oid = existing.lobj_oid if existing else None
+
                 oid = _create_large_object(raw_conn, file_bytes)
 
                 upsert_filerecord(
@@ -143,6 +153,17 @@ class PostgresBackedFileStore(FileStore):
                     file_size=len(file_bytes),
                     db_session=session,
                 )
+
+                # Unlink the previous Large Object to avoid orphans
+                if old_oid is not None and old_oid != oid:
+                    try:
+                        _delete_large_object(raw_conn, old_oid)
+                    except Exception:
+                        logger.warning(
+                            f"Failed to unlink old large object {old_oid} "
+                            f"for file {file_id}"
+                        )
+
                 session.commit()
             except Exception:
                 session.rollback()
@@ -231,13 +252,9 @@ class PostgresBackedFileStore(FileStore):
                 old_record = get_filerecord_by_file_id(
                     file_id=old_file_id, db_session=session
                 )
-                old_content = get_file_content_by_file_id(
-                    file_id=old_file_id, db_session=session
-                )
-
                 file_metadata = cast(dict[Any, Any] | None, old_record.file_metadata)
 
-                # Create new records pointing to the same large object
+                # 1. Create the new file_record so the FK target exists
                 upsert_filerecord(
                     file_id=new_file_id,
                     display_name=old_record.display_name,
@@ -248,15 +265,16 @@ class PostgresBackedFileStore(FileStore):
                     db_session=session,
                     file_metadata=file_metadata,
                 )
-                upsert_file_content(
-                    file_id=new_file_id,
-                    lobj_oid=old_content.lobj_oid,
-                    file_size=old_content.file_size,
+
+                # 2. Move file_content in-place — the LO OID is never
+                #    shared between two rows.
+                transfer_file_content_file_id(
+                    old_file_id=old_file_id,
+                    new_file_id=new_file_id,
                     db_session=session,
                 )
 
-                # Delete old records (large object stays — new record references it)
-                delete_file_content_by_file_id(file_id=old_file_id, db_session=session)
+                # 3. Remove the now-orphaned old file_record
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=session)
 
                 session.commit()

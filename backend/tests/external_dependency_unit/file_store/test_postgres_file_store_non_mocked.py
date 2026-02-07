@@ -21,6 +21,8 @@ from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.file_content import get_file_content_by_file_id
 from onyx.db.file_content import get_file_content_by_file_id_optional
+from onyx.file_store.postgres_file_store import _get_raw_connection
+from onyx.file_store.postgres_file_store import _read_large_object
 from onyx.file_store.postgres_file_store import POSTGRES_BUCKET_SENTINEL
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 from onyx.utils.logger import setup_logger
@@ -288,6 +290,10 @@ class TestPostgresBackedFileStore:
 
         assert pg_file_store.read_file(file_id).read() == b"original"
 
+        # Capture the OID of the original Large Object
+        with get_session_with_current_tenant() as session:
+            old_oid = get_file_content_by_file_id(file_id, session).lobj_oid
+
         pg_file_store.save_file(
             content=BytesIO(b"overwritten"),
             display_name="v2.txt",
@@ -297,6 +303,15 @@ class TestPostgresBackedFileStore:
         )
 
         assert pg_file_store.read_file(file_id).read() == b"overwritten"
+
+        # The old Large Object should have been unlinked
+        with get_session_with_current_tenant() as session:
+            new_oid = get_file_content_by_file_id(file_id, session).lobj_oid
+            assert new_oid != old_oid
+
+            raw_conn = _get_raw_connection(session)
+            with pytest.raises(Exception):
+                _read_large_object(raw_conn, old_oid)
 
     # ── change_file_id ─────────────────────────────────────────────
 
