@@ -410,6 +410,7 @@ def restore_session(
                 # Fall through to TERMINATED handling below
 
         session_manager = SessionManager(db_session)
+        llm_config = session_manager._get_llm_config(None, None)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
             # Mark as PROVISIONING before the long-running provision() call
@@ -420,7 +421,6 @@ def restore_session(
             db_session.commit()
             db_session.refresh(sandbox)
 
-            llm_config = session_manager._get_llm_config(None, None)
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
                 user_id=user.id,
@@ -444,8 +444,6 @@ def restore_session(
                 snapshot = None
                 if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     snapshot = get_latest_snapshot_for_session(db_session, session_id)
-
-                llm_config = session_manager._get_llm_config(None, None)
 
                 if snapshot:
                     new_port = allocate_nextjs_port(db_session)
@@ -492,7 +490,7 @@ def restore_session(
             )
 
     except Exception as e:
-        logger.error(f"Failed to restore session {session_id}: {e}")
+        logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",

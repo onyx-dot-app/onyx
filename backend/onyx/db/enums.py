@@ -233,7 +233,7 @@ class SandboxStatus(str, PyEnum):
     FAILED = "failed"
 
     def is_active(self) -> bool:
-        """Check if sandbox is in an active state (running or idle)."""
+        """Check if sandbox is in an active state (running)."""
         return self == SandboxStatus.RUNNING
 
     def is_terminal(self) -> bool:

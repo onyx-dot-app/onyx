@@ -644,47 +644,6 @@ done
             else:
                 raise
 
-    def _wait_for_nextjs_ready(
-        self,
-        pod_name: str,
-        port: int,
-        timeout_seconds: int = 30,
-    ) -> None:
-        """Poll until the NextJS dev server responds on the given port.
-
-        Execs a curl loop inside the sandbox container. Logs a warning
-        if the server doesn't become ready within the timeout but does
-        NOT raise — the frontend will retry on its own.
-        """
-        check_script = (
-            f"for i in $(seq 1 {timeout_seconds}); do "
-            f"  if curl -s -o /dev/null -w '' http://localhost:{port}/ --max-time 1 2>/dev/null; then "
-            f'    echo "NEXTJS_READY"; exit 0; '
-            f"  fi; "
-            f"  sleep 1; "
-            f"done; "
-            f'echo "NEXTJS_TIMEOUT"'
-        )
-
-        try:
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-                command=["/bin/sh", "-c", check_script],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
-            if "NEXTJS_READY" not in resp:
-                logger.warning(
-                    f"NextJS not ready after {timeout_seconds}s on port {port}"
-                )
-        except Exception as e:
-            logger.warning(f"Failed to check NextJS readiness: {e}")
-
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.
 
@@ -900,7 +859,6 @@ done
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
-        self._get_service_name(str(sandbox_id))
 
         # Check if pod already exists and is healthy (idempotency check)
         if self._pod_exists_and_healthy(pod_name):

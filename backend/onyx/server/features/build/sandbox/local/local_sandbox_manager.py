@@ -656,7 +656,11 @@ class LocalSandboxManager(SandboxManager):
             "Local sandboxes persist on disk and don't use snapshots."
         )
 
-    def health_check(self, sandbox_id: UUID) -> bool:
+    def health_check(
+        self,
+        sandbox_id: UUID,
+        timeout: float = 60.0,  # noqa: ARG002
+    ) -> bool:
         """Check if the sandbox is healthy (folder exists).
 
         Args:
