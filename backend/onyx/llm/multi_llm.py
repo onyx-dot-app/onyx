@@ -21,6 +21,7 @@ from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import Usage
 from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
 from onyx.llm.models import OPENAI_REASONING_EFFORT
+from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.utils import is_true_openai_model
 from onyx.llm.utils import model_is_reasoning_model
@@ -378,7 +379,7 @@ class LitellmLLM(LLM):
                 passthrough_kwargs["api_key"] = self._api_key or None
 
             response = litellm.completion(
-                mock_response=MOCK_LLM_RESPONSE,
+                mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                 model=model,
                 base_url=self._api_base or None,
                 api_version=self._api_version or None,

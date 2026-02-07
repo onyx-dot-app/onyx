@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Annotated
+from typing import Any
 from typing import Literal
 from typing import Union
 
@@ -37,6 +38,7 @@ class StreamingType(Enum):
     REASONING_DELTA = "reasoning_delta"
     REASONING_DONE = "reasoning_done"
     CITATION_INFO = "citation_info"
+    TOOL_CALL_DEBUG = "tool_call_debug"
 
     DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
     DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
@@ -125,6 +127,14 @@ class CitationInfo(BaseObj):
     # The document id of the SearchDoc (same as the field stored in the DB)
     # This is the actual document id from the connector, not the int id
     document_id: str
+
+
+class ToolCallDebug(BaseObj):
+    type: Literal["tool_call_debug"] = StreamingType.TOOL_CALL_DEBUG.value
+
+    tool_call_id: str
+    tool_name: str
+    tool_args: dict[str, Any]
 
 
 ################################################
@@ -318,6 +328,7 @@ PacketObj = Union[
     ReasoningDone,
     # Citation Packets
     CitationInfo,
+    ToolCallDebug,
     # Deep Research Packets
     DeepResearchPlanStart,
     DeepResearchPlanDelta,
