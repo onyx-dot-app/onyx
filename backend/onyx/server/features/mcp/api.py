@@ -80,6 +80,7 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -851,13 +852,14 @@ def _db_mcp_server_to_api_mcp_server(
             and include_auth_config
         ):
             admin_config_dict = extract_connection_data(
-                db_server.admin_connection_config, apply_mask=True
+                db_server.admin_connection_config, apply_mask=False
             )
             if db_server.auth_type == MCPAuthenticationType.API_TOKEN:
+                raw_api_key = admin_config_dict["headers"]["Authorization"].split(" ")[
+                    -1
+                ]
                 admin_credentials = {
-                    "api_key": admin_config_dict["headers"]["Authorization"].split(" ")[
-                        -1
-                    ]
+                    "api_key": mask_string(raw_api_key),
                 }
             elif db_server.auth_type == MCPAuthenticationType.OAUTH:
                 user_authenticated = False
@@ -873,8 +875,8 @@ def _db_mcp_server_to_api_mcp_server(
                             "Stored client info had empty client ID or secret"
                         )
                     admin_credentials = {
-                        "client_id": client_info.client_id,
-                        "client_secret": client_info.client_secret,
+                        "client_id": mask_string(client_info.client_id),
+                        "client_secret": mask_string(client_info.client_secret),
                     }
                 else:
                     admin_credentials = {}
@@ -900,7 +902,7 @@ def _db_mcp_server_to_api_mcp_server(
         ):
             client_info = None
             oauth_admin_config_dict = extract_connection_data(
-                db_server.admin_connection_config, apply_mask=True
+                db_server.admin_connection_config, apply_mask=False
             )
             client_info_raw = oauth_admin_config_dict.get(
                 MCPOAuthKeys.CLIENT_INFO.value
@@ -912,8 +914,8 @@ def _db_mcp_server_to_api_mcp_server(
                     raise ValueError("Stored client info had empty client ID or secret")
                 if can_view_admin_credentials:
                     admin_credentials = {
-                        "client_id": client_info.client_id,
-                        "client_secret": client_info.client_secret,
+                        "client_id": mask_string(client_info.client_id),
+                        "client_secret": mask_string(client_info.client_secret),
                     }
             elif can_view_admin_credentials:
                 admin_credentials = {}
@@ -926,7 +928,7 @@ def _db_mcp_server_to_api_mcp_server(
             template_config = db_server.admin_connection_config
             if template_config:
                 template_config_dict = extract_connection_data(
-                    template_config, apply_mask=True
+                    template_config, apply_mask=False
                 )
                 headers = template_config_dict.get("headers", {})
                 auth_template = MCPAuthTemplate(
