@@ -101,6 +101,7 @@ export function ParallelTimelineTabs({
           isFirst={isFirstTurnGroup}
           isLast={headerIsLast}
           isHover={isHover}
+          disableTopConnectorHover={true}
           icon={
             <div
               className={cn(

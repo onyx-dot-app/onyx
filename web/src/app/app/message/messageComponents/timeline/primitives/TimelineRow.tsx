@@ -13,6 +13,7 @@ export interface TimelineRowProps {
   railVariant?: TimelineRowRailVariant;
   icon?: React.ReactNode;
   showIcon?: boolean;
+  disableTopConnectorHover?: boolean;
   /**
    * Controls the height of the icon row within the rail.
    * Use compact when the header is hidden to keep alignment stable.
@@ -32,6 +33,7 @@ export function TimelineRow({
   railVariant = "rail",
   icon,
   showIcon = true,
+  disableTopConnectorHover = false,
   iconRowVariant = "default",
   isFirst = false,
   isLast = false,
@@ -45,6 +47,7 @@ export function TimelineRow({
           variant={railVariant === "spacer" ? "spacer" : "rail"}
           icon={icon}
           showIcon={showIcon}
+          disableTopConnectorHover={disableTopConnectorHover}
           iconRowVariant={iconRowVariant}
           isFirst={isFirst}
           isLast={isLast}
