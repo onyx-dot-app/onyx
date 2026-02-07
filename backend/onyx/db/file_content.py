@@ -1,3 +1,4 @@
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import FileContent
@@ -28,18 +29,24 @@ def upsert_file_content(
     file_size: int,
     db_session: Session,
 ) -> FileContent:
-    record = db_session.query(FileContent).filter_by(file_id=file_id).first()
-    if record:
-        record.lobj_oid = lobj_oid
-        record.file_size = file_size
-    else:
-        record = FileContent(
-            file_id=file_id,
-            lobj_oid=lobj_oid,
-            file_size=file_size,
-        )
-        db_session.add(record)
-    return record
+    """Atomic upsert using INSERT ... ON CONFLICT DO UPDATE to avoid
+    race conditions when concurrent calls target the same file_id."""
+    stmt = insert(FileContent).values(
+        file_id=file_id,
+        lobj_oid=lobj_oid,
+        file_size=file_size,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[FileContent.file_id],
+        set_={
+            "lobj_oid": stmt.excluded.lobj_oid,
+            "file_size": stmt.excluded.file_size,
+        },
+    )
+    db_session.execute(stmt)
+
+    # Return the merged ORM instance so callers can inspect the result
+    return db_session.get(FileContent, file_id)  # type: ignore[return-value]
 
 
 def delete_file_content_by_file_id(
