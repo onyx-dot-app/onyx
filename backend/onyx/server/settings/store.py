@@ -53,6 +53,26 @@ def load_settings() -> Settings:
         anonymous_user_enabled = False
 
     settings.anonymous_user_enabled = anonymous_user_enabled
+
+    # Read auto-scroll preference from Redis
+    try:
+        value = redis_client.get(OnyxRedisLocks.AUTO_SCROLL)
+        if value is not None:
+            assert isinstance(value, bytes)
+            auto_scroll = int(value.decode("utf-8")) == 1
+        else:
+            # Default to False
+            auto_scroll = False
+            # Persist default if missing
+            redis_client.set(
+                OnyxRedisLocks.AUTO_SCROLL, "0", ex=SETTINGS_TTL
+            )
+    except Exception as e:
+        # Log the error and reset to default
+        logger.error(f"Error loading auto-scroll setting from Redis: {str(e)}")
+        auto_scroll = False
+
+    settings.auto_scroll = auto_scroll
     settings.query_history_type = ONYX_QUERY_HISTORY_TYPE
 
     # Override user knowledge setting if disabled via environment variable
@@ -71,6 +91,13 @@ def store_settings(settings: Settings) -> None:
         redis_client.set(
             OnyxRedisLocks.ANONYMOUS_USER_ENABLED,
             "1" if settings.anonymous_user_enabled else "0",
+            ex=SETTINGS_TTL,
+        )
+
+    if settings.auto_scroll is not None:
+        redis_client.set(
+            OnyxRedisLocks.AUTO_SCROLL,
+            "1" if settings.auto_scroll else "0",
             ex=SETTINGS_TTL,
         )
 
