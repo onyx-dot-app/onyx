@@ -6,6 +6,7 @@ from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
+import jwt
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -37,6 +38,7 @@ from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
+from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -646,7 +648,9 @@ def get_current_auth_token_creation_redis(
         return None
 
 
-def get_current_token_creation(user: User, db_session: Session) -> datetime | None:
+def get_current_token_creation_postgres(
+    user: User, db_session: Session
+) -> datetime | None:
     # Anonymous users don't have auth tokens
     if user.is_anonymous:
         return None
@@ -657,6 +661,41 @@ def get_current_token_creation(user: User, db_session: Session) -> datetime | No
     else:
         logger.error("No AccessToken found for user")
         return None
+
+
+def get_current_token_creation_jwt(user: User, request: Request) -> datetime | None:
+    """Extract token creation time from the ``iat`` claim of a JWT cookie."""
+    if user.is_anonymous:
+        return None
+
+    token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        return None
+
+    try:
+        payload = jwt.decode(
+            token,
+            USER_AUTH_SECRET,
+            algorithms=["HS256"],
+            audience=["fastapi-users:auth"],
+        )
+        iat = payload.get("iat")
+        if iat is None:
+            return None
+        return datetime.fromtimestamp(iat, tz=timezone.utc)
+    except jwt.PyJWTError:
+        logger.error("Failed to decode JWT for iat claim")
+        return None
+
+
+def _get_token_created_at(
+    user: User, request: Request, db_session: Session
+) -> datetime | None:
+    if AUTH_BACKEND == AuthBackend.REDIS:
+        return get_current_auth_token_creation_redis(user, request)
+    if AUTH_BACKEND == AuthBackend.JWT:
+        return get_current_token_creation_jwt(user, request)
+    return get_current_token_creation_postgres(user, db_session)
 
 
 @router.get("/me", tags=PUBLIC_API_TAGS)
@@ -681,11 +720,7 @@ def verify_user_logged_in(
             detail="Access denied. User's OIDC token has expired.",
         )
 
-    token_created_at = (
-        get_current_auth_token_creation_redis(user, request)
-        if AUTH_BACKEND == AuthBackend.REDIS
-        else get_current_token_creation(user, db_session)
-    )
+    token_created_at = _get_token_created_at(user, request, db_session)
 
     team_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
