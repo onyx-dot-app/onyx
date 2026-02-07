@@ -26,7 +26,8 @@ fi
 BASE_NAME="${SVG_FILE%.svg}"
 
 # Run the conversion with relative path to template
-bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template "scripts/icon-template.js" > "${BASE_NAME}.tsx"
+# Remove stroke, stroke-opacity, width, height, fill, and outline attributes
+bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height","fill","outline"]}}]}' --template "scripts/icon-template.js" > "${BASE_NAME}.tsx"
 
 if [ $? -eq 0 ]; then
   # Verify the output file was created and has content
@@ -66,6 +67,30 @@ if [ $? -eq 0 ]; then
   echo "Created ${BASE_NAME}.tsx"
   rm "$SVG_FILE"
   echo "Deleted $SVG_FILE"
+
+  # Add export to index.ts
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  INDEX_FILE="$SCRIPT_DIR/../index.ts"
+
+  # Get just the filename without path and extension
+  FILE_NAME=$(basename "$BASE_NAME")
+
+  # Create the export line
+  EXPORT_LINE="export { default as Svg${FILE_NAME} } from \"@opal/icons/${FILE_NAME}\";"
+
+  # Check if export already exists
+  if grep -q "Svg${FILE_NAME}" "$INDEX_FILE"; then
+    echo "Export for Svg${FILE_NAME} already exists in index.ts"
+  else
+    # Add the export line in alphabetical order
+    # Create a temp file with all exports, add the new one, sort, and replace
+    {
+      grep "^export" "$INDEX_FILE"
+      echo "$EXPORT_LINE"
+    } | sort > "${INDEX_FILE}.tmp"
+    mv "${INDEX_FILE}.tmp" "$INDEX_FILE"
+    echo "Added export for Svg${FILE_NAME} to index.ts"
+  fi
 else
   echo "Error: Conversion failed" >&2
   exit 1
