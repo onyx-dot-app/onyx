@@ -71,7 +71,7 @@ def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def _mask_list(items: list[Any]) -> list[Any]:
-    masked = []
+    masked: list[Any] = []
     for item in items:
         if isinstance(item, dict):
             masked.append(mask_credential_dict(item))
