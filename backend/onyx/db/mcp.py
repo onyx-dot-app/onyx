@@ -19,6 +19,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
 
@@ -214,7 +215,9 @@ def extract_connection_data(
     """
     if config is None or config.config is None:
         return MCPConnectionData(headers={})
-    return cast(MCPConnectionData, config.config.get_value(apply_mask=apply_mask))
+    if isinstance(config.config, SensitiveValue):
+        return cast(MCPConnectionData, config.config.get_value(apply_mask=apply_mask))
+    return cast(MCPConnectionData, config.config)
 
 
 def get_connection_config_by_id(
