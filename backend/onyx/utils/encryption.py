@@ -46,8 +46,8 @@ MASK_CREDENTIALS_WHITELIST = {
 }
 
 
-def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
-    masked_creds = {}
+def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, Any]:
+    masked_creds: dict[str, Any] = {}
     for key, val in credential_dict.items():
         if isinstance(val, str):
             # we want to pass the authentication_method field through so the frontend
@@ -56,18 +56,34 @@ def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
                 masked_creds[key] = val
             else:
                 masked_creds[key] = mask_string(val)
-            continue
-
-        if isinstance(val, int):
+        elif isinstance(val, dict):
+            masked_creds[key] = mask_credential_dict(val)
+        elif isinstance(val, list):
+            masked_creds[key] = _mask_list(val)
+        elif isinstance(val, (bool, type(None))):
+            masked_creds[key] = val
+        elif isinstance(val, (int, float)):
             masked_creds[key] = "*****"
-            continue
-
-        raise ValueError(
-            f"Unable to mask credentials of type other than string or int, cannot process request."
-            f"Received type: {type(val)}"
-        )
+        else:
+            masked_creds[key] = "*****"
 
     return masked_creds
+
+
+def _mask_list(items: list[Any]) -> list[Any]:
+    masked = []
+    for item in items:
+        if isinstance(item, dict):
+            masked.append(mask_credential_dict(item))
+        elif isinstance(item, str):
+            masked.append(mask_string(item))
+        elif isinstance(item, list):
+            masked.append(_mask_list(item))
+        elif isinstance(item, (bool, type(None))):
+            masked.append(item)
+        else:
+            masked.append("*****")
+    return masked
 
 
 def encrypt_string_to_bytes(intput_str: str) -> bytes:
