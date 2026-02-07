@@ -7,7 +7,6 @@ from onyx.context.search.enums import RecencyBiasSetting
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestPersonaLabel
 from tests.integration.common_utils.test_models import DATestUser
@@ -16,6 +15,7 @@ from tests.integration.common_utils.test_models import DATestUser
 class PersonaManager:
     @staticmethod
     def create(
+        user_performing_action: DATestUser,
         name: str | None = None,
         description: str | None = None,
         system_prompt: str | None = None,
@@ -34,7 +34,6 @@ class PersonaManager:
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
         user_file_ids: list[str] | None = None,
-        user_performing_action: DATestUser | None = None,
         display_priority: int | None = None,
     ) -> DATestPersona:
         name = name or f"test-persona-{uuid4()}"
@@ -67,11 +66,7 @@ class PersonaManager:
         response = requests.post(
             f"{API_SERVER_URL}/persona",
             json=persona_creation_request.model_dump(mode="json"),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         persona_data = response.json()
@@ -100,6 +95,7 @@ class PersonaManager:
     @staticmethod
     def edit(
         persona: DATestPersona,
+        user_performing_action: DATestUser,
         name: str | None = None,
         description: str | None = None,
         system_prompt: str | None = None,
@@ -117,7 +113,6 @@ class PersonaManager:
         users: list[str] | None = None,
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
-        user_performing_action: DATestUser | None = None,
     ) -> DATestPersona:
         system_prompt = system_prompt or f"System prompt for {persona.name}"
         task_prompt = task_prompt or f"Task prompt for {persona.name}"
@@ -151,11 +146,7 @@ class PersonaManager:
         response = requests.patch(
             f"{API_SERVER_URL}/persona/{persona.id}",
             json=persona_update_request.model_dump(mode="json"),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         updated_persona_data = response.json()
@@ -187,15 +178,11 @@ class PersonaManager:
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/admin/persona",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [FullPersonaSnapshot(**persona) for persona in response.json()]
@@ -203,15 +190,11 @@ class PersonaManager:
     @staticmethod
     def get_one(
         persona_id: int,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/{persona_id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [FullPersonaSnapshot(**response.json())]
@@ -219,7 +202,7 @@ class PersonaManager:
     @staticmethod
     def verify(
         persona: DATestPersona,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         all_personas = PersonaManager.get_one(
             persona_id=persona.id,
@@ -388,15 +371,11 @@ class PersonaManager:
     @staticmethod
     def delete(
         persona: DATestPersona,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/persona/{persona.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
@@ -405,18 +384,14 @@ class PersonaLabelManager:
     @staticmethod
     def create(
         label: DATestPersonaLabel,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> DATestPersonaLabel:
         response = requests.post(
             f"{API_SERVER_URL}/persona/labels",
             json={
                 "name": label.name,
             },
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         response_data = response.json()
@@ -425,15 +400,11 @@ class PersonaLabelManager:
 
     @staticmethod
     def get_all(
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> list[DATestPersonaLabel]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/labels",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return [DATestPersonaLabel(**label) for label in response.json()]
@@ -441,18 +412,14 @@ class PersonaLabelManager:
     @staticmethod
     def update(
         label: DATestPersonaLabel,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> DATestPersonaLabel:
         response = requests.patch(
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
             json={
                 "label_name": label.name,
             },
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return label
@@ -460,22 +427,18 @@ class PersonaLabelManager:
     @staticmethod
     def delete(
         label: DATestPersonaLabel,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=user_performing_action.headers,
         )
         return response.ok
 
     @staticmethod
     def verify(
         label: DATestPersonaLabel,
-        user_performing_action: DATestUser | None = None,
+        user_performing_action: DATestUser,
     ) -> bool:
         all_labels = PersonaLabelManager.get_all(user_performing_action)
         for fetched_label in all_labels:
