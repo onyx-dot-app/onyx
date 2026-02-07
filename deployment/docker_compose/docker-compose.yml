@@ -73,7 +73,7 @@ services:
     environment:
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-basic}
-      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-postgres}
+      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
       - REDIS_HOST=${REDIS_HOST:-cache}
