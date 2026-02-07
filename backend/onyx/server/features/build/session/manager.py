@@ -1675,7 +1675,8 @@ class SessionManager:
             user_id: The user ID to verify ownership
 
         Returns:
-            Dict with has_webapp, webapp_url, and status, or None if session not found
+            Dict with has_webapp, webapp_url, status, and ready,
+            or None if session not found
         """
         # Verify session ownership
         session = get_build_session(session_id, user_id, self._db_session)
@@ -1684,19 +1685,50 @@ class SessionManager:
 
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
-            return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
+            return {
+                "has_webapp": False,
+                "webapp_url": None,
+                "status": "no_sandbox",
+                "ready": False,
+            }
 
         # Return the proxy URL - the proxy handles routing to the correct sandbox
         # for both local and Kubernetes environments
         webapp_url = None
+        ready = False
         if session.nextjs_port:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
+
+            # Quick health check: can the API server reach the NextJS dev server?
+            ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
 
         return {
             "has_webapp": session.nextjs_port is not None,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
+            "ready": ready,
         }
+
+    def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:
+        """Check if the NextJS dev server is responding.
+
+        Does a quick HTTP GET to the sandbox's internal URL with a short timeout.
+        Returns True if the server responds with any status code, False on timeout
+        or connection error.
+        """
+        import httpx
+
+        from onyx.server.features.build.sandbox.base import get_sandbox_manager
+
+        try:
+            sandbox_manager = get_sandbox_manager()
+            internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
+            with httpx.Client(timeout=2.0) as client:
+                resp = client.get(internal_url)
+                # Any response (even 500) means the server is up
+                return resp.status_code < 500
+        except (httpx.TimeoutException, httpx.ConnectError, Exception):
+            return False
 
     def download_webapp_zip(
         self,

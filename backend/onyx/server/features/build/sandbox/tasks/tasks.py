@@ -16,6 +16,9 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
+from onyx.server.features.build.db.build_session import (
+    mark_user_sessions_idle__no_commit,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -75,12 +78,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     try:
         # Import here to avoid circular imports
         from onyx.db.enums import SandboxStatus
-        from onyx.server.features.build.db.sandbox import create_snapshot
+        from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
         from onyx.server.features.build.db.sandbox import (
             update_sandbox_status__no_commit,
         )
-        from onyx.server.features.build.sandbox import get_sandbox_manager
 
         sandbox_manager = get_sandbox_manager()
 
@@ -128,7 +130,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             )
                             if snapshot_result:
                                 # Create DB record for the snapshot
-                                create_snapshot(
+                                create_snapshot__no_commit(
                                     db_session,
                                     session_id,
                                     snapshot_result.storage_path,
@@ -154,7 +156,15 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                         f"{sandbox.user_id}"
                     )
 
-                    # Mark sandbox as SLEEPING (not TERMINATED)
+                    # Mark all active sessions as IDLE
+                    idled = mark_user_sessions_idle__no_commit(
+                        db_session, sandbox.user_id
+                    )
+                    task_logger.debug(
+                        f"Marked {idled} sessions as IDLE for user "
+                        f"{sandbox.user_id}"
+                    )
+
                     update_sandbox_status__no_commit(
                         db_session, sandbox_id, SandboxStatus.SLEEPING
                     )
@@ -272,7 +282,7 @@ def sync_sandbox_files(
             task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
             return False
 
-        if sandbox.status not in [SandboxStatus.RUNNING, SandboxStatus.IDLE]:
+        if sandbox.status != SandboxStatus.RUNNING:
             task_logger.debug(
                 f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
                 f"skipping sync"

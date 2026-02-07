@@ -34,9 +34,7 @@ def _schema_exists(schema_name: str) -> bool:
 class TestTenantProvisioningRollback:
     """Integration tests for provisioning failure and rollback."""
 
-    def test_failed_provisioning_cleans_up_schema(
-        self, reset_multitenant: None
-    ) -> None:
+    def test_failed_provisioning_cleans_up_schema(self) -> None:
         """
         When setup_tenant fails after schema creation, rollback should
         clean up the orphaned schema.
@@ -79,9 +77,7 @@ class TestTenantProvisioningRollback:
             created_tenant_id
         ), f"Schema {created_tenant_id} should have been rolled back"
 
-    def test_drop_schema_works_with_uuid_tenant_id(
-        self, reset_multitenant: None
-    ) -> None:
+    def test_drop_schema_works_with_uuid_tenant_id(self) -> None:
         """
         drop_schema should work with UUID-format tenant IDs.
 

@@ -18,7 +18,6 @@ from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
@@ -269,27 +268,6 @@ def update_artifact(
         logger.info(f"Updated artifact {artifact_id}")
 
 
-# Snapshot operations
-def create_snapshot(
-    session_id: UUID,
-    storage_path: str,
-    size_bytes: int,
-    db_session: Session,
-) -> Snapshot:
-    """Create a new snapshot record."""
-    snapshot = Snapshot(
-        session_id=session_id,
-        storage_path=storage_path,
-        size_bytes=size_bytes,
-    )
-    db_session.add(snapshot)
-    db_session.commit()
-    db_session.refresh(snapshot)
-
-    logger.info(f"Created snapshot {snapshot.id} for session {session_id}")
-    return snapshot
-
-
 # Message operations
 def create_message(
     session_id: UUID,
@@ -499,6 +477,32 @@ def allocate_nextjs_port(db_session: Session) -> int:
     raise RuntimeError(
         f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
     )
+
+
+def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> int:
+    """Mark all ACTIVE sessions for a user as IDLE.
+
+    Called when a sandbox goes to sleep so the frontend knows these sessions
+    need restoration before they can be used again.
+
+    Args:
+        db_session: Database session
+        user_id: The user whose sessions should be marked idle
+
+    Returns:
+        Number of sessions updated
+    """
+    result = (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            BuildSession.status == BuildSessionStatus.ACTIVE,
+        )
+        .update({BuildSession.status: BuildSessionStatus.IDLE})
+    )
+    db_session.flush()
+    logger.info(f"Marked {result} sessions as IDLE for user {user_id}")
+    return result
 
 
 def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:

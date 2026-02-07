@@ -608,34 +608,14 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         tenant_id: str,
     ) -> SnapshotResult | None:
-        """Create a snapshot of a session's outputs directory.
+        """Not implemented for local backend - workspaces persist on disk.
 
-        Returns None if snapshots are disabled (local backend).
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to snapshot
-            tenant_id: Tenant identifier for storage path
-
-        Returns:
-            SnapshotResult with storage path and size, or None if
-            snapshots are disabled for this backend
+        Local sandboxes don't use snapshots since the filesystem persists.
+        This should never be called for local backend.
         """
-        session_path = self._get_session_path(sandbox_id, session_id)
-        # SnapshotManager expects string session_id for storage path
-        _, storage_path, size_bytes = self._snapshot_manager.create_snapshot(
-            session_path,
-            str(session_id),
-            tenant_id,
-        )
-
-        logger.info(
-            f"Created snapshot for session {session_id}, size: {size_bytes} bytes"
-        )
-
-        return SnapshotResult(
-            storage_path=storage_path,
-            size_bytes=size_bytes,
+        raise NotImplementedError(
+            "create_snapshot is not supported for local backend. "
+            "Local sandboxes persist on disk and don't use snapshots."
         )
 
     def session_workspace_exists(
@@ -663,52 +643,23 @@ class LocalSandboxManager(SandboxManager):
         snapshot_storage_path: str,
         tenant_id: str,  # noqa: ARG002
         nextjs_port: int,
+        llm_config: LLMProviderConfig,
+        use_demo_data: bool = False,
     ) -> None:
-        """Restore a snapshot into a session's workspace directory and start NextJS.
+        """Not implemented for local backend - workspaces persist on disk.
 
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to restore
-            snapshot_storage_path: Path to the snapshot in storage
-            tenant_id: Tenant identifier for storage access
-            nextjs_port: Port number for the NextJS dev server
-
-        Raises:
-            RuntimeError: If snapshot restoration fails
-            FileNotFoundError: If snapshot does not exist
+        Local sandboxes don't use snapshots since the filesystem persists.
+        This should never be called for local backend.
         """
-        session_path = self._get_session_path(sandbox_id, session_id)
-
-        # Ensure session directory exists
-        session_path.mkdir(parents=True, exist_ok=True)
-
-        # Use SnapshotManager to restore
-        self._snapshot_manager.restore_snapshot(
-            storage_path=snapshot_storage_path,
-            target_path=session_path,
+        raise NotImplementedError(
+            "restore_snapshot is not supported for local backend. "
+            "Local sandboxes persist on disk and don't use snapshots."
         )
 
-        logger.info(f"Restored snapshot for session {session_id}")
-
-        # Start NextJS dev server
-        web_dir = session_path / "outputs" / "web"
-        if web_dir.exists():
-            logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
-            nextjs_process = self._process_manager.start_nextjs_server(
-                web_dir, nextjs_port
-            )
-            # Store process for clean shutdown on session delete
-            self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
-            logger.info(
-                f"Started NextJS server for session {session_id} on port {nextjs_port}"
-            )
-        else:
-            logger.warning(
-                f"Web directory not found at {web_dir}, skipping NextJS startup"
-            )
-
     def health_check(
-        self, sandbox_id: UUID, timeout: float = 60.0  # noqa: ARG002
+        self,
+        sandbox_id: UUID,
+        timeout: float = 60.0,  # noqa: ARG002
     ) -> bool:
         """Check if the sandbox is healthy (folder exists).
 

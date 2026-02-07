@@ -1221,15 +1221,20 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           !sessionData.session_loaded_in_sandbox);
 
       if (needsRestore) {
-        console.log(`Restoring session ${sessionId}...`);
-        // Update UI to show restoring state
+        // Update UI: show sandbox as "restoring" and session as loading
         updateSessionData(sessionId, {
-          status: "creating", // Use "creating" to show loading indicator
+          status: "creating",
+          sandbox: sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : null,
         });
 
         // Call restore endpoint (blocks until complete)
         sessionData = await restoreSession(sessionId);
-        console.log(`Session ${sessionId} restored successfully`);
+
+        // Clear the "creating" loading indicator so subsequent logic
+        // doesn't mistake this for an active streaming session.
+        updateSessionData(sessionId, { status: "idle" });
       }
 
       // Now fetch messages and artifacts
@@ -1269,7 +1274,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const statusToUse = isCurrentlyStreaming
         ? currentSession!.status
         : sessionData.status === "active"
-          ? "completed"
+          ? "active"
           : "idle";
 
       updateSessionData(sessionId, {
@@ -1282,6 +1287,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox: sessionData.sandbox,
         error: null,
         isLoaded: true,
+        // After restore, bump webappNeedsRefresh so OutputPanel's SWR refetches
+        // webapp-info. Done here (not earlier) so all session data is set atomically.
+        ...(needsRestore
+          ? {
+              webappNeedsRefresh:
+                (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+            }
+          : {}),
       });
     } catch (err) {
       console.error("Failed to load session:", err);

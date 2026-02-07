@@ -28,6 +28,11 @@ const STATUS_CONFIG = {
     pulse: false,
     label: "Sandbox sleeping",
   },
+  restoring: {
+    color: "bg-status-warning-05",
+    pulse: true,
+    label: "Restoring sandbox...",
+  },
   terminated: {
     color: "bg-status-error-05",
     pulse: false,
