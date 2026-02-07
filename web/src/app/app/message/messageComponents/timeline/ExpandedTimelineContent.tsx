@@ -16,6 +16,7 @@ import { StepContainer } from "./StepContainer";
 import { TimelineStepComposer } from "./TimelineStepComposer";
 import {
   isSearchToolPackets,
+  isPythonToolPackets,
   isReasoningPackets,
   isDeepResearchPlanPackets,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
@@ -53,6 +54,10 @@ const TimelineStep = React.memo(function TimelineStep({
   );
   const isReasoning = useMemo(
     () => isReasoningPackets(step.packets),
+    [step.packets]
+  );
+  const isPythonTool = useMemo(
+    () => isPythonToolPackets(step.packets),
     [step.packets]
   );
   const isDeepResearchPlan = useMemo(
@@ -96,7 +101,7 @@ const TimelineStep = React.memo(function TimelineStep({
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
-      defaultExpanded={isStreaming || isSingleStep}
+      defaultExpanded={isStreaming || (isSingleStep && !isPythonTool)}
       isLastStep={isLastStep}
     >
       {renderStep}

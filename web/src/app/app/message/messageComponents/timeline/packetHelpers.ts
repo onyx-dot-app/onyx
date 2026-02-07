@@ -19,6 +19,10 @@ export const isResearchAgentPackets = (packets: Packet[]): boolean =>
 export const isSearchToolPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.SEARCH_TOOL_START);
 
+// Check if packets belong to a python tool
+export const isPythonToolPackets = (packets: Packet[]): boolean =>
+  packets.some((p) => p.obj.type === PacketType.PYTHON_TOOL_START);
+
 // Check if packets belong to reasoning
 export const isReasoningPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.REASONING_START);
