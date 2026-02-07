@@ -1221,7 +1221,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           !sessionData.session_loaded_in_sandbox);
 
       if (needsRestore) {
-        console.log(`Restoring session ${sessionId}...`);
         // Update UI: show sandbox as "restoring" and session as loading
         updateSessionData(sessionId, {
           status: "creating",
@@ -1232,7 +1231,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
         // Call restore endpoint (blocks until complete)
         sessionData = await restoreSession(sessionId);
-        console.log(`Session ${sessionId} restored successfully`);
 
         // Clear the "creating" loading indicator so subsequent logic
         // doesn't mistake this for an active streaming session.

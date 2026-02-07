@@ -678,15 +678,12 @@ done
                 stdout=True,
                 tty=False,
             )
-            if "NEXTJS_READY" in resp:
-                logger.info(f"[SNAPSHOT_RESTORE] NextJS ready on port {port}")
-            else:
+            if "NEXTJS_READY" not in resp:
                 logger.warning(
-                    f"[SNAPSHOT_RESTORE] NextJS not ready after {timeout_seconds}s "
-                    f"on port {port}, continuing anyway"
+                    f"NextJS not ready after {timeout_seconds}s on port {port}"
                 )
         except Exception as e:
-            logger.warning(f"[SNAPSHOT_RESTORE] Failed to check NextJS readiness: {e}")
+            logger.warning(f"Failed to check NextJS readiness: {e}")
 
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.
@@ -1596,12 +1593,6 @@ echo "SNAPSHOT_CREATED"
 
         s3_path = f"s3://{self._s3_bucket}/{snapshot_storage_path}"
 
-        logger.info(
-            f"[SNAPSHOT_RESTORE] pod={pod_name}, session={session_id}, "
-            f"s3_path={s3_path}, bucket={self._s3_bucket}, "
-            f"storage_path={snapshot_storage_path}"
-        )
-
         # Stream snapshot directly from S3 via s5cmd in file-sync container.
         # Mirrors the upload pattern: upload uses `tar | s5cmd pipe`,
         # restore uses `s5cmd cat | tar`. Both run in file-sync container
@@ -1610,21 +1601,12 @@ echo "SNAPSHOT_CREATED"
         # container.
         restore_script = f"""
 set -eo pipefail
-echo "DEBUG: Starting restore to {safe_session_path}"
-echo "DEBUG: S3 path = {s3_path}"
 mkdir -p {safe_session_path}
-echo "DEBUG: mkdir done, running s5cmd cat..."
 /s5cmd cat {s3_path} | tar -xzf - -C {safe_session_path}
-echo "DEBUG: tar extraction done"
-echo "DEBUG: Contents of {safe_session_path}:"
-ls -la {safe_session_path}/
 echo "SNAPSHOT_RESTORED"
 """
 
         try:
-            logger.info(
-                "[SNAPSHOT_RESTORE] Executing restore script in file-sync container"
-            )
             resp = k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
@@ -1637,12 +1619,8 @@ echo "SNAPSHOT_RESTORED"
                 tty=False,
             )
 
-            logger.info(f"[SNAPSHOT_RESTORE] Script output: {resp}")
-
             if "SNAPSHOT_RESTORED" not in resp:
                 raise RuntimeError(f"Snapshot restore may have failed. Output: {resp}")
-
-            logger.info("[SNAPSHOT_RESTORE] Extraction succeeded, regenerating config")
 
             # Regenerate configuration files that aren't in the snapshot
             # These are regenerated to ensure they match the current system state
@@ -1653,13 +1631,12 @@ echo "SNAPSHOT_RESTORED"
                 nextjs_port=nextjs_port,
                 use_demo_data=use_demo_data,
             )
-            logger.info("[SNAPSHOT_RESTORE] Config regenerated, starting NextJS")
 
             # Start NextJS dev server (check node_modules since restoring from snapshot)
             start_script = _build_nextjs_start_script(
                 safe_session_path, nextjs_port, check_node_modules=True
             )
-            resp2 = k8s_stream(
+            k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
@@ -1670,14 +1647,7 @@ echo "SNAPSHOT_RESTORED"
                 stdout=True,
                 tty=False,
             )
-            logger.info(f"[SNAPSHOT_RESTORE] NextJS start output: {resp2}")
-
-            logger.info(
-                f"[SNAPSHOT_RESTORE] Done for session {session_id} on port {nextjs_port}"
-            )
-
         except ApiException as e:
-            logger.error(f"[SNAPSHOT_RESTORE] ApiException: {e}", exc_info=True)
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
     def _regenerate_session_config(

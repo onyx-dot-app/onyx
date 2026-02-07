@@ -348,24 +348,13 @@ def restore_session(
     Returns immediately if session workspace already exists in pod.
     Always returns session_loaded_in_sandbox=True on success.
     """
-    logger.info(
-        f"[RESTORE] === Starting restore for session {session_id}, user {user.id} ==="
-    )
-
     session = get_build_session(session_id, user.id, db_session)
     if not session:
-        logger.warning(f"[RESTORE] Session {session_id} not found for user {user.id}")
         raise HTTPException(status_code=404, detail="Session not found")
 
     sandbox = get_sandbox_by_user_id(db_session, user.id)
     if not sandbox:
-        logger.warning(f"[RESTORE] No sandbox found for user {user.id}")
         raise HTTPException(status_code=404, detail="Sandbox not found")
-
-    logger.info(
-        f"[RESTORE] Session status={session.status}, "
-        f"sandbox={sandbox.id} status={sandbox.status}"
-    )
 
     # If sandbox is already running, check if session workspace exists
     sandbox_manager = get_sandbox_manager()
@@ -378,36 +367,24 @@ def restore_session(
 
     # Non-blocking: if another restore is already running, return 409 immediately
     # instead of making the user wait. The frontend will retry.
-    logger.info(f"[RESTORE] Acquiring Redis lock: {lock_key}")
     acquired = lock.acquire(blocking=False)
     if not acquired:
-        logger.info(f"[RESTORE] Lock {lock_key} held by another request, returning 409")
         raise HTTPException(
             status_code=409,
             detail="Restore already in progress",
         )
 
-    logger.info("[RESTORE] Lock acquired, proceeding with restore")
-
     try:
         # Re-fetch sandbox status (may have changed while waiting for lock)
         db_session.refresh(sandbox)
-        logger.info(f"[RESTORE] After refresh: sandbox status={sandbox.status}")
 
         # Also re-check if session workspace exists (another request may have
         # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
-            # Verify pod is healthy before proceeding
-            logger.info("[RESTORE] Sandbox is RUNNING, checking health...")
             is_healthy = sandbox_manager.health_check(sandbox.id, timeout=10.0)
-            logger.info(f"[RESTORE] Health check result: {is_healthy}")
             if is_healthy and sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             ):
-                logger.info(
-                    f"[RESTORE] Session {session_id} workspace already exists, "
-                    f"returning early"
-                )
                 # Ensure session is marked ACTIVE (may still be IDLE from sleep)
                 if session.status != BuildSessionStatus.ACTIVE:
                     session.status = BuildSessionStatus.ACTIVE
@@ -435,11 +412,6 @@ def restore_session(
         session_manager = SessionManager(db_session)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            # 1. Re-provision the pod
-            logger.info(
-                f"[RESTORE] Sandbox is {sandbox.status.value}, re-provisioning..."
-            )
-
             # Mark as PROVISIONING before the long-running provision() call
             # so other requests know work is in progress
             update_sandbox_status__no_commit(
@@ -449,14 +421,12 @@ def restore_session(
             db_session.refresh(sandbox)
 
             llm_config = session_manager._get_llm_config(None, None)
-            logger.info(f"[RESTORE] Calling provision() for sandbox {sandbox.id}")
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
             )
-            logger.info("[RESTORE] Provision complete, marking RUNNING")
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.RUNNING
             )
@@ -465,25 +435,15 @@ def restore_session(
 
         # 2. Check if session workspace needs to be loaded
         if sandbox.status == SandboxStatus.RUNNING:
-            logger.info("[RESTORE] Checking if session workspace exists in pod...")
             workspace_exists = sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             )
-            logger.info(f"[RESTORE] Workspace exists: {workspace_exists}")
 
             if not workspace_exists:
                 # Only Kubernetes backend supports snapshot restoration
                 snapshot = None
                 if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     snapshot = get_latest_snapshot_for_session(db_session, session_id)
-                    logger.info(
-                        f"[RESTORE] Snapshot lookup: "
-                        f"{'found ' + snapshot.storage_path if snapshot else 'NONE'}"
-                    )
-                else:
-                    logger.info(
-                        f"[RESTORE] Backend is {SANDBOX_BACKEND}, skipping snapshot"
-                    )
 
                 llm_config = session_manager._get_llm_config(None, None)
 
@@ -492,11 +452,6 @@ def restore_session(
                     session.nextjs_port = new_port
                     # Commit port allocation before the long-running restore
                     db_session.commit()
-
-                    logger.info(
-                        f"[RESTORE] Restoring snapshot for session {session_id} "
-                        f"from {snapshot.storage_path} with port {new_port}"
-                    )
 
                     try:
                         sandbox_manager.restore_snapshot(
@@ -508,26 +463,17 @@ def restore_session(
                             llm_config=llm_config,
                             use_demo_data=session.demo_data_enabled,
                         )
-                        logger.info(
-                            f"[RESTORE] Snapshot restore succeeded for {session_id}"
-                        )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
                     except Exception as e:
                         logger.error(
-                            f"[RESTORE] Snapshot restore FAILED for {session_id}, "
-                            f"clearing port {new_port}: {e}",
-                            exc_info=True,
+                            f"Snapshot restore failed for session {session_id}: {e}"
                         )
                         session.nextjs_port = None
                         db_session.commit()
                         raise
                 else:
-                    # No snapshot or local backend - set up fresh workspace
-                    logger.info(
-                        f"[RESTORE] No snapshot, setting up fresh workspace "
-                        f"for session {session_id}"
-                    )
+                    # No snapshot - set up fresh workspace
                     if not session.nextjs_port:
                         session.nextjs_port = allocate_nextjs_port(db_session)
 
@@ -541,12 +487,12 @@ def restore_session(
                     db_session.commit()
         else:
             logger.warning(
-                f"[RESTORE] Sandbox status is {sandbox.status} after "
-                f"re-provision block, expected RUNNING"
+                f"Sandbox {sandbox.id} status is {sandbox.status} after "
+                f"re-provision, expected RUNNING"
             )
 
     except Exception as e:
-        logger.error(f"[RESTORE] FAILED for session {session_id}: {e}", exc_info=True)
+        logger.error(f"Failed to restore session {session_id}: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",
@@ -554,15 +500,9 @@ def restore_session(
     finally:
         if lock.owned():
             lock.release()
-            logger.info(f"[RESTORE] Released lock {lock_key}")
 
     # Update heartbeat to mark sandbox as active after successful restore
     update_sandbox_heartbeat(db_session, sandbox.id)
-
-    logger.info(
-        f"[RESTORE] === Restore complete for session {session_id}, "
-        f"sandbox={sandbox.id}, status={sandbox.status} ==="
-    )
 
     base_response = SessionResponse.from_model(session, sandbox)
     return DetailedSessionResponse.from_session_response(
