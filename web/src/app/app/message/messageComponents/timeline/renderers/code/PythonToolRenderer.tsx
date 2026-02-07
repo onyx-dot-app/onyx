@@ -192,7 +192,10 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       status,
       supportsCollapsible: true,
       content: (
-        <FadingEdgeContainer direction="bottom" className="h-24">
+        <FadingEdgeContainer
+          direction="bottom"
+          className="max-h-24 overflow-hidden"
+        >
           {content}
         </FadingEdgeContainer>
       ),

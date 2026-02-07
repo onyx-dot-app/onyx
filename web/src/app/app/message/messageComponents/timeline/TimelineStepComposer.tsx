@@ -54,7 +54,11 @@ export function TimelineStepComposer({
             supportsCollapsible={result.supportsCollapsible}
             isLastStep={index === results.length - 1 && isLastStep}
             isFirstStep={index === 0 && isFirstStep}
-            hideHeader={results.length === 1 && isSingleStep}
+            hideHeader={
+              results.length === 1 &&
+              isSingleStep &&
+              !result.supportsCollapsible
+            }
             collapsedIcon={
               getCollapsedIcon ? getCollapsedIcon(result) : undefined
             }

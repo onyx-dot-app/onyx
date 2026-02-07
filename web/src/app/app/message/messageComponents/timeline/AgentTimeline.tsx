@@ -243,7 +243,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   const collapsedRenderTypeOverride = useMemo(() => {
     if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
     if (lastStepIsSearchTool) return RenderType.INLINE;
-    return undefined;
+    return RenderType.COMPACT;
   }, [lastStepIsResearchAgent, lastStepIsSearchTool]);
 
   // Header selection based on UI state

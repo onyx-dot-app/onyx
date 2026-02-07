@@ -49,10 +49,11 @@ export function TimelineStepContent({
             </Text>
           </div>
 
-          <div className="h-full w-[var(--timeline-step-header-right-section-width)] p-0.5 flex items-center justify-center">
+          <div className="h-full w-[var(--timeline-step-header-right-section-width)] flex items-center justify-end">
             {showCollapseControls &&
               (buttonTitle ? (
                 <Button
+                  size="md"
                   tertiary
                   onClick={onToggle}
                   rightIcon={
@@ -63,7 +64,7 @@ export function TimelineStepContent({
                 </Button>
               ) : (
                 <IconButton
-                  tertiary
+                  internal
                   onClick={onToggle}
                   icon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
