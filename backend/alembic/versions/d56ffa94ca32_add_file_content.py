@@ -1,7 +1,7 @@
 """add_file_content
 
 Revision ID: d56ffa94ca32
-Revises: d5c86e2c6dc6
+Revises: 01f8e6d95a33
 Create Date: 2026-02-06 15:29:34.192960
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d56ffa94ca32"
-down_revision = "d5c86e2c6dc6"
+down_revision = "01f8e6d95a33"
 branch_labels = None
 depends_on = None
 
