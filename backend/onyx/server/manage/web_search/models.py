@@ -44,7 +44,7 @@ class WebContentProviderView(BaseModel):
     name: str
     provider_type: WebContentProviderType
     is_active: bool
-    config: dict[str, str] | None
+    config: WebContentProviderConfig | None
     has_api_key: bool = Field(default=False)
 
 
@@ -52,7 +52,7 @@ class WebContentProviderUpsertRequest(BaseModel):
     id: int | None = None
     name: str
     provider_type: WebContentProviderType
-    config: dict[str, str] | None = None
+    config: WebContentProviderConfig | None = None
     api_key: str | None = None
     api_key_changed: bool = False
     activate: bool = False
