@@ -18,7 +18,10 @@ import {
   getBuildLlmSelection,
   getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { LLM_PROVIDERS_ADMIN_URL } from "@/app/admin/configuration/llm/constants";
 import {
   buildInitialValues,
@@ -36,12 +39,25 @@ import OnboardingLlmSetup, {
  * Used when user completes onboarding without going through LLM setup step.
  */
 function autoSelectBestLlm(
-  llmProviders: LLMProviderDescriptor[] | undefined
+  llmProviders: LLMProviderDescriptor[] | undefined,
+  defaultLlmModel?: DefaultModel
 ): void {
   // Don't override if user already has a selection
   if (getBuildLlmSelection()) return;
 
-  const selection = getDefaultLlmSelection(llmProviders);
+  const selection = getDefaultLlmSelection(
+    llmProviders?.map((p) => ({
+      name: p.name,
+      provider: p.provider,
+      default_model_name: (() => {
+        if (p.id === defaultLlmModel?.provider_id) {
+          return defaultLlmModel?.model_name ?? "";
+        }
+        return p.model_configurations[0]?.name ?? "";
+      })(),
+      is_default_provider: p.id === defaultLlmModel?.provider_id,
+    }))
+  );
   if (selection) {
     setBuildLlmSelection(selection);
   }
@@ -57,6 +73,7 @@ interface InitialValues {
 interface BuildOnboardingModalProps {
   mode: OnboardingModalMode;
   llmProviders?: LLMProviderDescriptor[];
+  defaultLlm?: DefaultModel;
   initialValues: InitialValues;
   isAdmin: boolean;
   hasUserInfo: boolean;
@@ -103,6 +120,7 @@ function getStepsForMode(
 export default function BuildOnboardingModal({
   mode,
   llmProviders,
+  defaultLlm,
   initialValues,
   isAdmin,
   hasUserInfo,
@@ -326,7 +344,7 @@ export default function BuildOnboardingModal({
 
       // Auto-select best available LLM if user didn't go through LLM setup
       // (e.g., non-admin users or when all providers already configured)
-      autoSelectBestLlm(llmProviders);
+      autoSelectBestLlm(llmProviders, defaultLlm);
 
       // Validate workArea is provided before submission
       if (!workArea) {

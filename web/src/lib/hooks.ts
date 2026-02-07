@@ -474,6 +474,8 @@ export interface LlmDescriptor {
 export interface LlmManager {
   currentLlm: LlmDescriptor;
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
+  defaultLlmModel?: DefaultModel;
+  updateDefaultLlmModel: (newDefaultLlmModel: DefaultModel) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
@@ -592,6 +594,13 @@ export function useLlmManager(
     provider: "",
     modelName: "",
   });
+
+  const [defaultLlmModel, setDefaultLlmModel] = useState<
+    DefaultModel | undefined
+  >(defaultTextLlmModel);
+  const updateDefaultLlmModel = (newDefaultLlmModel: DefaultModel) => {
+    setDefaultLlmModel(newDefaultLlmModel);
+  };
 
   // Track the previous assistant ID to detect when it changes
   const prevAssistantIdRef = useRef<number | undefined>(undefined);
@@ -802,6 +811,8 @@ export function useLlmManager(
     updateModelOverrideBasedOnChatSession,
     currentLlm,
     updateCurrentLlm,
+    defaultLlmModel,
+    updateDefaultLlmModel,
     temperature,
     updateTemperature,
     imageFilesPresent,

@@ -78,7 +78,7 @@ interface SelectedConnectorState {
  */
 export default function BuildConfigPage() {
   const { isAdmin, isCurator } = useUser();
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders, defaultText } = useLLMProviders();
   const { openPersonaEditor, openLlmSetup } = useOnboarding();
   const [selectedConnector, setSelectedConnector] =
     useState<SelectedConnectorState | null>(null);
@@ -109,7 +109,7 @@ export default function BuildConfigPage() {
 
   // Build mode LLM selection (cookie-based)
   const { selection: llmSelection, updateSelection: updateLlmSelection } =
-    useBuildLlmSelection(llmProviders);
+    useBuildLlmSelection(llmProviders, defaultText ?? undefined);
 
   // Read demo data from cookie (single source of truth)
   const [demoDataEnabled, setDemoDataEnabledLocal] = useState(() =>

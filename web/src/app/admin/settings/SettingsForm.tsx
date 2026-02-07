@@ -16,6 +16,7 @@ import LLMSelector from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { SvgAlertTriangle } from "@opal/icons";
+import { useLlmManager } from "@/lib/hooks";
 
 export function Checkbox({
   label,

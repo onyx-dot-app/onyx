@@ -974,7 +974,8 @@ export default function useChatController({
       const [_, llmModel] = getFinalLLM(
         llmManager.llmProviders || [],
         liveAssistant || null,
-        llmManager.currentLlm
+        llmManager.currentLlm,
+        llmManager.defaultLlmModel
       );
       const llmAcceptsImages = modelSupportsImageInput(
         llmManager.llmProviders || [],

@@ -1,5 +1,6 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
+  DefaultModel,
   LLMProviderDescriptor,
   ModelConfiguration,
 } from "@/app/admin/configuration/llm/interfaces";
@@ -8,14 +9,15 @@ import { LlmDescriptor } from "@/lib/hooks";
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
   persona: MinimalPersonaSnapshot | null,
-  currentLlm: LlmDescriptor | null
+  currentLlm: LlmDescriptor | null,
+  defaultLlmModel?: DefaultModel
 ): [string, string] {
   const defaultProvider = llmProviders.find(
-    (llmProvider) => llmProvider.is_default_provider
+    (llmProvider) => llmProvider.id === defaultLlmModel?.provider_id
   );
 
   let provider = defaultProvider?.provider || "";
-  let model = defaultProvider?.default_model_name || "";
+  let model = defaultLlmModel?.model_name || "";
 
   if (persona) {
     // Map "provider override" to actual LLLMProvider

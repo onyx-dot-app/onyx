@@ -1,5 +1,8 @@
 import { useMemo, useState, useCallback } from "react";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import {
   BuildLlmSelection,
   getBuildLlmSelection,
@@ -16,7 +19,8 @@ import {
  * 2. Smart default - via getDefaultLlmSelection()
  */
 export function useBuildLlmSelection(
-  llmProviders: LLMProviderDescriptor[] | undefined
+  llmProviders: LLMProviderDescriptor[] | undefined,
+  defaultLlmModel?: DefaultModel
 ) {
   const [selection, setSelectionState] = useState<BuildLlmSelection | null>(
     () => getBuildLlmSelection()
@@ -42,7 +46,19 @@ export function useBuildLlmSelection(
     }
 
     // Fall back to smart default
-    return getDefaultLlmSelection(llmProviders);
+    return getDefaultLlmSelection(
+      llmProviders?.map((p) => ({
+        name: p.name,
+        provider: p.provider,
+        default_model_name: (() => {
+          if (p.id === defaultLlmModel?.provider_id) {
+            return defaultLlmModel?.model_name ?? "";
+          }
+          return p.model_configurations[0]?.name ?? "";
+        })(),
+        is_default_provider: p.id === defaultLlmModel?.provider_id,
+      }))
+    );
   }, [selection, llmProviders, isSelectionValid]);
 
   // Update selection and persist to cookie
