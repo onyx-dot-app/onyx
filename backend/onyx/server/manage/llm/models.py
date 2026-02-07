@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
@@ -19,6 +20,34 @@ if TYPE_CHECKING:
         LLMProvider as LLMProviderModel,
         ModelConfiguration as ModelConfigurationModel,
     )
+
+
+# TODO: Clear this up on api refactor
+# There is still logic that requires sending each providers default model name
+# There is no logic that requires sending the providers default vision model name
+# We only send for the one that is actually the default
+def get_default_llm_model_name(llm_provider_model: "LLMProviderModel") -> str:
+    """Find the default conversation model name for a provider.
+
+    Returns the model name if found, otherwise returns empty string.
+    """
+    for model_config in llm_provider_model.model_configurations:
+        for flow in model_config.llm_model_flows:
+            if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.CHAT:
+                return model_config.name
+    return ""
+
+
+def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str | None:
+    """Find the default vision model name for a provider.
+
+    Returns the model name if found, otherwise returns None.
+    """
+    for model_config in llm_provider_model.model_configurations:
+        for flow in model_config.llm_model_flows:
+            if flow.is_default and flow.llm_model_flow_type == LLMModelFlowType.VISION:
+                return model_config.name
+    return None
 
 
 class TestLLMRequest(BaseModel):
@@ -70,15 +99,22 @@ class LLMProviderDescriptor(BaseModel):
         )
 
         provider = llm_provider_model.provider
+        default_model_name = get_default_llm_model_name(llm_provider_model)
+        default_vision_model = get_default_vision_model_name(llm_provider_model)
+
+        is_default_provider = bool(default_model_name)
+        is_default_vision_provider = default_vision_model is not None
+
+        default_model_name = default_model_name or llm_provider_model.default_model_name
 
         return cls(
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            default_model_name=llm_provider_model.default_model_name,
-            is_default_provider=llm_provider_model.is_default_provider,
-            is_default_vision_provider=llm_provider_model.is_default_vision_provider,
-            default_vision_model=llm_provider_model.default_vision_model,
+            default_model_name=default_model_name,
+            is_default_provider=is_default_provider,
+            is_default_vision_provider=is_default_vision_provider,
+            default_vision_model=default_vision_model,
             model_configurations=filter_model_configurations(
                 llm_provider_model.model_configurations, provider
             ),
@@ -142,6 +178,14 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
+        default_model_name = get_default_llm_model_name(llm_provider_model)
+        default_vision_model = get_default_vision_model_name(llm_provider_model)
+
+        is_default_provider = bool(default_model_name)
+        is_default_vision_provider = default_vision_model is not None
+
+        default_model_name = default_model_name or llm_provider_model.default_model_name
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -150,10 +194,10 @@ class LLMProviderView(LLMProvider):
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
-            default_model_name=llm_provider_model.default_model_name,
-            is_default_provider=llm_provider_model.is_default_provider,
-            is_default_vision_provider=llm_provider_model.is_default_vision_provider,
-            default_vision_model=llm_provider_model.default_vision_model,
+            default_model_name=default_model_name,
+            is_default_provider=is_default_provider,
+            is_default_vision_provider=is_default_vision_provider,
+            default_vision_model=default_vision_model,
             is_public=llm_provider_model.is_public,
             is_auto_mode=llm_provider_model.is_auto_mode,
             groups=groups,
@@ -219,7 +263,8 @@ class ModelConfigurationView(BaseModel):
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 supports_image_input=(
-                    model_configuration_model.supports_image_input or False
+                    LLMModelFlowType.VISION
+                    in model_configuration_model.llm_model_flow_types
                 ),
                 # Infer reasoning support from model name/display name
                 supports_reasoning=is_reasoning_model(
@@ -261,8 +306,9 @@ class ModelConfigurationView(BaseModel):
                 )
             ),
             supports_image_input=(
-                val
-                if (val := model_configuration_model.supports_image_input) is not None
+                True
+                if LLMModelFlowType.VISION
+                in model_configuration_model.llm_model_flow_types
                 else litellm_thinks_model_supports_image_input(
                     model_configuration_model.name, provider_name
                 )

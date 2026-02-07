@@ -790,7 +790,7 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=initial_default_model,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
         expected_is_public=True,
@@ -804,7 +804,7 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=initial_default_model,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -817,7 +817,7 @@ def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG
         expected_name=provider_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=initial_default_model,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=expected_model_names,
         expected_visible=expected_visible,
     )
@@ -1063,7 +1063,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=provider_2_unique_model,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
@@ -1145,7 +1145,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=shared_model_name,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
@@ -1252,7 +1252,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=shared_model_name,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
         expected_is_public=True,
@@ -1267,7 +1267,7 @@ def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG
         expected_name=provider_1_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=shared_model_name,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=provider_1_model_names,
         expected_visible=provider_1_visible,
     )
@@ -1324,10 +1324,12 @@ def test_default_provider_and_vision_provider_selection(
         ModelConfigurationUpsertRequest(
             name=provider_2_vision_model_1,
             is_visible=True,
+            supports_image_input=True,
         ),
         ModelConfigurationUpsertRequest(
             name=provider_2_vision_model_2,
             is_visible=True,
+            supports_image_input=True,
         ),
     ]
 
@@ -1414,7 +1416,7 @@ def test_default_provider_and_vision_provider_selection(
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=provider_2_vision_model_1,
-        expected_is_default=None,  # Provider 2 is NOT the general default
+        expected_is_default=False,  # Provider 2 is NOT the general default
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_public=True,
@@ -1447,7 +1449,7 @@ def test_default_provider_and_vision_provider_selection(
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=provider_2_vision_model_1,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_default_vision=True,
@@ -1477,7 +1479,7 @@ def test_default_provider_and_vision_provider_selection(
         expected_name=provider_2_name,
         expected_provider=LlmProviderNames.OPENAI,
         expected_default_model=provider_2_vision_model_1,
-        expected_is_default=None,
+        expected_is_default=False,
         expected_model_names=provider_2_model_names,
         expected_visible=provider_2_visible,
         expected_is_default_vision=True,
@@ -1703,8 +1705,12 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     ]
 
     vision_model_configs = [
-        ModelConfigurationUpsertRequest(name="gpt-4-vision-preview", is_visible=True),
-        ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4-vision-preview", is_visible=True, supports_image_input=True
+        ),
+        ModelConfigurationUpsertRequest(
+            name="gpt-4o", is_visible=True, supports_image_input=True
+        ),
     ]
 
     # Step 1: Create regular LLM provider

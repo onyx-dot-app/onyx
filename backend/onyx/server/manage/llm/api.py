@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -19,9 +20,11 @@ from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
@@ -37,7 +40,6 @@ from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
-from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -252,7 +254,9 @@ def list_llm_providers(
 
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(
-        db_session, exclude_image_generation_providers=not include_image_gen
+        db_session=db_session,
+        flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        exclude_image_generation_providers=not include_image_gen,
     ):
         from_model_start = datetime.now(timezone.utc)
         full_llm_provider = LLMProviderView.from_model(llm_provider_model)
@@ -335,6 +339,8 @@ def put_llm_provider(
             model_configuration.is_visible = True
             default_model_found = True
 
+    # TODO: Remove this logic on api change
+    # Believed to be a dead pathway but we want to be safe for now
     if not default_model_found:
         llm_provider_upsert_request.model_configurations.append(
             ModelConfigurationUpsertRequest(
@@ -416,6 +422,8 @@ def set_provider_as_default_vision(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if vision_model is None:
+        raise HTTPException(status_code=404, detail="Vision model not provided")
     update_default_vision_provider(
         provider_id=provider_id, vision_model=vision_model, db_session=db_session
     )
@@ -445,41 +453,34 @@ def get_vision_capable_providers(
     db_session: Session = Depends(get_session),
 ) -> list[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
+    vision_models = fetch_existing_models(
+        db_session=db_session, flow_types=[LLMModelFlowType.VISION]
+    )
 
-    providers = fetch_existing_llm_providers(db_session)
-    vision_providers = []
+    # Group vision models by provider ID (using ID as key since it's hashable)
+    provider_models: dict[int, list[str]] = defaultdict(list)
+    providers_by_id: dict[int, LLMProviderView] = {}
 
-    logger.info("Fetching vision-capable providers")
-
-    for provider in providers:
-        vision_models = []
-
-        # Check each model for vision capability
-        for model_configuration in provider.model_configurations:
-            if model_supports_image_input(model_configuration.name, provider.provider):
-                vision_models.append(model_configuration.name)
-                logger.debug(
-                    f"Vision model found: {provider.provider}/{model_configuration.name}"
-                )
-
-        # Only include providers with at least one vision-capable model
-        if vision_models:
-            provider_view = LLMProviderView.from_model(provider)
+    for vision_model in vision_models:
+        provider_id = vision_model.llm_provider.id
+        provider_models[provider_id].append(vision_model.name)
+        # Only create the view once per provider
+        if provider_id not in providers_by_id:
+            provider_view = LLMProviderView.from_model(vision_model.llm_provider)
             _mask_provider_credentials(provider_view)
+            providers_by_id[provider_id] = provider_view
 
-            vision_providers.append(
-                VisionProviderResponse(
-                    **provider_view.model_dump(),
-                    vision_models=vision_models,
-                )
-            )
+    # Build response list
+    vision_provider_response = [
+        VisionProviderResponse(
+            **providers_by_id[provider_id].model_dump(),
+            vision_models=model_names,
+        )
+        for provider_id, model_names in provider_models.items()
+    ]
 
-            logger.info(
-                f"Vision provider: {provider.provider} with models: {vision_models}"
-            )
-
-    logger.info(f"Found {len(vision_providers)} vision-capable providers")
-    return vision_providers
+    logger.debug(f"Found {len(vision_provider_response)} vision-capable providers")
+    return vision_provider_response
 
 
 """Endpoints for all"""
@@ -502,7 +503,9 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
 
@@ -545,7 +548,9 @@ def get_valid_model_names_for_persona(
         return []
 
     is_admin = user.role == UserRole.ADMIN
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     valid_models = []
@@ -592,7 +597,9 @@ def list_llm_providers_for_persona(
         )
 
     is_admin = user.role == UserRole.ADMIN
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     llm_provider_list: list[LLMProviderDescriptor] = []
@@ -630,7 +637,7 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(db_session)
+    providers = fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT])
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:

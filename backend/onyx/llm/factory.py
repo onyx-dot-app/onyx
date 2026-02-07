@@ -1,23 +1,21 @@
 from collections.abc import Callable
 
-from sqlalchemy.orm import Session
-
 from onyx.auth.schemas import UserRole
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_default_provider
-from onyx.db.llm import fetch_default_vision_provider
+from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import get_max_input_tokens_from_llm_provider
@@ -51,54 +49,6 @@ def _build_provider_extra_headers(
         }
 
     return {}
-
-
-def get_llm_config_for_persona(
-    persona: Persona,
-    db_session: Session,
-    llm_override: LLMOverride | None = None,
-) -> LLMConfig:
-    """Get LLM config from persona without access checks.
-
-    This function assumes access to the persona has already been verified.
-    Use this when you need the LLM config but don't need to create the full LLM object.
-    """
-    provider_name_override = llm_override.model_provider if llm_override else None
-    model_version_override = llm_override.model_version if llm_override else None
-    temperature_override = llm_override.temperature if llm_override else None
-
-    provider_name = provider_name_override or persona.llm_model_provider_override
-    if not provider_name:
-        llm_provider = fetch_default_provider(db_session)
-        if not llm_provider:
-            raise ValueError("No default LLM provider found")
-        model_name: str | None = llm_provider.default_model_name
-    else:
-        llm_provider = fetch_llm_provider_view(db_session, provider_name)
-        if not llm_provider:
-            raise ValueError(f"No LLM provider found with name: {provider_name}")
-        model_name = model_version_override or persona.llm_model_version_override
-        if not model_name:
-            model_name = llm_provider.default_model_name
-
-    if not model_name:
-        raise ValueError("No model name found")
-
-    max_input_tokens = get_max_input_tokens_from_llm_provider(
-        llm_provider=llm_provider, model_name=model_name
-    )
-
-    return LLMConfig(
-        model_provider=llm_provider.provider,
-        model_name=model_name,
-        temperature=temperature_override or GEN_AI_TEMPERATURE,
-        api_key=llm_provider.api_key,
-        api_base=llm_provider.api_base,
-        api_version=llm_provider.api_version,
-        deployment_name=llm_provider.deployment_name,
-        custom_config=llm_provider.custom_config,
-        max_input_tokens=max_input_tokens,
-    )
 
 
 def get_llm_for_persona(
@@ -200,48 +150,50 @@ def get_default_llm_with_vision(
             ),
         )
 
+    provider_map = {}
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
-        default_provider = fetch_default_vision_provider(db_session)
-        if default_provider and default_provider.default_vision_model:
+        default_model = fetch_default_vision_model(db_session)
+        if default_model:
             if model_supports_image_input(
-                default_provider.default_vision_model, default_provider.provider
+                default_model.name, default_model.llm_provider.provider
             ):
                 return create_vision_llm(
-                    default_provider, default_provider.default_vision_model
+                    LLMProviderView.from_model(default_model.llm_provider),
+                    default_model.name,
+                )
+        # Fall back to searching all providers
+        models = fetch_existing_models(
+            db_session=db_session,
+            flow_types=[LLMModelFlowType.VISION, LLMModelFlowType.CHAT],
+        )
+
+        if not models:
+            return None
+
+        for model in models:
+            if model.llm_provider_id not in provider_map:
+                provider_map[model.llm_provider_id] = LLMProviderView.from_model(
+                    model.llm_provider
                 )
 
-        # Fall back to searching all providers
-        providers = fetch_existing_llm_providers(db_session)
+    # Search for viable vision model followed by chat models
+    # Sort models from VISION to CHAT priority
+    sorted_models = sorted(
+        models,
+        key=lambda x: (
+            LLMModelFlowType.VISION in x.llm_model_flow_types,
+            LLMModelFlowType.CHAT in x.llm_model_flow_types,
+        ),
+        reverse=True,
+    )
 
-    if not providers:
-        return None
-
-    # Check all providers for viable vision models
-    for provider in providers:
-        provider_view = LLMProviderView.from_model(provider)
-
-        # First priority: Check if provider has a default_vision_model
-        if provider.default_vision_model and model_supports_image_input(
-            provider.default_vision_model, provider.provider
-        ):
-            return create_vision_llm(provider_view, provider.default_vision_model)
-
-        # If no model-configurations are specified, try default model
-        if not provider.model_configurations:
-            # Try default_model_name
-            if provider.default_model_name and model_supports_image_input(
-                provider.default_model_name, provider.provider
-            ):
-                return create_vision_llm(provider_view, provider.default_model_name)
-
-        # Otherwise, if model-configurations are specified, check each model
-        else:
-            for model_configuration in provider.model_configurations:
-                if model_supports_image_input(
-                    model_configuration.name, provider.provider
-                ):
-                    return create_vision_llm(provider_view, model_configuration.name)
+    for model in sorted_models:
+        if model_supports_image_input(model.name, model.llm_provider.provider):
+            return create_vision_llm(
+                provider_map[model.llm_provider_id],
+                model.name,
+            )
 
     return None
 
@@ -287,22 +239,18 @@ def get_default_llm(
     additional_headers: dict[str, str] | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        llm_provider = fetch_default_provider(db_session)
+        model = fetch_default_llm_model(db_session)
 
-    if not llm_provider:
-        raise ValueError("No default LLM provider found")
+        if not model:
+            raise ValueError("No default LLM model found")
 
-    model_name = llm_provider.default_model_name
-    if not model_name:
-        raise ValueError("No default model name found")
-
-    return llm_from_provider(
-        model_name=model_name,
-        llm_provider=llm_provider,
-        timeout=timeout,
-        temperature=temperature,
-        additional_headers=additional_headers,
-    )
+        return llm_from_provider(
+            model_name=model.name,
+            llm_provider=LLMProviderView.from_model(model.llm_provider),
+            timeout=timeout,
+            temperature=temperature,
+            additional_headers=additional_headers,
+        )
 
 
 def get_llm(

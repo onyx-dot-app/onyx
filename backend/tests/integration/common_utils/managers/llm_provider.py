@@ -6,6 +6,7 @@ import requests
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestLLMProvider
@@ -44,7 +45,15 @@ class LLMProviderManager:
             is_public=True if is_public is None else is_public,
             groups=groups or [],
             personas=personas or [],
-            model_configurations=[],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=default_model_name or "gpt-4o-mini",
+                    is_visible=True,
+                    max_input_tokens=None,
+                    display_name=default_model_name or "gpt-4o-mini",
+                    supports_image_input=True,
+                )
+            ],
             api_key_changed=True,
         )
 
