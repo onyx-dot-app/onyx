@@ -96,6 +96,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.kg.models import KGStage
 from onyx.server.features.mcp.models import MCPConnectionData
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -2920,8 +2921,8 @@ class InternetContentProvider(Base):
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     provider_type: Mapped[str] = mapped_column(String, nullable=False)
     api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
-    config: Mapped[dict[str, str] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
+    config: Mapped[WebContentProviderConfig | None] = mapped_column(
+        PydanticType(WebContentProviderConfig), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     time_created: Mapped[datetime.datetime] = mapped_column(

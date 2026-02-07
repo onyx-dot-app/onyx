@@ -324,7 +324,6 @@ class OpenSearchClient:
     @log_function_time(
         print_only=True,
         debug_only=True,
-        include_args=False,
         include_args_subset={
             "documents": len,
             "tenant_state": str,
@@ -355,7 +354,7 @@ class OpenSearchClient:
                 already exists. Defaults to False.
 
         Raises:
-            RuntimeError: There was an error during the bulk index. This
+            Exception: There was an error during the bulk index. This
                 includes the case where a document with the same ID already
                 exists if update_if_exists is False.
         """
