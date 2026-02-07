@@ -122,8 +122,10 @@ def build_document_subpath(doc: Document, replace_slash: bool = True) -> list[st
     parts.append(doc.source.value)
 
     # Get hierarchy from doc_metadata
-    hierarchy = doc.doc_metadata.get("hierarchy", {}) if doc.doc_metadata else {}
-    source_path = hierarchy.get("source_path", [])
+    hierarchy: dict[str, Any] = (
+        doc.doc_metadata.get("hierarchy", {}) if doc.doc_metadata else {}
+    )
+    source_path: list[str] = hierarchy.get("source_path", [])
 
     if source_path:
         parts.extend(

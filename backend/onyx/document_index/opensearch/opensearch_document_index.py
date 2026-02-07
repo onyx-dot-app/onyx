@@ -1,7 +1,9 @@
 import json
+from collections import defaultdict
 from typing import Any
 
 import httpx
+from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import USING_AWS_MANAGED_OPENSEARCH
@@ -71,6 +73,10 @@ from shared_configs.model_server_models import Embedding
 
 
 logger = setup_logger(__name__)
+
+
+class ChunkCountNotFoundError(ValueError):
+    """Raised when a document has no chunk count."""
 
 
 def generate_opensearch_filtered_access_control_list(
@@ -357,7 +363,21 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
             ),
         )
 
-        return self._real_index.update([update_request])
+        try:
+            self._real_index.update([update_request])
+        except NotFoundError:
+            logger.exception(
+                f"Tried to update document {doc_id} but at least one of its chunks was not found in OpenSearch. "
+                "This is likely due to it not having been indexed yet. Skipping update for now..."
+            )
+            return
+        except ChunkCountNotFoundError:
+            logger.exception(
+                f"Tried to update document {doc_id} but its chunk count is not known. We tolerate this for now "
+                "but this will not be an acceptable state once OpenSearch is the primary document index and the "
+                "indexing/updating race condition is fixed."
+            )
+            return
 
     def id_based_retrieval(
         self,
@@ -474,7 +494,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 similarity part of the search.
 
         Raises:
-            RuntimeError: There was an error verifying or creating the index or
+            Exception: There was an error verifying or creating the index or
                 search pipelines.
         """
         logger.debug(
@@ -522,49 +542,76 @@ class OpenSearchDocumentIndex(DocumentIndex):
         chunks: list[DocMetadataAwareIndexChunk],
         indexing_metadata: IndexingMetadata,  # noqa: ARG002
     ) -> list[DocumentInsertionRecord]:
-        logger.debug(
-            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} chunks for index {self._index_name}."
+        """Indexes a list of document chunks into the document index.
+
+        Groups chunks by document ID and for each document, deletes existing
+        chunks and indexes the new chunks in bulk.
+
+        NOTE: It is assumed that chunks for a given document are not spread out
+        over multiple index() calls.
+
+        Args:
+            chunks: Document chunks with all of the information needed for
+                indexing to the document index.
+            indexing_metadata: Information about chunk counts for efficient
+                cleaning / updating.
+
+        Raises:
+            Exception: Failed to index some or all of the chunks for the
+                specified documents.
+
+        Returns:
+            List of document IDs which map to unique documents as well as if the
+                document is newly indexed or had already existed and was just
+                updated.
+        """
+        # Group chunks by document ID.
+        doc_id_to_chunks: dict[str, list[DocMetadataAwareIndexChunk]] = defaultdict(
+            list
         )
-        # Set of doc IDs.
-        unique_docs_to_be_indexed: set[str] = set()
-        document_indexing_results: list[DocumentInsertionRecord] = []
         for chunk in chunks:
-            document_insertion_record: DocumentInsertionRecord | None = None
-            onyx_document: Document = chunk.source_document
-            if onyx_document.id not in unique_docs_to_be_indexed:
-                # If this is the first time we see this doc in this indexing
-                # operation, first delete the doc's chunks from the index. This
-                # is so that there are no dangling chunks in the index, in the
-                # event that the new document's content contains fewer chunks
-                # than the previous content.
-                # TODO(andrei): This can possibly be made more efficient by
-                # checking if the chunk count has actually decreased. This
-                # assumes that overlapping chunks are perfectly overwritten. If
-                # we can't guarantee that then we need the code as-is.
-                unique_docs_to_be_indexed.add(onyx_document.id)
-                num_chunks_deleted = self.delete(
-                    onyx_document.id, onyx_document.chunk_count
-                )
-                # If we see that chunks were deleted we assume the doc already
-                # existed.
-                document_insertion_record = DocumentInsertionRecord(
-                    document_id=onyx_document.id,
-                    already_existed=num_chunks_deleted > 0,
-                )
+            doc_id_to_chunks[chunk.source_document.id].append(chunk)
+        logger.debug(
+            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} chunks from {len(doc_id_to_chunks)} "
+            f"documents for index {self._index_name}."
+        )
 
-            opensearch_document_chunk = _convert_onyx_chunk_to_opensearch_document(
-                chunk
+        document_indexing_results: list[DocumentInsertionRecord] = []
+        # Try to index per-document.
+        for _, chunks in doc_id_to_chunks.items():
+            # Create a batch of OpenSearch-formatted chunks for bulk insertion.
+            # Do this before deleting existing chunks to reduce the amount of
+            # time the document index has no content for a given document, and
+            # to reduce the chance of entering a state where we delete chunks,
+            # then some error happens, and never successfully index new chunks.
+            chunk_batch: list[DocumentChunk] = [
+                _convert_onyx_chunk_to_opensearch_document(chunk) for chunk in chunks
+            ]
+            onyx_document: Document = chunks[0].source_document
+            # First delete the doc's chunks from the index. This is so that
+            # there are no dangling chunks in the index, in the event that the
+            # new document's content contains fewer chunks than the previous
+            # content.
+            # TODO(andrei): This can possibly be made more efficient by checking
+            # if the chunk count has actually decreased. This assumes that
+            # overlapping chunks are perfectly overwritten. If we can't
+            # guarantee that then we need the code as-is.
+            num_chunks_deleted = self.delete(
+                onyx_document.id, onyx_document.chunk_count
             )
-            # TODO(andrei): After our client supports batch indexing, use that
-            # here.
-            self._os_client.index_document(
-                document=opensearch_document_chunk, tenant_state=self._tenant_state
+            # If we see that chunks were deleted we assume the doc already
+            # existed.
+            document_insertion_record = DocumentInsertionRecord(
+                document_id=onyx_document.id,
+                already_existed=num_chunks_deleted > 0,
             )
-
-            if document_insertion_record is not None:
-                # Only add records once per doc. This object is not None only if
-                # we've seen this doc for the first time in this for-loop.
-                document_indexing_results.append(document_insertion_record)
+            # Now index. This will raise if a chunk of the same ID exists, which
+            # we do not expect because we should have deleted all chunks.
+            self._os_client.bulk_index_documents(
+                documents=chunk_batch,
+                tenant_state=self._tenant_state,
+            )
+            document_indexing_results.append(document_insertion_record)
 
         return document_indexing_results
 
@@ -576,15 +623,17 @@ class OpenSearchDocumentIndex(DocumentIndex):
         Does nothing if the specified document ID does not exist.
 
         TODO(andrei): Consider implementing this method to delete on document
-        chunk IDs vs querying for matching document chunks.
+        chunk IDs vs querying for matching document chunks. Unclear if this is
+        any better though.
 
         Args:
-            document_id: The ID of the document to delete.
+            document_id: The unique identifier for the document as represented
+                in Onyx, not necessarily in the document index.
             chunk_count: The number of chunks in OpenSearch for the document.
                 Defaults to None.
 
         Raises:
-            RuntimeError: Failed to delete some or all of the chunks for the
+            Exception: Failed to delete some or all of the chunks for the
                 document.
 
         Returns:
@@ -623,7 +672,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 apply to all of the specified documents in each update request.
 
         Raises:
-            RuntimeError: Failed to update some or all of the chunks for the
+            Exception: Failed to update some or all of the chunks for the
                 specified documents.
         """
         logger.debug(
@@ -678,7 +727,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     # since been deprecated and should no longer be the case
                     # here.
                     # TODO(andrei): Fix the aforementioned race condition.
-                    raise ValueError(
+                    raise ChunkCountNotFoundError(
                         f"Tried to update document {doc_id} but its chunk count is not known. Older versions of the "
                         "application used to permit this but is not a supported state for a document when using OpenSearch. "
                         "The document was likely just added to the indexing pipeline and the chunk count will be updated shortly."

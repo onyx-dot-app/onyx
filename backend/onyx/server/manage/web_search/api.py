@@ -35,6 +35,7 @@ from onyx.server.manage.web_search.models import WebSearchProviderView
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.providers import (
     build_content_provider_from_config,
 )
@@ -236,7 +237,7 @@ def list_content_providers(
             name=provider.name,
             provider_type=WebContentProviderType(provider.provider_type),
             is_active=provider.is_active,
-            config=provider.config or {},
+            config=provider.config or WebContentProviderConfig(),
             has_api_key=bool(provider.api_key),
         )
         for provider in providers
@@ -299,7 +300,7 @@ def upsert_content_provider_endpoint(
         name=provider.name,
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
-        config=provider.config or {},
+        config=provider.config or WebContentProviderConfig(),
         has_api_key=bool(provider.api_key),
     )
 
@@ -331,7 +332,7 @@ def activate_content_provider(
         name=provider.name,
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
-        config=provider.config or {},
+        config=provider.config or WebContentProviderConfig(),
         has_api_key=bool(provider.api_key),
     )
 
@@ -381,9 +382,7 @@ def test_content_provider(
             )
         if MULTI_TENANT:
             stored_base_url = (
-                existing_provider.config.get("base_url")
-                if existing_provider.config
-                else None
+                existing_provider.config.base_url if existing_provider.config else None
             )
             request_base_url = request.config.base_url
             if request_base_url != stored_base_url:

@@ -12,6 +12,7 @@ from datetime import timedelta
 from datetime import timezone
 
 import pytest
+from opensearchpy import NotFoundError
 
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
@@ -450,7 +451,7 @@ class TestOpenSearchClient:
         # Postcondition.
         assert result is True
         # Verify the document is gone.
-        with pytest.raises(Exception, match="404"):
+        with pytest.raises(NotFoundError, match="404"):
             test_client.get_document(document_chunk_id=doc_chunk_id)
 
     def test_delete_nonexistent_document(
@@ -614,7 +615,7 @@ class TestOpenSearchClient:
 
         # Under test and postcondition.
         # Try to update a document that doesn't exist.
-        with pytest.raises(Exception, match="404"):
+        with pytest.raises(NotFoundError, match="404"):
             test_client.update_document(
                 document_chunk_id="test_source__nonexistent__512__0",
                 properties_to_update={"hidden": True},
