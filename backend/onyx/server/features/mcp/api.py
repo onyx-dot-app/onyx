@@ -1263,10 +1263,8 @@ def _list_mcp_tools_by_id(
             )
 
     if connection_config:
-        connection_config_dict = (
-            connection_config.config.get_value(apply_mask=False)
-            if connection_config.config
-            else {}
+        connection_config_dict = extract_connection_data(
+            connection_config, apply_mask=False
         )
         headers.update(connection_config_dict.get("headers", {}))
 
