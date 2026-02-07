@@ -25,6 +25,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.schemas import UserRole
+from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
@@ -664,15 +665,16 @@ def verify_user_logged_in(
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
-    # User should no longer be None (unless not auth-ed).
-    # However, we need to use optional_user dependency
-    # to allow unverified users to access this endpoint
+    tenant_id = get_current_tenant_id()
+
+    # User can be None if not authenticated.
+    # We use optional_user to allow unverified users to access this endpoint.
     if user is None:
+        # If anonymous access is enabled, return anonymous user info
+        if anonymous_user_enabled(tenant_id=tenant_id):
+            store = get_kv_store()
+            return fetch_anonymous_user_info(store)
         raise BasicAuthenticationError(detail="Unauthorized")
-    # If anonymous user, return the fake UserInfo (maintains backward compatibility)
-    if user.is_anonymous:
-        store = get_kv_store()
-        return fetch_anonymous_user_info(store)
 
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
         raise BasicAuthenticationError(
