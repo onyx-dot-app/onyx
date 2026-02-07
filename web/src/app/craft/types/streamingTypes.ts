@@ -118,7 +118,7 @@ export type SessionStatus =
   | "idle"
   | "creating"
   | "running"
-  | "completed"
+  | "active"
   | "failed";
 
 export interface Session {
@@ -148,7 +148,8 @@ export interface ApiSandboxResponse {
     | "idle"
     | "sleeping"
     | "terminated"
-    | "failed";
+    | "failed"
+    | "restoring"; // Frontend-only: set during snapshot restore
   container_id: string | null;
   created_at: string;
   last_heartbeat: string | null;

@@ -1222,9 +1222,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       if (needsRestore) {
         console.log(`Restoring session ${sessionId}...`);
-        // Update UI to show restoring state
+        // Update UI: show sandbox as "restoring" and session as loading
         updateSessionData(sessionId, {
-          status: "creating", // Use "creating" to show loading indicator
+          status: "creating",
+          sandbox: sessionData.sandbox
+            ? { ...sessionData.sandbox, status: "restoring" }
+            : null,
         });
 
         // Call restore endpoint (blocks until complete)
@@ -1273,7 +1276,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const statusToUse = isCurrentlyStreaming
         ? currentSession!.status
         : sessionData.status === "active"
-          ? "completed"
+          ? "active"
           : "idle";
 
       updateSessionData(sessionId, {
