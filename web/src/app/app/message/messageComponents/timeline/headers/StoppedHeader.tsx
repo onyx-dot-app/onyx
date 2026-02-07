@@ -2,7 +2,7 @@ import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { noProp } from "@/lib/utils";
+import { cn, noProp } from "@/lib/utils";
 
 export interface StoppedHeaderProps {
   totalSteps: number;
@@ -18,17 +18,27 @@ export const StoppedHeader = React.memo(function StoppedHeader({
   isExpanded,
   onToggle,
 }: StoppedHeaderProps) {
+  const isInteractive = collapsible && totalSteps > 0;
+
   return (
     <div
-      role="button"
-      onClick={onToggle}
-      className="flex items-center justify-between w-full rounded-12 p-1"
+      role={isInteractive ? "button" : undefined}
+      onClick={isInteractive ? onToggle : undefined}
+      className={cn(
+        "flex items-center justify-between w-full rounded-12",
+        isInteractive ? "cursor-pointer" : "cursor-default"
+      )}
+      aria-disabled={isInteractive ? undefined : true}
     >
-      <Text as="p" mainUiAction text03>
-        Interrupted Thinking
-      </Text>
-      {collapsible && totalSteps > 0 && (
+      <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+        <Text as="p" mainUiAction text03>
+          Interrupted Thinking
+        </Text>
+      </div>
+
+      {isInteractive && (
         <Button
+          size="md"
           tertiary
           onClick={noProp(onToggle)}
           rightIcon={isExpanded ? SvgFold : SvgExpand}

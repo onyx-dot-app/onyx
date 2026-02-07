@@ -18,6 +18,7 @@ import {
   isResearchAgentPackets,
   isSearchToolPackets,
   stepSupportsCollapsedStreaming,
+  stepHasCollapsedStreamingContent,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { StreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/StreamingHeader";
 import { CompletedHeader } from "@/app/app/message/messageComponents/timeline/headers/CompletedHeader";
@@ -26,34 +27,33 @@ import { ParallelStreamingHeader } from "@/app/app/message/messageComponents/tim
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
+import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
+import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineHeaderRow";
 
 // =============================================================================
 // Private Wrapper Components
 // =============================================================================
 
 interface TimelineContainerProps {
-  className?: string;
   agent: FullChatState["assistant"];
   headerContent?: React.ReactNode;
   children?: React.ReactNode;
 }
 
-const TimelineContainer: React.FC<TimelineContainerProps> = ({
-  className,
+function TimelineContainer({
   agent,
   headerContent,
   children,
-}) => (
-  <div className={cn("flex flex-col", className)}>
-    <div className="flex w-full h-9">
-      <div className="flex justify-center items-center size-9">
-        <AgentAvatar agent={agent} size={24} />
-      </div>
-      {headerContent}
-    </div>
-    {children}
-  </div>
-);
+}: TimelineContainerProps) {
+  return (
+    <TimelineRoot>
+      <TimelineHeaderRow left={<AgentAvatar agent={agent} size={24} />}>
+        {headerContent}
+      </TimelineHeaderRow>
+      {children}
+    </TimelineRoot>
+  );
+}
 
 // =============================================================================
 // Main Component
@@ -78,8 +78,6 @@ export interface AgentTimelineProps {
   collapsible?: boolean;
   /** Title of the button to toggle the timeline */
   buttonTitle?: string;
-  /** Additional class names */
-  className?: string;
   /** Test ID for e2e testing */
   "data-testid"?: string;
   /** Processing duration in seconds (for completed messages) */
@@ -109,7 +107,6 @@ function areAgentTimelinePropsEqual(
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
-    prev.className === next.className &&
     prev.chatState === next.chatState &&
     prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
@@ -126,7 +123,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   hasDisplayContent = false,
   collapsible = true,
   buttonTitle,
-  className,
   "data-testid": testId,
   processingDurationSeconds,
   isGeneratingImage = false,
@@ -176,6 +172,33 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     return stepSupportsCollapsedStreaming(parallelActiveStep.packets);
   }, [parallelActiveStep]);
 
+  const lastStepHasCollapsedContent = useMemo(() => {
+    if (!lastStep) return false;
+    return stepHasCollapsedStreamingContent(lastStep.packets);
+  }, [lastStep]);
+
+  const parallelActiveStepHasCollapsedContent = useMemo(() => {
+    if (!parallelActiveStep) return false;
+    return stepHasCollapsedStreamingContent(parallelActiveStep.packets);
+  }, [parallelActiveStep]);
+
+  const stoppedStepsCount = useMemo(() => {
+    if (!stopPacketSeen || !userStopped) {
+      return totalSteps;
+    }
+
+    let count = 0;
+    for (const turnGroup of turnGroups) {
+      for (const step of turnGroup.steps) {
+        if (stepHasCollapsedStreamingContent(step.packets)) {
+          count += 1;
+        }
+      }
+    }
+
+    return count;
+  }, [stopPacketSeen, userStopped, totalSteps, turnGroups]);
+
   // Derive all UI state from inputs
   const {
     uiState,
@@ -196,17 +219,31 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepSupportsCollapsedStreaming,
+    lastStepHasCollapsedContent,
     lastStepIsResearchAgent,
     parallelActiveStepSupportsCollapsedStreaming,
+    parallelActiveStepHasCollapsedContent,
     isGeneratingImage,
     finalAnswerComing,
   });
+
+  const headerIsInteractive = useMemo(() => {
+    if (!collapsible) {
+      return false;
+    }
+
+    if (uiState === TimelineUIState.STOPPED) {
+      return stoppedStepsCount > 0;
+    }
+
+    return totalSteps > 0;
+  }, [collapsible, uiState, stoppedStepsCount, totalSteps]);
 
   // Determine render type override for collapsed streaming view
   const collapsedRenderTypeOverride = useMemo(() => {
     if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
     if (lastStepIsSearchTool) return RenderType.INLINE;
-    return undefined;
+    return RenderType.COMPACT;
   }, [lastStepIsResearchAgent, lastStepIsSearchTool]);
 
   // Header selection based on UI state
@@ -243,7 +280,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       case TimelineUIState.STOPPED:
         return (
           <StoppedHeader
-            totalSteps={totalSteps}
+            totalSteps={stoppedStepsCount}
             collapsible={collapsible}
             isExpanded={isExpanded}
             onToggle={handleToggle}
@@ -281,6 +318,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     buttonTitle,
     streamingStartTime,
     totalSteps,
+    stoppedStepsCount,
     processingDurationSeconds,
     generatedImageCount,
     toolProcessingDuration,
@@ -290,10 +328,9 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   if (uiState === TimelineUIState.EMPTY) {
     return (
       <TimelineContainer
-        className={className}
         agent={chatState.assistant}
         headerContent={
-          <div className="flex w-full h-full items-center px-2">
+          <div className="flex w-full h-full items-center pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
             <Text
               as="p"
               mainUiAction
@@ -310,19 +347,17 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Display content only (no timeline steps) - but show header for image generation
   if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
-    return (
-      <TimelineContainer className={className} agent={chatState.assistant} />
-    );
+    return <TimelineContainer agent={chatState.assistant} />;
   }
 
   return (
     <TimelineContainer
-      className={className}
       agent={chatState.assistant}
       headerContent={
         <div
           className={cn(
-            "flex flex-1 min-w-0 h-full items-center justify-between pl-2 hover:bg-background-tint-00 rounded-t-12 transition-colors duration-300",
+            "flex flex-1 min-w-0 h-full items-center justify-between p-1 rounded-t-12 transition-colors duration-300",
+            headerIsInteractive && "hover:bg-background-tint-00",
             showTintedBackground && "bg-background-tint-00",
             showRoundedBottom && "rounded-b-12"
           )}

@@ -8,14 +8,15 @@ import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import {
   TimelineRendererComponent,
-  TimelineRendererResult,
   TimelineRendererOutput,
+  TimelineRendererResult,
 } from "./TimelineRendererComponent";
 import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
 import { StepContainer } from "./StepContainer";
+import { TimelineStepComposer } from "./TimelineStepComposer";
 import {
-  isResearchAgentPackets,
   isSearchToolPackets,
+  isPythonToolPackets,
   isReasoningPackets,
   isDeepResearchPlanPackets,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
@@ -47,10 +48,6 @@ const TimelineStep = React.memo(function TimelineStep({
   isSingleStep,
   isStreaming = false,
 }: TimelineStepProps) {
-  const isResearchAgent = useMemo(
-    () => isResearchAgentPackets(step.packets),
-    [step.packets]
-  );
   const isSearchTool = useMemo(
     () => isSearchToolPackets(step.packets),
     [step.packets]
@@ -59,58 +56,40 @@ const TimelineStep = React.memo(function TimelineStep({
     () => isReasoningPackets(step.packets),
     [step.packets]
   );
+  const isPythonTool = useMemo(
+    () => isPythonToolPackets(step.packets),
+    [step.packets]
+  );
   const isDeepResearchPlan = useMemo(
     () => isDeepResearchPlanPackets(step.packets),
     [step.packets]
   );
 
-  const renderStep = useCallback(
-    (results: TimelineRendererOutput) => {
-      if (isResearchAgent) {
-        return (
-          <>
-            {results.map((result, index) => (
-              <React.Fragment key={index}>{result.content}</React.Fragment>
-            ))}
-          </>
-        );
-      }
+  const getCollapsedIcon = useCallback(
+    (result: TimelineRendererResult) =>
+      isSearchTool ? (result.icon as FunctionComponent<IconProps>) : undefined,
+    [isSearchTool]
+  );
 
-      return (
-        <>
-          {results.map((result, index) => (
-            <StepContainer
-              key={index}
-              stepIcon={result.icon as FunctionComponent<IconProps> | undefined}
-              header={result.status}
-              isExpanded={result.isExpanded}
-              onToggle={result.onToggle}
-              collapsible={true}
-              supportsCollapsible={result.supportsCollapsible}
-              isLastStep={index === results.length - 1 && isLastStep}
-              isFirstStep={index === 0 && isFirstStep}
-              hideHeader={results.length === 1 && isSingleStep}
-              collapsedIcon={
-                isSearchTool
-                  ? (result.icon as FunctionComponent<IconProps>)
-                  : undefined
-              }
-              noPaddingRight={isReasoning || isDeepResearchPlan}
-            >
-              {result.content}
-            </StepContainer>
-          ))}
-        </>
-      );
-    },
+  const renderStep = useCallback(
+    (results: TimelineRendererOutput) => (
+      <TimelineStepComposer
+        results={results}
+        isLastStep={isLastStep}
+        isFirstStep={isFirstStep}
+        isSingleStep={isSingleStep}
+        collapsible={true}
+        noPaddingRight={isReasoning || isDeepResearchPlan}
+        getCollapsedIcon={getCollapsedIcon}
+      />
+    ),
     [
-      isResearchAgent,
-      isSearchTool,
-      isReasoning,
-      isDeepResearchPlan,
       isFirstStep,
       isLastStep,
       isSingleStep,
+      isReasoning,
+      isDeepResearchPlan,
+      getCollapsedIcon,
     ]
   );
 
@@ -122,7 +101,7 @@ const TimelineStep = React.memo(function TimelineStep({
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
-      defaultExpanded={isStreaming || isSingleStep}
+      defaultExpanded={isStreaming || (isSingleStep && !isPythonTool)}
       isLastStep={isLastStep}
     >
       {renderStep}
@@ -168,7 +147,12 @@ export const ExpandedTimelineContent = React.memo(
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}
               stopReason={stopReason}
-              isLastTurnGroup={turnIdx === turnGroups.length - 1}
+              isLastTurnGroup={
+                turnIdx === turnGroups.length - 1 &&
+                !showDoneStep &&
+                !showStoppedStep
+              }
+              isFirstTurnGroup={turnIdx === 0}
             />
           ) : (
             turnGroup.steps.map((step, stepIdx) => {
