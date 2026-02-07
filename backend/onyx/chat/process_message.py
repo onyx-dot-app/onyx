@@ -574,7 +574,6 @@ def handle_stream_message_objects(
         simple_chat_history = convert_chat_history(
             chat_history=chat_history,
             files=files,
-            project_image_files=extracted_project_files.project_image_files,
             additional_context=additional_context,
             token_counter=token_counter,
             tool_id_to_name_map=tool_id_to_name_map,

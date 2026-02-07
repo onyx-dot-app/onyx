@@ -498,7 +498,6 @@ def convert_chat_history_basic(
 def convert_chat_history(
     chat_history: list[ChatMessage],
     files: list[ChatLoadedFile],
-    project_image_files: list[ChatLoadedFile],
     additional_context: str | None,
     token_counter: Callable[[str], int],
     tool_id_to_name_map: dict[int, str],
@@ -557,29 +556,23 @@ def convert_chat_history(
                     )
                 )
 
-            # Sum token counts from image files (excluding project image files)
+            # Sum token counts from image files
             image_token_count = (
                 sum(img.token_count for img in image_files) if image_files else 0
             )
 
             # Add the user message with image files attached
-            # If this is the last USER message, also include project_image_files
-            # Note: project image file tokens are NOT counted in the token count
-            if idx == last_user_message_idx:
-                if project_image_files:
-                    image_files.extend(project_image_files)
-
-                if additional_context:
-                    simple_messages.append(
-                        ChatMessageSimple(
-                            message=ADDITIONAL_CONTEXT_PROMPT.format(
-                                additional_context=additional_context
-                            ),
-                            token_count=token_counter(additional_context),
-                            message_type=MessageType.USER,
-                            image_files=None,
-                        )
+            if idx == last_user_message_idx and additional_context:
+                simple_messages.append(
+                    ChatMessageSimple(
+                        message=ADDITIONAL_CONTEXT_PROMPT.format(
+                            additional_context=additional_context
+                        ),
+                        token_count=token_counter(additional_context),
+                        message_type=MessageType.USER,
+                        image_files=None,
                     )
+                )
 
             simple_messages.append(
                 ChatMessageSimple(
