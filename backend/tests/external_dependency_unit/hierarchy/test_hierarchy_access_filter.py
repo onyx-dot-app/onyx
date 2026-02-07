@@ -5,6 +5,7 @@ with PostgreSQL's VARCHAR[] column type. This specifically tests the fix for
 the `character varying[] && text[]` type mismatch error.
 """
 
+from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
@@ -36,7 +37,7 @@ def _make_node(
 
 
 @pytest.fixture()
-def seeded_nodes(db_session: Session) -> list[HierarchyNode]:
+def seeded_nodes(db_session: Session) -> Generator[list[HierarchyNode], None, None]:
     """Seed hierarchy nodes with various permission configurations."""
     tag = uuid4().hex[:8]
     nodes = [
