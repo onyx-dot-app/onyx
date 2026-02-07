@@ -30,7 +30,11 @@ def get_any_salesforce_client_for_doc_id(
     if _ANY_SALESFORCE_CLIENT is None:
         cc_pairs = get_cc_pairs_for_document(db_session, doc_id)
         first_cc_pair = cc_pairs[0]
-        credential_json = first_cc_pair.credential.credential_json
+        credential_json = (
+            first_cc_pair.credential.credential_json.get_value(apply_mask=False)
+            if first_cc_pair.credential.credential_json
+            else {}
+        )
         _ANY_SALESFORCE_CLIENT = Salesforce(
             username=credential_json["sf_username"],
             password=credential_json["sf_password"],
@@ -158,7 +162,11 @@ def _get_salesforce_client_for_doc_id(db_session: Session, doc_id: str) -> Sales
         )
         if cc_pair is None:
             raise ValueError(f"CC pair {cc_pair_id} not found")
-        credential_json = cc_pair.credential.credential_json
+        credential_json = (
+            cc_pair.credential.credential_json.get_value(apply_mask=False)
+            if cc_pair.credential.credential_json
+            else {}
+        )
         _CC_PAIR_ID_SALESFORCE_CLIENT_MAP[cc_pair_id] = Salesforce(
             username=credential_json["sf_username"],
             password=credential_json["sf_password"],

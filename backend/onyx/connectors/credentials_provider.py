@@ -65,7 +65,9 @@ class OnyxDBCredentialsProvider(
                     f"No credential found: credential={self._credential_id}"
                 )
 
-            return credential.credential_json
+            if credential.credential_json is None:
+                return {}
+            return credential.credential_json.get_value(apply_mask=False)
 
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
         with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
@@ -81,7 +83,7 @@ class OnyxDBCredentialsProvider(
                         f"No credential found: credential={self._credential_id}"
                     )
 
-                credential.credential_json = credential_json
+                credential.credential_json = credential_json  # type: ignore[assignment]
                 db_session.commit()
             except Exception:
                 db_session.rollback()

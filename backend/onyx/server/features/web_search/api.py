@@ -75,7 +75,7 @@ def _get_active_search_provider(
         has_api_key=bool(provider_model.api_key),
     )
 
-    if not provider_model.api_key:
+    if provider_model.api_key is None:
         raise HTTPException(
             status_code=400,
             detail="Web search provider requires an API key.",
@@ -84,7 +84,7 @@ def _get_active_search_provider(
     try:
         provider: WebSearchProvider = build_search_provider_from_config(
             provider_type=provider_view.provider_type,
-            api_key=provider_model.api_key,
+            api_key=provider_model.api_key.get_value(apply_mask=False),
             config=provider_model.config or {},
         )
     except ValueError as exc:
@@ -121,7 +121,7 @@ def _get_active_content_provider(
 
         provider: WebContentProvider | None = build_content_provider_from_config(
             provider_type=provider_type,
-            api_key=provider_model.api_key,
+            api_key=provider_model.api_key.get_value(apply_mask=False),
             config=config,
         )
     except ValueError as exc:

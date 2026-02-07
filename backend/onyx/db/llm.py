@@ -232,7 +232,8 @@ def upsert_llm_provider(
         custom_config = custom_config or None
 
     existing_llm_provider.provider = llm_provider_upsert_request.provider
-    existing_llm_provider.api_key = llm_provider_upsert_request.api_key
+    # EncryptedString accepts str for writes, returns SensitiveValue for reads
+    existing_llm_provider.api_key = llm_provider_upsert_request.api_key  # type: ignore[assignment]
     existing_llm_provider.api_base = llm_provider_upsert_request.api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config

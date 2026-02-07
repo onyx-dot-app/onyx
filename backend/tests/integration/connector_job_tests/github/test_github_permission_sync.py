@@ -40,6 +40,8 @@ def test_github_private_repo_permission_sync(
     ) = github_test_env_setup
 
     # Create GitHub client from credential
+    # Note: github_credential is a DATestCredential (Pydantic model), not a SQLAlchemy model
+    # so credential_json is already a plain dict
     github_access_token = github_credential.credential_json["github_access_token"]
     github_client = Github(github_access_token)
     github_manager = GitHubManager(github_client)
@@ -158,6 +160,8 @@ def test_github_public_repo_permission_sync(
     ) = github_test_env_setup
 
     # Create GitHub client from credential
+    # Note: github_credential is a DATestCredential (Pydantic model), not a SQLAlchemy model
+    # so credential_json is already a plain dict
     github_access_token = github_credential.credential_json["github_access_token"]
     github_client = Github(github_access_token)
     github_manager = GitHubManager(github_client)
@@ -262,6 +266,8 @@ def test_github_internal_repo_permission_sync(
     ) = github_test_env_setup
 
     # Create GitHub client from credential
+    # Note: github_credential is a DATestCredential (Pydantic model), not a SQLAlchemy model
+    # so credential_json is already a plain dict
     github_access_token = github_credential.credential_json["github_access_token"]
     github_client = Github(github_access_token)
     github_manager = GitHubManager(github_client)

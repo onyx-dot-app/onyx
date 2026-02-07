@@ -203,7 +203,11 @@ def test_llm_configuration(
                 new_custom_config=test_llm_request.custom_config,
                 api_key_changed=False,
             )
-            test_api_key = existing_provider.api_key
+            test_api_key = (
+                existing_provider.api_key.get_value(apply_mask=False)
+                if existing_provider.api_key
+                else None
+            )
         if existing_provider and not test_llm_request.custom_config_changed:
             test_custom_config = existing_provider.custom_config
 
@@ -351,7 +355,11 @@ def put_llm_provider(
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
-        llm_provider_upsert_request.api_key = existing_provider.api_key
+        llm_provider_upsert_request.api_key = (
+            existing_provider.api_key.get_value(apply_mask=False)
+            if existing_provider.api_key
+            else None
+        )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
@@ -646,7 +654,11 @@ def get_provider_contextual_cost(
                 provider=provider.provider,
                 model=model_configuration.name,
                 deployment_name=provider.deployment_name,
-                api_key=provider.api_key,
+                api_key=(
+                    provider.api_key.get_value(apply_mask=False)
+                    if provider.api_key
+                    else None
+                ),
                 api_base=provider.api_base,
                 api_version=provider.api_version,
                 custom_config=provider.custom_config,

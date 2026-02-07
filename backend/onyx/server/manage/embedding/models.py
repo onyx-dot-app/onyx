@@ -37,7 +37,11 @@ class CloudEmbeddingProvider(BaseModel):
     ) -> "CloudEmbeddingProvider":
         return cls(
             provider_type=cloud_provider_model.provider_type,
-            api_key=cloud_provider_model.api_key,
+            api_key=(
+                cloud_provider_model.api_key.get_value(apply_mask=True)
+                if cloud_provider_model.api_key
+                else None
+            ),
             api_url=cloud_provider_model.api_url,
             api_version=cloud_provider_model.api_version,
             deployment_name=cloud_provider_model.deployment_name,

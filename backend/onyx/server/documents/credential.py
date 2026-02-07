@@ -346,10 +346,17 @@ def update_credential_from_model(
             detail=f"Credential {credential_id} does not exist or does not belong to user",
         )
 
+    # Get credential_json value - use masking for API responses
+    credential_json_value = (
+        updated_credential.credential_json.get_value(apply_mask=True)
+        if updated_credential.credential_json
+        else {}
+    )
+
     return CredentialSnapshot(
         source=updated_credential.source,
         id=updated_credential.id,
-        credential_json=updated_credential.credential_json,
+        credential_json=credential_json_value,
         user_id=updated_credential.user_id,
         name=updated_credential.name,
         admin_public=updated_credential.admin_public,

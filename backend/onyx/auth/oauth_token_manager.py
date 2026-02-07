@@ -11,6 +11,7 @@ from onyx.db.models import OAuthUserToken
 from onyx.db.oauth_config import get_user_oauth_token
 from onyx.db.oauth_config import upsert_user_oauth_token
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 
 
 logger = setup_logger()
@@ -33,7 +34,10 @@ class OAuthTokenManager:
         if not user_token:
             return None
 
-        token_data = user_token.token_data
+        if not user_token.token_data:
+            return None
+
+        token_data = self._unwrap_token_data(user_token.token_data)
 
         # Check if token is expired
         if OAuthTokenManager.is_token_expired(token_data):
@@ -51,7 +55,10 @@ class OAuthTokenManager:
 
     def refresh_token(self, user_token: OAuthUserToken) -> str:
         """Refresh access token using refresh token"""
-        token_data = user_token.token_data
+        if not user_token.token_data:
+            raise ValueError("No token data available for refresh")
+
+        token_data = self._unwrap_token_data(user_token.token_data)
 
         response = requests.post(
             self.oauth_config.token_url,
@@ -153,3 +160,11 @@ class OAuthTokenManager:
         separator = "&" if "?" in oauth_config.authorization_url else "?"
 
         return f"{oauth_config.authorization_url}{separator}{urlencode(params)}"
+
+    @staticmethod
+    def _unwrap_token_data(
+        token_data: SensitiveValue[dict[str, Any]] | dict[str, Any],
+    ) -> dict[str, Any]:
+        if isinstance(token_data, SensitiveValue):
+            return token_data.get_value(apply_mask=False)
+        return token_data

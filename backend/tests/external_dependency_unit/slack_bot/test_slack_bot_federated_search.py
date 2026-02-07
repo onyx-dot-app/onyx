@@ -254,6 +254,8 @@ class TestSlackBotFederatedSearch:
         )
         db_session.add(federated_connector)
         db_session.flush()
+        # Expire to ensure credentials is reloaded as SensitiveValue from DB
+        db_session.expire(federated_connector)
 
         # Associate the federated connector with the persona's document sets
         # This is required for Slack federated search to be enabled
@@ -276,6 +278,8 @@ class TestSlackBotFederatedSearch:
         )
         db_session.add(slack_bot)
         db_session.flush()
+        # Expire to ensure tokens are reloaded as SensitiveValue from DB
+        db_session.expire(slack_bot)
 
         slack_channel_config = SlackChannelConfig(
             slack_bot_id=slack_bot.id,

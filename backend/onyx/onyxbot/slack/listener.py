@@ -216,14 +216,10 @@ class SlackbotHandler:
         - If the tokens have changed, close the existing socket client and reconnect.
         - If the tokens are new, warm up the model and start a new socket client.
         """
-        slack_bot_tokens = SlackBotTokens(
-            bot_token=bot.bot_token,
-            app_token=bot.app_token,
-        )
         tenant_bot_pair = (tenant_id, bot.id)
 
         # If the tokens are missing or empty, close the socket client and remove them.
-        if not slack_bot_tokens:
+        if not bot.bot_token or not bot.app_token:
             logger.debug(
                 f"No Slack bot tokens found for tenant={tenant_id}, bot {bot.id}"
             )
@@ -232,6 +228,11 @@ class SlackbotHandler:
                 del self.socket_clients[tenant_bot_pair]
                 del self.slack_bot_tokens[tenant_bot_pair]
             return
+
+        slack_bot_tokens = SlackBotTokens(
+            bot_token=bot.bot_token.get_value(apply_mask=False),
+            app_token=bot.app_token.get_value(apply_mask=False),
+        )
 
         tokens_exist = tenant_bot_pair in self.slack_bot_tokens
         tokens_changed = (

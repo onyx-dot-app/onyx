@@ -190,7 +190,11 @@ class LLMProviderView(LLMProvider):
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
-            api_key=llm_provider_model.api_key,
+            api_key=(
+                llm_provider_model.api_key.get_value(apply_mask=False)
+                if llm_provider_model.api_key
+                else None
+            ),
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,

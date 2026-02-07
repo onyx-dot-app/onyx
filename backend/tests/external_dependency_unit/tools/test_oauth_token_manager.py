@@ -211,9 +211,11 @@ class TestOAuthTokenManagerRefresh:
 
         # Verify token was updated in DB
         db_session.refresh(user_token)
-        assert user_token.token_data["access_token"] == "new_token"
-        assert user_token.token_data["refresh_token"] == "new_refresh"
-        assert "expires_at" in user_token.token_data
+        assert user_token.token_data is not None
+        token_data = user_token.token_data.get_value(apply_mask=False)
+        assert token_data["access_token"] == "new_token"
+        assert token_data["refresh_token"] == "new_refresh"
+        assert "expires_at" in token_data
 
     @patch("onyx.auth.oauth_token_manager.requests.post")
     def test_refresh_token_preserves_refresh_token(
@@ -249,7 +251,9 @@ class TestOAuthTokenManagerRefresh:
 
         # Verify old refresh_token was preserved
         db_session.refresh(user_token)
-        assert user_token.token_data["refresh_token"] == "old_refresh"
+        assert user_token.token_data is not None
+        token_data = user_token.token_data.get_value(apply_mask=False)
+        assert token_data["refresh_token"] == "old_refresh"
 
     @patch("onyx.auth.oauth_token_manager.requests.post")
     def test_refresh_token_http_error(

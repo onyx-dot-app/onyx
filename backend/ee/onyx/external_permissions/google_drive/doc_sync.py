@@ -295,7 +295,12 @@ def gdrive_doc_sync(
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
     )
-    google_drive_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    google_drive_connector.load_credentials(credential_json)
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 

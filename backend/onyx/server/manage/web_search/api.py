@@ -194,7 +194,7 @@ def test_search_provider(
                 status_code=400,
                 detail="No stored API key found for this provider type.",
             )
-        api_key = existing_provider.api_key
+        api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if provider_requires_api_key and not api_key:
         raise HTTPException(
@@ -391,7 +391,7 @@ def test_content_provider(
                     detail="Base URL cannot differ from stored provider when using stored API key",
                 )
 
-        api_key = existing_provider.api_key
+        api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if not api_key:
         raise HTTPException(

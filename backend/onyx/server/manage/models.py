@@ -341,9 +341,21 @@ class SlackBot(BaseModel):
             name=slack_bot_model.name,
             enabled=slack_bot_model.enabled,
             configs_count=len(slack_bot_model.slack_channel_configs),
-            bot_token=slack_bot_model.bot_token,
-            app_token=slack_bot_model.app_token,
-            user_token=slack_bot_model.user_token,
+            bot_token=(
+                slack_bot_model.bot_token.get_value(apply_mask=True)
+                if slack_bot_model.bot_token
+                else ""
+            ),
+            app_token=(
+                slack_bot_model.app_token.get_value(apply_mask=True)
+                if slack_bot_model.app_token
+                else ""
+            ),
+            user_token=(
+                slack_bot_model.user_token.get_value(apply_mask=True)
+                if slack_bot_model.user_token
+                else None
+            ),
         )
 
 

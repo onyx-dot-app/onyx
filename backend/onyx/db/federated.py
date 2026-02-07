@@ -111,7 +111,7 @@ def update_federated_connector_oauth_token(
 
     if existing_token:
         # Update existing token
-        existing_token.token = token
+        existing_token.token = token  # type: ignore[assignment]
         existing_token.expires_at = expires_at
         db_session.commit()
         return existing_token
@@ -267,7 +267,13 @@ def update_federated_connector(
     # Use provided credentials if updating them, otherwise use existing credentials
     # This is needed to instantiate the connector for config validation when only config is being updated
     creds_to_use = (
-        credentials if credentials is not None else federated_connector.credentials
+        credentials
+        if credentials is not None
+        else (
+            federated_connector.credentials.get_value(apply_mask=False)
+            if federated_connector.credentials
+            else {}
+        )
     )
 
     if credentials is not None:
@@ -278,7 +284,7 @@ def update_federated_connector(
             raise ValueError(
                 f"Invalid credentials for federated connector source: {federated_connector.source}"
             )
-        federated_connector.credentials = credentials
+        federated_connector.credentials = credentials  # type: ignore[assignment]
 
     if config is not None:
         # Validate config using connector-specific validation

@@ -50,7 +50,12 @@ def github_doc_sync(
         **cc_pair.connector.connector_specific_config
     )
 
-    github_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    github_connector.load_credentials(credential_json)
     logger.info("GitHub connector credentials loaded successfully")
 
     if not github_connector.github_client:

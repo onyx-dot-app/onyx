@@ -270,6 +270,8 @@ def create_credential(
     )
 
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -297,14 +299,21 @@ def alter_credential(
 
     credential.name = name
 
-    # Assign a new dictionary to credential.credential_json
-    credential.credential_json = {
-        **credential.credential_json,
+    # Get existing credential_json and merge with new values
+    existing_json = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+    credential.credential_json = {  # type: ignore[assignment]
+        **existing_json,
         **credential_json,
     }
 
     credential.user_id = user.id
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -318,10 +327,12 @@ def update_credential(
     if credential is None:
         return None
 
-    credential.credential_json = credential_data.credential_json
-    credential.user_id = user.id
+    credential.credential_json = credential_data.credential_json  # type: ignore[assignment]
+    credential.user_id = user.id if user is not None else None
 
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -335,8 +346,10 @@ def update_credential_json(
     if credential is None:
         return None
 
-    credential.credential_json = credential_json
+    credential.credential_json = credential_json  # type: ignore[assignment]
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -346,7 +359,7 @@ def backend_update_credential_json(
     db_session: Session,
 ) -> None:
     """This should not be used in any flows involving the frontend or users"""
-    credential.credential_json = credential_json
+    credential.credential_json = credential_json  # type: ignore[assignment]
     db_session.commit()
 
 
@@ -441,7 +454,12 @@ def create_initial_public_credential(db_session: Session) -> None:
     )
 
     if first_credential is not None:
-        if first_credential.credential_json != {} or first_credential.user is not None:
+        credential_json_value = (
+            first_credential.credential_json.get_value(apply_mask=False)
+            if first_credential.credential_json
+            else {}
+        )
+        if credential_json_value != {} or first_credential.user is not None:
             raise ValueError(error_msg)
         return
 
@@ -477,8 +495,13 @@ def delete_service_account_credentials(
 ) -> None:
     credentials = fetch_credentials_for_user(db_session=db_session, user=user)
     for credential in credentials:
+        credential_json = (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        )
         if (
-            credential.credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
+            credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
             and credential.source == source
         ):
             db_session.delete(credential)

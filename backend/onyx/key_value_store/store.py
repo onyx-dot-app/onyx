@@ -43,7 +43,7 @@ class PgRedisKVStore(KeyValueStore):
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if obj:
                 obj.value = plain_val
-                obj.encrypted_value = encrypted_val
+                obj.encrypted_value = encrypted_val  # type: ignore[assignment]
             else:
                 obj = KVStore(key=key, value=plain_val, encrypted_value=encrypted_val)
                 db_session.query(KVStore).filter_by(key=key).delete()  # just in case
@@ -73,7 +73,8 @@ class PgRedisKVStore(KeyValueStore):
             if obj.value is not None:
                 value = obj.value
             elif obj.encrypted_value is not None:
-                value = obj.encrypted_value
+                # Unwrap SensitiveValue - this is internal backend use
+                value = obj.encrypted_value.get_value(apply_mask=False)
             else:
                 value = None
 

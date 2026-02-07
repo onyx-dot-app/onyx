@@ -73,7 +73,8 @@ def _apply_search_provider_updates(
     provider.provider_type = provider_type.value
     provider.config = config
     if api_key_changed or provider.api_key is None:
-        provider.api_key = api_key
+        # EncryptedString accepts str for writes, returns SensitiveValue for reads
+        provider.api_key = api_key  # type: ignore[assignment]
 
 
 def upsert_web_search_provider(
@@ -228,7 +229,8 @@ def _apply_content_provider_updates(
     provider.provider_type = provider_type.value
     provider.config = config
     if api_key_changed or provider.api_key is None:
-        provider.api_key = api_key
+        # EncryptedString accepts str for writes, returns SensitiveValue for reads
+        provider.api_key = api_key  # type: ignore[assignment]
 
 
 def upsert_web_content_provider(
