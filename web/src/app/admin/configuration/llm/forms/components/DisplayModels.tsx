@@ -60,6 +60,7 @@ interface DisplayModelHeaderProps {
   alternativeText?: string;
   onSelectAll?: () => void;
   onRefresh?: () => void;
+  isAutoMode: boolean;
   showSelectAll?: boolean;
 }
 
@@ -67,6 +68,7 @@ function DisplayModelHeader({
   alternativeText,
   onSelectAll,
   onRefresh,
+  isAutoMode,
   showSelectAll = true,
 }: DisplayModelHeaderProps) {
   return (
@@ -86,7 +88,7 @@ function DisplayModelHeader({
       </GeneralLayouts.Section>
       <GeneralLayouts.Section flexDirection="row" gap={0.25} width="fit">
         {showSelectAll && (
-          <Button main tertiary onClick={onSelectAll}>
+          <Button main tertiary onClick={onSelectAll} disabled={isAutoMode}>
             Select All
           </Button>
         )}
@@ -290,6 +292,7 @@ export function DisplayModels<T extends BaseLLMFormValues>({
         onSelectAll={handleSelectAll}
         onRefresh={handleRefresh}
         showSelectAll={modelConfigurations.length > 0}
+        isAutoMode={isAutoMode}
       />
       {modelConfigurations.length > 0 ? (
         <Card variant="borderless" padding={0} gap={0}>

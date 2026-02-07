@@ -26,6 +26,7 @@ import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import { FetchModelsButton } from "./components/FetchModelsButton";
 import { useState } from "react";
+import InputWrapper from "./components/InputWrapper";
 
 export const OPENROUTER_PROVIDER_NAME = "openrouter";
 const OPENROUTER_DISPLAY_NAME = "OpenRouter";
@@ -182,17 +183,27 @@ export function OpenRouterForm({
 
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
-                    <TextFormField
-                      name="api_base_url"
+                    <InputWrapper
                       label="API Base URL"
-                      subtext="Paste your OpenRouter compatible endpoint URL or use OpenRouter API directly."
-                    />
+                      description="Paste your OpenRouter compatible endpoint URL or use OpenRouter API directly."
+                    >
+                      <TextFormField
+                        name="api_base_url"
+                        placeholder="https://openrouter.ai/api/v1"
+                        label=""
+                      />
+                    </InputWrapper>
 
-                    <PasswordInputTypeInField
-                      name="api_key"
+                    <InputWrapper
                       label="API Key"
-                      subtext="Paste your API key from OpenRouter to access your models."
-                    />
+                      description="Paste your API key from {link} to access your models."
+                      descriptionLink={{
+                        text: "OpenRouter",
+                        href: "https://openrouter.ai/settings/keys",
+                      }}
+                    >
+                      <PasswordInputTypeInField name="api_key" label="" />
+                    </InputWrapper>
 
                     <Separator />
 

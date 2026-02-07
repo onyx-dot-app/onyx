@@ -29,6 +29,7 @@ import Tabs from "@/refresh-components/Tabs";
 import Separator from "@/refresh-components/Separator";
 
 export const OLLAMA_PROVIDER_NAME = "ollama_chat";
+const DEFAULT_API_BASE = "http://127.0.0.1:11434";
 
 enum OllamaHostingTab {
   SelfHosted = "self-hosted",
@@ -193,7 +194,7 @@ export function OllamaForm({
             existingLlmProvider,
             modelConfigurations
           ),
-          api_base: existingLlmProvider?.api_base ?? "",
+          api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
           custom_config: {
             OLLAMA_API_KEY:
               (existingLlmProvider?.custom_config?.OLLAMA_API_KEY as string) ??

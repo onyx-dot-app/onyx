@@ -39,6 +39,7 @@ import Message from "@/refresh-components/messages/Message";
 import { Card } from "@/refresh-components/cards";
 import { SvgInfo, SvgInfoSmall } from "@opal/icons";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import InputWrapper from "./components/InputWrapper";
 
 export const BEDROCK_PROVIDER_NAME = "bedrock";
 const BEDROCK_DISPLAY_NAME = "Amazon Bedrock";
@@ -215,18 +216,23 @@ function BedrockFormInternals({
       </InputSelectField>
 
       <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
-        <Text as="p">Authentication Method</Text>
-        <InputSelect.Trigger placeholder="Select authentication method" />
-        <InputSelect.Content>
-          {AUTH_METHOD_OPTIONS.map((option) => (
-            <InputSelect.Item key={option.value} value={option.value}>
-              {option.name}
-            </InputSelect.Item>
-          ))}
-        </InputSelect.Content>
-        <Text as="p" secondaryBody text03>
-          See documentation for more instructions.
-        </Text>
+        <InputWrapper
+          label="Authentication Method"
+          description="See {link} for more instructions."
+          descriptionLink={{
+            text: "documentation",
+            href: `https://docs.onyx.app/admin/ai_models/bedrock#authentication-methods`,
+          }}
+        >
+          <InputSelect.Trigger placeholder="Select authentication method" />
+          <InputSelect.Content>
+            {AUTH_METHOD_OPTIONS.map((option) => (
+              <InputSelect.Item key={option.value} value={option.value}>
+                {option.name}
+              </InputSelect.Item>
+            ))}
+          </InputSelect.Content>
+        </InputWrapper>
       </InputSelectField>
 
       {authDisplay()}

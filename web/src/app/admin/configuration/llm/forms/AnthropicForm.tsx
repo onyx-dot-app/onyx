@@ -19,6 +19,7 @@ import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
+import InputWrapper from "./components/InputWrapper";
 
 export const ANTHROPIC_PROVIDER_NAME = "anthropic";
 const DEFAULT_DEFAULT_MODEL_NAME = "claude-sonnet-4-5";
@@ -106,11 +107,16 @@ export function AnthropicForm({
               {(formikProps) => {
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
-
-                    <Text text03 secondaryBody className="mt-[-0.5rem]">
-                      Paste your API key from Anthropic to access your models.
-                    </Text>
+                    <InputWrapper
+                      label="API Key"
+                      description="Paste your {link} from Anthropic to access your models."
+                      descriptionLink={{
+                        text: "API key",
+                        href: "https://console.anthropic.com/dashboard",
+                      }}
+                    >
+                      <PasswordInputTypeInField name="api_key" />
+                    </InputWrapper>
 
                     <Separator noPadding />
 

@@ -25,6 +25,7 @@ import {
 } from "@/lib/azureTargetUri";
 import Separator from "@/refresh-components/Separator";
 import { DisplayModels } from "./components/DisplayModels";
+import InputWrapper from "./components/InputWrapper";
 
 export const AZURE_PROVIDER_NAME = "azure";
 const AZURE_DISPLAY_NAME = "Azure OpenAI";
@@ -141,18 +142,27 @@ export function AzureForm({
               {(formikProps) => {
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
-                    <TextFormField
-                      name="target_uri"
+                    <InputWrapper
                       label="Target URI"
-                      placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                      subtext="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
-                    />
+                      description="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
+                    >
+                      <TextFormField
+                        name="target_uri"
+                        label=""
+                        placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+                      />
+                    </InputWrapper>
 
-                    <PasswordInputTypeInField
-                      name="api_key"
+                    <InputWrapper
                       label="API Key"
-                      subtext="Paste your API key from Azure OpenAI to access your models."
-                    />
+                      description="Paste your API key from {link} to access your models."
+                      descriptionLink={{
+                        text: "Azure OpenAI",
+                        href: "https://oai.azure.com",
+                      }}
+                    >
+                      <PasswordInputTypeInField name="api_key" placeholder="" />
+                    </InputWrapper>
 
                     <Separator />
 

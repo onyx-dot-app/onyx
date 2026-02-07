@@ -15,6 +15,7 @@ import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
 import LLMFormLayout from "./components/FormLayout";
 import Separator from "@/refresh-components/Separator";
+import InputWrapper from "./components/InputWrapper";
 
 export const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
@@ -100,11 +101,19 @@ export function OpenAIForm({
               {(formikProps) => (
                 <Form>
                   <LLMFormLayout.Body>
-                    <PasswordInputTypeInField
-                      name="api_key"
+                    <InputWrapper
                       label="API Key"
-                      subtext="Paste your API key from OpenAI to access your models."
-                    />
+                      description="Paste your {link} from OpenAI to access your models."
+                      descriptionLink={{
+                        text: "API key",
+                        href: "https://platform.openai.com/api-keys",
+                      }}
+                    >
+                      <PasswordInputTypeInField
+                        name="api_key"
+                        subtext="Paste your API key from OpenAI to access your models."
+                      />
+                    </InputWrapper>
 
                     <Separator />
 

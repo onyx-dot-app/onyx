@@ -24,13 +24,44 @@ import InputFile from "@/refresh-components/inputs/InputFile";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
+import { ModelAccessOptions } from "./components/ModelAccessOptions";
 
 export const VERTEXAI_PROVIDER_NAME = "vertex_ai";
 const VERTEXAI_DISPLAY_NAME = "Google Cloud Vertex AI";
 const VERTEXAI_DEFAULT_MODEL = "gemini-2.5-pro";
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
-const VERTEXAI_REGION_OPTIONS = [{ name: "global", value: "global" }];
+const VERTEXAI_REGION_OPTIONS = [
+  { name: "global", value: "global" },
+  { name: "us-central1", value: "us-central1" },
+  { name: "us-east1", value: "us-east1" },
+  { name: "us-east4", value: "us-east4" },
+  { name: "us-east5", value: "us-east5" },
+  { name: "us-south1", value: "us-south1" },
+  { name: "us-west1", value: "us-west1" },
+  { name: "northamerica-northeast1", value: "northamerica-northeast1" },
+  { name: "southamerica-east1", value: "southamerica-east1" },
+  { name: "europe-west4", value: "europe-west4" },
+  { name: "europe-west9", value: "europe-west9" },
+  { name: "europe-west2", value: "europe-west2" },
+  { name: "europe-west3", value: "europe-west3" },
+  { name: "europe-west1", value: "europe-west1" },
+  { name: "europe-west6", value: "europe-west6" },
+  { name: "europe-southwest1", value: "europe-southwest1" },
+  { name: "europe-west8", value: "europe-west8" },
+  { name: "europe-north1", value: "europe-north1" },
+  { name: "europe-central2", value: "europe-central2" },
+  { name: "asia-northeast1", value: "asia-northeast1" },
+  { name: "australia-southeast1", value: "australia-southeast1" },
+  { name: "asia-southeast1", value: "asia-southeast1" },
+  { name: "asia-northeast3", value: "asia-northeast3" },
+  { name: "asia-east1", value: "asia-east1" },
+  { name: "asia-east2", value: "asia-east2" },
+  { name: "asia-south1", value: "asia-south1" },
+  { name: "me-central2", value: "me-central2" },
+  { name: "me-central1", value: "me-central1" },
+  { name: "me-west1", value: "me-west1" },
+];
 
 const VERTEXAI_REGION_NAME = "custom_config.vertex_location";
 
@@ -207,7 +238,7 @@ export function VertexAIForm({
                       shouldShowAutoUpdateToggle={true}
                     />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                    <ModelAccessOptions />
 
                     <FormActionButtons
                       isTesting={isTesting}
