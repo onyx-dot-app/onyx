@@ -60,7 +60,7 @@ export const CollapsedStreamingContent = React.memo(
     );
 
     return (
-      <TimelineContentRow className="bg-background-tint-00 rounded-b-12 px-2 pb-2">
+      <TimelineContentRow className="flex-1 bg-background-tint-00 rounded-b-12 px-2 pb-2">
         <TimelineRendererComponent
           key={`${step.key}-compact`}
           packets={step.packets}
