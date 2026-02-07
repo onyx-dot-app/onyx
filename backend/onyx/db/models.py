@@ -95,11 +95,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.kg.models import KGStage
-<<<<<<< HEAD
-from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
-=======
->>>>>>> 078d86d9f (k)
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.sensitive import SensitiveValue
