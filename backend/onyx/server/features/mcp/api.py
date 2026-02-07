@@ -692,10 +692,8 @@ def save_user_credentials(
         # Use template to create the full connection config
         try:
             # TODO: fix and/or type correctly w/base model
-            auth_template_dict = (
-                auth_template.config.get_value(apply_mask=False)
-                if auth_template.config
-                else {}
+            auth_template_dict = extract_connection_data(
+                auth_template, apply_mask=False
             )
             config_data = MCPConnectionData(
                 headers=auth_template_dict.get("headers", {}),
@@ -852,10 +850,8 @@ def _db_mcp_server_to_api_mcp_server(
             and db_server.admin_connection_config is not None
             and include_auth_config
         ):
-            admin_config_dict = (
-                db_server.admin_connection_config.config.get_value(apply_mask=True)
-                if db_server.admin_connection_config.config
-                else {}
+            admin_config_dict = extract_connection_data(
+                db_server.admin_connection_config, apply_mask=True
             )
             if db_server.auth_type == MCPAuthenticationType.API_TOKEN:
                 admin_credentials = {
@@ -895,11 +891,7 @@ def _db_mcp_server_to_api_mcp_server(
                 include_auth_config
                 and db_server.auth_type != MCPAuthenticationType.OAUTH
             ):
-                user_config_dict = (
-                    user_config.config.get_value(apply_mask=True)
-                    if user_config.config
-                    else {}
-                )
+                user_config_dict = extract_connection_data(user_config, apply_mask=True)
                 user_credentials = user_config_dict.get(HEADER_SUBSTITUTIONS, {})
 
         if (
@@ -907,10 +899,8 @@ def _db_mcp_server_to_api_mcp_server(
             and db_server.admin_connection_config
         ):
             client_info = None
-            oauth_admin_config_dict = (
-                db_server.admin_connection_config.config.get_value(apply_mask=True)
-                if db_server.admin_connection_config.config
-                else {}
+            oauth_admin_config_dict = extract_connection_data(
+                db_server.admin_connection_config, apply_mask=True
             )
             client_info_raw = oauth_admin_config_dict.get(
                 MCPOAuthKeys.CLIENT_INFO.value
@@ -935,10 +925,8 @@ def _db_mcp_server_to_api_mcp_server(
         try:
             template_config = db_server.admin_connection_config
             if template_config:
-                template_config_dict = (
-                    template_config.config.get_value(apply_mask=True)
-                    if template_config.config
-                    else {}
+                template_config_dict = extract_connection_data(
+                    template_config, apply_mask=True
                 )
                 headers = template_config_dict.get("headers", {})
                 auth_template = MCPAuthTemplate(
@@ -1354,10 +1342,8 @@ def _upsert_mcp_server(
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
         client_info = None
         if mcp_server.admin_connection_config:
-            existing_admin_config_dict = (
-                mcp_server.admin_connection_config.config.get_value(apply_mask=False)
-                if mcp_server.admin_connection_config.config
-                else {}
+            existing_admin_config_dict = extract_connection_data(
+                mcp_server.admin_connection_config, apply_mask=False
             )
             client_info_raw = existing_admin_config_dict.get(
                 MCPOAuthKeys.CLIENT_INFO.value
