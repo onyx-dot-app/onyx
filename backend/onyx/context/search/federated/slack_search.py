@@ -118,11 +118,15 @@ def fetch_and_cache_channel_metadata(
             cursor = None
             channel_count = 0
             while True:
+                # Pass team_id for Enterprise Grid support
+                # Without team_id, conversations.list fails with "missing_argument: team_id"
+                # on Slack Enterprise Grid workspaces
                 response = slack_client.conversations_list(
                     types=channel_types,
                     exclude_archived=True,
                     limit=1000,
                     cursor=cursor,
+                    team_id=team_id,
                 )
                 response.validate()
 
@@ -432,6 +436,7 @@ def query_slack(
     entities: dict[str, Any] | None = None,
     available_channels: list[str] | None = None,
     channel_metadata_dict: dict[str, ChannelMetadata] | None = None,
+    team_id: str | None = None,
 ) -> SlackQueryResult:
 
     # Check if query has channel override (user specified channels in query)
@@ -468,6 +473,12 @@ def query_slack(
         if sort_by_time:
             search_params["sort"] = "timestamp"
             search_params["sort_dir"] = "desc"
+
+        # Pass team_id for Enterprise Grid support
+        # Without team_id, search.messages fails with "team_access_not_granted"
+        # on Enterprise Grid workspaces
+        if team_id:
+            search_params["team_id"] = team_id
 
         response = slack_client.search_messages(**search_params)
         response.validate()
@@ -1007,6 +1018,7 @@ def slack_retrieval(
                 entities,
                 available_channels,
                 channel_metadata_dict,
+                team_id,
             ),
         )
         for query_string in query_strings
@@ -1049,6 +1061,7 @@ def slack_retrieval(
                         dm_entities,
                         available_channels,
                         channel_metadata_dict,
+                        team_id,
                     ),
                 )
             )
