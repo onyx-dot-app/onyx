@@ -48,6 +48,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
 
       {collapsible && totalSteps > 0 && (
         <Button
+          size="md"
           tertiary
           onClick={noProp(onToggle)}
           rightIcon={isExpanded ? SvgFold : SvgExpand}

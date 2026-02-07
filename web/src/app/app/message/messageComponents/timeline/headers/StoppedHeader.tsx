@@ -38,6 +38,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
 
       {isInteractive && (
         <Button
+          size="md"
           tertiary
           onClick={noProp(onToggle)}
           rightIcon={isExpanded ? SvgFold : SvgExpand}

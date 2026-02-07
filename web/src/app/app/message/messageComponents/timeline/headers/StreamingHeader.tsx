@@ -52,6 +52,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
       {collapsible &&
         (buttonTitle ? (
           <Button
+            size="md"
             tertiary
             onClick={onToggle}
             rightIcon={isExpanded ? SvgFold : SvgExpand}
@@ -61,6 +62,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
           </Button>
         ) : showElapsedTime ? (
           <Button
+            size="md"
             tertiary
             onClick={onToggle}
             rightIcon={SvgFold}
