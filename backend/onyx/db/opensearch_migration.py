@@ -95,36 +95,54 @@ def get_opensearch_migration_records_needing_migration(
 ) -> list[OpenSearchDocumentMigrationRecord]:
     """Gets records of documents that need to be migrated.
 
-    Priority order:
-     1. Documents with status PENDING, prioritizing those which were created
-        first.
-     2. Documents with status FAILED, prioritizing those with the fewest
-        attempts first.
+    Properties:
+    - First tries documents with status PENDING.
+    - Of these, orders documents with the oldest last_modified to prioritize
+      documents that were modified a long time ago, as they are presumed to be
+      stable. This column is modified in many flows so is not a guarantee of the
+      document having been indexed.
+    - Then if there's room in the result, tries documents with status FAILED.
+    - Of these, first orders documents on the least attempts_count so as to have
+      a backoff for recently-failed docs. Then orders on last_modified as
+      before.
     """
     result: list[OpenSearchDocumentMigrationRecord] = []
-    stmt = (
+
+    # Step 1: Fetch as many PENDING status records as possible ordered by
+    # last_modified (oldest first). last_modified lives on Document, so we join.
+    stmt_pending = (
         select(OpenSearchDocumentMigrationRecord)
+        .join(Document, OpenSearchDocumentMigrationRecord.document_id == Document.id)
         .where(
             OpenSearchDocumentMigrationRecord.status
             == OpenSearchDocumentMigrationStatus.PENDING
         )
-        .order_by(OpenSearchDocumentMigrationRecord.created_at.asc())
+        .order_by(Document.last_modified.asc())
         .limit(limit)
     )
-    result.extend(list(db_session.scalars(stmt).all()))
+    result.extend(list(db_session.scalars(stmt_pending).all()))
     remaining = limit - len(result)
 
+    # Step 2: If more are needed, fetch records with status FAILED, ordered by
+    # attempts_count (lowest first), then last_modified (oldest first).
     if remaining > 0:
-        stmt = (
+        stmt_failed = (
             select(OpenSearchDocumentMigrationRecord)
+            .join(
+                Document,
+                OpenSearchDocumentMigrationRecord.document_id == Document.id,
+            )
             .where(
                 OpenSearchDocumentMigrationRecord.status
                 == OpenSearchDocumentMigrationStatus.FAILED
             )
-            .order_by(OpenSearchDocumentMigrationRecord.attempts_count.asc())
+            .order_by(
+                OpenSearchDocumentMigrationRecord.attempts_count.asc(),
+                Document.last_modified.asc(),
+            )
             .limit(remaining)
         )
-        result.extend(list(db_session.scalars(stmt).all()))
+        result.extend(list(db_session.scalars(stmt_failed).all()))
 
     return result
 
