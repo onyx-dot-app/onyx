@@ -17,6 +17,10 @@ import { VertexAIForm } from "./forms/VertexAIForm";
 import { OpenRouterForm } from "./forms/OpenRouterForm";
 import { getFormForExistingProvider } from "./forms/getForm";
 import { CustomForm } from "./forms/CustomForm";
+import { DefaultModelSelector } from "./forms/components/DefaultModel";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import Separator from "@/refresh-components/Separator";
+import { useLlmManager } from "@/lib/hooks";
 
 export function LLMConfiguration() {
   const { data: existingLLMProvidersResponse } = useSWR<
@@ -30,21 +34,30 @@ export function LLMConfiguration() {
   const existingLlmProviders = existingLLMProvidersResponse.providers;
   const defaultProviderId =
     existingLLMProvidersResponse.default_text?.provider_id;
+  const defaultLlmModel =
+    existingLLMProvidersResponse.default_text ?? undefined;
   const isFirstProvider = existingLlmProviders.length === 0;
+
+  const { updateDefaultLlmModel } = useLlmManager();
 
   return (
     <>
-      <Title className="mb-2">Enabled LLM Providers</Title>
-
       {existingLlmProviders.length > 0 ? (
         <>
-          <Text as="p" className="mb-4">
-            If multiple LLM providers are enabled, the default provider will be
-            used for all &quot;Default&quot; Assistants. For user-created
-            Assistants, you can select the LLM provider/model that best fits the
-            use case!
-          </Text>
-          <div className="flex flex-col gap-y-4">
+          <DefaultModelSelector
+            existingLlmProviders={existingLlmProviders}
+            defaultLlmModel={defaultLlmModel ?? null}
+            onModelChange={(provider_id, model_name) =>
+              updateDefaultLlmModel({ provider_id, model_name })
+            }
+          />
+
+          <GeneralLayouts.Section
+            flexDirection="column"
+            justifyContent="start"
+            alignItems="start"
+          >
+            <Text headingH3>Available Providers</Text>
             {[...existingLlmProviders]
               .sort((a, b) => {
                 if (a.id === defaultProviderId && b.id !== defaultProviderId)
@@ -53,15 +66,10 @@ export function LLMConfiguration() {
                   return 1;
                 return 0;
               })
-              .map((llmProvider) => (
-                <div key={llmProvider.id}>
-                  {getFormForExistingProvider(
-                    llmProvider,
-                    existingLLMProvidersResponse.default_text ?? undefined
-                  )}
-                </div>
-              ))}
-          </div>
+              .map((llmProvider) => getFormForExistingProvider(llmProvider))}
+          </GeneralLayouts.Section>
+
+          <Separator />
         </>
       ) : (
         <Callout type="warning" title="No LLM providers configured yet">
@@ -69,19 +77,25 @@ export function LLMConfiguration() {
         </Callout>
       )}
 
-      <Title className="mb-2 mt-6">Add LLM Provider</Title>
-      <Text as="p" className="mb-4">
-        Add a new LLM provider by either selecting from one of the default
-        providers or by specifying your own custom LLM provider.
-      </Text>
+      <GeneralLayouts.Section
+        flexDirection="column"
+        justifyContent="start"
+        alignItems="start"
+        gap={0}
+      >
+        <Text headingH3>Add Provider</Text>
+        <Text as="p" secondaryBody text03>
+          Onyx supports both popular providers and self-hosted models.
+        </Text>
+      </GeneralLayouts.Section>
 
-      <div className="flex flex-col gap-y-4">
+      <div className="grid grid-cols-2 gap-4">
         <OpenAIForm shouldMarkAsDefault={isFirstProvider} />
         <AnthropicForm shouldMarkAsDefault={isFirstProvider} />
         <OllamaForm shouldMarkAsDefault={isFirstProvider} />
+        <VertexAIForm shouldMarkAsDefault={isFirstProvider} />
         <AzureForm shouldMarkAsDefault={isFirstProvider} />
         <BedrockForm shouldMarkAsDefault={isFirstProvider} />
-        <VertexAIForm shouldMarkAsDefault={isFirstProvider} />
         <OpenRouterForm shouldMarkAsDefault={isFirstProvider} />
 
         <CustomForm shouldMarkAsDefault={isFirstProvider} />

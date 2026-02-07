@@ -1,20 +1,21 @@
 import { Form, Formik } from "formik";
+import * as Yup from "yup";
 
 import { LLMProviderFormProps } from "../interfaces";
-import * as Yup from "yup";
 import { ProviderFormEntrypointWrapper } from "./components/FormWrapper";
 import { DisplayNameField } from "./components/DisplayNameField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import { FormActionButtons } from "./components/FormActionButtons";
 import {
   buildDefaultInitialValues,
   buildDefaultValidationSchema,
   buildAvailableModelConfigurations,
   submitLLMProvider,
-  LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
+import LLMFormLayout from "./components/FormLayout";
+import Separator from "@/refresh-components/Separator";
+import InputWrapper from "./components/InputWrapper";
 
 export const OPENAI_PROVIDER_NAME = "openai";
 const DEFAULT_DEFAULT_MODEL_NAME = "gpt-5.2";
@@ -27,6 +28,7 @@ export function OpenAIForm({
   return (
     <ProviderFormEntrypointWrapper
       providerName="OpenAI"
+      providerDisplayName={existingLlmProvider?.name ?? "OpenAI"}
       providerEndpoint={OPENAI_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
     >
@@ -45,18 +47,27 @@ export function OpenAIForm({
           existingLlmProvider,
           wellKnownLLMProvider
         );
+        const isAutoMode = existingLlmProvider?.is_auto_mode ?? true;
+        const autoModelDefault =
+          wellKnownLLMProvider?.recommended_default_model?.name ??
+          DEFAULT_DEFAULT_MODEL_NAME;
+
+        // We use a default model if we're editting and this provider is the global default
+        // Or we are creating the first provider (and shouldMarkAsDefault is true)
+        const defaultModel = shouldMarkAsDefault
+          ? isAutoMode
+            ? autoModelDefault
+            : defaultLlmModel?.model_name ?? DEFAULT_DEFAULT_MODEL_NAME
+          : undefined;
+
         const initialValues = {
           ...buildDefaultInitialValues(
             existingLlmProvider,
-            modelConfigurations
+            modelConfigurations,
+            defaultModel
           ),
           api_key: existingLlmProvider?.api_key ?? "",
-          default_model_name:
-            existingLlmProvider?.default_model_name ??
-            wellKnownLLMProvider?.recommended_default_model?.name ??
-            DEFAULT_DEFAULT_MODEL_NAME,
-          // Default to auto mode for new OpenAI providers
-          is_auto_mode: existingLlmProvider?.is_auto_mode ?? true,
+          is_auto_mode: isAutoMode,
         };
 
         const validationSchema = buildDefaultValidationSchema().shape({
@@ -87,35 +98,47 @@ export function OpenAIForm({
                 });
               }}
             >
-              {(formikProps) => {
-                return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
+              {(formikProps) => (
+                <Form>
+                  <LLMFormLayout.Body>
+                    <InputWrapper
+                      label="API Key"
+                      description="Paste your {link} from OpenAI to access your models."
+                      descriptionLink={{
+                        text: "API key",
+                        href: "https://platform.openai.com/api-keys",
+                      }}
+                    >
+                      <PasswordInputTypeInField
+                        name="api_key"
+                        subtext="Paste your API key from OpenAI to access your models."
+                      />
+                    </InputWrapper>
+
+                    <Separator />
+
                     <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
+                    <Separator />
 
                     <DisplayModels
                       modelConfigurations={modelConfigurations}
                       formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
                       shouldShowAutoUpdateToggle={true}
                     />
 
                     <AdvancedOptions formikProps={formikProps} />
+                  </LLMFormLayout.Body>
 
-                    <FormActionButtons
-                      isTesting={isTesting}
-                      testError={testError}
-                      existingLlmProvider={existingLlmProvider}
-                      mutate={mutate}
-                      onClose={onClose}
-                      isFormValid={formikProps.isValid}
-                    />
-                  </Form>
-                );
-              }}
+                  <LLMFormLayout.Footer
+                    onCancel={onClose}
+                    submitLabel={existingLlmProvider ? "Update" : "Enable"}
+                    isSubmitting={isTesting}
+                    isSubmitDisabled={!formikProps.isValid}
+                    error={testError}
+                  />
+                </Form>
+              )}
             </Formik>
           </>
         );

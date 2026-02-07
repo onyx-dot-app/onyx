@@ -12,6 +12,7 @@ export const ProviderIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: ProviderIconProps) => {
+  console.log(provider);
   const Icon = getProviderIcon(provider, modelName);
   return <Icon size={size} className={className} />;
 };

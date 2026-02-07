@@ -111,6 +111,12 @@ export interface LLMProviderFormProps {
   shouldMarkAsDefault?: boolean;
 }
 
+export interface DefaultModelSelectorProps {
+  existingLlmProviders: LLMProviderView[];
+  defaultLlmModel: DefaultModel | null;
+  onModelChange: (provider_id: number, model_name: string) => void;
+}
+
 // Param types for model fetching functions - use snake_case to match API structure
 export interface BedrockFetchParams {
   aws_region_name: string;

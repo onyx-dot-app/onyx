@@ -18,15 +18,16 @@ import {
   LLM_FORM_CLASS_NAME,
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
-import { SingleDefaultModelField } from "./components/SingleDefaultModelField";
 import {
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
 import Separator from "@/refresh-components/Separator";
+import { DisplayModels } from "./components/DisplayModels";
+import InputWrapper from "./components/InputWrapper";
 
 export const AZURE_PROVIDER_NAME = "azure";
-const AZURE_DISPLAY_NAME = "Microsoft Azure Cloud";
+const AZURE_DISPLAY_NAME = "Azure OpenAI";
 
 interface AzureFormValues extends BaseLLMFormValues {
   api_key: string;
@@ -53,7 +54,9 @@ export function AzureForm({
 }: LLMProviderFormProps) {
   return (
     <ProviderFormEntrypointWrapper
-      providerName={AZURE_DISPLAY_NAME}
+      providerName={"Microsoft Azure"}
+      providerDisplayName={existingLlmProvider?.name ?? AZURE_DISPLAY_NAME}
+      providerInternalName={"azure"}
       providerEndpoint={AZURE_PROVIDER_NAME}
       existingLlmProvider={existingLlmProvider}
     >
@@ -138,19 +141,41 @@ export function AzureForm({
               {(formikProps) => {
                 return (
                   <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
-
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
-
-                    <TextFormField
-                      name="target_uri"
+                    <InputWrapper
                       label="Target URI"
-                      placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                      subtext="The complete target URI for your deployment from the Azure AI portal."
-                    />
+                      description="Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version)."
+                    >
+                      <TextFormField
+                        name="target_uri"
+                        label=""
+                        placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+                      />
+                    </InputWrapper>
+
+                    <InputWrapper
+                      label="API Key"
+                      description="Paste your API key from {link} to access your models."
+                      descriptionLink={{
+                        text: "Azure OpenAI",
+                        href: "https://oai.azure.com",
+                      }}
+                    >
+                      <PasswordInputTypeInField name="api_key" placeholder="" />
+                    </InputWrapper>
 
                     <Separator />
-                    <SingleDefaultModelField placeholder="E.g. gpt-4o" />
+
+                    <DisplayNameField disabled={!!existingLlmProvider} />
+
+                    <Separator noPadding />
+
+                    <DisplayModels
+                      modelConfigurations={modelConfigurations}
+                      formikProps={formikProps}
+                      shouldShowAutoUpdateToggle={false}
+                      noModelConfigurationsMessage="No models available. Provide a valid base URL or key."
+                    />
+
                     <Separator />
 
                     <AdvancedOptions formikProps={formikProps} />

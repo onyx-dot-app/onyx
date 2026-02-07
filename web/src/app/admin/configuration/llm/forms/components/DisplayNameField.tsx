@@ -1,4 +1,7 @@
 import { TextFormField } from "@/components/Field";
+import Text from "@/refresh-components/texts/Text";
+import * as GeneralLayouts from "@/layouts/general-layouts";
+import InputWrapper from "./InputWrapper";
 
 interface DisplayNameFieldProps {
   disabled?: boolean;
@@ -6,12 +9,17 @@ interface DisplayNameFieldProps {
 
 export function DisplayNameField({ disabled = false }: DisplayNameFieldProps) {
   return (
-    <TextFormField
-      name="name"
+    <InputWrapper
       label="Display Name"
-      subtext="A name which you can use to identify this provider when selecting it in the UI."
-      placeholder="Display Name"
-      disabled={disabled}
-    />
+      optional
+      description="Use to identify this provider in the app"
+    >
+      <TextFormField
+        name="name"
+        label=""
+        placeholder="Display Name"
+        disabled={disabled}
+      />
+    </InputWrapper>
   );
 }
