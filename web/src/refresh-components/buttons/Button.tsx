@@ -44,7 +44,7 @@ const BUTTON_SIZE_CLASS_MAP = {
     },
   },
   md: {
-    button: "p-1 rounded-08 gap-0.5",
+    button: "p-1 rounded-08 gap-0",
     content: {
       left: "pr-1 py-0.5",
       right: "pl-1 py-0.5",

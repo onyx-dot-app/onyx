@@ -134,7 +134,7 @@ export function ParallelTimelineTabs({
                 )}
                 rightContent={
                   <IconButton
-                    tertiary
+                    internal
                     onClick={handleToggle}
                     icon={isExpanded ? SvgFold : SvgExpand}
                   />
