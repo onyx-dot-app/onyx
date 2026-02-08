@@ -1,6 +1,7 @@
 from typing import Type
 from typing import Union
 
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -25,6 +26,7 @@ BUILT_IN_TOOL_TYPES = Union[
     KnowledgeGraphTool,
     OpenURLTool,
     PythonTool,
+    FileReaderTool,
 ]
 
 BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
@@ -34,6 +36,7 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     KnowledgeGraphTool.__name__: KnowledgeGraphTool,
     OpenURLTool.__name__: OpenURLTool,
     PythonTool.__name__: PythonTool,
+    FileReaderTool.__name__: FileReaderTool,
 }
 
 STOPPING_TOOLS_NAMES: list[str] = [ImageGenerationTool.NAME]
