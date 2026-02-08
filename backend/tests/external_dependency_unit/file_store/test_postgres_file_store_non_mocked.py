@@ -51,7 +51,7 @@ def pg_file_store(
         created_ids.append(file_id)
         return file_id
 
-    store.save_file = _tracking_save  # type: ignore[assignment]
+    store.save_file = _tracking_save  # type: ignore[method-assign]
 
     yield store
 

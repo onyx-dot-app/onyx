@@ -332,9 +332,7 @@ class TestFileStoreInterface:
             file_store = get_default_file_store()
             assert isinstance(file_store, PostgresBackedFileStore)
 
-    def test_file_store_defaults_to_postgres(self) -> None:
-        """Test that the default backend is postgres"""
-        from onyx.file_store.postgres_file_store import PostgresBackedFileStore
-
+    def test_file_store_defaults_to_s3(self) -> None:
+        """Test that the default backend is s3"""
         file_store = get_default_file_store()
-        assert isinstance(file_store, PostgresBackedFileStore)
+        assert isinstance(file_store, S3BackedFileStore)
