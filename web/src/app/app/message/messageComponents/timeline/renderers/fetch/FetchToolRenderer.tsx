@@ -67,6 +67,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         status: null,
         content: <div />,
         supportsCollapsible: false,
+        timelineLayout: "timeline",
       },
     ]);
   }
@@ -81,6 +82,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
         icon: null,
         status: null,
         supportsCollapsible: false,
+        timelineLayout: "content",
         content: (
           <div className="flex flex-col">
             <Text as="p" text02 className="text-sm mb-1">
@@ -122,6 +124,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       icon: SvgCircle,
       status: "Reading",
       supportsCollapsible: false,
+      timelineLayout: "timeline",
       content: (
         <div className="flex flex-col">
           {displayDocuments ? (

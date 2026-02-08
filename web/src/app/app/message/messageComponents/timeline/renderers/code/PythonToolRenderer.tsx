@@ -136,11 +136,9 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
       {/* Output */}
       {stdout && (
-        <div className="rounded-md bg-gray-100 dark:bg-gray-800 p-3">
-          <div className="text-xs font-semibold mb-1 text-gray-600 dark:text-gray-400">
-            Output:
-          </div>
-          <pre className="text-sm whitespace-pre-wrap font-mono text-gray-900 dark:text-gray-100">
+        <div className="rounded-md bg-background-neutral-02 p-3">
+          <div className="text-xs font-semibold mb-1 text-text-03">Output:</div>
+          <pre className="text-sm whitespace-pre-wrap font-mono text-text-01">
             {stdout}
           </pre>
         </div>
@@ -148,11 +146,11 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
       {/* Error */}
       {stderr && (
-        <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-3 border border-red-200 dark:border-red-800">
-          <div className="text-xs font-semibold mb-1 text-red-600 dark:text-red-400">
+        <div className="rounded-md bg-status-error-01 p-3 border border-status-error-02">
+          <div className="text-xs font-semibold mb-1 text-status-error-05">
             Error:
           </div>
-          <pre className="text-sm whitespace-pre-wrap font-mono text-red-900 dark:text-red-100">
+          <pre className="text-sm whitespace-pre-wrap font-mono text-status-error-05">
             {stderr}
           </pre>
         </div>
@@ -160,14 +158,14 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
 
       {/* File count */}
       {fileIds.length > 0 && (
-        <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="text-sm text-text-03">
           Generated {fileIds.length} file{fileIds.length !== 1 ? "s" : ""}
         </div>
       )}
 
       {/* No output fallback - only when complete with no output */}
       {isComplete && !stdout && !stderr && (
-        <div className="py-2 text-center text-gray-500 dark:text-gray-400">
+        <div className="py-2 text-center text-text-04">
           <SvgTerminal className="w-4 h-4 mx-auto mb-1 opacity-50" />
           <p className="text-xs">No output</p>
         </div>
@@ -194,7 +192,10 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       status,
       supportsCollapsible: true,
       content: (
-        <FadingEdgeContainer direction="bottom" className="h-24">
+        <FadingEdgeContainer
+          direction="bottom"
+          className="max-h-24 overflow-hidden"
+        >
           {content}
         </FadingEdgeContainer>
       ),

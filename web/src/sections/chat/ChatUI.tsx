@@ -113,7 +113,7 @@ const ChatUI = React.memo(
     );
 
     return (
-      <div className="w-full max-w-[var(--app-page-main-content-width)] h-full pl-1.5">
+      <div className="w-full max-w-[var(--app-page-main-content-width)] h-full">
         <Spacer />
         {messages.map((message, i) => {
           const messageReactComponentKey = `message-${message.nodeId}`;

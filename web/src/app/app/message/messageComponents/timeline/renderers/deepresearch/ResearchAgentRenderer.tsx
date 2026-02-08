@@ -1,6 +1,5 @@
-import React, { useMemo, useCallback, FunctionComponent } from "react";
+import React, { useMemo, useCallback } from "react";
 import { SvgCircle, SvgCheckCircle, SvgBookOpen } from "@opal/icons";
-import { IconProps } from "@opal/types";
 
 import {
   PacketType,
@@ -20,6 +19,7 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
+import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -194,8 +194,8 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col">
-              <Text as="p" text02 className="text-sm mb-1">
+            <div className="flex flex-col pl-[var(--timeline-common-text-padding)]">
+              <Text as="p" text04 mainUiMuted className="mb-1">
                 Research Report
               </Text>
               <ExpandableTextDisplay
@@ -208,6 +208,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             </div>
           ),
           supportsCollapsible: true,
+          timelineLayout: "content",
         },
       ]);
     }
@@ -243,6 +244,7 @@ export const ResearchAgentRenderer: MessageRenderer<
                     </>
                   ),
                   supportsCollapsible: true,
+                  timelineLayout: "content",
                 },
               ])
             }
@@ -258,7 +260,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           icon: null,
           status: null,
           content: (
-            <div className="flex flex-col">
+            <div className="flex flex-col pl-[var(--timeline-common-text-padding)]">
               <Text as="p" text04 mainUiMuted>
                 Research Task
               </Text>
@@ -268,6 +270,7 @@ export const ResearchAgentRenderer: MessageRenderer<
             </div>
           ),
           supportsCollapsible: true,
+          timelineLayout: "content",
         },
       ]);
     }
@@ -278,6 +281,7 @@ export const ResearchAgentRenderer: MessageRenderer<
         status: null,
         content: <></>,
         supportsCollapsible: true,
+        timelineLayout: "content",
       },
     ]);
   }
@@ -299,9 +303,11 @@ export const ResearchAgentRenderer: MessageRenderer<
           }
           isHover={isHover}
         >
-          <Text as="p" text02 mainUiMuted>
-            {researchTask}
-          </Text>
+          <div className="pl-[var(--timeline-common-text-padding)]">
+            <Text as="p" text02 mainUiMuted>
+              {researchTask}
+            </Text>
+          </div>
         </StepContainer>
       )}
 
@@ -329,31 +335,14 @@ export const ResearchAgentRenderer: MessageRenderer<
               isHover={isHover}
             >
               {(results: TimelineRendererOutput) => (
-                <>
-                  {results.map((result, resultIndex) => (
-                    <StepContainer
-                      key={resultIndex}
-                      stepIcon={
-                        result.icon as FunctionComponent<IconProps> | undefined
-                      }
-                      header={result.status}
-                      isExpanded={result.isExpanded}
-                      onToggle={result.onToggle}
-                      collapsible={true}
-                      isLastStep={
-                        resultIndex === results.length - 1 && isLastNestedStep
-                      }
-                      isFirstStep={
-                        !researchTask && index === 0 && resultIndex === 0
-                      }
-                      isHover={result.isHover}
-                      supportsCollapsible={result.supportsCollapsible}
-                      noPaddingRight={isReasoning}
-                    >
-                      {result.content}
-                    </StepContainer>
-                  ))}
-                </>
+                <TimelineStepComposer
+                  results={results}
+                  isLastStep={isLastNestedStep}
+                  isFirstStep={!researchTask && index === 0}
+                  isSingleStep={false}
+                  collapsible={true}
+                  noPaddingRight={isReasoning}
+                />
               )}
             </TimelineRendererComponent>
           );
@@ -369,12 +358,14 @@ export const ResearchAgentRenderer: MessageRenderer<
           isHover={isHover}
           noPaddingRight={true}
         >
-          <ExpandableTextDisplay
-            title="Research Report"
-            content={fullReportContent}
-            renderContent={renderReport}
-            isStreaming={isReportStreaming}
-          />
+          <div className="pl-[var(--timeline-common-text-padding)]">
+            <ExpandableTextDisplay
+              title="Research Report"
+              content={fullReportContent}
+              renderContent={renderReport}
+              isStreaming={isReportStreaming}
+            />
+          </div>
         </StepContainer>
       )}
     </div>
@@ -387,6 +378,7 @@ export const ResearchAgentRenderer: MessageRenderer<
       status: null,
       content: researchAgentContent,
       supportsCollapsible: true,
+      timelineLayout: "content",
     },
   ]);
 };

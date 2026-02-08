@@ -14,7 +14,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
@@ -169,16 +169,16 @@ class TestAutoModeSyncFeature:
             update_default_provider(provider.id, db_session)
 
             # Step 5: Fetch the default provider and verify
-            default_provider = fetch_default_provider(db_session)
-            assert default_provider is not None, "Default provider should exist"
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None, "Default provider should exist"
             assert (
-                default_provider.name == provider_name
+                default_model.llm_provider.name == provider_name
             ), "Default provider should be our test provider"
             assert (
-                default_provider.default_model_name == expected_default_model
+                default_model.name == expected_default_model
             ), f"Default provider's default model should be '{expected_default_model}'"
             assert (
-                default_provider.is_auto_mode is True
+                default_model.llm_provider.is_auto_mode is True
             ), "Default provider should be in auto mode"
 
         finally:
@@ -570,11 +570,11 @@ class TestAutoModeSyncFeature:
 
             # Step 3: Verify provider 1 is still the default
             db_session.expire_all()
-            default_provider = fetch_default_provider(db_session)
-            assert default_provider is not None
-            assert default_provider.name == provider_1_name
-            assert default_provider.default_model_name == provider_1_default_model
-            assert default_provider.is_auto_mode is True
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None
+            assert default_model.llm_provider.name == provider_1_name
+            assert default_model.name == provider_1_default_model
+            assert default_model.llm_provider.is_auto_mode is True
 
             # Step 4: Change the default to provider 2
             provider_2 = fetch_existing_llm_provider(
@@ -585,11 +585,11 @@ class TestAutoModeSyncFeature:
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
-            default_provider = fetch_default_provider(db_session)
-            assert default_provider is not None
-            assert default_provider.name == provider_2_name
-            assert default_provider.default_model_name == provider_2_default_model
-            assert default_provider.is_auto_mode is True
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None
+            assert default_model.llm_provider.name == provider_2_name
+            assert default_model.name == provider_2_default_model
+            assert default_model.llm_provider.is_auto_mode is True
 
             # Step 6: Run test_default_provider and verify it uses provider 2's model
             with patch(

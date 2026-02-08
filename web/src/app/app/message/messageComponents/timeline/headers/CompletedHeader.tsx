@@ -38,13 +38,17 @@ export const CompletedHeader = React.memo(function CompletedHeader({
     <div
       role="button"
       onClick={onToggle}
-      className="flex items-center justify-between w-full rounded-12 p-1"
+      className="flex items-center justify-between w-full"
     >
-      <Text as="p" mainUiAction text03>
-        {isExpanded ? durationText : imageText ?? durationText}
-      </Text>
+      <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+        <Text as="p" mainUiAction text03>
+          {isExpanded ? durationText : imageText ?? durationText}
+        </Text>
+      </div>
+
       {collapsible && totalSteps > 0 && (
         <Button
+          size="md"
           tertiary
           onClick={noProp(onToggle)}
           rightIcon={isExpanded ? SvgFold : SvgExpand}

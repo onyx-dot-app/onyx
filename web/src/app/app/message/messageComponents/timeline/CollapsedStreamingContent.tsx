@@ -4,34 +4,12 @@ import React, { useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState, RenderType } from "../interfaces";
 import { TransformedStep } from "./transformers";
-import { cn } from "@/lib/utils";
 import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
-
-// =============================================================================
-// TimelineContentRow - Layout helper for content rows
-// =============================================================================
-
-interface TimelineContentRowProps {
-  className?: string;
-  children: React.ReactNode;
-}
-
-const TimelineContentRow: React.FC<TimelineContentRowProps> = ({
-  className,
-  children,
-}) => (
-  <div className="flex w-full">
-    <div className="w-9" />
-    <div className={cn("w-full", className)}>{children}</div>
-  </div>
-);
-
-// =============================================================================
-// CollapsedStreamingContent Component
-// =============================================================================
+import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
+import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
 export interface CollapsedStreamingContentProps {
   step: TransformedStep;
@@ -60,22 +38,24 @@ export const CollapsedStreamingContent = React.memo(
     );
 
     return (
-      <TimelineContentRow className="bg-background-tint-00 rounded-b-12 px-2 pb-2">
-        <TimelineRendererComponent
-          key={`${step.key}-compact`}
-          packets={step.packets}
-          chatState={chatState}
-          onComplete={noopComplete}
-          animate={true}
-          stopPacketSeen={false}
-          stopReason={stopReason}
-          defaultExpanded={false}
-          renderTypeOverride={renderTypeOverride}
-          isLastStep={true}
-        >
-          {renderContentOnly}
-        </TimelineRendererComponent>
-      </TimelineContentRow>
+      <TimelineRow railVariant="spacer">
+        <TimelineSurface className="px-2 pb-2" roundedBottom>
+          <TimelineRendererComponent
+            key={`${step.key}-compact`}
+            packets={step.packets}
+            chatState={chatState}
+            onComplete={noopComplete}
+            animate={true}
+            stopPacketSeen={false}
+            stopReason={stopReason}
+            defaultExpanded={false}
+            renderTypeOverride={renderTypeOverride}
+            isLastStep={true}
+          >
+            {renderContentOnly}
+          </TimelineRendererComponent>
+        </TimelineSurface>
+      </TimelineRow>
     );
   }
 );

@@ -71,7 +71,7 @@ const useTabsContext = () => {
 /** Style classes for TabsList variants */
 const listVariants = {
   contained: "grid w-full rounded-08 bg-background-tint-03",
-  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden pr-1",
+  pill: "relative flex w-full items-center pb-[5px] bg-background-tint-00 overflow-hidden",
 } as const;
 
 /** Base style classes for TabsTrigger variants */
@@ -486,7 +486,7 @@ const TabsList = React.forwardRef<
             enableScrollArrows ? (
               <div
                 ref={tabsContainerRef}
-                className="flex items-center gap-2 pt-1 overflow-x-auto scrollbar-hide flex-1 min-w-0"
+                className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1 min-w-0"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
                 {children}
@@ -523,7 +523,7 @@ const TabsList = React.forwardRef<
           )}
 
           {isPill && rightContent && (
-            <div ref={rightContentRef} className="ml-auto px-1 flex-shrink-0">
+            <div ref={rightContentRef} className="ml-auto flex-shrink-0">
               {rightContent}
             </div>
           )}
