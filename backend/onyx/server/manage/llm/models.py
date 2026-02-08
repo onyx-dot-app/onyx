@@ -423,6 +423,7 @@ class OpenRouterFinalModelResponse(BaseModel):
 class LMStudioModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
+    api_key_changed: bool = False
     provider_name: str | None = None  # Optional: to save models to existing provider
 
 

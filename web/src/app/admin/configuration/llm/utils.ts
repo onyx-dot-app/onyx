@@ -298,6 +298,7 @@ export const fetchLMStudioModels = async (
       body: JSON.stringify({
         api_base: apiBase,
         api_key: params.api_key,
+        api_key_changed: params.api_key_changed ?? false,
         provider_name: params.provider_name,
       }),
     });

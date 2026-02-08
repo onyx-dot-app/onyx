@@ -1108,6 +1108,16 @@ def get_lm_studio_available_models(
             detail="API base URL is required to fetch LM Studio models.",
         )
 
+    # If provider_name is given and the api_key hasn't been changed by the user,
+    # fall back to the stored API key from the database (the form value is masked).
+    api_key = request.api_key
+    if request.provider_name and not request.api_key_changed:
+        existing_provider = fetch_existing_llm_provider(
+            name=request.provider_name, db_session=db_session
+        )
+        if existing_provider and existing_provider.custom_config:
+            api_key = existing_provider.custom_config.get("LM_STUDIO_API_KEY")
+
     # LM Studio serves an OpenAI-compatible /v1/models endpoint.
     # The api_base may or may not include /v1 already.
     if cleaned_api_base.endswith("/v1"):
@@ -1115,8 +1125,8 @@ def get_lm_studio_available_models(
     else:
         url = f"{cleaned_api_base}/v1/models"
     headers: dict[str, str] = {}
-    if request.api_key:
-        headers["Authorization"] = f"Bearer {request.api_key}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     try:
         response = httpx.get(url, headers=headers, timeout=10.0)
