@@ -289,6 +289,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}

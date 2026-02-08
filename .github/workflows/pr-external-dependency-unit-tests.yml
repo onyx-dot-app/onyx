@@ -118,6 +118,7 @@ jobs:
       - name: Create .env file for Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
           CODE_INTERPRETER_BETA_ENABLED=true
           DISABLE_TELEMETRY=true
           EOF

@@ -53,11 +53,17 @@ services:
       - path: .env
         required: false
     depends_on:
-      - relational_db
-      - index
-      - cache
-      - inference_model_server
-      - minio
+      relational_db:
+        condition: service_started
+      index:
+        condition: service_started
+      cache:
+        condition: service_started
+      inference_model_server:
+        condition: service_started
+      minio:
+        condition: service_started
+        required: false
     restart: unless-stopped
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
@@ -67,6 +73,7 @@ services:
     environment:
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-basic}
+      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
       - REDIS_HOST=${REDIS_HOST:-cache}
@@ -137,6 +144,7 @@ services:
     restart: unless-stopped
     environment:
       - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
+      - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - VESPA_HOST=${VESPA_HOST:-index}
       - REDIS_HOST=${REDIS_HOST:-cache}
@@ -447,6 +455,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    profiles: ["s3-filestore"]
     restart: unless-stopped
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
