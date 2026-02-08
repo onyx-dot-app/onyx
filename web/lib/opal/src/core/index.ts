@@ -5,8 +5,6 @@ export {
   type InteractiveBaseProps,
   type InteractiveContainerProps,
   type InteractiveChevronContainerProps,
-  type InteractiveBaseVariant,
-  type InteractiveBaseSubvariant,
   type InteractiveContainerHeightVariant as ContainerHeightVariant,
   type InteractiveContainerPaddingVariant as ContainerPaddingVariant,
   type InteractiveContainerRoundingVariant as ContainerRoundingVariant,

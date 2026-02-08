@@ -9,39 +9,29 @@ import type { WithoutStyles } from "@opal/types";
 // ---------------------------------------------------------------------------
 
 /**
- * Variant for interactive elements.
+ * Discriminated union tying `variant` to `subvariant`.
  *
- * Determines the semantic color palette used for the interactive element:
- *
- * - `"none"` — No background styling; defers to child component's background
- * - `"standard"` — Uses theme primary colors (default brand colors)
- * - `"action"` — Uses action/link colors (blue)
- * - `"danger"` — Uses danger colors (red) for destructive actions
+ * - `"none"` and `"select"` accept no subvariant (`subvariant` must not be provided)
+ * - `"default"`, `"action"`, and `"danger"` accept an optional subvariant
  */
-export type InteractiveBaseVariant = "none" | "standard" | "action" | "danger";
-
-/**
- * Subvariant for interactive elements.
- *
- * Determines the background fill treatment of the element:
- *
- * - `"primary"` — Solid filled background with prominent appearance
- * - `"secondary"` — Subtle tinted background (`tint-01`)
- * - `"ghost"` — Transparent background, visible only on hover
- */
-export type InteractiveBaseSubvariant = "primary" | "secondary" | "ghost";
+export type InteractiveBaseVariantProps =
+  | { variant?: "none" | "select"; subvariant?: never }
+  | {
+      variant?: "default" | "action" | "danger";
+      subvariant?: "primary" | "secondary" | "ghost";
+    };
 
 /**
  * Height presets for `Interactive.Container`.
  *
- * - `"standard"` — Default height of 2.25rem (36px), suitable for most buttons/items
+ * - `"default"` — Default height of 2.25rem (36px), suitable for most buttons/items
  * - `"compact"` — Reduced height of 1.75rem (28px), for denser UIs or inline elements
  * - `"full"` — Expands to fill parent height (`h-full`), for flexible layouts
  */
 export type InteractiveContainerHeightVariant =
   keyof typeof interactiveContainerHeightVariants;
 const interactiveContainerHeightVariants = {
-  standard: "h-[2.25rem]",
+  default: "h-[2.25rem]",
   compact: "h-[1.75rem]",
   full: "h-full",
 } as const;
@@ -49,14 +39,14 @@ const interactiveContainerHeightVariants = {
 /**
  * Padding presets for `Interactive.Container`.
  *
- * - `"standard"` — Default padding of 0.5rem (8px) on all sides
+ * - `"default"` — Default padding of 0.5rem (8px) on all sides
  * - `"thin"` — Reduced padding of 0.25rem (4px), for tighter layouts
  * - `"none"` — No padding, when the child handles its own spacing
  */
 export type InteractiveContainerPaddingVariant =
   keyof typeof interactiveContainerPaddingVariants;
 const interactiveContainerPaddingVariants = {
-  standard: "p-2",
+  default: "p-2",
   thin: "p-1",
   none: "p-0",
 } as const;
@@ -64,13 +54,13 @@ const interactiveContainerPaddingVariants = {
 /**
  * Border-radius presets for `Interactive.Container`.
  *
- * - `"standard"` — Default radius of 0.75rem (12px), matching card rounding
+ * - `"default"` — Default radius of 0.75rem (12px), matching card rounding
  * - `"compact"` — Smaller radius of 0.5rem (8px), for tighter/inline elements
  */
 export type InteractiveContainerRoundingVariant =
   keyof typeof interactiveContainerRoundingVariants;
 const interactiveContainerRoundingVariants = {
-  standard: "rounded-12",
+  default: "rounded-12",
   compact: "rounded-08",
 } as const;
 
@@ -79,12 +69,12 @@ const interactiveContainerRoundingVariants = {
 // ---------------------------------------------------------------------------
 
 /**
- * Props for {@link InteractiveBase}.
+ * Base props for {@link InteractiveBase} (without variant/subvariant).
  *
  * Extends standard HTML element attributes (minus `className` and `style`,
  * which are controlled by the design system).
  */
-export interface InteractiveBaseProps
+interface InteractiveBasePropsBase
   extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   /**
    * Ref forwarded to the underlying element (the single child).
@@ -92,31 +82,6 @@ export interface InteractiveBaseProps
    * element the child renders.
    */
   ref?: React.Ref<HTMLElement>;
-
-  /**
-   * Variant determining the semantic color palette.
-   *
-   * - `"none"` — No background styling; defers to child component's background
-   * - `"standard"` — Uses theme primary colors (default)
-   * - `"action"` — Uses action/link colors (blue)
-   * - `"danger"` — Uses danger colors (red)
-   *
-   * @default "standard"
-   */
-  variant?: InteractiveBaseVariant;
-
-  /**
-   * Subvariant determining the background fill treatment.
-   *
-   * Ignored when `variant` is `"none"`.
-   *
-   * - `"primary"` — Solid filled background with prominent appearance
-   * - `"secondary"` — Subtle tinted background (`tint-01`)
-   * - `"ghost"` — Transparent background, visible only on hover
-   *
-   * @default "primary"
-   */
-  subvariant?: InteractiveBaseSubvariant;
 
   /**
    * Tailwind group class to apply (e.g. `"group/AgentCard"`).
@@ -196,6 +161,18 @@ export interface InteractiveBaseProps
 }
 
 /**
+ * Props for {@link InteractiveBase}.
+ *
+ * Intersects the base props with the {@link InteractiveBaseVariantProps}
+ * discriminated union so that `variant` and `subvariant` are correlated:
+ *
+ * - `"none"` / `"select"` — `subvariant` must not be provided
+ * - `"default"` / `"action"` / `"danger"` — `subvariant` is optional (defaults to `"primary"`)
+ */
+export type InteractiveBaseProps = InteractiveBasePropsBase &
+  InteractiveBaseVariantProps;
+
+/**
  * The foundational interactive surface primitive.
  *
  * `Interactive.Base` is the lowest-level building block for any clickable
@@ -203,7 +180,8 @@ export interface InteractiveBaseProps
  *
  * 1. The `.interactive` CSS class (flex layout, pointer cursor, color transitions)
  * 2. `data-interactive-base-variant` and `data-interactive-base-subvariant`
- *    attributes for variant-specific background colors (omitted when `variant="none"`)
+ *    attributes for variant-specific background colors (both omitted for `"none"`;
+ *    subvariant omitted for `"select"`)
  * 3. `data-static` attribute when hover feedback is disabled
  * 4. `data-pressed` attribute for forced pressed state
  * 5. `data-disabled` attribute for disabled styling
@@ -214,7 +192,7 @@ export interface InteractiveBaseProps
  * @example
  * ```tsx
  * // Basic usage with a container
- * <Interactive.Base variant="standard" subvariant="primary">
+ * <Interactive.Base variant="default" subvariant="primary">
  *   <Interactive.Container border>
  *     <span>Click me</span>
  *   </Interactive.Container>
@@ -250,7 +228,7 @@ export interface InteractiveBaseProps
  */
 function InteractiveBase({
   ref,
-  variant = "standard",
+  variant = "default",
   subvariant = "primary",
   group,
   static: isStatic,
@@ -268,7 +246,7 @@ function InteractiveBase({
   const dataAttrs = {
     "data-interactive-base-variant": variant !== "none" ? variant : undefined,
     "data-interactive-base-subvariant":
-      variant !== "none" ? subvariant : undefined,
+      variant !== "none" && variant !== "select" ? subvariant : undefined,
     "data-static": isStatic ? "true" : undefined,
     "data-pressed": transient ? "true" : undefined,
     "data-disabled": disabled ? "true" : undefined,
@@ -334,32 +312,32 @@ export interface InteractiveContainerProps
   /**
    * Border-radius preset controlling corner rounding.
    *
-   * - `"standard"` — 0.75rem (12px), matching card-level rounding
+   * - `"default"` — 0.75rem (12px), matching card-level rounding
    * - `"compact"` — 0.5rem (8px), for smaller/inline elements
    *
-   * @default "standard"
+   * @default "default"
    */
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /**
    * Padding preset controlling inner spacing.
    *
-   * - `"standard"` — 0.5rem (8px) padding on all sides
+   * - `"default"` — 0.5rem (8px) padding on all sides
    * - `"thin"` — 0.25rem (4px) padding for tighter layouts
    * - `"none"` — No padding; child content controls its own spacing
    *
-   * @default "standard"
+   * @default "default"
    */
   paddingVariant?: InteractiveContainerPaddingVariant;
 
   /**
    * Height preset controlling the container's vertical size.
    *
-   * - `"standard"` — Fixed 2.25rem (36px), typical button/item height
+   * - `"default"` — Fixed 2.25rem (36px), typical button/item height
    * - `"compact"` — Fixed 1.75rem (28px), for denser UIs
    * - `"full"` — Fills parent height (`h-full`)
    *
-   * @default "standard"
+   * @default "default"
    */
   heightVariant?: InteractiveContainerHeightVariant;
 }
@@ -385,7 +363,7 @@ export interface InteractiveContainerProps
  * </Interactive.Base>
  *
  * // Compact, borderless container with no padding
- * <Interactive.Base variant="standard" subvariant="ghost">
+ * <Interactive.Base variant="default" subvariant="ghost">
  *   <Interactive.Container
  *     heightVariant="compact"
  *     roundingVariant="compact"
@@ -401,9 +379,9 @@ export interface InteractiveContainerProps
 function InteractiveContainer({
   ref,
   border,
-  roundingVariant = "standard",
-  paddingVariant = "standard",
-  heightVariant = "standard",
+  roundingVariant = "default",
+  paddingVariant = "default",
+  heightVariant = "default",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className and style at runtime (bypassing WithoutStyles),
@@ -549,7 +527,7 @@ function InteractiveChevronContainer({
  * ```tsx
  * import { Interactive } from "@opal/core";
  *
- * <Interactive.Base variant="standard" subvariant="ghost" onClick={handleClick}>
+ * <Interactive.Base variant="default" subvariant="ghost" onClick={handleClick}>
  *   <Interactive.Container border>
  *     <span>Clickable card</span>
  *   </Interactive.Container>

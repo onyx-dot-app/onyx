@@ -9,75 +9,92 @@
 
 /* ============================================================================
    Variant + Subvariant combinations (9 total)
-   ============================================================================ */
+
+   Each combination sets:
+     - background-color (via @apply)
+     - --interactive-foreground (CSS custom property for descendant text color)
+
+   Descendants opt in to text color via: color: var(--interactive-foreground);
+
+============================================================================ */
 
 /* ---------------------------------------------------------------------------
-   Standard + Primary
+   Default + Primary
    --------------------------------------------------------------------------- */
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"] {
   @apply bg-[var(--theme-primary-05)];
+  --interactive-foreground: var(--text-inverted-05);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"]:hover:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-04)];
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"]:active:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-06)];
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"][data-disabled] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-background-neutral-04;
+  --interactive-foreground: var(--text-inverted-04);
 }
 
 /* ---------------------------------------------------------------------------
-   Standard + Secondary
+   Default + Secondary
    --------------------------------------------------------------------------- */
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"] {
   @apply bg-background-tint-01;
+  --interactive-foreground: var(--text-03);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"]:hover:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"]:active:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"][data-disabled] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-03;
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
-   Standard + Ghost
+   Default + Ghost
    --------------------------------------------------------------------------- */
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--text-03);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"]:hover:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"]:active:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"]:active:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"][data-disabled] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
@@ -85,8 +102,8 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"] {
   @apply bg-[var(--action-link-05)];
+  --interactive-foreground: var(--text-light-05);
 }
-
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]) {
@@ -102,6 +119,7 @@
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-[var(--action-link-02)];
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
@@ -109,6 +127,7 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"] {
   @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-link-05);
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
@@ -125,6 +144,7 @@
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-link-03);
 }
 
 /* ---------------------------------------------------------------------------
@@ -132,6 +152,7 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--action-text-link-05);
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
@@ -148,6 +169,7 @@
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-link-03);
 }
 
 /* ---------------------------------------------------------------------------
@@ -155,6 +177,7 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"] {
   @apply bg-[var(--action-danger-05)];
+  --interactive-foreground: var(--text-light-05);
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
@@ -171,6 +194,7 @@
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-[var(--action-danger-02)];
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
@@ -178,6 +202,7 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"] {
   @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-danger-05);
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
@@ -194,6 +219,7 @@
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-danger-03);
 }
 
 /* ---------------------------------------------------------------------------
@@ -201,6 +227,7 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--action-text-danger-05);
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
@@ -217,4 +244,5 @@
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-danger-03);
 }
