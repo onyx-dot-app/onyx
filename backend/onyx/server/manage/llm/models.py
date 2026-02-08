@@ -371,6 +371,20 @@ class OpenRouterFinalModelResponse(BaseModel):
     supports_image_input: bool
 
 
+# LM Studio dynamic models fetch
+class LMStudioModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class LMStudioFinalModelResponse(BaseModel):
+    name: str  # Model ID from LM Studio (e.g., "lmstudio-community/Meta-Llama-3-8B")
+    display_name: str  # Human-readable name
+    max_input_tokens: int | None  # From LM Studio API or None if unavailable
+    supports_image_input: bool
+
+
 class DefaultModel(BaseModel):
     provider_id: int
     model_name: str
