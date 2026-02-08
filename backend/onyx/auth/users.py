@@ -1088,6 +1088,11 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
 
     async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
         # JWTs are stateless — nothing to invalidate server-side.
+        # NOTE: a compromise that makes JWT auth stateful but revocable
+        # is to include a token_version claim in the JWT payload. The token_version
+        # is incremented whenever the user logs out (or gets login revoked). Whenever
+        # the JWT is used, it is only valid if the token_version claim is the same as the one
+        # in the db. If not, the JWT is invalid and the user needs to login again.
         return
 
     async def refresh_token(
@@ -1116,11 +1121,14 @@ def get_jwt_strategy() -> SingleTenantJWTStrategy:
     )
 
 
-if AUTH_BACKEND == AuthBackend.JWT and (MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD):
-    raise ValueError(
-        "JWT auth backend is only supported for single-tenant, self-hosted deployments. "
-        "Use 'redis' or 'postgres' instead."
-    )
+if AUTH_BACKEND == AuthBackend.JWT:
+    if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
+        raise ValueError(
+            "JWT auth backend is only supported for single-tenant, self-hosted deployments. "
+            "Use 'redis' or 'postgres' instead."
+        )
+    if not USER_AUTH_SECRET:
+        raise ValueError("USER_AUTH_SECRET is required for JWT auth backend.")
 
 if AUTH_BACKEND == AuthBackend.REDIS:
     auth_backend = AuthenticationBackend(
