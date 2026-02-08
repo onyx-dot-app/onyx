@@ -23,7 +23,7 @@ import {
 } from "./formUtils";
 import { AdvancedOptions } from "./components/AdvancedOptions";
 import { DisplayModels } from "./components/DisplayModels";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchLMStudioModels } from "../utils";
 
 export const LM_STUDIO_PROVIDER_NAME = "lm_studio";
@@ -60,9 +60,16 @@ function LMStudioFormContent({
   isFormValid,
 }: LMStudioFormContentProps) {
   const [isLoadingModels, setIsLoadingModels] = useState(true);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (formikProps.values.api_base) {
+    if (!formikProps.values.api_base) return;
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = setTimeout(() => {
       setIsLoadingModels(true);
       fetchLMStudioModels({
         api_base: formikProps.values.api_base,
@@ -80,9 +87,16 @@ function LMStudioFormContent({
         .finally(() => {
           setIsLoadingModels(false);
         });
-    }
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
   }, [
     formikProps.values.api_base,
+    formikProps.values.custom_config?.LM_STUDIO_API_KEY,
     existingLlmProvider?.name,
     setFetchedModels,
   ]);
