@@ -43,7 +43,7 @@ export type InteractiveContainerHeightVariant =
 const interactiveContainerHeightVariants = {
   standard: "h-[2.25rem]",
   compact: "h-[1.75rem]",
-  full: "h-full",
+  full: "h-fit",
 } as const;
 
 /**

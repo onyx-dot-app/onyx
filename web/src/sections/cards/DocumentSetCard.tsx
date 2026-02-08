@@ -39,10 +39,10 @@ export default function DocumentSetCard({
           static={disabled || isSelected === undefined}
         >
           <Interactive.Container
-            paddingVariant="none"
-            border
             data-testid={`document-set-card-${documentSet.id}`}
+            border
             heightVariant="full"
+            paddingVariant="none"
           >
             <AttachmentItemLayout
               icon={SvgFiles}

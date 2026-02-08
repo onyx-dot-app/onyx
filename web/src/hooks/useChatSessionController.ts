@@ -29,7 +29,7 @@ import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile } from "@/app/app/projects/projectsService";
 import { getSessionProjectTokenCount } from "@/app/app/projects/projectsService";
 import { getProjectFilesForSession } from "@/app/app/projects/projectsService";
-import { ChatInputBarHandle } from "@/app/app/components/input/ChatInputBar";
+import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -47,7 +47,7 @@ interface UseChatSessionControllerProps {
   // Refs
   chatSessionIdRef: React.RefObject<string | null>;
   loadedIdSessionRef: React.RefObject<string | null>;
-  chatInputBarRef: React.RefObject<ChatInputBarHandle | null>;
+  chatInputBarRef: React.RefObject<AppInputBarHandle | null>;
   isInitialLoad: React.RefObject<boolean>;
   submitOnLoadPerformed: React.RefObject<boolean>;
 

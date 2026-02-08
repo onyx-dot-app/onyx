@@ -28,7 +28,7 @@ const OnboardingFlowInner = ({
   const hasStarted = onboardingState.currentStep !== OnboardingStep.Welcome;
 
   return user?.role === UserRole.ADMIN ? (
-    <div className="flex flex-col items-center justify-center w-full max-w-[800px] gap-2 mb-4">
+    <div className="flex flex-col items-center justify-center w-full max-w-[var(--app-page-main-content-width)] gap-2 mb-4">
       <OnboardingHeader
         state={onboardingState}
         actions={onboardingActions}
