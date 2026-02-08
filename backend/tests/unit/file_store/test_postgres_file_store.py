@@ -293,35 +293,27 @@ class TestChangeFileId:
         old_fr.file_metadata = None
         old_fr.object_key = "55"
 
-        old_fc = MagicMock()
-        old_fc.lobj_oid = 55
-        old_fc.file_size = 2048
-
         with (
             patch(
                 "onyx.file_store.postgres_file_store.get_filerecord_by_file_id",
                 return_value=old_fr,
             ),
             patch(
-                "onyx.file_store.postgres_file_store.get_file_content_by_file_id",
-                return_value=old_fc,
-            ),
-            patch(
                 "onyx.file_store.postgres_file_store.upsert_filerecord"
             ) as mock_upsert_fr,
             patch(
-                "onyx.file_store.postgres_file_store.upsert_file_content"
-            ) as mock_upsert_fc,
-            patch("onyx.file_store.postgres_file_store.delete_file_content_by_file_id"),
+                "onyx.file_store.postgres_file_store.transfer_file_content_file_id"
+            ) as mock_transfer,
             patch("onyx.file_store.postgres_file_store.delete_filerecord_by_file_id"),
         ):
             store.change_file_id("old-id", "new-id", db_session=mock_session)
 
-        # New records should point to the same large object OID
-        fc_kwargs = mock_upsert_fc.call_args[1]
-        assert fc_kwargs["lobj_oid"] == 55
-        assert fc_kwargs["file_id"] == "new-id"
+        # file_content row should be moved in-place via transfer
+        transfer_kwargs = mock_transfer.call_args[1]
+        assert transfer_kwargs["old_file_id"] == "old-id"
+        assert transfer_kwargs["new_file_id"] == "new-id"
 
+        # New file_record should preserve the same object_key (LO OID)
         fr_kwargs = mock_upsert_fr.call_args[1]
         assert fr_kwargs["file_id"] == "new-id"
         assert fr_kwargs["object_key"] == "55"
