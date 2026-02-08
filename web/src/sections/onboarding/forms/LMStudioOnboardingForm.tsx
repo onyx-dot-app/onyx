@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -58,7 +58,6 @@ function LMStudioFormFields(
     apiStatus,
     showApiMessage,
     errorMessage,
-    setApiStatus,
     modelOptions,
     isFetchingModels,
     handleFetchModels,
@@ -68,29 +67,11 @@ function LMStudioFormFields(
     disabled,
   } = props;
 
-  // Auto-fetch models on initial load and when api_base or API key changes
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!formikProps.values.api_base) return;
-
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    debounceRef.current = setTimeout(() => {
-      setApiStatus("loading");
+  const handleFetchOnBlur = () => {
+    if (formikProps.values.api_base) {
       handleFetchModels();
-    }, 500);
-
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, [
-    formikProps.values.api_base,
-    formikProps.values.custom_config?.LM_STUDIO_API_KEY,
-  ]);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -111,6 +92,10 @@ function LMStudioFormFields(
                       : undefined
                 }
                 showClearButton={false}
+                onBlur={(e) => {
+                  field.onBlur(e);
+                  handleFetchOnBlur();
+                }}
               />
             </FormField.Control>
             {showApiMessage && (
@@ -151,6 +136,10 @@ function LMStudioFormFields(
                 disabled={disabled}
                 error={false}
                 showClearButton={false}
+                onBlur={(e) => {
+                  field.onBlur(e);
+                  handleFetchOnBlur();
+                }}
               />
             </FormField.Control>
             <FormField.Message
