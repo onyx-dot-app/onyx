@@ -571,24 +571,30 @@ const AppInputBar = React.memo(
             </Popover>
 
             {isSearchMode && (
-              <IconButton
-                id="onyx-chat-input-send-button"
-                icon={isClassifying ? SimpleLoader : SvgSearch}
-                disabled={
-                  (chatState === "input" && !message) ||
-                  hasUploadingFiles ||
-                  isClassifying
-                }
-                onClick={() => {
-                  if (chatState == "streaming") {
-                    stopGenerating();
-                  } else if (message) {
-                    onSubmit(message);
-                  }
-                }}
-                className="mr-1"
-                tertiary
-              />
+              <>
+                {message && (
+                  <IconButton
+                    icon={SvgX}
+                    disabled={!message || isClassifying}
+                    onClick={() => setMessage("")}
+                    internal
+                  />
+                )}
+                <IconButton
+                  id="onyx-chat-input-send-button"
+                  icon={isClassifying ? SimpleLoader : SvgSearch}
+                  disabled={!message || isClassifying}
+                  onClick={() => {
+                    if (chatState == "streaming") {
+                      stopGenerating();
+                    } else if (message) {
+                      onSubmit(message);
+                    }
+                  }}
+                  className="mr-1"
+                  tertiary
+                />
+              </>
             )}
           </div>
 
