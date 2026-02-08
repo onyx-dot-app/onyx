@@ -236,13 +236,18 @@ class PostgresBackedFileStore(FileStore):
         mime_type = "application/octet-stream"
         try:
             file_io = self.read_file(file_id, mode="b")
-            file_content = file_io.read()
+        except Exception:
+            return None
+
+        file_content = file_io.read()
+        try:
             matches = puremagic.magic_string(file_content)
             if matches:
                 mime_type = cast(str, matches[0].mime_type)
-            return FileWithMimeType(data=file_content, mime_type=mime_type)
-        except Exception:
-            return None
+        except puremagic.PureError:
+            pass
+
+        return FileWithMimeType(data=file_content, mime_type=mime_type)
 
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
