@@ -30,6 +30,7 @@ from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -55,6 +56,10 @@ class SearchToolConfig(BaseModel):
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
+
+
+class FileReaderToolConfig(BaseModel):
+    available_file_ids: list[UUID] | None = None
 
 
 class CustomToolConfig(BaseModel):
@@ -99,6 +104,7 @@ def construct_tools(
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
+    file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
 ) -> dict[int, list[Tool]]:
@@ -232,6 +238,21 @@ def construct_tools(
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                ]
+
+            # Handle File Reader Tool
+            elif tool_cls.__name__ == FileReaderTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    FileReaderTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        db_session=db_session,
+                        available_file_ids=(
+                            file_reader_tool_config.available_file_ids
+                            if file_reader_tool_config
+                            else None
+                        ),
+                    )
                 ]
 
             # Handle KG Tool

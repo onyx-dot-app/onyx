@@ -1,0 +1,69 @@
+"""add_file_reader_tool
+
+Revision ID: d3fd499c829c
+Revises: 01f8e6d95a33
+Create Date: 2026-02-07 19:28:22.452337
+
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision = "d3fd499c829c"
+down_revision = "01f8e6d95a33"
+branch_labels = None
+depends_on = None
+
+FILE_READER_TOOL = {
+    "name": "FileReaderTool",
+    "display_name": "File Reader",
+    "description": (
+        "Read sections of user-uploaded files by character offset. "
+        "Useful for inspecting large files that cannot fit entirely in context."
+    ),
+    "in_code_tool_id": "FileReaderTool",
+    "enabled": True,
+}
+
+
+def upgrade() -> None:
+    conn = op.get_bind()
+
+    # Check if tool already exists
+    existing = conn.execute(
+        sa.text("SELECT id FROM tool WHERE in_code_tool_id = :in_code_tool_id"),
+        {"in_code_tool_id": FILE_READER_TOOL["in_code_tool_id"]},
+    ).fetchone()
+
+    if existing:
+        # Update existing tool
+        conn.execute(
+            sa.text(
+                """
+                UPDATE tool
+                SET name = :name,
+                    display_name = :display_name,
+                    description = :description
+                WHERE in_code_tool_id = :in_code_tool_id
+                """
+            ),
+            FILE_READER_TOOL,
+        )
+    else:
+        # Insert new tool
+        conn.execute(
+            sa.text(
+                """
+                INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
+                VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
+                """
+            ),
+            FILE_READER_TOOL,
+        )
+
+
+def downgrade() -> None:
+    # Keep the tool around on downgrade (safe no-op)
+    pass
