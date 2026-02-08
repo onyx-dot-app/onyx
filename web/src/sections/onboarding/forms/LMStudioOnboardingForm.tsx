@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -68,13 +68,29 @@ function LMStudioFormFields(
     disabled,
   } = props;
 
-  // Auto-fetch models on initial load
+  // Auto-fetch models on initial load and when api_base or API key changes
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (formikProps.values.api_base) {
+    if (!formikProps.values.api_base) return;
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = setTimeout(() => {
       setApiStatus("loading");
       handleFetchModels();
-    }
-  }, []);
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [
+    formikProps.values.api_base,
+    formikProps.values.custom_config?.LM_STUDIO_API_KEY,
+  ]);
 
   return (
     <div className="flex flex-col gap-4 w-full">
