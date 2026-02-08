@@ -2,6 +2,7 @@ import { LLMProviderName, LLMProviderView } from "../interfaces";
 import { AnthropicForm } from "./AnthropicForm";
 import { OpenAIForm } from "./OpenAIForm";
 import { OllamaForm } from "./OllamaForm";
+import { LMStudioForm } from "./LMStudioForm";
 import { AzureForm } from "./AzureForm";
 import { VertexAIForm } from "./VertexAIForm";
 import { OpenRouterForm } from "./OpenRouterForm";
@@ -30,6 +31,8 @@ export const getFormForExistingProvider = (provider: LLMProviderView) => {
       return <AnthropicForm existingLlmProvider={provider} />;
     case LLMProviderName.OLLAMA_CHAT:
       return <OllamaForm existingLlmProvider={provider} />;
+    case LLMProviderName.LM_STUDIO:
+      return <LMStudioForm existingLlmProvider={provider} />;
     case LLMProviderName.AZURE:
       return <AzureForm existingLlmProvider={provider} />;
     case LLMProviderName.VERTEX_AI:

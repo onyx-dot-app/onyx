@@ -23,6 +23,7 @@ DYNAMIC_LLM_PROVIDERS = frozenset(
         LlmProviderNames.OPENROUTER,
         LlmProviderNames.BEDROCK,
         LlmProviderNames.OLLAMA_CHAT,
+        LlmProviderNames.LM_STUDIO,
     }
 )
 
@@ -347,5 +348,21 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
                 return vendor
         # Fallback: capitalize the base name as vendor
         return base_name.split("-")[0].title()
+
+    elif provider == LlmProviderNames.LM_STUDIO:
+        # LM Studio model IDs can be paths like "publisher/model-name"
+        # or simple names. Use MODEL_PREFIX_TO_VENDOR for matching.
+        from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR
+
+        model_lower = model_name.lower()
+        # Check for slash-separated vendor prefix first
+        if "/" in model_lower:
+            vendor_key = model_lower.split("/")[0]
+            return PROVIDER_DISPLAY_NAMES.get(vendor_key, vendor_key.title())
+        # Fallback to model prefix matching
+        for prefix, vendor in MODEL_PREFIX_TO_VENDOR.items():
+            if model_lower.startswith(prefix):
+                return PROVIDER_DISPLAY_NAMES.get(vendor, vendor.title())
+        return None
 
     return None

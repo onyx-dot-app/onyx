@@ -56,6 +56,8 @@ from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import LMStudioFinalModelResponse
+from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
@@ -1057,5 +1059,134 @@ def get_openrouter_available_models(
                 )
         except ValueError as e:
             logger.warning(f"Failed to sync OpenRouter models to DB: {e}")
+
+    return sorted_results
+
+
+def _generate_lm_studio_display_name(model_id: str) -> str:
+    """Generate a human-friendly display name for an LM Studio model ID.
+
+    LM Studio model IDs are typically paths like:
+        "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF" → "Meta Llama 3 8B Instruct"
+        "TheBloke/Mistral-7B-Instruct-v0.2-GGUF" → "Mistral 7B Instruct v0.2"
+        "my-local-model" → "My Local Model"
+    """
+    import re
+
+    # Remove publisher prefix (before /)
+    if "/" in model_id:
+        model_id = model_id.split("/", 1)[1]
+
+    # Remove common suffixes like -GGUF, -GPTQ, -AWQ, -MLX
+    model_id = re.sub(
+        r"-(GGUF|GPTQ|AWQ|MLX|EXL2|FP16|BF16)$", "", model_id, flags=re.IGNORECASE
+    )
+
+    # Replace dashes and underscores with spaces
+    display_name = model_id.replace("-", " ").replace("_", " ")
+
+    # Clean up multiple spaces
+    display_name = re.sub(r"\s+", " ", display_name).strip()
+
+    return display_name
+
+
+@admin_router.post("/lm-studio/available-models")
+def get_lm_studio_available_models(
+    request: LMStudioModelsRequest,
+    _: User = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[LMStudioFinalModelResponse]:
+    """Fetch available models from an LM Studio server.
+
+    LM Studio exposes an OpenAI-compatible API at /v1/models.
+    """
+    cleaned_api_base = request.api_base.strip().rstrip("/")
+    if not cleaned_api_base:
+        raise HTTPException(
+            status_code=400,
+            detail="API base URL is required to fetch LM Studio models.",
+        )
+
+    # LM Studio serves an OpenAI-compatible /v1/models endpoint.
+    # The api_base may or may not include /v1 already.
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+    headers: dict[str, str] = {}
+    if request.api_key:
+        headers["Authorization"] = f"Bearer {request.api_key}"
+
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch LM Studio models: {e}",
+        )
+
+    data = response_json.get("data", [])
+    if not isinstance(data, list) or len(data) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No models found from your LM Studio server.",
+        )
+
+    results: list[LMStudioFinalModelResponse] = []
+    for item in data:
+        model_id = item.get("id")
+        if not model_id:
+            continue
+
+        # Skip embedding models if identifiable
+        model_id_lower = model_id.lower()
+        if "embed" in model_id_lower:
+            continue
+
+        display_name = _generate_lm_studio_display_name(model_id)
+
+        results.append(
+            LMStudioFinalModelResponse(
+                name=model_id,
+                display_name=display_name,
+                max_input_tokens=None,  # LM Studio /v1/models doesn't expose context length
+                supports_image_input=False,  # Conservatively default to False
+            )
+        )
+
+    if not results:
+        raise HTTPException(
+            status_code=400,
+            detail="No compatible models found from LM Studio server.",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_name is specified
+    if request.provider_name:
+        try:
+            models_to_sync = [
+                {
+                    "name": r.name,
+                    "display_name": r.display_name,
+                    "max_input_tokens": r.max_input_tokens,
+                    "supports_image_input": r.supports_image_input,
+                }
+                for r in sorted_results
+            ]
+            new_count = sync_model_configurations(
+                db_session=db_session,
+                provider_name=request.provider_name,
+                models=models_to_sync,
+            )
+            if new_count > 0:
+                logger.info(
+                    f"Added {new_count} new LM Studio models to provider '{request.provider_name}'"
+                )
+        except ValueError as e:
+            logger.warning(f"Failed to sync LM Studio models to DB: {e}")
 
     return sorted_results

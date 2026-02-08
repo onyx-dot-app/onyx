@@ -56,6 +56,7 @@ import jiraSVG from "@public/Jira.svg";
 import kimiIcon from "@public/Kimi.png";
 import linearIcon from "@public/Linear.png";
 import litellmIcon from "@public/litellm.png";
+import lmStudioIcon from "@public/lm_studio.png";
 import mediawikiIcon from "@public/MediaWiki.svg";
 import metaSVG from "@public/Meta.svg";
 import microsoftIcon from "@public/microsoft.png";
@@ -880,6 +881,7 @@ export const CodaIcon = createLogoIcon(codaIcon);
 export const NotionIcon = createLogoIcon(notionIcon, { monochromatic: true });
 export const OCIStorageIcon = createLogoIcon(OCIStorageSVG);
 export const OllamaIcon = createLogoIcon(ollamaIcon);
+export const LMStudioIcon = createLogoIcon(lmStudioIcon);
 export const TestRailIcon = createLogoIcon(testrailSVG);
 export const OpenAIISVG = ({
   size = 16,

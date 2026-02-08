@@ -37,6 +37,7 @@ from onyx.llm.well_known_providers.constants import AWS_SECRET_ACCESS_KEY_KWARG
 from onyx.llm.well_known_providers.constants import (
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
 )
+from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import (
@@ -138,6 +139,9 @@ class LitellmLLM(LLM):
                 elif model_provider == LlmProviderNames.OLLAMA_CHAT:
                     if k == OLLAMA_API_KEY_CONFIG_KEY:
                         model_kwargs["api_key"] = v
+                elif model_provider == LlmProviderNames.LM_STUDIO:
+                    if k == LM_STUDIO_API_KEY_CONFIG_KEY:
+                        model_kwargs["api_key"] = v
                 elif model_provider == LlmProviderNames.BEDROCK:
                     if k == AWS_REGION_NAME_KWARG:
                         model_kwargs[k] = v
@@ -153,6 +157,15 @@ class LitellmLLM(LLM):
                         model_kwargs[k] = v
                     elif k == AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT:
                         model_kwargs[AWS_SECRET_ACCESS_KEY_KWARG] = v
+
+        # LM Studio: LiteLLM defaults to "fake-api-key" when no key is provided,
+        # which LM Studio rejects. Ensure we always pass an explicit key (or empty
+        # string) to prevent LiteLLM from injecting its fake default.
+        if (
+            model_provider == LlmProviderNames.LM_STUDIO
+            and "api_key" not in model_kwargs
+        ):
+            model_kwargs["api_key"] = ""
 
         # Default vertex_location to "global" if not provided for Vertex AI
         # Latest gemini models are only available through the global region
