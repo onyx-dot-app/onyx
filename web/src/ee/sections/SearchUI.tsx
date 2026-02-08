@@ -7,6 +7,7 @@ import {
   SourceMetadata,
 } from "@/lib/search/interfaces";
 import SearchCard from "@/ee/sections/SearchCard";
+import Pagination from "@/refresh-components/Pagination";
 import Separator from "@/refresh-components/Separator";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { getSourceMetadata } from "@/lib/sources";
@@ -36,6 +37,8 @@ export interface SearchResultsProps {
 // ============================================================================
 // Constants
 // ============================================================================
+
+const RESULTS_PER_PAGE = 20;
 
 const TIME_FILTER_OPTIONS: { value: TimeFilter; label: string }[] = [
   { value: "day", label: "Past 24 hours" },
@@ -67,6 +70,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+
   const tagExtractor = useCallback(
     (tag: Tag) => `${tag.tag_key} ${tag.tag_value}`,
     []
@@ -93,9 +99,10 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     };
   };
 
-  // Reset source filter when results change
+  // Reset source filter and pagination when results change
   useEffect(() => {
     setSelectedSources([]);
+    setCurrentPage(1);
   }, [results]);
 
   // Create a set for fast lookup of LLM-selected docs
@@ -125,6 +132,15 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
       return (b.score ?? 0) - (a.score ?? 0);
     });
   }, [results, selectedSources, llmSelectedSet]);
+
+  // Pagination
+  const totalPages = Math.ceil(
+    filteredAndSortedResults.length / RESULTS_PER_PAGE
+  );
+  const paginatedResults = useMemo(() => {
+    const start = (currentPage - 1) * RESULTS_PER_PAGE;
+    return filteredAndSortedResults.slice(start, start + RESULTS_PER_PAGE);
+  }, [filteredAndSortedResults, currentPage]);
 
   // Extract unique sources with metadata for the source filter
   const sourcesWithMeta = useMemo(() => {
@@ -156,6 +172,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [results]);
 
   const handleSourceToggle = (source: string) => {
+    setCurrentPage(1);
     if (selectedSources.includes(source)) {
       setSelectedSources(selectedSources.filter((s) => s !== source));
     } else {
@@ -165,8 +182,11 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   return (
     <div
-      className="h-full w-full grid min-h-0 gap-x-4"
-      style={{ gridTemplateColumns: "3fr 1fr", gridTemplateRows: "auto 1fr" }}
+      className="flex-1 min-h-0 w-full grid gap-x-4"
+      style={{
+        gridTemplateColumns: "3fr 1fr",
+        gridTemplateRows: "auto 1fr auto",
+      }}
     >
       {/* Top-left: Search filters */}
       <div className="row-start-1 col-start-1 flex flex-col justify-end gap-3">
@@ -281,21 +301,32 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
       {/* Bottom-left: Search results */}
       <div className="row-start-2 col-start-1 min-h-0 overflow-y-scroll py-3 flex flex-col gap-2">
-        {filteredAndSortedResults.length > 0 ? (
-          filteredAndSortedResults.map((doc) => (
-            <SearchCard
-              key={`${doc.document_id}-${doc.chunk_ind}`}
-              document={doc}
-              isLlmSelected={llmSelectedSet.has(doc.document_id)}
-              onDocumentClick={onDocumentClick}
-            />
-          ))
+        {paginatedResults.length > 0 ? (
+          <>
+            {paginatedResults.map((doc) => (
+              <SearchCard
+                key={`${doc.document_id}-${doc.chunk_ind}`}
+                document={doc}
+                isLlmSelected={llmSelectedSet.has(doc.document_id)}
+                onDocumentClick={onDocumentClick}
+              />
+            ))}
+          </>
         ) : (
           <EmptyMessage
             title="No documents found"
             description="Try searching for something else"
           />
         )}
+      </div>
+
+      {/* Pagination */}
+      <div className="row-start-3 col-start-1 pt-3">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Bottom-right: Source filter */}
