@@ -7,9 +7,11 @@ metadata:
 data:
   INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
-  {{- $postgresNameOverride := dig "postgresql" "nameOverride" "postgresql" .Values }}
-  {{- $clusterNameOverride := dig "postgresql" "cluster" "name" "" .Values }}
-  {{- $clusterName := default (printf "%s-%s" .Release.Name $postgresNameOverride) $clusterNameOverride }}
+  {{- $postgresNameOverride := default "postgresql" .Values.postgresql.nameOverride }}
+  {{- $clusterName := printf "%s-%s" .Release.Name $postgresNameOverride }}
+  {{- if and .Values.postgresql.cluster .Values.postgresql.cluster.name }}
+  {{- $clusterName = .Values.postgresql.cluster.name }}
+  {{- end }}
   POSTGRES_HOST: {{ $clusterName }}-rw
   {{- end }}
   {{- if .Values.vespa.enabled }}

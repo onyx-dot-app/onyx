@@ -1,6 +1,7 @@
-{{- $postgresEnabled := dig "postgresql" "enabled" false .Values -}}
-{{- $postgresNameOverride := dig "postgresql" "nameOverride" "postgresql" .Values -}}
-{{- $clusterConfig := dig "postgresql" "cluster" (dict) .Values -}}
+{{- $postgresConfig := .Values.postgresql | default dict -}}
+{{- $postgresEnabled := default false $postgresConfig.enabled -}}
+{{- $postgresNameOverride := default "postgresql" $postgresConfig.nameOverride -}}
+{{- $clusterConfig := $postgresConfig.cluster | default dict -}}
 {{- if and $postgresEnabled (ne (default true $clusterConfig.enabled) false) -}}
 {{- $clusterName := default (printf "%s-%s" .Release.Name $postgresNameOverride) $clusterConfig.name -}}
 {{- $storage := $clusterConfig.storage | default dict -}}
