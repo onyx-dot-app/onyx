@@ -7,6 +7,11 @@
   @apply cursor-not-allowed;
 }
 
+/* Utility class — descendants opt in to parent-controlled foreground color */
+.interactive-foreground {
+  color: var(--interactive-foreground);
+}
+
 /* ============================================================================
    Variant + Subvariant combinations (9 + select)
 
@@ -295,9 +300,19 @@
   --interactive-foreground: var(--action-link-03);
 }
 
-/* Heavy — selected background override */
+/* Heavy — selected background overrides */
 .interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-link-01)];
+}
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:hover:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:active:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-tint-00;
 }
