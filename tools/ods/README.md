@@ -109,10 +109,11 @@ ods compose --tag edge
 
 ### `logs` - View Docker Container Logs
 
-View logs from running Onyx docker containers.
+View logs from running Onyx docker containers. Service names are available as
+arguments to filter output, with tab-completion support.
 
 ```shell
-ods logs [profile]
+ods logs [service...]
 ```
 
 **Flags:**
@@ -125,14 +126,17 @@ ods logs [profile]
 **Examples:**
 
 ```shell
-# View logs (follow mode)
+# View logs from all services (follow mode)
 ods logs
 
-# View logs for dev profile
-ods logs dev
+# View logs for a specific service
+ods logs api_server
+
+# View logs for multiple services
+ods logs api_server background
 
 # View last 100 lines and follow
-ods logs --tail 100
+ods logs --tail 100 api_server
 
 # View logs without following
 ods logs --follow=false
@@ -143,7 +147,7 @@ ods logs --follow=false
 Pull the latest images for Onyx docker containers.
 
 ```shell
-ods pull [profile]
+ods pull
 ```
 
 **Flags:**
@@ -155,11 +159,8 @@ ods pull [profile]
 **Examples:**
 
 ```shell
-# Pull images with default configuration
+# Pull images
 ods pull
-
-# Pull images for dev profile
-ods pull dev
 
 # Pull images with a specific tag
 ods pull --tag edge
