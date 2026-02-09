@@ -1,0 +1,22 @@
+/* Button — layout only; colors handled by Interactive.Base */
+
+.opal-button {
+  @apply flex flex-row items-center gap-2;
+}
+
+.opal-button-icon {
+  @apply size-4 shrink-0;
+}
+
+.opal-button-label {
+  @apply whitespace-nowrap leading-none text-sm font-medium;
+}
+
+/* Compact size */
+.opal-button[data-size="compact"] {
+  @apply gap-1;
+}
+
+.opal-button[data-size="compact"] .opal-button-label {
+  @apply text-xs;
+}

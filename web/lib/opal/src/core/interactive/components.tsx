@@ -37,6 +37,11 @@ const interactiveContainerHeightVariants = {
   compact: "h-[1.75rem]",
   full: "h-full",
 } as const;
+const interactiveContainerMinWidthVariants = {
+  default: "min-w-[2.25rem]",
+  compact: "min-w-[1.75rem]",
+  full: "",
+} as const;
 
 /**
  * Padding presets for `Interactive.Container`.
@@ -404,10 +409,12 @@ function InteractiveContainer({
       ref={ref}
       {...rest}
       className={cn(
+        "items-center justify-center",
         border && "border",
         interactiveContainerRoundingVariants[roundingVariant],
         interactiveContainerPaddingVariants[paddingVariant],
         interactiveContainerHeightVariants[heightVariant],
+        interactiveContainerMinWidthVariants[heightVariant],
         slotClassName
       )}
       style={slotStyle}

@@ -3,6 +3,7 @@ import "@opal/core/interactive/styles.css";
 export {
   Interactive,
   type InteractiveBaseProps,
+  type InteractiveBaseVariantProps,
   type InteractiveContainerProps,
   type InteractiveChevronContainerProps,
   type InteractiveContainerHeightVariant as ContainerHeightVariant,
