@@ -123,7 +123,7 @@ execnet==2.1.2
     # via pytest-xdist
 executing==2.2.1
     # via stack-data
-faker==37.1.0
+faker==40.1.2
     # via onyx
 fastapi==0.128.0
     # via
@@ -622,7 +622,7 @@ typing-inspection==0.4.2
     #   mcp
     #   pydantic
     #   pydantic-settings
-tzdata==2025.2
+tzdata==2025.2 ; sys_platform == 'win32'
     # via faker
 urllib3==2.6.3
     # via

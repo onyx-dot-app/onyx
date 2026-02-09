@@ -140,7 +140,7 @@ backend = [
 dev = [
     "black==25.1.0",
     "celery-types==0.19.0",
-    "faker==37.1.0",
+    "faker==40.1.2",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
