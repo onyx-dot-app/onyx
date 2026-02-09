@@ -127,6 +127,7 @@ class PostgresBackedFileStore(FileStore):
             file_id = str(uuid.uuid4())
 
         file_bytes = self._read_content_bytes(content)
+        created_lo = False
 
         with get_session_with_current_tenant_if_none(db_session) as session:
             try:
@@ -140,6 +141,7 @@ class PostgresBackedFileStore(FileStore):
                 old_oid = existing.lobj_oid if existing else None
 
                 oid = _create_large_object(raw_conn, file_bytes)
+                created_lo = True
 
                 upsert_filerecord(
                     file_id=file_id,
@@ -169,9 +171,16 @@ class PostgresBackedFileStore(FileStore):
                         )
 
                 session.commit()
-            except Exception:
+            except Exception as e:
                 session.rollback()
-                raise
+                try:
+                    if created_lo:
+                        _delete_large_object(raw_conn, oid)
+                except Exception:
+                    logger.exception(
+                        f"Failed to delete large object {oid} for file {file_id}"
+                    )
+                raise e
 
         return file_id
 
