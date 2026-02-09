@@ -1,21 +1,20 @@
+import "@opal/components/buttons/Button/styles.css";
 import { Interactive, type InteractiveBaseVariantProps } from "@opal/core";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type IconComponent = React.ComponentType<IconProps>;
-
-export type ButtonProps = InteractiveBaseVariantProps & {
+type ButtonProps = InteractiveBaseVariantProps & {
   /** Left icon component (renders at 1rem x 1rem). */
-  icon?: IconComponent;
+  icon?: IconFunctionComponent;
 
   /** Button label text. Omit for icon-only buttons. */
   children?: string;
 
   /** Right icon component (renders at 1rem x 1rem). */
-  rightIcon?: IconComponent;
+  rightIcon?: IconFunctionComponent;
 
   /** Size preset — controls gap, text size, and Container height/rounding. */
   size?: "default" | "compact";
@@ -71,4 +70,4 @@ function Button({
   );
 }
 
-export { Button };
+export { Button, type ButtonProps };

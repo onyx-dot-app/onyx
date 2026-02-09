@@ -44,9 +44,9 @@ Interactive.Base          ← variant/subvariant, selected, disabled, href, onCl
 |------|------|---------|-------------|
 | `variant` | `"default" \| "action" \| "danger" \| "none" \| "select"` | `"default"` | Top-level color variant (maps to `Interactive.Base`) |
 | `subvariant` | Depends on `variant` | `"primary"` | Color subvariant — e.g. `"primary"`, `"secondary"`, `"ghost"` for default/action/danger |
-| `icon` | `React.ComponentType<IconProps>` | — | Left icon component |
+| `icon` | `IconFunctionComponent` | — | Left icon component |
 | `children` | `string` | — | Button label text. Omit for icon-only buttons |
-| `rightIcon` | `React.ComponentType<IconProps>` | — | Right icon component |
+| `rightIcon` | `IconFunctionComponent` | — | Right icon component |
 | `size` | `"default" \| "compact"` | `"default"` | Size preset controlling height, rounding, padding, gap, and font size |
 | `selected` | `boolean` | `false` | Forces the selected visual state (data-selected) |
 | `disabled` | `boolean` | `false` | Disables the button (data-disabled, aria-disabled) |
@@ -106,6 +106,78 @@ import { SvgPlus, SvgArrowRight } from "@opal/icons";
 | `size="lg"` | `size="default"` (default, can be omitted) |
 | `leftIcon={X}` | `icon={X}` |
 | `IconButton icon={X}` | `<Button icon={X} />` (no children = icon-only) |
+
+---
+
+## OpenButton
+
+**Import:** `import { OpenButton, type OpenButtonProps } from "@opal/components";`
+
+A trigger button with a built-in chevron that rotates when the associated panel/popover is open. Designed to work automatically with Radix primitives (reads `data-state="open"`) while also supporting explicit `open` control.
+
+### Architecture
+
+```
+Interactive.Base            ← variant/subvariant, selected, disabled, href, onClick, group, static
+  └─ Interactive.Container  ← height, rounding, padding, border (passed directly)
+       └─ div.opal-open-button.interactive-foreground  ← full-width flexbox row
+            ├─ Icon?               .opal-open-button-icon     (1rem x 1rem, shrink-0)
+            ├─ <div>               .opal-open-button-content  (flex-1, min-w-0)
+            └─ SvgChevronDownSmall .opal-open-button-chevron  (rotates 180° when open)
+```
+
+- **Open-state detection** is dual-resolution: an explicit `open` prop takes priority; otherwise the component reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`).
+- **Container props** (`heightVariant`, `paddingVariant`, `roundingVariant`, `border`) are forwarded directly to `Interactive.Container`, giving callers full control over sizing.
+- **Colors** are handled by `Interactive.Base` — the `.interactive-foreground` class ensures icon, text, and chevron all track the current state color.
+
+### Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `variant` | `"default" \| "action" \| "danger" \| "none" \| "select"` | `"default"` | Top-level color variant |
+| `subvariant` | Depends on `variant` | `"primary"` | Color subvariant |
+| `open` | `boolean` | — | Explicit open state for chevron rotation. Falls back to Radix `data-state` |
+| `icon` | `IconFunctionComponent` | — | Left icon component |
+| `children` | `string` | — | Content between icon and chevron |
+| `border` | `boolean` | `false` | Applies a 1px border to the container |
+| `selected` | `boolean` | `false` | Forces selected visual state |
+| `disabled` | `boolean` | `false` | Disables the button |
+| `href` | `string` | — | URL; renders an `<a>` wrapper |
+| `group` | `string` | — | Tailwind group class for descendant hover utilities |
+| `static` | `boolean` | `false` | Disables hover/active visual feedback |
+| `onClick` | `MouseEventHandler<HTMLElement>` | — | Click handler |
+| `heightVariant` | `"default" \| "compact" \| "full"` | `"default"` | Container height preset |
+| `paddingVariant` | `"default" \| "thin" \| "none"` | `"default"` | Container padding preset |
+| `roundingVariant` | `"default" \| "compact"` | `"default"` | Container border-radius preset |
+
+### Usage examples
+
+```tsx
+import { OpenButton } from "@opal/components";
+import { SvgFilter } from "@opal/icons";
+
+// Basic usage with Radix Popover (auto-detects open state)
+<Popover.Trigger asChild>
+  <OpenButton variant="default" subvariant="ghost" border>
+    Select option
+  </OpenButton>
+</Popover.Trigger>
+
+// Explicit open control
+<OpenButton open={isExpanded} onClick={toggle}>
+  Advanced settings
+</OpenButton>
+
+// With left icon
+<OpenButton icon={SvgFilter} variant="default" subvariant="secondary" border>
+  Filters
+</OpenButton>
+
+// Compact sizing
+<OpenButton heightVariant="compact" roundingVariant="compact" paddingVariant="thin">
+  More
+</OpenButton>
+```
 
 ---
 
