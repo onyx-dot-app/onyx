@@ -24,7 +24,7 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
-from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_persona_with_groups
@@ -190,12 +190,12 @@ def test_llm_configuration(
 
     test_api_key = test_llm_request.api_key
     test_custom_config = test_llm_request.custom_config
-    if test_llm_request.name:
+    if test_llm_request.id:
         # NOTE: we are querying by name. we probably should be querying by an invariant id, but
         # as it turns out the name is not editable in the UI and other code also keys off name,
         # so we won't rock the boat just yet.
-        existing_provider = fetch_existing_llm_provider(
-            name=test_llm_request.name, db_session=db_session
+        existing_provider = fetch_existing_llm_provider_by_id(
+            id=test_llm_request.id, db_session=db_session
         )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
@@ -307,12 +307,18 @@ def put_llm_provider(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
+    # NOTE: Name updating functionality currently not supported. There are many places that still
+    # rely on immutable names, so this will be a larger change
+
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
     # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
     # the result
-    existing_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
+    existing_provider = None
+    if llm_provider_upsert_request.id:
+        existing_provider = fetch_existing_llm_provider_by_id(
+            id=llm_provider_upsert_request.id, db_session=db_session
+        )
+
     if existing_provider and is_creation:
         raise HTTPException(
             status_code=400,
@@ -378,8 +384,8 @@ def put_llm_provider(
             config = fetch_llm_recommendations_from_github()
             if config and llm_provider_upsert_request.provider in config.providers:
                 # Refetch the provider to get the updated model
-                updated_provider = fetch_existing_llm_provider(
-                    name=llm_provider_upsert_request.name, db_session=db_session
+                updated_provider = fetch_existing_llm_provider_by_id(
+                    id=result.id, db_session=db_session
                 )
                 if updated_provider:
                     sync_auto_mode_models(

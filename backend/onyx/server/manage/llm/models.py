@@ -56,6 +56,7 @@ def get_default_vision_model_name(llm_provider_model: "LLMProviderModel") -> str
 
 class TestLLMRequest(BaseModel):
     # provider level
+    id: int | None = None
     name: str | None = None
     provider: str
     model: str
@@ -127,6 +128,7 @@ class LLMProvider(BaseModel):
 class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
+    id: int | None = None
     api_key_changed: bool = False
     custom_config_changed: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []

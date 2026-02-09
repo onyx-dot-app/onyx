@@ -125,7 +125,14 @@ def _seed_llms(
         ]
 
         if len(seeded_providers[0].model_configurations) > 0:
-            default_model = seeded_providers[0].model_configurations[0].name
+            default_model = next(
+                (
+                    mc
+                    for mc in seeded_providers[0].model_configurations
+                    if mc.is_visible
+                ),
+                seeded_providers[0].model_configurations[0],
+            ).name
             update_default_provider(
                 provider_id=seeded_providers[0].id,
                 model_name=default_model,
