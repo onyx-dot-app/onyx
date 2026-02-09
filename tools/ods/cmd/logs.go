@@ -40,7 +40,7 @@ Examples:
   ods logs --follow=false`,
 		Args: cobra.ArbitraryArgs,
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return composeServiceNames(), cobra.ShellCompDirectiveNoFileComp
+			return runningServiceNames(), cobra.ShellCompDirectiveNoFileComp
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			runComposeLogs(args, opts)
@@ -54,7 +54,8 @@ Examples:
 }
 
 func runComposeLogs(services []string, opts *LogsOptions) {
-	args := []string{"compose", "-p", composeProjectName, "logs"}
+	args := baseArgs("")
+	args = append(args, "logs")
 	if opts.Follow {
 		args = append(args, "-f")
 	}

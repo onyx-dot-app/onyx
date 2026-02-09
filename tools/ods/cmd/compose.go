@@ -100,9 +100,9 @@ func composeFiles(profile string) []string {
 	}
 }
 
-// baseArgs builds the common "docker compose -f ... -f ..." argument prefix.
+// baseArgs builds the common "docker compose -p <project> -f ... -f ..." argument prefix.
 func baseArgs(profile string) []string {
-	args := []string{"compose"}
+	args := []string{"compose", "-p", composeProjectName}
 	for _, f := range composeFiles(profile) {
 		args = append(args, "-f", f)
 	}
@@ -142,18 +142,17 @@ func execDockerCompose(args []string, extraEnv []string) {
 	}
 }
 
-// composeServiceNames returns the service names defined in the default docker
-// compose file by running "docker compose config --services".
+// runningServiceNames returns the names of currently running services in the
+// compose project by running "docker compose -p onyx ps --services".
 // On any error it returns nil (completions will just be empty).
-func composeServiceNames() []string {
+func runningServiceNames() []string {
 	gitRoot, err := paths.GitRoot()
 	if err != nil {
 		return nil
 	}
 	composeDir := filepath.Join(gitRoot, "deployment", "docker_compose")
 
-	args := baseArgs("")
-	args = append(args, "config", "--services")
+	args := []string{"compose", "-p", composeProjectName, "ps", "--services"}
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = composeDir
