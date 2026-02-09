@@ -21,6 +21,7 @@ postgresql:
   # Optional CloudNativePG Cluster CR managed by this chart.
   cluster:
     enabled: false
+    # When false, set configMap.POSTGRES_HOST to your external database host.
     # Defaults to "<release-name>-postgresql" when empty.
     name: ""
     instances: 1
