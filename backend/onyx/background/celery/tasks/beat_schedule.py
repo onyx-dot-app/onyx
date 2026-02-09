@@ -234,7 +234,7 @@ if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
             # NOTE: If MIGRATION_TASK_SOFT_TIME_LIMIT_S is greater than this
             # value and the task is maximally busy, we can expect to see some
             # enqueued tasks be revoked over time. This is ok; by erring on the
-            # side of "there will probably always be at lease one task of this
+            # side of "there will probably always be at least one task of this
             # type in the queue", we are minimizing this task's idleness while
             # still giving chances for other tasks to execute.
             "schedule": timedelta(seconds=120),  # 2 minutes
