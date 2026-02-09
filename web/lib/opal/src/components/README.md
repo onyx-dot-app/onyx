@@ -10,7 +10,7 @@ Components are exposed from the `@onyx/opal` package via:
 import { Button } from "@opal/components";
 ```
 
-The barrel file at `index.ts` imports each component's `styles.css` side-effect and re-exports the component and its prop types.
+The barrel file at `index.ts` re-exports each component and its prop types. Each component imports its own `styles.css` internally.
 
 ---
 
@@ -47,11 +47,12 @@ Interactive.Base          ← variant/subvariant, selected, disabled, href, onCl
 | `icon` | `IconFunctionComponent` | — | Left icon component |
 | `children` | `string` | — | Button label text. Omit for icon-only buttons |
 | `rightIcon` | `IconFunctionComponent` | — | Right icon component |
-| `size` | `"default" \| "compact"` | `"default"` | Size preset controlling height, rounding, padding, gap, and font size |
+| `size` | `SizeVariant` | `"default"` | Size preset controlling height, rounding, padding, gap, and font size |
 | `selected` | `boolean` | `false` | Forces the selected visual state (data-selected) |
 | `disabled` | `boolean` | `false` | Disables the button (data-disabled, aria-disabled) |
 | `href` | `string` | — | URL; renders an `<a>` wrapper instead of Radix Slot |
 | `onClick` | `MouseEventHandler<HTMLElement>` | — | Click handler |
+| _...and all other `InteractiveBaseProps`_ | | | `group`, `static`, `ref`, etc. |
 
 ### Usage examples
 
@@ -113,21 +114,21 @@ import { SvgPlus, SvgArrowRight } from "@opal/icons";
 
 **Import:** `import { OpenButton, type OpenButtonProps } from "@opal/components";`
 
-A trigger button with a built-in chevron that rotates when the associated panel/popover is open. Designed to work automatically with Radix primitives (reads `data-state="open"`) while also supporting explicit `open` control.
+A trigger button with a built-in chevron that rotates when `selected` is true (or when a Radix parent injects `data-state="open"`). Designed to work automatically with Radix primitives while also supporting explicit control.
 
 ### Architecture
 
 ```
 Interactive.Base            ← variant/subvariant, selected, disabled, href, onClick, group, static
-  └─ Interactive.Container  ← height, rounding, padding, border (passed directly)
+  └─ Interactive.Container  ← height, rounding, padding (derived from `size`), border
        └─ div.opal-open-button.interactive-foreground  ← full-width flexbox row
             ├─ Icon?               .opal-open-button-icon     (1rem x 1rem, shrink-0)
             ├─ <div>               .opal-open-button-content  (flex-1, min-w-0)
-            └─ SvgChevronDownSmall .opal-open-button-chevron  (rotates 180° when open)
+            └─ SvgChevronDownSmall .opal-open-button-chevron  (rotates 180° when selected)
 ```
 
-- **Open-state detection** is dual-resolution: an explicit `open` prop takes priority; otherwise the component reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`).
-- **Container props** (`heightVariant`, `paddingVariant`, `roundingVariant`, `border`) are forwarded directly to `Interactive.Container`, giving callers full control over sizing.
+- **Selected-state detection** is dual-resolution: the `selected` prop takes priority; otherwise the component reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`). The `selected` prop drives both the `Interactive.Base` visual state and the chevron rotation.
+- **Sizing** uses the shared `SizeVariant` type (same as Button), mapping to Container height/rounding/padding presets.
 - **Colors** are handled by `Interactive.Base` — the `.interactive-foreground` class ensures icon, text, and chevron all track the current state color.
 
 ### Props
@@ -136,19 +137,15 @@ Interactive.Base            ← variant/subvariant, selected, disabled, href, on
 |------|------|---------|-------------|
 | `variant` | `"default" \| "action" \| "danger" \| "none" \| "select"` | `"default"` | Top-level color variant |
 | `subvariant` | Depends on `variant` | `"primary"` | Color subvariant |
-| `open` | `boolean` | — | Explicit open state for chevron rotation. Falls back to Radix `data-state` |
 | `icon` | `IconFunctionComponent` | — | Left icon component |
 | `children` | `string` | — | Content between icon and chevron |
 | `border` | `boolean` | `false` | Applies a 1px border to the container |
-| `selected` | `boolean` | `false` | Forces selected visual state |
+| `size` | `SizeVariant` | `"default"` | Size preset controlling height, rounding, and padding |
+| `selected` | `boolean` | `false` | Forces selected visual state and rotates chevron |
 | `disabled` | `boolean` | `false` | Disables the button |
 | `href` | `string` | — | URL; renders an `<a>` wrapper |
-| `group` | `string` | — | Tailwind group class for descendant hover utilities |
-| `static` | `boolean` | `false` | Disables hover/active visual feedback |
 | `onClick` | `MouseEventHandler<HTMLElement>` | — | Click handler |
-| `heightVariant` | `"default" \| "compact" \| "full"` | `"default"` | Container height preset |
-| `paddingVariant` | `"default" \| "thin" \| "none"` | `"default"` | Container padding preset |
-| `roundingVariant` | `"default" \| "compact"` | `"default"` | Container border-radius preset |
+| _...and all other `InteractiveBaseProps`_ | | | `group`, `static`, `ref`, etc. |
 
 ### Usage examples
 
@@ -163,8 +160,8 @@ import { SvgFilter } from "@opal/icons";
   </OpenButton>
 </Popover.Trigger>
 
-// Explicit open control
-<OpenButton open={isExpanded} onClick={toggle}>
+// Explicit selected control
+<OpenButton selected={isExpanded} onClick={toggle}>
   Advanced settings
 </OpenButton>
 
@@ -174,7 +171,7 @@ import { SvgFilter } from "@opal/icons";
 </OpenButton>
 
 // Compact sizing
-<OpenButton heightVariant="compact" roundingVariant="compact" paddingVariant="thin">
+<OpenButton size="compact">
   More
 </OpenButton>
 ```
@@ -186,8 +183,8 @@ import { SvgFilter } from "@opal/icons";
 1. Create a directory under `components/` (e.g. `components/inputs/TextInput/`)
 2. Add a `styles.css` for layout-only CSS (colors come from Interactive.Base or other core primitives)
 3. Add a `components.tsx` with the component and its exported props type
-4. In `components/index.ts`, import the CSS side-effect and re-export the component:
+4. Import `styles.css` at the top of your `components.tsx` (each component owns its own styles)
+5. In `components/index.ts`, re-export the component:
    ```ts
-   import "@opal/components/inputs/TextInput/styles.css";
    export { TextInput, type TextInputProps } from "@opal/components/inputs/TextInput/components";
    ```
