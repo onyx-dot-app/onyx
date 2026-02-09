@@ -503,7 +503,7 @@ function InteractiveChevronContainer({
 
   return (
     <InteractiveContainer {...containerProps}>
-      <div className="flex flex-row items-center gap-2">
+      <div className="flex w-full flex-row items-center gap-2">
         <div className="flex-1 min-w-0">{children}</div>
         <SvgChevronDownSmall
           className={cn(
