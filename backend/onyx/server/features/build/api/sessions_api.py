@@ -385,9 +385,7 @@ def restore_session(
             if is_healthy and sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             ):
-                # Ensure session is marked ACTIVE (may still be IDLE from sleep)
-                if session.status != BuildSessionStatus.ACTIVE:
-                    session.status = BuildSessionStatus.ACTIVE
+                session.status = BuildSessionStatus.ACTIVE
                 update_sandbox_heartbeat(db_session, sandbox.id)
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
@@ -419,7 +417,6 @@ def restore_session(
                 db_session, sandbox.id, SandboxStatus.PROVISIONING
             )
             db_session.commit()
-            db_session.refresh(sandbox)
 
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
@@ -427,11 +424,12 @@ def restore_session(
                 tenant_id=tenant_id,
                 llm_config=llm_config,
             )
+
+            # Mark as RUNNING after successful provision
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.RUNNING
             )
             db_session.commit()
-            db_session.refresh(sandbox)
 
         # 2. Check if session workspace needs to be loaded
         if sandbox.status == SandboxStatus.RUNNING:
@@ -440,24 +438,25 @@ def restore_session(
             )
 
             if not workspace_exists:
+                # Allocate port if not already set (needed for both snapshot restore and fresh setup)
+                if not session.nextjs_port:
+                    session.nextjs_port = allocate_nextjs_port(db_session)
+                    # Commit port allocation before long-running operations
+                    db_session.commit()
+
                 # Only Kubernetes backend supports snapshot restoration
                 snapshot = None
                 if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
                 if snapshot:
-                    new_port = allocate_nextjs_port(db_session)
-                    session.nextjs_port = new_port
-                    # Commit port allocation before the long-running restore
-                    db_session.commit()
-
                     try:
                         sandbox_manager.restore_snapshot(
                             sandbox_id=sandbox.id,
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
                             tenant_id=tenant_id,
-                            nextjs_port=new_port,
+                            nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
                             use_demo_data=session.demo_data_enabled,
                         )
@@ -472,9 +471,6 @@ def restore_session(
                         raise
                 else:
                     # No snapshot - set up fresh workspace
-                    if not session.nextjs_port:
-                        session.nextjs_port = allocate_nextjs_port(db_session)
-
                     sandbox_manager.setup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
