@@ -18,6 +18,13 @@ def posthog_on_error(error: Any, items: Any) -> None:
     logger.error(f"PostHog error: {error}, items: {items}")
 
 
+# This module intentionally lives under `utils` (rather than `feature_flags`) because
+# PostHog is used by more than feature flags:
+# - Feature flag evaluation
+# - Cloud telemetry capture
+# - Marketing cookie/identity syncing
+
+# These flags are disabled by default when PostHog is not configured.
 POSTHOG_DISABLED_DEFAULT_OFF_FLAGS = frozenset(
     {
         # Build mode access should stay disabled unless explicitly enabled.
