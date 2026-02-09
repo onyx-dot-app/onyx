@@ -63,7 +63,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Cache Cargo registry and build
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # zizmor: ignore[cache-poisoning]
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # zizmor: ignore[cache-poisoning]
         with:
           path: |
             ~/.cargo/bin/
