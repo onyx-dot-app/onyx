@@ -56,7 +56,7 @@ function OpenButton({
   const button = (
     <Interactive.Base
       {...({ variant, subvariant } as InteractiveBaseProps)}
-      selected={selected}
+      selected={isOpen}
       {...baseProps}
     >
       <Interactive.Container
