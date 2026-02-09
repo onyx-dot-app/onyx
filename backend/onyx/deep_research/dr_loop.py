@@ -531,7 +531,7 @@ def run_deep_research_llm_loop(
                     )
 
                 if not tool_calls:
-                    # Basically hope that this is an infrequent occurence and hopefully multiple research
+                    # Basically hope that this is an infrequent occurrence and hopefully multiple research
                     # cycles have already ran
                     logger.warning("No tool calls found, this should not happen.")
                     report_turn_index = (

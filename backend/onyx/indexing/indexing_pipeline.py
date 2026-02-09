@@ -795,7 +795,7 @@ def index_doc_batch(
                     f"Updatable IDs: {updatable_ids}, "
                     f"Returned IDs: {all_returned_doc_ids}. "
                     "This should never happen."
-                    f"This occured for document index {document_index.__class__.__name__}"
+                    f"This occurred for document index {document_index.__class__.__name__}"
                 )
             # We treat the first document index we got as the primary one used
             # for reporting the state of indexing.
