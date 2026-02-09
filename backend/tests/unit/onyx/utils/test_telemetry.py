@@ -12,7 +12,8 @@ def test_mt_cloud_telemetry_noop_when_not_multi_tenant(monkeypatch: Any) -> None
         "fetch_versioned_implementation_with_fallback",
         fetch_impl,
     )
-    monkeypatch.setattr(telemetry_utils, "MULTI_TENANT", False)
+    # mt_cloud_telemetry reads the module-local imported symbol, so patch this path.
+    monkeypatch.setattr("onyx.utils.telemetry.MULTI_TENANT", False)
 
     telemetry_utils.mt_cloud_telemetry(
         tenant_id="tenant-1",
@@ -34,7 +35,8 @@ def test_mt_cloud_telemetry_calls_event_telemetry_when_multi_tenant(
         "fetch_versioned_implementation_with_fallback",
         fetch_impl,
     )
-    monkeypatch.setattr(telemetry_utils, "MULTI_TENANT", True)
+    # mt_cloud_telemetry reads the module-local imported symbol, so patch this path.
+    monkeypatch.setattr("onyx.utils.telemetry.MULTI_TENANT", True)
 
     telemetry_utils.mt_cloud_telemetry(
         tenant_id="tenant-1",
