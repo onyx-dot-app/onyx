@@ -114,7 +114,8 @@ DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000
 ASSUMED_DOCUMENT_AGE_DAYS = 90
 
 # The default number of neighbors to consider for vector similarity search.
-DEFAULT_NUM_CANDIDATES = 1000
+# TODO(andrei): How does this differ from EF_SEARCH?
+DEFAULT_NUM_CANDIDATES = 200
 
 
 class DocumentQuery:

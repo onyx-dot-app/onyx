@@ -322,6 +322,11 @@ class TokenRateLimitScope(str, Enum):
     GLOBAL = "global"
 
 
+class FileStoreType(str, Enum):
+    S3 = "s3"
+    POSTGRES = "postgres"
+
+
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"

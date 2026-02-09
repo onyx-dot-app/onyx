@@ -203,7 +203,7 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
@@ -214,7 +214,7 @@
         "--pool=threads",
         "--concurrency=4",
         "--prefetch-multiplier=1",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=primary@%n",
         "-Q",
         "celery"
@@ -232,7 +232,7 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
@@ -243,7 +243,7 @@
         "--pool=threads",
         "--concurrency=64",
         "--prefetch-multiplier=8",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=light@%n",
         "-Q",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,index_attempt_cleanup"
@@ -261,7 +261,7 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
@@ -272,7 +272,7 @@
         "--pool=threads",
         "--concurrency=20",
         "--prefetch-multiplier=4",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=background@%n",
         "-Q",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,docprocessing,connector_doc_fetching,user_files_indexing,connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,kg_processing,monitoring,user_file_processing,user_file_project_sync,user_file_delete"
@@ -290,7 +290,7 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
@@ -301,7 +301,7 @@
         "--pool=threads",
         "--concurrency=4",
         "--prefetch-multiplier=1",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=heavy@%n",
         "-Q",
         "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation"
@@ -319,7 +319,7 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
@@ -330,7 +330,7 @@
         "--pool=threads",
         "--concurrency=2",
         "--prefetch-multiplier=1",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=kg_processing@%n",
         "-Q",
         "kg_processing"
@@ -348,7 +348,7 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
@@ -359,7 +359,7 @@
         "--pool=threads",
         "--concurrency=1",
         "--prefetch-multiplier=1",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=monitoring@%n",
         "-Q",
         "monitoring"
@@ -377,7 +377,7 @@
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
@@ -388,7 +388,7 @@
         "--pool=threads",
         "--concurrency=2",
         "--prefetch-multiplier=1",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=user_file_processing@%n",
         "-Q",
         "user_file_processing,user_file_project_sync,user_file_delete"
@@ -416,7 +416,7 @@
         "worker",
         "--pool=threads",
         "--prefetch-multiplier=1",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=docfetching@%n",
         "-Q",
         "connector_doc_fetching,user_files_indexing"
@@ -446,7 +446,7 @@
         "worker",
         "--pool=threads",
         "--prefetch-multiplier=1",
-        "--loglevel=INFO",
+        "--loglevel=DEBUG",
         "--hostname=docprocessing@%n",
         "-Q",
         "docprocessing"
@@ -472,7 +472,7 @@
         "-A",
         "onyx.background.celery.versioned_apps.beat",
         "beat",
-        "--loglevel=INFO"
+        "--loglevel=DEBUG"
       ],
       "presentation": {
         "group": "2"

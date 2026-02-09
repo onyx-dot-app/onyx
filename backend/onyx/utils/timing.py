@@ -47,9 +47,10 @@ def log_function_time(
     def decorator(func: F) -> F:
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
-            start_time = time.time()
+            # Elapsed time should use monotonic.
+            start_time = time.monotonic()
             result = func(*args, **kwargs)
-            elapsed_time = time.time() - start_time
+            elapsed_time = time.monotonic() - start_time
             elapsed_time_str = f"{elapsed_time:.3f}"
             log_name = func_name or func.__name__
             args_str = ""
@@ -92,7 +93,7 @@ def log_generator_function_time(
     def decorator(func: FG) -> FG:
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
-            start_time = time.time()
+            start_time = time.monotonic()
             user = kwargs.get("user")
             gen = func(*args, **kwargs)
             try:
@@ -103,7 +104,7 @@ def log_generator_function_time(
             except StopIteration:
                 pass
             finally:
-                elapsed_time_str = str(time.time() - start_time)
+                elapsed_time_str = f"{time.monotonic() - start_time:.3f}"
                 log_name = func_name or func.__name__
                 logger.info(f"{log_name} took {elapsed_time_str} seconds")
                 if not print_only:

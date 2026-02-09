@@ -3651,6 +3651,22 @@ class FileRecord(Base):
     )
 
 
+class FileContent(Base):
+    """Stores file content in PostgreSQL using Large Objects.
+    Used when FILE_STORE_BACKEND=postgres to avoid needing S3/MinIO."""
+
+    __tablename__ = "file_content"
+
+    file_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # PostgreSQL Large Object OID referencing pg_largeobject
+    lobj_oid: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
 """
 ************************************************************************
 Enterprise Edition Models
