@@ -118,6 +118,7 @@ export function usePacedTurnGroups(
     }
     stateRef.current = createInitialPacingState();
     stateRef.current.nodeId = nodeIdStr;
+    prevPacedRef.current = [];
   }
 
   const state = stateRef.current;
