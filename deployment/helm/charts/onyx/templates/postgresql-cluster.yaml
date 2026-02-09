@@ -1,15 +1,14 @@
 {{- $postgresConfig := .Values.postgresql | default dict -}}
 {{- $postgresEnabled := default false $postgresConfig.enabled -}}
-{{- $postgresNameOverride := default "postgresql" $postgresConfig.nameOverride -}}
 {{- $clusterConfig := $postgresConfig.cluster | default dict -}}
-{{- if and $postgresEnabled (ne (default true $clusterConfig.enabled) false) -}}
-{{- $clusterName := default (printf "%s-%s" .Release.Name $postgresNameOverride) $clusterConfig.name -}}
+{{- $cnpgClusterApiAvailable := .Capabilities.APIVersions.Has "postgresql.cnpg.io/v1/Cluster" -}}
+{{- if and $postgresEnabled (eq (default false $clusterConfig.enabled) true) $cnpgClusterApiAvailable -}}
 {{- $storage := $clusterConfig.storage | default dict -}}
 {{- $superuserSecret := $clusterConfig.superuserSecret | default dict -}}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: {{ $clusterName }}
+  name: {{ include "onyx.postgresql.clusterName" . }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
 spec:

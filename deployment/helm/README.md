@@ -23,11 +23,12 @@
 
 ## Test the entire cluster manually
 * cd charts/onyx
+* Optional: enable CloudNativePG cluster creation by setting `postgresql.cluster.enabled=true`.
 * helm install onyx . -n onyx --create-namespace --wait=false
-  * This chart installs operators (e.g. CloudNativePG) and their custom resources in one release.
-    On a fresh install, webhooks/operators may not be ready before dependent CRs are applied.
+  * If you enabled `postgresql.cluster.enabled=true`, CRDs/webhooks may not be discoverable/ready on first install.
+    In that case the Postgres Cluster CR will be created on the follow-up upgrade.
 * helm upgrade onyx . -n onyx --wait
-  * Running a second `upgrade --wait` once operators are up makes startup deterministic.
+  * Running a second `upgrade --wait` once operators are up makes CR creation deterministic.
 * kubectl -n onyx port-forward service/onyx-nginx 8080:80
   * this will forward the local port 8080 to the installed chart for you to run tests, etc.
 * When you are finished

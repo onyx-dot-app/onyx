@@ -11,18 +11,17 @@ global:
   host: "0.0.0.0"
 
 postgresql:
+  # Set to false when connecting to an externally managed PostgreSQL instance.
   enabled: true
-  # Note: if this chart is installing the operator and Cluster in the same release,
-  # a first install with `--wait=false` followed by `helm upgrade --wait` is recommended.
+  # This controls installation of the CloudNativePG operator subchart.
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
   # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
   # but since the subchart is aliased as "postgresql", Helm defaults to that name.
   nameOverride: cloudnative-pg
-  # The subchart installs the CloudNativePG operator. The Onyx chart template below
-  # creates the actual Postgres Cluster CR.
+  # Optional CloudNativePG Cluster CR managed by this chart.
   cluster:
-    enabled: true
-    # Defaults to "<release-name>-<postgresql.nameOverride>" when empty.
+    enabled: false
+    # Defaults to "<release-name>-postgresql" when empty.
     name: ""
     instances: 1
     storage:
