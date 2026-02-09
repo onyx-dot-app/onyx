@@ -2,6 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from ee.onyx.utils.posthog_client import posthog
+from ee.onyx.utils.posthog_client import POSTHOG_ENABLED
 from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.utils.logger import setup_logger
 
@@ -34,6 +35,9 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
         Returns:
             True if the feature is enabled for the user, False otherwise.
         """
+        if not POSTHOG_ENABLED:
+            return False
+
         try:
             posthog.set(
                 distinct_id=user_id,

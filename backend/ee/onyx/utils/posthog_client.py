@@ -18,12 +18,38 @@ def posthog_on_error(error: Any, items: Any) -> None:
     logger.error(f"PostHog error: {error}, items: {items}")
 
 
-posthog = Posthog(
-    project_api_key=POSTHOG_API_KEY,
-    host=POSTHOG_HOST,
-    debug=POSTHOG_DEBUG_LOGS_ENABLED,
-    on_error=posthog_on_error,
-)
+class NoOpPosthogClient:
+    """No-op PostHog client used when POSTHOG_API_KEY is not configured."""
+
+    def identify(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+        return None
+
+    def capture(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+        return None
+
+    def flush(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+        return None
+
+    def set(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+        return None
+
+    def feature_enabled(self, *args: Any, **kwargs: Any) -> bool:  # noqa: ARG002
+        return False
+
+
+POSTHOG_ENABLED = bool(POSTHOG_API_KEY)
+
+posthog: Posthog | NoOpPosthogClient
+if POSTHOG_ENABLED:
+    posthog = Posthog(
+        project_api_key=POSTHOG_API_KEY,
+        host=POSTHOG_HOST,
+        debug=POSTHOG_DEBUG_LOGS_ENABLED,
+        on_error=posthog_on_error,
+    )
+else:
+    posthog = NoOpPosthogClient()
+    logger.info("PostHog is disabled because POSTHOG_API_KEY is not set.")
 
 # For cross referencing between cloud and www Onyx sites
 # NOTE: These clients are separate because they are separate posthog projects.
