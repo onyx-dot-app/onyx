@@ -215,6 +215,19 @@ class ChatLoadedFile(InMemoryChatFile):
     token_count: int
 
 
+class ToolCallSimple(BaseModel):
+    """Tool call for ChatMessageSimple representation (mirrors OpenAI format).
+
+    Used when an ASSISTANT message contains one or more tool calls.
+    Each tool call has an ID, name, arguments, and token count for tracking.
+    """
+
+    tool_call_id: str
+    tool_name: str
+    tool_arguments: dict[str, Any]
+    token_count: int = 0
+
+
 class ChatMessageSimple(BaseModel):
     message: str
     token_count: int
@@ -223,6 +236,8 @@ class ChatMessageSimple(BaseModel):
     image_files: list[ChatLoadedFile] | None = None
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
+    # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)
+    tool_calls: list[ToolCallSimple] | None = None
     # The last message for which this is true
     # AND is true for all previous messages
     # (counting from the start of the history)

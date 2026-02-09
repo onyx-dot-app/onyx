@@ -78,6 +78,9 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
+    ATTACHMENTS_SECTION_CONTENT,
+)
+from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
@@ -287,6 +290,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _load_agent_instructions(
         self,
+        files_path: Path | None = None,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
@@ -298,7 +302,9 @@ class KubernetesSandboxManager(SandboxManager):
     ) -> str:
         """Load and populate agent instructions from template file.
 
+
         Args:
+            files_path: Path to the files directory (symlink to knowledge sources)
             provider: LLM provider type
             model_name: Model name
             nextjs_port: Next.js port
@@ -312,15 +318,14 @@ class KubernetesSandboxManager(SandboxManager):
             Populated agent instructions content
 
         Note:
-            files_path is not passed here because in Kubernetes, the files are
-            synced via an init container after pod creation. The agent will
-            discover the file structure at runtime by exploring the files/ directory.
+            In Kubernetes mode, files_path refers to paths inside the pod.
+            Since the backend cannot access the pod filesystem, these are passed as None
+            to leave placeholders intact for the container script to resolve at runtime.
         """
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
-            files_path=None,  # Files are synced after pod creation
-            attachments_path=None,  # Attachments won't exist until session workspace is created
+            files_path=files_path,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -352,26 +357,48 @@ class KubernetesSandboxManager(SandboxManager):
         # via kubectl exec after new documents are indexed
         file_sync_container = client.V1Container(
             name="file-sync",
-            image="amazon/aws-cli:latest",
-            env=_get_local_aws_credential_env_vars()
-            + [
-                # Set HOME to a writable directory so AWS CLI can create .aws config dir
-                # Without this, AWS CLI tries to access /.aws which fails with permission denied
-                client.V1EnvVar(name="HOME", value="/tmp"),
-            ],
+            image="peakcom/s5cmd:v2.3.0",
+            env=_get_local_aws_credential_env_vars(),
             command=["/bin/sh", "-c"],
             args=[
                 f"""
-set -e
-
 # Handle SIGTERM for fast container termination
 trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
 
 # Initial sync on startup - sync knowledge files for this user/tenant
 echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
-aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/" /workspace/files/
+echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
 
-echo "Initial sync complete, staying alive for incremental syncs"
+# s5cmd sync: high-performance parallel S3 sync (default 256 workers)
+# Capture both stdout and stderr to see all messages including errors
+sync_exit_code=0
+sync_output=$(mktemp)
+/s5cmd --log debug --stat sync \
+    "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" \
+    /workspace/files/ 2>&1 | tee "$sync_output" || sync_exit_code=$?
+
+echo "=== S3 sync finished with exit code: $sync_exit_code ==="
+
+# Count files synced
+file_count=$(find /workspace/files -type f | wc -l)
+echo "Total files in /workspace/files: $file_count"
+
+# Show summary of any errors from the output
+if [ $sync_exit_code -ne 0 ]; then
+    echo "=== Errors/warnings from sync ==="
+    grep -iE "error|warn|fail" "$sync_output" || echo "No errors found"
+    echo "=========================="
+fi
+rm -f "$sync_output"
+
+# Exit codes 0 and 1 are considered success (1 = success with warnings)
+if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
+    echo "Sync complete (exit $sync_exit_code), staying alive for incremental syncs"
+else
+    echo "ERROR: Sync failed with exit code: $sync_exit_code"
+    exit $sync_exit_code
+fi
+
 # Stay alive - incremental sync commands will be executed via kubectl exec
 # Use 'wait' so shell can respond to signals while sleeping
 while true; do
@@ -385,8 +412,8 @@ done
             ],
             resources=client.V1ResourceRequirements(
                 # Reduced resources since sidecar is mostly idle (sleeping)
-                requests={"cpu": "50m", "memory": "128Mi"},
-                limits={"cpu": "1000m", "memory": "1Gi"},
+                requests={"cpu": "250m", "memory": "256Mi"},
+                limits={"cpu": "4000m", "memory": "6Gi"},
             ),
         )
 
@@ -699,14 +726,51 @@ done
         logger.warning(f"Timeout waiting for pod {pod_name} to become ready")
         return False
 
+    def _pod_exists_and_healthy(self, pod_name: str) -> bool:
+        """Check if a pod exists and is in a healthy/running state.
+
+        Args:
+            pod_name: Name of the pod to check
+
+        Returns:
+            True if pod exists and is running/ready, False otherwise
+        """
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+            )
+            phase = pod.status.phase
+
+            # Check if running and ready
+            if phase == "Running":
+                conditions = pod.status.conditions or []
+                for condition in conditions:
+                    if condition.type == "Ready" and condition.status == "True":
+                        return True
+
+            # Pending is OK too - pod is being created by another request
+            if phase == "Pending":
+                return True
+
+            return False
+        except ApiException as e:
+            if e.status == 404:
+                return False
+            raise
+
     def provision(
         self,
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
+        llm_config: LLMProviderConfig,  # noqa: ARG002
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
+
+        This method is idempotent - if a pod already exists and is healthy,
+        it will be reused. This prevents race conditions when multiple requests
+        try to provision the same sandbox concurrently.
 
         Creates pod with:
         1. Init container syncs files/ from S3
@@ -734,6 +798,51 @@ done
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
+        service_name = self._get_service_name(str(sandbox_id))
+
+        # Check if pod already exists and is healthy (idempotency check)
+        if self._pod_exists_and_healthy(pod_name):
+            logger.info(
+                f"Pod {pod_name} already exists and is healthy, reusing existing pod"
+            )
+            # Ensure service exists too
+            try:
+                self._core_api.read_namespaced_service(
+                    name=service_name,
+                    namespace=self._namespace,
+                )
+            except ApiException as e:
+                if e.status == 404:
+                    # Service doesn't exist, create it
+                    logger.debug(f"Creating missing Service {service_name}")
+                    service = self._create_sandbox_service(sandbox_id, tenant_id)
+                    try:
+                        self._core_api.create_namespaced_service(
+                            namespace=self._namespace,
+                            body=service,
+                        )
+                    except ApiException as svc_e:
+                        if svc_e.status != 409:  # Ignore AlreadyExists
+                            raise
+                else:
+                    raise
+
+            # Wait for pod to be ready if it's still pending
+            logger.info(f"Waiting for existing pod {pod_name} to become ready...")
+            if not self._wait_for_pod_ready(pod_name):
+                raise RuntimeError(
+                    f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
+                )
+
+            logger.info(
+                f"Reusing existing Kubernetes sandbox {sandbox_id}, pod: {pod_name}"
+            )
+            return SandboxInfo(
+                sandbox_id=sandbox_id,
+                directory_path=f"k8s://{self._namespace}/{pod_name}",
+                status=SandboxStatus.RUNNING,
+                last_heartbeat=None,
+            )
 
         try:
             # 1. Create Pod (user-level only, no session setup)
@@ -743,18 +852,48 @@ done
                 user_id=str(user_id),
                 tenant_id=tenant_id,
             )
-            self._core_api.create_namespaced_pod(
-                namespace=self._namespace,
-                body=pod,
-            )
+            try:
+                self._core_api.create_namespaced_pod(
+                    namespace=self._namespace,
+                    body=pod,
+                )
+            except ApiException as e:
+                if e.status == 409:
+                    # Pod was created by another concurrent request
+                    # Check if it's healthy and reuse it
+                    logger.warning(
+                        f"Pod {pod_name} already exists (409 conflict, this shouldn't normally happen), "
+                        "checking if it's healthy..."
+                    )
+                    if self._pod_exists_and_healthy(pod_name):
+                        logger.warning(
+                            f"During provisioning, discovered that pod {pod_name} already exists. Reusing"
+                        )
+                        # Continue to ensure service exists and wait for ready
+                    else:
+                        # Pod exists but is not healthy - this shouldn't happen often
+                        # but could occur if a previous provision failed mid-way
+                        logger.warning(
+                            f"Pod {pod_name} exists but is not healthy, "
+                            "waiting for it to become ready or fail"
+                        )
+                else:
+                    raise
 
-            # 2. Create Service
-            logger.debug(f"Creating Service {self._get_service_name(str(sandbox_id))}")
+            # 2. Create Service (idempotent - ignore 409)
+            logger.debug(f"Creating Service {service_name}")
             service = self._create_sandbox_service(sandbox_id, tenant_id)
-            self._core_api.create_namespaced_service(
-                namespace=self._namespace,
-                body=service,
-            )
+            try:
+                self._core_api.create_namespaced_service(
+                    namespace=self._namespace,
+                    body=service,
+                )
+            except ApiException as e:
+                if e.status != 409:  # Ignore AlreadyExists
+                    raise
+                logger.warning(
+                    f"During provisioning, discovered that service {service_name} already exists. Reusing"
+                )
 
             # 3. Wait for pod to be ready
             logger.info(f"Waiting for pod {pod_name} to become ready...")
@@ -776,12 +915,19 @@ done
             )
 
         except Exception as e:
-            # Cleanup on failure
-            logger.error(
-                f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}",
-                exc_info=True,
-            )
-            self._cleanup_kubernetes_resources(str(sandbox_id))
+            # Only cleanup if we're sure the pod is not being used by another request
+            # Check if pod is healthy - if so, don't clean up (another request may own it)
+            if self._pod_exists_and_healthy(pod_name):
+                logger.warning(
+                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}, "
+                    "but pod is healthy (likely owned by concurrent request), not cleaning up"
+                )
+            else:
+                logger.error(
+                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}",
+                    exc_info=True,
+                )
+                self._cleanup_kubernetes_resources(str(sandbox_id))
             raise
 
     def _wait_for_resource_deletion(
@@ -917,7 +1063,7 @@ done
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
-        file_system_path: str | None = None,
+        file_system_path: str | None = None,  # noqa: ARG002
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -966,7 +1112,15 @@ done
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
+        # Paths inside the pod (created during workspace setup below):
+        # - {session_path}/files: symlink to knowledge sources
+        # - {session_path}/attachments: user-uploaded files
+        #
+        # Note: files_path=None leaves {{KNOWLEDGE_SOURCES_SECTION}} placeholder intact
+        # for generate_agents_md.py to resolve at container runtime by scanning /workspace/files.
+        # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
+            files_path=None,  # Container script handles this at runtime
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1114,7 +1268,7 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
+        nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
         """Clean up a session workspace (on session delete).
 
@@ -1301,7 +1455,7 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002
         nextjs_port: int,
     ) -> None:
         """Download snapshot from S3, extract into session workspace, and start NextJS.
@@ -1499,10 +1653,33 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             packet_logger.log_session_end(
                 session_id, success=True, events_count=events_count
             )
-        except Exception as e:
-            # Log failure
+        except GeneratorExit:
+            # Generator was closed by consumer (client disconnect, timeout, broken pipe)
+            # This is the most common failure mode for SSE streaming
             packet_logger.log_session_end(
-                session_id, success=False, error=str(e), events_count=events_count
+                session_id,
+                success=False,
+                error="GeneratorExit: Client disconnected or stream closed by consumer",
+                events_count=events_count,
+            )
+            raise
+        except Exception as e:
+            # Log failure from normal exceptions
+            packet_logger.log_session_end(
+                session_id,
+                success=False,
+                error=f"Exception: {str(e)}",
+                events_count=events_count,
+            )
+            raise
+        except BaseException as e:
+            # Log failure from other base exceptions (SystemExit, KeyboardInterrupt, etc.)
+            exception_type = type(e).__name__
+            packet_logger.log_session_end(
+                session_id,
+                success=False,
+                error=f"{exception_type}: {str(e) if str(e) else 'System-level interruption'}",
+                events_count=events_count,
             )
             raise
         finally:
@@ -1729,10 +1906,10 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
     ) -> bool:
         """Sync files from S3 to the running pod via the file-sync sidecar.
 
-        Executes `aws s3 sync` in the file-sync sidecar container to download
+        Executes `s5cmd sync` in the file-sync sidecar container to download
         any new or changed files from S3 to /workspace/files/.
 
-        This is safe to call multiple times - aws s3 sync is idempotent.
+        This is safe to call multiple times - s5cmd sync is idempotent.
 
         Args:
             sandbox_id: The sandbox UUID
@@ -1744,10 +1921,14 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
+        # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
+        # --stat shows transfer statistics for monitoring
+        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
         sync_command = [
             "/bin/sh",
             "-c",
-            f'aws s3 sync "s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/" /workspace/files/',
+            f'/s5cmd --log debug --stat sync "{s3_path}" /workspace/files/; '
+            f'echo "Files in workspace: $(find /workspace/files -type f | wc -l)"',
         ]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
@@ -1763,6 +1944,71 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
         logger.debug(f"File sync response: {resp}")
         return True
 
+    def _ensure_agents_md_attachments_section(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> None:
+        """Ensure AGENTS.md has the attachments section.
+
+        Called after uploading a file. Only adds the section if it doesn't exist.
+        Inserts the section above ## Skills for better document flow.
+        This is a fire-and-forget operation - failures are logged but not raised.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = f"/workspace/sessions/{session_id}"
+        agents_md_path = f"{session_path}/AGENTS.md"
+
+        # Base64 encode the content for safe shell handling
+        attachments_content_b64 = base64.b64encode(
+            ATTACHMENTS_SECTION_CONTENT.encode()
+        ).decode()
+
+        # Script: add section before ## Skills if not present
+        # Uses a temp file approach for safe insertion
+        script = f"""
+if [ -f "{agents_md_path}" ]; then
+    if ! grep -q "## Attachments (PRIORITY)" "{agents_md_path}" 2>/dev/null; then
+        # Check if ## Skills exists
+        if grep -q "## Skills" "{agents_md_path}" 2>/dev/null; then
+            # Insert before ## Skills using awk
+            awk -v content="$(echo "{attachments_content_b64}" | base64 -d)" '
+                /^## Skills/ {{ print content; print ""; }}
+                {{ print }}
+            ' "{agents_md_path}" > "{agents_md_path}.tmp" && mv "{agents_md_path}.tmp" "{agents_md_path}"
+            echo "ADDED_BEFORE_SKILLS"
+        else
+            # Fallback: append to end
+            echo "" >> "{agents_md_path}"
+            echo "" >> "{agents_md_path}"
+            echo "{attachments_content_b64}" | base64 -d >> "{agents_md_path}"
+            echo "ADDED_AT_END"
+        fi
+    else
+        echo "EXISTS"
+    fi
+else
+    echo "NO_AGENTS_MD"
+fi
+"""
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", script],
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+            logger.debug(
+                f"Ensure AGENTS.md attachments section for session {session_id}: "
+                f"{resp.strip()}"
+            )
+        except ApiException as e:
+            logger.warning(f"Failed to ensure AGENTS.md attachments section: {e}")
+
     def upload_file(
         self,
         sandbox_id: UUID,
@@ -1772,7 +2018,11 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
     ) -> str:
         """Upload a file to the session's attachments directory.
 
-        Uses tar streaming via stdin for efficient binary transfer.
+        Uses tar streaming via stdin with explicit byte count to avoid EOF issues.
+        The K8s Python client cannot close stdin without closing the entire WebSocket
+        connection, so we use `head -c <size>` to read exactly the expected bytes
+        instead of waiting for EOF.
+
         Handles filename collisions atomically within the shell script.
 
         Args:
@@ -1797,13 +2047,15 @@ echo '{tar_b64}' | base64 -d | tar -xzf -
             tarinfo.size = len(content)
             tar.addfile(tarinfo, io.BytesIO(content))
         tar_data = tar_buffer.getvalue()
+        tar_size = len(tar_data)
 
         # Shell script that:
         # 1. Creates target directory and temp extraction directory
-        # 2. Extracts tar to temp directory
-        # 3. Moves file to target with collision handling
-        # 4. Cleans up temp directory
-        # 5. Outputs final filename
+        # 2. Reads exactly tar_size bytes from stdin (avoids needing EOF signal)
+        # 3. Extracts tar to temp directory
+        # 4. Moves file to target with collision handling
+        # 5. Cleans up temp directory
+        # 6. Outputs final filename
         script = f"""
 set -e
 target_dir="{target_dir}"
@@ -1811,7 +2063,9 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
 mkdir -p "$target_dir"
-tar xf - -C "$tmpdir"
+
+# Read exactly {tar_size} bytes and extract (avoids waiting for EOF)
+head -c {tar_size} | tar xf - -C "$tmpdir"
 
 # Find the extracted file (first file in tmpdir)
 original=$(ls -1 "$tmpdir" | head -1)
@@ -1849,9 +2103,9 @@ echo "$base"
 
             # Write tar data to stdin
             ws_client.write_stdin(tar_data)
-            ws_client.close()
 
-            # Read response
+            # Read response - head -c will read exactly tar_size bytes and proceed,
+            # so we don't need to close stdin to signal EOF
             stdout_data = ""
             stderr_data = ""
             while ws_client.is_open():
@@ -1878,8 +2132,11 @@ echo "$base"
 
             logger.info(
                 f"Uploaded file to session {session_id}: attachments/{final_filename} "
-                f"({len(content)} bytes via tar)"
+                f"({len(content)} bytes)"
             )
+
+            # Ensure AGENTS.md has the attachments section
+            self._ensure_agents_md_attachments_section(sandbox_id, session_id)
 
             return f"attachments/{final_filename}"
 

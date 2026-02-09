@@ -28,3 +28,7 @@ export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
   packets.some((p) =>
     COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType)
   );
+
+// Check if packets belong to a deep research plan
+export const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
+  packets.some((p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START);

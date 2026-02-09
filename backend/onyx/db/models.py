@@ -96,6 +96,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.kg.models import KGStage
 from onyx.server.features.mcp.models import MCPConnectionData
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -120,12 +121,16 @@ class EncryptedString(TypeDecorator):
     # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
 
-    def process_bind_param(self, value: str | None, dialect: Dialect) -> bytes | None:
+    def process_bind_param(
+        self, value: str | None, dialect: Dialect  # noqa: ARG002
+    ) -> bytes | None:
         if value is not None:
             return encrypt_string_to_bytes(value)
         return value
 
-    def process_result_value(self, value: bytes | None, dialect: Dialect) -> str | None:
+    def process_result_value(
+        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
+    ) -> str | None:
         if value is not None:
             return decrypt_bytes_to_string(value)
         return value
@@ -136,14 +141,16 @@ class EncryptedJson(TypeDecorator):
     # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
 
-    def process_bind_param(self, value: dict | None, dialect: Dialect) -> bytes | None:
+    def process_bind_param(
+        self, value: dict | None, dialect: Dialect  # noqa: ARG002
+    ) -> bytes | None:
         if value is not None:
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
         return value
 
     def process_result_value(
-        self, value: bytes | None, dialect: Dialect
+        self, value: bytes | None, dialect: Dialect  # noqa: ARG002
     ) -> dict | None:
         if value is not None:
             json_str = decrypt_bytes_to_string(value)
@@ -156,13 +163,17 @@ class NullFilteredString(TypeDecorator):
     # This type's behavior is fully deterministic and doesn't depend on any external factors.
     cache_ok = True
 
-    def process_bind_param(self, value: str | None, dialect: Dialect) -> str | None:
+    def process_bind_param(
+        self, value: str | None, dialect: Dialect  # noqa: ARG002
+    ) -> str | None:
         if value is not None and "\x00" in value:
             logger.warning(f"NUL characters found in value: {value}")
             return value.replace("\x00", "")
         return value
 
-    def process_result_value(self, value: str | None, dialect: Dialect) -> str | None:
+    def process_result_value(
+        self, value: str | None, dialect: Dialect  # noqa: ARG002
+    ) -> str | None:
         return value
 
 
@@ -273,7 +284,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     )
 
     @validates("email")
-    def validate_email(self, key: str, value: str) -> str:
+    def validate_email(self, key: str, value: str) -> str:  # noqa: ARG002
         return value.lower() if value else value
 
     @property
@@ -2385,9 +2396,13 @@ class ChatSession(Base):
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
-        "ChatMessage", back_populates="chat_session", cascade="all, delete-orphan"
+        "ChatMessage",
+        back_populates="chat_session",
+        cascade="all, delete-orphan",
+        foreign_keys="ChatMessage.chat_session_id",
     )
     persona: Mapped["Persona"] = relationship("Persona")
 
@@ -2421,6 +2436,13 @@ class ChatMessage(Base):
         ForeignKey("chat_message.id"), nullable=True
     )
 
+    # Only set on summary messages - the ID of the last message included in this summary
+    # Used for chat history compression
+    last_summarized_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # What does this message contain
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
@@ -2451,7 +2473,11 @@ class ChatMessage(Base):
     )
 
     # Relationships
-    chat_session: Mapped[ChatSession] = relationship("ChatSession")
+    chat_session: Mapped[ChatSession] = relationship(
+        "ChatSession",
+        back_populates="messages",
+        foreign_keys=[chat_session_id],
+    )
 
     chat_message_feedbacks: Mapped[list["ChatMessageFeedback"]] = relationship(
         "ChatMessageFeedback",
@@ -2633,7 +2659,9 @@ class SearchQuery(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("user.id"))
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE")
+    )
     query: Mapped[str] = mapped_column(String)
     query_expansions: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
@@ -2886,8 +2914,8 @@ class InternetContentProvider(Base):
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     provider_type: Mapped[str] = mapped_column(String, nullable=False)
     api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
-    config: Mapped[dict[str, str] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True
+    config: Mapped[WebContentProviderConfig | None] = mapped_column(
+        PydanticType(WebContentProviderConfig), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -3316,8 +3344,6 @@ class PersonaLabel(Base):
         "Persona",
         secondary=Persona__PersonaLabel.__table__,
         back_populates="labels",
-        cascade="all, delete-orphan",
-        single_parent=True,
     )
 
 
@@ -4151,7 +4177,7 @@ class UserTenantMapping(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     @validates("email")
-    def validate_email(self, key: str, value: str) -> str:
+    def validate_email(self, key: str, value: str) -> str:  # noqa: ARG002
         return value.lower() if value else value
 
 

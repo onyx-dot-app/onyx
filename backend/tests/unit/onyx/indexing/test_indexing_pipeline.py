@@ -173,7 +173,7 @@ def test_contextual_rag(
     mock_llm_invoke_count = 0
     counter_lock = threading.Lock()
 
-    def mock_llm_invoke(*args: Any, **kwargs: Any) -> ModelResponse:
+    def mock_llm_invoke(*args: Any, **kwargs: Any) -> ModelResponse:  # noqa: ARG001
         nonlocal mock_llm_invoke_count
         with counter_lock:
             mock_llm_invoke_count += 1

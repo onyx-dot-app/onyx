@@ -10,7 +10,7 @@ from tests.integration.common_utils.test_models import DATestUser
 STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
 
 
-def test_mcp_server_health_check(reset: None) -> None:
+def test_mcp_server_health_check(reset: None) -> None:  # noqa: ARG001
     """Test MCP server health check endpoint."""
     response = requests.get(f"{MCP_SERVER_URL}/health", timeout=10)
     assert response.status_code == 200
@@ -18,13 +18,13 @@ def test_mcp_server_health_check(reset: None) -> None:
     assert response.json()["service"] == "mcp_server"
 
 
-def test_mcp_server_auth_missing_token(reset: None) -> None:
+def test_mcp_server_auth_missing_token(reset: None) -> None:  # noqa: ARG001
     """Test MCP server rejects requests without credentials."""
     response = requests.post(STREAMABLE_HTTP_URL)
     assert response.status_code == 401
 
 
-def test_mcp_server_auth_invalid_token(reset: None) -> None:
+def test_mcp_server_auth_invalid_token(reset: None) -> None:  # noqa: ARG001
     """Test MCP server rejects requests with an invalid bearer token."""
     response = requests.post(
         STREAMABLE_HTTP_URL,
@@ -34,7 +34,9 @@ def test_mcp_server_auth_invalid_token(reset: None) -> None:
     assert response.status_code == 401
 
 
-def test_mcp_server_auth_valid_token(reset: None, admin_user: DATestUser) -> None:
+def test_mcp_server_auth_valid_token(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     """Test MCP server accepts requests with a valid bearer token."""
     pat = PATManager.create(
         name="Test MCP Token",

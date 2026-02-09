@@ -29,7 +29,7 @@ class UserFileTestSetup(NamedTuple):
 
 
 @pytest.fixture
-def user_file_setup(reset: None) -> UserFileTestSetup:
+def user_file_setup(reset: None) -> UserFileTestSetup:  # noqa: ARG001
     """
     Common setup for user file permission tests.
     Creates users, files, and a public assistant with files.

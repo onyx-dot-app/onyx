@@ -30,7 +30,10 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING
 from onyx.document_index.vespa_constants import USER_PROJECT
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+
+logger = setup_logger(__name__)
 
 
 def _extract_content_vector(embeddings: Any) -> list[float]:
@@ -150,13 +153,25 @@ def _transform_vespa_acl_to_opensearch_acl(
 def transform_vespa_chunks_to_opensearch_chunks(
     vespa_chunks: list[dict[str, Any]],
     tenant_state: TenantState,
+    document_id: str,
 ) -> list[DocumentChunk]:
     result: list[DocumentChunk] = []
     for vespa_chunk in vespa_chunks:
         # This should exist; fail loudly if it does not.
-        document_id: str = vespa_chunk[DOCUMENT_ID]
-        if not document_id:
+        vespa_document_id: str = vespa_chunk[DOCUMENT_ID]
+        if not vespa_document_id:
             raise ValueError("Missing document_id in Vespa chunk.")
+        # Vespa doc IDs were sanitized using replace_invalid_doc_id_characters.
+        # This was a poor design choice and we don't want this in OpenSearch;
+        # whatever restrictions there may be on indexed chunk ID should have no
+        # bearing on the chunk's document ID field, even if document ID is an
+        # argument to the chunk ID. Deliberately choose to use the real doc ID
+        # supplied to this function.
+        if vespa_document_id != document_id:
+            logger.warning(
+                f"Vespa document ID {vespa_document_id} does not match the document ID supplied {document_id}. "
+                "The Vespa ID will be discarded."
+            )
 
         # This should exist; fail loudly if it does not.
         chunk_index: int = vespa_chunk[CHUNK_ID]
@@ -236,6 +251,8 @@ def transform_vespa_chunks_to_opensearch_chunks(
                 )
 
         opensearch_chunk = DocumentChunk(
+            # We deliberately choose to use the doc ID supplied to this function
+            # over the Vespa doc ID.
             document_id=document_id,
             chunk_index=chunk_index,
             title=title,

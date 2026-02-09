@@ -276,7 +276,7 @@ def document_by_cc_pair_cleanup_task(
 
 
 @shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)
-def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:
+def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """When this task runs, it writes a key to Redis with a TTL.
 
     An external observer can check this key to figure out if the celery beat is still running.

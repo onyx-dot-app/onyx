@@ -16,7 +16,7 @@ from tests.integration.common_utils.test_models import ToolName
 
 def test_force_tool_use(
     basic_user: DATestUser,
-    image_generation_config: DATestImageGenerationConfig,
+    image_generation_config: DATestImageGenerationConfig,  # noqa: ARG001
 ) -> None:
     with get_session_with_current_tenant() as db_session:
         image_generation_tool = db_session.execute(

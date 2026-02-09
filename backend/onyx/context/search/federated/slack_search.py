@@ -906,7 +906,7 @@ def slack_retrieval(
     query: ChunkIndexRequest,
     access_token: str,
     db_session: Session,
-    connector: FederatedConnectorDetail | None = None,
+    connector: FederatedConnectorDetail | None = None,  # noqa: ARG001
     entities: dict[str, Any] | None = None,
     limit: int | None = None,
     slack_event_context: SlackContext | None = None,

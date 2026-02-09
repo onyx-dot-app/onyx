@@ -50,7 +50,7 @@ def is_usage_limits_enabled() -> bool:
     return USAGE_LIMITS_ENABLED
 
 
-def is_tenant_on_trial(tenant_id: str) -> bool:
+def is_tenant_on_trial(tenant_id: str) -> bool:  # noqa: ARG001
     """
     Determine if a tenant is currently on a trial subscription.
 

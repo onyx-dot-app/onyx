@@ -236,6 +236,28 @@ export async function restoreSession(
   return res.json();
 }
 
+/**
+ * Check if a pre-provisioned session is still valid (empty).
+ * Used for polling to detect when another tab has used the session.
+ *
+ * @returns { valid: true, session_id: string } if session is still empty
+ * @returns { valid: false, session_id: null } if session has messages or doesn't exist
+ */
+export async function checkPreProvisionedSession(
+  sessionId: string
+): Promise<{ valid: boolean; session_id: string | null }> {
+  const res = await fetch(
+    `${API_BASE}/sessions/${sessionId}/pre-provisioned-check`
+  );
+
+  if (!res.ok) {
+    // Treat errors as invalid session
+    return { valid: false, session_id: null };
+  }
+
+  return res.json();
+}
+
 // =============================================================================
 // Messages API
 // =============================================================================
@@ -531,9 +553,18 @@ export async function deleteFile(
   sessionId: string,
   path: string
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/sessions/${sessionId}/files/${path}`, {
-    method: "DELETE",
-  });
+  // Encode each path segment individually (spaces, special chars) but preserve slashes
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  const res = await fetch(
+    `${API_BASE}/sessions/${sessionId}/files/${encodedPath}`,
+    {
+      method: "DELETE",
+    }
+  );
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));

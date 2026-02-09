@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { SvgCircle } from "@opal/icons";
 
 import {
@@ -10,7 +10,11 @@ import {
   FullChatState,
 } from "@/app/app/message/messageComponents/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import { mutedTextMarkdownComponents } from "@/app/app/message/messageComponents/timeline/renderers/sharedMarkdownComponents";
+import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
+import {
+  mutedTextMarkdownComponents,
+  collapsedMarkdownComponents,
+} from "@/app/app/message/messageComponents/timeline/renderers/sharedMarkdownComponents";
 
 /**
  * Renderer for deep research plan packets.
@@ -37,16 +41,34 @@ export const DeepResearchPlanRenderer: MessageRenderer<
 
   const statusText = isComplete ? "Generated plan" : "Generating plan";
 
+  // Markdown renderer callback for ExpandableTextDisplay
+  // Uses collapsed components (no spacing) in collapsed view, normal spacing in expanded modal
+  const renderMarkdown = useCallback(
+    (text: string, isExpanded: boolean) => (
+      <MinimalMarkdown
+        content={text}
+        components={
+          isExpanded ? mutedTextMarkdownComponents : collapsedMarkdownComponents
+        }
+      />
+    ),
+    []
+  );
+
+  const planContent = (
+    <ExpandableTextDisplay
+      title="Research Plan"
+      content={fullContent}
+      renderContent={renderMarkdown}
+      isStreaming={!isComplete}
+    />
+  );
+
   return children([
     {
       icon: SvgCircle,
       status: statusText,
-      content: (
-        <MinimalMarkdown
-          content={fullContent}
-          components={mutedTextMarkdownComponents}
-        />
-      ),
+      content: planContent,
     },
   ]);
 };

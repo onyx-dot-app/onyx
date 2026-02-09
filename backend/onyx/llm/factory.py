@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+from onyx.auth.schemas import UserRole
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -84,9 +85,7 @@ def get_llm_for_persona(
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
-            provider_model,
-            user_group_ids,
-            persona_model,
+            provider_model, user_group_ids, persona_model, user.role == UserRole.ADMIN
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",

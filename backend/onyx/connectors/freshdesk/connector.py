@@ -195,7 +195,7 @@ class FreshdeskConnector(PollConnector, LoadConnector):
         self.domain = domain
 
     def _fetch_tickets(
-        self, start: datetime | None = None, end: datetime | None = None
+        self, start: datetime | None = None, end: datetime | None = None  # noqa: ARG002
     ) -> Iterator[List[dict]]:
         """
         'end' is not currently used, so we may double fetch tickets created after the indexing

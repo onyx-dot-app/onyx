@@ -17,6 +17,7 @@ import {
   isResearchAgentPackets,
   isSearchToolPackets,
   isReasoningPackets,
+  isDeepResearchPlanPackets,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // =============================================================================
@@ -58,6 +59,10 @@ const TimelineStep = React.memo(function TimelineStep({
     () => isReasoningPackets(step.packets),
     [step.packets]
   );
+  const isDeepResearchPlan = useMemo(
+    () => isDeepResearchPlanPackets(step.packets),
+    [step.packets]
+  );
 
   const renderStep = useCallback(
     (results: TimelineRendererOutput) => {
@@ -90,7 +95,7 @@ const TimelineStep = React.memo(function TimelineStep({
                   ? (result.icon as FunctionComponent<IconProps>)
                   : undefined
               }
-              noPaddingRight={isReasoning}
+              noPaddingRight={isReasoning || isDeepResearchPlan}
             >
               {result.content}
             </StepContainer>
@@ -102,6 +107,7 @@ const TimelineStep = React.memo(function TimelineStep({
       isResearchAgent,
       isSearchTool,
       isReasoning,
+      isDeepResearchPlan,
       isFirstStep,
       isLastStep,
       isSingleStep,

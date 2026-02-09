@@ -72,7 +72,9 @@ def _migrate_single_document(
         raise RuntimeError(f"No chunks found for document {document_id} in Vespa.")
 
     opensearch_document_chunks: list[DocumentChunk] = (
-        transform_vespa_chunks_to_opensearch_chunks(vespa_document_chunks, tenant_state)
+        transform_vespa_chunks_to_opensearch_chunks(
+            vespa_document_chunks, tenant_state, document_id
+        )
     )
     if len(opensearch_document_chunks) != len(vespa_document_chunks):
         raise RuntimeError(
@@ -98,7 +100,7 @@ def _migrate_single_document(
     bind=True,
 )
 def check_for_documents_for_opensearch_migration_task(
-    self: Task, *, tenant_id: str
+    self: Task, *, tenant_id: str  # noqa: ARG001
 ) -> bool | None:
     """
     Periodic task to check for and add documents to the OpenSearch migration
@@ -209,7 +211,7 @@ def check_for_documents_for_opensearch_migration_task(
     bind=True,
 )
 def migrate_documents_from_vespa_to_opensearch_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     *,
     tenant_id: str,
 ) -> bool | None:

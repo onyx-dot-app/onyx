@@ -39,7 +39,7 @@ EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
 
 
 def include_object(
-    object: SchemaItem,
+    object: SchemaItem,  # noqa: ARG001
     name: str | None,
     type_: Literal[
         "schema",
@@ -49,8 +49,8 @@ def include_object(
         "unique_constraint",
         "foreign_key_constraint",
     ],
-    reflected: bool,
-    compare_to: SchemaItem | None,
+    reflected: bool,  # noqa: ARG001
+    compare_to: SchemaItem | None,  # noqa: ARG001
 ) -> bool:
     if type_ == "table" and name in EXCLUDE_TABLES:
         return False

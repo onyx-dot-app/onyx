@@ -9,7 +9,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_connector_creation(reset: None) -> None:
+def test_connector_creation(reset: None) -> None:  # noqa: ARG001
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
@@ -28,7 +28,7 @@ def test_connector_creation(reset: None) -> None:
     assert cc_pair_info.creator_email == admin_user.email
 
 
-def test_overlapping_connector_creation(reset: None) -> None:
+def test_overlapping_connector_creation(reset: None) -> None:  # noqa: ARG001
     """Tests that connectors indexing the same documents don't interfere with each other.
     A previous bug involved document by cc pair entries not being added for new connectors
     when the docs existed already via another connector and were up to date relative to the source.
@@ -86,7 +86,7 @@ def test_overlapping_connector_creation(reset: None) -> None:
     assert info_1.num_docs_indexed == info_2.num_docs_indexed
 
 
-def test_connector_pause_while_indexing(reset: None) -> None:
+def test_connector_pause_while_indexing(reset: None) -> None:  # noqa: ARG001
     """Tests that we can pause a connector while indexing is in progress and that
     tasks end early or abort as a result.
 

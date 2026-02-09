@@ -145,8 +145,8 @@ def assert_response_is_equivalent(
     ],
 )
 def test_create_llm_provider(
-    reset: None,
-    default_model_name: str,
+    reset: None,  # noqa: ARG001
+    _default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
     expected: list[ModelConfigurationUpsertRequest],
 ) -> None:
@@ -236,7 +236,7 @@ def test_create_llm_provider(
     ],
 )
 def test_update_model_configurations(
-    reset: None,
+    reset: None,  # noqa: ARG001
     initial: tuple[str, list[ModelConfigurationUpsertRequest]],
     initial_expected: list[ModelConfigurationUpsertRequest],
     updated: tuple[str, list[ModelConfigurationUpsertRequest]],
@@ -341,8 +341,8 @@ def test_update_model_configurations(
     ],
 )
 def test_delete_llm_provider(
-    reset: None,
-    default_model_name: str,
+    reset: None,  # noqa: ARG001
+    _default_model_name: str,
     model_configurations: list[ModelConfigurationUpsertRequest],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
@@ -378,7 +378,7 @@ def test_delete_llm_provider(
     assert provider_data is None
 
 
-def test_model_visibility_preserved_on_edit(reset: None) -> None:
+def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG001
     """
     Test that model visibility flags are correctly preserved when editing an LLM provider.
 
@@ -758,7 +758,7 @@ def _validate_provider_data(
     )
 
 
-def test_default_model_persistence_and_update(reset: None) -> None:
+def test_default_model_persistence_and_update(reset: None) -> None:  # noqa: ARG001
     """
     Test that the default model is correctly set, persisted, and can be updated.
 
@@ -1010,7 +1010,7 @@ def _set_default_vision_provider(
     assert response.status_code == 200
 
 
-def test_multiple_providers_default_switching(reset: None) -> None:
+def test_multiple_providers_default_switching(_reset: None) -> None:
     """
     Test switching default providers and models across multiple LLM providers.
 
@@ -1364,7 +1364,9 @@ def test_multiple_providers_default_switching(reset: None) -> None:
     )
 
 
-def test_default_provider_and_vision_provider_selection(reset: None) -> None:
+def test_default_provider_and_vision_provider_selection(
+    reset: None,  # noqa: ARG001
+) -> None:
     """
     Test setting separate default providers for regular LLM and vision capabilities.
 
@@ -1592,7 +1594,9 @@ def test_default_provider_and_vision_provider_selection(reset: None) -> None:
     ), "Default provider and vision provider should be different providers (basic endpoint)"
 
 
-def test_default_provider_is_not_default_vision_provider(reset: None) -> None:
+def test_default_provider_is_not_default_vision_provider(
+    reset: None,  # noqa: ARG001
+) -> None:
     """
     Test that setting a provider as the default provider does NOT make it
     the default vision provider.
@@ -1735,7 +1739,7 @@ def _delete_image_gen_config(admin_user: DATestUser, image_provider_id: str) -> 
     assert response.status_code == 200
 
 
-def test_all_three_provider_types_no_mixup(reset: None) -> None:
+def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     """
     Test that regular LLM providers, vision providers, and image generation providers
     are all tracked separately with no mixup.

@@ -8,7 +8,7 @@ INVITED_BASIC_USER = "basic_user"
 INVITED_BASIC_USER_EMAIL = "basic_user@example.com"
 
 
-def test_admin_can_invite_users(reset_multitenant: None) -> None:
+def test_admin_can_invite_users(reset_multitenant: None) -> None:  # noqa: ARG001
     """Test that an admin can invite both registered and non-registered users."""
     # Create first user (admin)
     unique = uuid4().hex
@@ -30,7 +30,9 @@ def test_admin_can_invite_users(reset_multitenant: None) -> None:
     ], f"User {invited_user.email} not found in invited users list"
 
 
-def test_non_registered_user_gets_basic_role(reset_multitenant: None) -> None:
+def test_non_registered_user_gets_basic_role(
+    reset_multitenant: None,  # noqa: ARG001
+) -> None:
     """Test that a non-registered user gets a BASIC role when they register after being invited."""
     # Create admin user
     unique = uuid4().hex
@@ -48,7 +50,7 @@ def test_non_registered_user_gets_basic_role(reset_multitenant: None) -> None:
     assert UserManager.is_role(invited_basic_user, UserRole.BASIC)
 
 
-def test_user_can_accept_invitation(reset_multitenant: None) -> None:
+def test_user_can_accept_invitation(reset_multitenant: None) -> None:  # noqa: ARG001
     """Test that a user can accept an invitation and join the organization with BASIC role."""
     # Create admin user
     unique = uuid4().hex

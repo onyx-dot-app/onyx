@@ -384,7 +384,7 @@ def _build_onyx_groups(
 
 
 def gdrive_group_sync(
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     # Initialize connector and build credential/service objects

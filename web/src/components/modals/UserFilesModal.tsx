@@ -15,7 +15,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import CounterSeparator from "@/refresh-components/CounterSeparator";
+import TextSeparator from "@/refresh-components/TextSeparator";
 import {
   SvgEye,
   SvgFiles,
@@ -252,7 +252,7 @@ export default function UserFilesModal({
 
                 {/* File count divider - only show when not searching or filtering */}
                 {!query.trim() && !showOnlySelected && (
-                  <CounterSeparator
+                  <TextSeparator
                     count={recentFiles.length}
                     text={recentFiles.length === 1 ? "File" : "Files"}
                   />

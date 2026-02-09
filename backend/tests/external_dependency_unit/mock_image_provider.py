@@ -44,7 +44,7 @@ class MockImageGenerationProvider(
     @classmethod
     def validate_credentials(
         cls,
-        credentials: ImageGenerationProviderCredentials,
+        credentials: ImageGenerationProviderCredentials,  # noqa: ARG003
     ) -> bool:
         return True
 
@@ -58,11 +58,11 @@ class MockImageGenerationProvider(
     def generate_image(
         self,
         prompt: str,
-        model: str,
-        size: str,
-        n: int,
-        quality: str | None = None,
-        **kwargs: Any,
+        model: str,  # noqa: ARG002
+        size: str,  # noqa: ARG002
+        n: int,  # noqa: ARG002
+        quality: str | None = None,  # noqa: ARG002
+        **kwargs: Any,  # noqa: ARG002
     ) -> ImageResponse:
         image_data = self._images.pop(0)
         delay = self._delays.pop(0)

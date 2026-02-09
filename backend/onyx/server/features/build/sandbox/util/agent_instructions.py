@@ -130,7 +130,6 @@ The `org_info/` directory contains information about the organization and user c
 
 
 # Content for the attachments section when user has uploaded files
-# NOTE: This is duplicated in agent_instructions.py to avoid circular imports
 ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
 
 The `attachments/` directory contains files that the user has explicitly
@@ -161,29 +160,6 @@ should be treated as high-priority context.
 
 **Do NOT ignore user uploaded files.** They are there for a reason and likely
 contain exactly what you need to complete the task successfully."""
-
-
-def build_attachments_section(attachments_path: Path | None) -> str:
-    """Build the attachments section for AGENTS.md.
-
-    Only includes the section when user-uploaded files are present
-    in the attachments directory.
-
-    Args:
-        attachments_path: Path to the attachments directory
-
-    Returns:
-        Formatted attachments section string, or empty string if no files
-    """
-    if not attachments_path or not attachments_path.exists():
-        return ""
-
-    try:
-        if any(attachments_path.iterdir()):
-            return ATTACHMENTS_SECTION_CONTENT
-    except Exception:
-        pass
-    return ""
 
 
 def build_org_info_section(include_org_info: bool) -> str:
@@ -437,7 +413,6 @@ def generate_agent_instructions(
     template_path: Path,
     skills_path: Path,
     files_path: Path | None = None,
-    attachments_path: Path | None = None,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
@@ -453,7 +428,6 @@ def generate_agent_instructions(
         template_path: Path to the AGENTS.template.md file
         skills_path: Path to the skills directory
         files_path: Path to the files directory (symlink to knowledge sources)
-        attachments_path: Path to the attachments directory (user-uploaded files)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
@@ -490,11 +464,6 @@ def generate_agent_instructions(
     # Build org info section (only included when demo data is enabled)
     org_info_section = build_org_info_section(include_org_info)
 
-    # Build attachments section (only included when files are present)
-    attachments_section = (
-        build_attachments_section(attachments_path) if attachments_path else ""
-    )
-
     # Replace placeholders
     content = template_content
     content = content.replace("{{USER_CONTEXT}}", user_context)
@@ -506,7 +475,6 @@ def generate_agent_instructions(
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
     content = content.replace("{{ORG_INFO_SECTION}}", org_info_section)
-    content = content.replace("{{ATTACHMENTS_SECTION}}", attachments_section)
 
     # Only replace file-related placeholders if files_path is provided.
     # When files_path is None (e.g., Kubernetes), leave placeholders intact

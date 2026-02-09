@@ -28,7 +28,7 @@ def _share_persona(
 
 
 def test_persona_create_update_share_delete(
-    reset: None, admin_user: DATestUser, basic_user: DATestUser
+    reset: None, admin_user: DATestUser, basic_user: DATestUser  # noqa: ARG001
 ) -> None:
     # TODO: refactor `PersonaManager.verify`, not a good pattern
     # Create a persona as admin and verify it can be fetched

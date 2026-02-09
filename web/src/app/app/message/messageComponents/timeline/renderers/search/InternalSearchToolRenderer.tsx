@@ -192,8 +192,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
           {(results.length > 0 || queries.length > 0) && (
             <>
               {!isCompact && (
-                <Text as="p" mainUiMuted text03>
-                  Reading:
+                <Text as="p" mainUiMuted text04>
+                  Reading
                 </Text>
               )}
               <SearchChipList

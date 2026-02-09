@@ -27,6 +27,7 @@ def test_bedrock_llm_configuration(client: TestClient) -> None:
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         },
         "api_key_changed": True,
+        "custom_config_changed": True,
     }
 
     # Send the test request
@@ -52,6 +53,7 @@ def test_bedrock_llm_configuration_invalid_key(client: TestClient) -> None:
             "AWS_SECRET_ACCESS_KEY": "invalid_secret_access_key",
         },
         "api_key_changed": True,
+        "custom_config_changed": True,
     }
 
     # Send the test request

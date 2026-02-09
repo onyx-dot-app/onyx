@@ -84,7 +84,8 @@ def patch_document_set(
         user=user,
         target_group_ids=document_set_update_request.groups,
         object_is_public=document_set_update_request.is_public,
-        object_is_owned_by_user=user and document_set.user_id == user.id,
+        object_is_owned_by_user=user
+        and (document_set.user_id is None or document_set.user_id == user.id),
     )
     try:
         update_document_set(
@@ -125,7 +126,8 @@ def delete_document_set(
         db_session=db_session,
         user=user,
         object_is_public=document_set.is_public,
-        object_is_owned_by_user=user and document_set.user_id == user.id,
+        object_is_owned_by_user=user
+        and (document_set.user_id is None or document_set.user_id == user.id),
     )
 
     try:

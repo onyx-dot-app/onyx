@@ -96,6 +96,8 @@ class ToolResponse(BaseModel):
     # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
     llm_facing_response: str
     # The original tool call that triggered this response - set by tool_runner
+    # The response is first created by the tool runner, which does not need to be aware of things like the tool_call_id
+    # So this is set after the response is created by the tool runner
     tool_call: ToolCallKickoff | None = None
 
 

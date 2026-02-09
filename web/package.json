@@ -87,7 +87,6 @@
     "react-loader-spinner": "^8.0.0",
     "react-markdown": "^9.0.1",
     "react-select": "^5.8.0",
-    "react-truncate-markup": "^5.1.2",
     "recharts": "^2.13.1",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",

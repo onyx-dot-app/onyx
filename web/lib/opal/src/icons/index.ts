@@ -11,6 +11,7 @@ export { default as SvgArrowLeftDot } from "@opal/icons/arrow-left-dot";
 export { default as SvgArrowRight } from "@opal/icons/arrow-right";
 export { default as SvgArrowRightCircle } from "@opal/icons/arrow-right-circle";
 export { default as SvgArrowRightDot } from "@opal/icons/arrow-right-dot";
+export { default as SvgArrowUpCircle } from "@opal/icons/arrow-up-circle";
 export { default as SvgArrowUp } from "@opal/icons/arrow-up";
 export { default as SvgArrowUpDown } from "@opal/icons/arrow-up-down";
 export { default as SvgArrowUpDot } from "@opal/icons/arrow-up-dot";

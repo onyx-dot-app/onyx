@@ -549,7 +549,6 @@ class VespaDocumentIndex(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the rerank-count value set in the
@@ -595,7 +594,6 @@ class VespaDocumentIndex(DocumentIndex):
             "input.query(alpha)": hybrid_alpha,
             "input.query(title_content_ratio)": TITLE_CONTENT_RATIO,
             "hits": num_to_retrieve,
-            "offset": offset,
             "ranking.profile": ranking_profile,
             "timeout": VESPA_TIMEOUT,
         }
@@ -606,7 +604,7 @@ class VespaDocumentIndex(DocumentIndex):
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 100,
-        dirty: bool | None = None,
+        dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
 
@@ -635,7 +633,9 @@ class VespaDocumentIndex(DocumentIndex):
         Returns:
             List of raw document chunks.
         """
-        chunk_request = VespaChunkRequest(document_id=document_id)
+        # Vespa doc IDs are sanitized using replace_invalid_doc_id_characters.
+        sanitized_document_id = replace_invalid_doc_id_characters(document_id)
+        chunk_request = VespaChunkRequest(document_id=sanitized_document_id)
         raw_chunks = get_chunks_via_visit_api(
             chunk_request=chunk_request,
             index_name=self._index_name,

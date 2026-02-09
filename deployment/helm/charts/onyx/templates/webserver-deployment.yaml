@@ -65,6 +65,18 @@ spec:
               protocol: TCP
           resources:
             {{- toYaml .Values.webserver.resources | nindent 12 }}
+          {{- with .Values.webserver.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.webserver.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.webserver.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}

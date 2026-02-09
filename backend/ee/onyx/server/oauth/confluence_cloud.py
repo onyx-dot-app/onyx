@@ -260,7 +260,7 @@ def confluence_oauth_accessible_resources(
     credential_id: int,
     user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
+    tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:
     """Atlassian's API is weird and does not supply us with enough info to be in a
     usable state after authorizing.  All API's require a cloud id. We have to list
@@ -323,7 +323,7 @@ def confluence_oauth_finalize(
     cloud_url: str,
     user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
+    tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:
     """Saves the info for the selected cloud site to the credential.
     This is the final step in the confluence oauth flow where after the traditional

@@ -131,7 +131,9 @@ class GoogleDriveManager:
         ).execute()
 
     @staticmethod
-    def remove_file_permissions(drive_service: Any, file_id: str, email: str) -> None:
+    def remove_file_permissions(
+        drive_service: Any, file_id: str, email: str  # noqa: ARG004
+    ) -> None:
         permissions = (
             drive_service.permissions()
             .list(fileId=file_id, supportsAllDrives=True)

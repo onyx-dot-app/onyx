@@ -62,7 +62,9 @@ def jira_connector_with_jql() -> JiraConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_jira_connector_basic(reset: None, jira_connector: JiraConnector) -> None:
+def test_jira_connector_basic(
+    reset: None, jira_connector: JiraConnector  # noqa: ARG001
+) -> None:
     _test_jira_connector_basic(jira_connector)
 
 
@@ -71,7 +73,7 @@ def test_jira_connector_basic(reset: None, jira_connector: JiraConnector) -> Non
     return_value=None,
 )
 def test_jira_connector_basic_scoped(
-    reset: None, jira_connector_scoped: JiraConnector
+    reset: None, jira_connector_scoped: JiraConnector  # noqa: ARG001
 ) -> None:
     _test_jira_connector_basic(jira_connector_scoped)
 
@@ -164,7 +166,7 @@ def _test_jira_connector_basic(jira_connector: JiraConnector) -> None:
     return_value=None,
 )
 def test_jira_connector_with_jql(
-    reset: None, jira_connector_with_jql: JiraConnector
+    reset: None, jira_connector_with_jql: JiraConnector  # noqa: ARG001
 ) -> None:
     """Test that JQL query functionality works correctly.
 

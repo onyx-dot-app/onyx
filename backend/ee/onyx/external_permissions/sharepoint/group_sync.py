@@ -15,7 +15,7 @@ logger = setup_logger()
 
 
 def sharepoint_group_sync(
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     """Sync SharePoint groups and their members"""

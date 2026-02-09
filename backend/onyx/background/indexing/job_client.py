@@ -174,7 +174,9 @@ class SimpleJobClient:
                 logger.debug(f"Cleaning up job with id: '{job.id}'")
                 del self.jobs[job.id]
 
-    def submit(self, func: Callable, *args: Any, pure: bool = True) -> SimpleJob | None:
+    def submit(
+        self, func: Callable, *args: Any, pure: bool = True  # noqa: ARG002
+    ) -> SimpleJob | None:
         """NOTE: `pure` arg is needed so this can be a drop in replacement for Dask"""
         self._cleanup_completed_jobs()
         if len(self.jobs) >= self.n_workers:

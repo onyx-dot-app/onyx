@@ -76,14 +76,18 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 #####
 # Upgrades users from disabled auth to basic auth and shows warning.
 _auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
-if not _auth_type_str or _auth_type_str in ("disabled", "none"):
+if _auth_type_str == "disabled":
     logger.warning(
         "AUTH_TYPE='disabled' is no longer supported. "
         "Defaulting to 'basic'. Please update your configuration. "
         "Your existing data will be migrated automatically."
     )
     _auth_type_str = AuthType.BASIC.value
-AUTH_TYPE = AuthType(_auth_type_str)
+try:
+    AUTH_TYPE = AuthType(_auth_type_str)
+except ValueError:
+    logger.error(f"Invalid AUTH_TYPE: {_auth_type_str}. Defaulting to 'basic'.")
+    AUTH_TYPE = AuthType.BASIC
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
@@ -817,6 +821,7 @@ SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 # Langfuse API credentials - if provided, Langfuse tracing will be enabled
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
 
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings

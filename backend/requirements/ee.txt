@@ -159,7 +159,6 @@ grpcio==1.67.1 ; python_full_version < '3.14'
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-    #   litellm
 grpcio==1.76.0 ; python_full_version >= '3.14'
     # via
     #   google-api-core
@@ -167,7 +166,6 @@ grpcio==1.76.0 ; python_full_version >= '3.14'
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-    #   litellm
 grpcio-status==1.67.1 ; python_full_version < '3.14'
     # via google-api-core
 grpcio-status==1.76.0 ; python_full_version >= '3.14'
@@ -218,7 +216,7 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 kubernetes==31.0.0
     # via onyx
-litellm==1.80.11
+litellm==1.81.6
     # via onyx
 markupsafe==3.0.3
     # via jinja2
