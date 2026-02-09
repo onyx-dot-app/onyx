@@ -18,6 +18,7 @@ from onyx.db.models import UserRole
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.override_models import LLMOverride
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.chat_backend import create_new_chat_session
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from tests.external_dependency_unit.answer.stream_test_assertions import (
@@ -63,8 +64,13 @@ def _create_provider(
             name=name,
             provider=provider,
             api_key="sk-ant-api03-...",
-            default_model_name="claude-3-5-sonnet-20240620",
             is_public=is_public,
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name="claude-3-5-sonnet-20240620",
+                    is_visible=True,
+                ),
+            ],
         ),
         db_session=db_session,
     )
@@ -147,7 +153,9 @@ def test_user_sends_message_to_private_provider(
     )
     _create_provider(db_session, LlmProviderNames.GOOGLE, "private-provider", False)
 
-    update_default_provider(public_provider_id, db_session)
+    update_default_provider(
+        public_provider_id, "claude-3-5-sonnet-20240620", db_session
+    )
 
     try:
         # Create chat session

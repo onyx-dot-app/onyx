@@ -74,7 +74,6 @@ class LLMProviderManager:
             name=response_data["name"],
             provider=response_data["provider"],
             api_key=response_data["api_key"],
-            default_model_name=response_data["default_model_name"],
             is_public=response_data["is_public"],
             is_auto_mode=response_data.get("is_auto_mode", False),
             groups=response_data["groups"],
@@ -84,8 +83,15 @@ class LLMProviderManager:
         )
 
         if set_as_default:
+            if default_model_name is None:
+                raise ValueError("Default model name is required")
+
             set_default_response = requests.post(
-                f"{API_SERVER_URL}/admin/llm/provider/{llm_response.json()['id']}/default",
+                f"{API_SERVER_URL}/admin/llm/default",
+                json={
+                    "provider_id": response_data["id"],
+                    "model_name": default_model_name,
+                },
                 headers=(
                     user_performing_action.headers
                     if user_performing_action

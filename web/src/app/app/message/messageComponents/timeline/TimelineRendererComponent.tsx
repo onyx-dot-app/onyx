@@ -22,6 +22,8 @@ export interface TimelineRendererResult extends RendererResult {
   isLastStep: boolean;
   /** Hover state from parent */
   isHover: boolean;
+  /** Whether parent should wrap with StepContainer or render raw content */
+  timelineLayout: "timeline" | "content";
 }
 
 // All renderers return an array of results
@@ -98,6 +100,7 @@ export const TimelineRendererComponent = React.memo(
           status: null,
           content: <></>,
           supportsCollapsible: false,
+          timelineLayout: "timeline",
           isExpanded,
           onToggle: handleToggle,
           renderType,
@@ -115,6 +118,7 @@ export const TimelineRendererComponent = React.memo(
       renderType,
       isLastStep: isLastStep ?? true,
       isHover,
+      timelineLayout: result.timelineLayout ?? "timeline",
     });
 
     return (

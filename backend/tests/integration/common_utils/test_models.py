@@ -116,7 +116,6 @@ class DATestLLMProvider(BaseModel):
     name: str
     provider: str
     api_key: str
-    default_model_name: str
     is_public: bool
     is_auto_mode: bool = False
     groups: list[int]
@@ -202,6 +201,12 @@ class ToolResult(BaseModel):
     images: list[GeneratedImage] = Field(default_factory=list)
 
 
+class ToolCallDebug(BaseModel):
+    tool_call_id: str
+    tool_name: str
+    tool_args: dict[str, Any]
+
+
 class ErrorResponse(BaseModel):
     error: str
     stack_trace: str
@@ -212,6 +217,7 @@ class StreamedResponse(BaseModel):
     assistant_message_id: int
     top_documents: list[SearchDoc]
     used_tools: list[ToolResult]
+    tool_call_debug: list[ToolCallDebug] = Field(default_factory=list)
     error: ErrorResponse | None = None
 
     # Track heartbeat packets for image generation and other tools

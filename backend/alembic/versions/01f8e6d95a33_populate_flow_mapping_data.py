@@ -1,7 +1,7 @@
 """Populate flow mapping data
 
 Revision ID: 01f8e6d95a33
-Revises: f220515df7b4
+Revises: d5c86e2c6dc6
 Create Date: 2026-01-31 17:37:10.485558
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "01f8e6d95a33"
-down_revision = "f220515df7b4"
+down_revision = "d5c86e2c6dc6"
 branch_labels = None
 depends_on = None
 
@@ -23,7 +23,7 @@ def upgrade() -> None:
         """
         INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
         SELECT
-            'chat' AS llm_model_flow_type,
+            'CHAT' AS llm_model_flow_type,
             COALESCE(
                 (lp.is_default_provider IS TRUE AND lp.default_model_name = mc.name),
                 FALSE
@@ -44,7 +44,7 @@ def upgrade() -> None:
         """
         INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
         SELECT
-            'vision' AS llm_model_flow_type,
+            'VISION' AS llm_model_flow_type,
             COALESCE(
                 (lp.is_default_vision_provider IS TRUE AND lp.default_vision_model = mc.name),
                 FALSE
@@ -68,7 +68,7 @@ def downgrade() -> None:
             default_vision_model = mc.name
         FROM llm_model_flow mf
         JOIN model_configuration mc ON mc.id = mf.model_configuration_id
-        WHERE mf.llm_model_flow_type = 'vision'
+        WHERE mf.llm_model_flow_type = 'VISION'
           AND mf.is_default = TRUE
           AND mc.llm_provider_id = lp.id;
         """
@@ -83,7 +83,7 @@ def downgrade() -> None:
             default_model_name = mc.name
         FROM llm_model_flow mf
         JOIN model_configuration mc ON mc.id = mf.model_configuration_id
-        WHERE mf.llm_model_flow_type = 'chat'
+        WHERE mf.llm_model_flow_type = 'CHAT'
           AND mf.is_default = TRUE
           AND mc.llm_provider_id = lp.id;
         """
@@ -100,7 +100,7 @@ def downgrade() -> None:
             FROM model_configuration mc
             JOIN llm_model_flow mf ON mf.model_configuration_id = mc.id
             WHERE mc.llm_provider_id = lp.id
-              AND mf.llm_model_flow_type = 'chat'
+              AND mf.llm_model_flow_type = 'CHAT'
             ORDER BY mc.is_visible DESC, mc.id ASC
             LIMIT 1
         )

@@ -146,7 +146,7 @@ def assert_response_is_equivalent(
 )
 def test_create_llm_provider(
     reset: None,  # noqa: ARG001
-    _default_model_name: str,
+    default_model_name: str,  # noqa: ARG001
     model_configurations: list[ModelConfigurationUpsertRequest],
     expected: list[ModelConfigurationUpsertRequest],
 ) -> None:
@@ -272,6 +272,16 @@ def test_update_model_configurations(
         initial_expected,
     )
 
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": updated_default_model_name,
+        },
+    )
+    assert response.status_code == 200
+
     response = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
@@ -319,6 +329,16 @@ def test_update_model_configurations(
         "sk-0****0001",
     )
 
+    response = requests.post(
+        f"{API_SERVER_URL}/admin/llm/default",
+        headers=admin_user.headers,
+        json={
+            "provider_id": created_provider["id"],
+            "model_name": updated_default_model_name,
+        },
+    )
+    assert response.status_code == 200
+
 
 @pytest.mark.parametrize(
     "default_model_name, model_configurations",
@@ -342,7 +362,7 @@ def test_update_model_configurations(
 )
 def test_delete_llm_provider(
     reset: None,  # noqa: ARG001
-    _default_model_name: str,
+    default_model_name: str,  # noqa: ARG001
     model_configurations: list[ModelConfigurationUpsertRequest],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
@@ -1010,7 +1030,7 @@ def _set_default_vision_provider(
     assert response.status_code == 200
 
 
-def test_multiple_providers_default_switching(_reset: None) -> None:
+def test_multiple_providers_default_switching(reset: None) -> None:  # noqa: ARG001
     """
     Test switching default providers and models across multiple LLM providers.
 

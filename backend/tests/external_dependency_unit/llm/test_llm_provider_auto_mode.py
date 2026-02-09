@@ -417,7 +417,12 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        model_configurations=[],
+                        model_configurations=[
+                            ModelConfigurationUpsertRequest(
+                                name="gpt-4o",
+                                is_visible=True,
+                            )
+                        ],
                     ),
                     is_creation=True,
                     _=_create_mock_admin(),

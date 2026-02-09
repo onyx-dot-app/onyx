@@ -74,12 +74,9 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         icon,
         status: status,
         supportsCollapsible: true,
-        content: (
-          <div className="text-sm text-muted-foreground">
-            {isRunning && `${toolName} running...`}
-            {isComplete && `${toolName} completed`}
-          </div>
-        ),
+        // Status is already shown in the step header in compact mode.
+        // Avoid duplicating the same line in the content body.
+        content: <></>,
       },
     ]);
   }
