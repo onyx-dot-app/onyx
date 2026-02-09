@@ -18,6 +18,26 @@ def posthog_on_error(error: Any, items: Any) -> None:
     logger.error(f"PostHog error: {error}, items: {items}")
 
 
+POSTHOG_DISABLED_DEFAULT_OFF_FLAGS = frozenset(
+    {
+        # Build mode access should stay disabled unless explicitly enabled.
+        "onyx-craft-enabled",
+        # Build mode rate limits should stay off unless explicitly enabled.
+        "craft-has-usage-limits",
+    }
+)
+
+
+def default_feature_enabled_when_posthog_disabled(flag_key: str) -> bool:
+    """
+    Default behavior for feature flags when PostHog is not configured.
+
+    Most flags default to True to avoid blocking functionality, while selected
+    safety/rollout flags default to False.
+    """
+    return flag_key not in POSTHOG_DISABLED_DEFAULT_OFF_FLAGS
+
+
 class NoOpPosthogClient:
     """No-op PostHog client used when POSTHOG_API_KEY is not configured."""
 
@@ -33,8 +53,10 @@ class NoOpPosthogClient:
     def set(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
         return None
 
-    def feature_enabled(self, *args: Any, **kwargs: Any) -> bool:  # noqa: ARG002
-        return False
+    def feature_enabled(
+        self, flag_key: str, *args: Any, **kwargs: Any  # noqa: ARG002
+    ) -> bool:
+        return default_feature_enabled_when_posthog_disabled(flag_key)
 
 
 POSTHOG_ENABLED = bool(POSTHOG_API_KEY)

@@ -1,6 +1,9 @@
 from typing import Any
 from uuid import UUID
 
+from ee.onyx.utils.posthog_client import (
+    default_feature_enabled_when_posthog_disabled,
+)
 from ee.onyx.utils.posthog_client import posthog
 from ee.onyx.utils.posthog_client import POSTHOG_ENABLED
 from onyx.feature_flags.interface import FeatureFlagProvider
@@ -35,8 +38,9 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
         Returns:
             True if the feature is enabled for the user, False otherwise.
         """
+        # If PostHog is not configured, fall back to static defaults.
         if not POSTHOG_ENABLED:
-            return False
+            return default_feature_enabled_when_posthog_disabled(flag_key)
 
         try:
             posthog.set(

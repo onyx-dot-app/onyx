@@ -36,7 +36,17 @@ def test_posthog_is_noop_when_api_key_missing() -> None:
         # No-op client calls should return immediately and not raise.
         posthog_client.posthog.capture("test-user", "test-event", {"k": "v"})
         posthog_client.posthog.flush()
-        assert posthog_client.posthog.feature_enabled("test-flag", "test-user") is False
+        assert posthog_client.posthog.feature_enabled("test-flag", "test-user") is True
+        assert (
+            posthog_client.posthog.feature_enabled("onyx-craft-enabled", "test-user")
+            is False
+        )
+        assert (
+            posthog_client.posthog.feature_enabled(
+                "craft-has-usage-limits", "test-user"
+            )
+            is False
+        )
     finally:
         _restore_posthog_api_key(original_value)
         _reload_posthog_modules()
