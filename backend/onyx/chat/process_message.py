@@ -359,7 +359,11 @@ def handle_stream_message_objects(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if not user.is_anonymous else tenant_id,
+            distinct_id=(
+                user.email
+                if user and not getattr(user, "is_anonymous", False)
+                else tenant_id
+            ),
             event=MilestoneRecordType.USER_MESSAGE_SENT,
             properties={
                 "origin": new_msg_req.origin.value,
