@@ -158,7 +158,7 @@ export function getSecondsUntilExpiration(
 }
 
 export function formatDurationSeconds(seconds: number): string {
-  const totalSeconds = Math.round(seconds);
+  const totalSeconds = Math.ceil(seconds);
   if (totalSeconds < 60) {
     return `${totalSeconds}s`;
   }
