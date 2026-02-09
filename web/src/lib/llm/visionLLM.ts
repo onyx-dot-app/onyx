@@ -1,11 +1,6 @@
-import {
-  LLMProviderResponse,
-  VisionProvider,
-} from "@/app/admin/configuration/llm/interfaces";
+import { VisionProvider } from "@/app/admin/configuration/llm/interfaces";
 
-export async function fetchVisionProviders(): Promise<
-  LLMProviderResponse<VisionProvider>
-> {
+export async function fetchVisionProviders(): Promise<VisionProvider[]> {
   const response = await fetch("/api/admin/llm/vision-providers", {
     headers: {
       "Content-Type": "application/json",

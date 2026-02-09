@@ -68,20 +68,14 @@ export function ProviderFormEntrypointWrapper({
   const onClose = () => setFormIsVisible(false);
 
   async function handleSetAsDefault(): Promise<void> {
-    if (
-      !existingLlmProvider ||
-      !existingLlmProvider.model_configurations ||
-      existingLlmProvider.model_configurations.length === 0
-    )
-      return;
+    if (!existingLlmProvider) return;
 
-    const response = await fetch(`${LLM_PROVIDERS_ADMIN_URL}/default`, {
-      method: "POST",
-      body: JSON.stringify({
-        provider_id: existingLlmProvider.id,
-        model_name: existingLlmProvider.model_configurations[0]?.name ?? "",
-      }),
-    });
+    const response = await fetch(
+      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}/default`,
+      {
+        method: "POST",
+      }
+    );
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;
       setPopup({

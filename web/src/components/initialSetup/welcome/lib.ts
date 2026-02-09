@@ -1,5 +1,4 @@
 import {
-  LLMProviderResponse,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
@@ -37,14 +36,9 @@ export async function checkLlmProvider(user: User | null) {
   const [providerResponse, optionsResponse, defaultCheckResponse] =
     await Promise.all(tasks);
 
-  let providers: LLMProviderResponse<LLMProviderView> = {
-    providers: [],
-    default_text: null,
-    default_vision: null,
-  };
+  let providers: LLMProviderView[] = [];
   if (providerResponse?.ok) {
-    providers =
-      (await providerResponse.json()) as LLMProviderResponse<LLMProviderView>;
+    providers = await providerResponse.json();
   }
 
   let options: WellKnownLLMProviderDescriptor[] = [];
@@ -58,5 +52,5 @@ export async function checkLlmProvider(user: User | null) {
     setDefaultLLMProviderTestComplete();
   }
 
-  return { providers: providers.providers, options, defaultCheckSuccessful };
+  return { providers, options, defaultCheckSuccessful };
 }
