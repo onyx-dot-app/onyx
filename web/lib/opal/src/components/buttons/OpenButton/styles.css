@@ -1,0 +1,21 @@
+/* OpenButton — layout only; colors handled by Interactive.Base */
+
+.opal-open-button {
+  @apply flex w-full flex-row items-center gap-2;
+}
+
+.opal-open-button-icon {
+  @apply size-4 shrink-0;
+}
+
+.opal-open-button-content {
+  @apply flex-1 min-w-0;
+}
+
+.opal-open-button-chevron {
+  @apply shrink-0 transition-transform duration-200;
+}
+
+.opal-open-button-chevron[data-selected="true"] {
+  @apply -rotate-180;
+}

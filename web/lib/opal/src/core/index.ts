@@ -1,11 +1,10 @@
 /* Interactive */
-import "@opal/core/interactive/styles.css";
 export {
   Interactive,
   type InteractiveBaseProps,
+  type InteractiveBaseVariantProps,
   type InteractiveContainerProps,
-  type InteractiveChevronContainerProps,
-  type InteractiveContainerHeightVariant as ContainerHeightVariant,
-  type InteractiveContainerPaddingVariant as ContainerPaddingVariant,
-  type InteractiveContainerRoundingVariant as ContainerRoundingVariant,
+  type InteractiveContainerHeightVariant,
+  type InteractiveContainerPaddingVariant,
+  type InteractiveContainerRoundingVariant,
 } from "@opal/core/interactive/components";

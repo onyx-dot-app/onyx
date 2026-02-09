@@ -1,6 +1,6 @@
 /* Interactive — base (structural only, no color changes) */
 .interactive {
-  @apply flex self-stretch cursor-pointer select-none transition-colors;
+  @apply cursor-pointer select-none transition-colors;
 }
 
 .interactive[data-disabled] {

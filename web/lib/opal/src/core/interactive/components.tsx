@@ -1,7 +1,7 @@
+import "@opal/core/interactive/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
-import { SvgChevronDownSmall } from "@opal/icons";
 import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -15,7 +15,7 @@ import type { WithoutStyles } from "@opal/types";
  * - `"select"` accepts an optional subvariant (defaults to `"light"`)
  * - `"default"`, `"action"`, and `"danger"` accept an optional subvariant
  */
-export type InteractiveBaseVariantProps =
+type InteractiveBaseVariantProps =
   | { variant?: "none"; subvariant?: never }
   | { variant?: "select"; subvariant?: "light" | "heavy" }
   | {
@@ -30,12 +30,17 @@ export type InteractiveBaseVariantProps =
  * - `"compact"` — Reduced height of 1.75rem (28px), for denser UIs or inline elements
  * - `"full"` — Expands to fill parent height (`h-full`), for flexible layouts
  */
-export type InteractiveContainerHeightVariant =
+type InteractiveContainerHeightVariant =
   keyof typeof interactiveContainerHeightVariants;
 const interactiveContainerHeightVariants = {
   default: "h-[2.25rem]",
   compact: "h-[1.75rem]",
   full: "h-full",
+} as const;
+const interactiveContainerMinWidthVariants = {
+  default: "min-w-[2.25rem]",
+  compact: "min-w-[1.75rem]",
+  full: "",
 } as const;
 
 /**
@@ -45,7 +50,7 @@ const interactiveContainerHeightVariants = {
  * - `"thin"` — Reduced padding of 0.25rem (4px), for tighter layouts
  * - `"none"` — No padding, when the child handles its own spacing
  */
-export type InteractiveContainerPaddingVariant =
+type InteractiveContainerPaddingVariant =
   keyof typeof interactiveContainerPaddingVariants;
 const interactiveContainerPaddingVariants = {
   default: "p-2",
@@ -59,7 +64,7 @@ const interactiveContainerPaddingVariants = {
  * - `"default"` — Default radius of 0.75rem (12px), matching card rounding
  * - `"compact"` — Smaller radius of 0.5rem (8px), for tighter/inline elements
  */
-export type InteractiveContainerRoundingVariant =
+type InteractiveContainerRoundingVariant =
   keyof typeof interactiveContainerRoundingVariants;
 const interactiveContainerRoundingVariants = {
   default: "rounded-12",
@@ -172,7 +177,7 @@ interface InteractiveBasePropsBase
  * - `"select"` — `subvariant` is optional (defaults to `"light"`)
  * - `"default"` / `"action"` / `"danger"` — `subvariant` is optional (defaults to `"primary"`)
  */
-export type InteractiveBaseProps = InteractiveBasePropsBase &
+type InteractiveBaseProps = InteractiveBasePropsBase &
   InteractiveBaseVariantProps;
 
 /**
@@ -297,7 +302,7 @@ function InteractiveBase({
  *
  * Extends standard `<div>` attributes (minus `className` and `style`).
  */
-export interface InteractiveContainerProps
+interface InteractiveContainerProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   /**
    * Ref forwarded to the underlying `<div>` element.
@@ -404,109 +409,16 @@ function InteractiveContainer({
       ref={ref}
       {...rest}
       className={cn(
+        "flex items-center justify-center",
         border && "border",
         interactiveContainerRoundingVariants[roundingVariant],
         interactiveContainerPaddingVariants[paddingVariant],
         interactiveContainerHeightVariants[heightVariant],
+        interactiveContainerMinWidthVariants[heightVariant],
         slotClassName
       )}
       style={slotStyle}
     />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// InteractiveChevronContainer
-// ---------------------------------------------------------------------------
-
-/**
- * Props for {@link InteractiveChevronContainer}.
- *
- * Extends all `InteractiveContainerProps` with an additional `open` prop.
- */
-export interface InteractiveChevronContainerProps
-  extends InteractiveContainerProps {
-  /**
-   * Explicit open/expanded state for the chevron rotation.
-   *
-   * When `true`, the chevron rotates 180° to point upward (indicating "open").
-   * When `false` or `undefined`, falls back to checking for a Radix
-   * `data-state="open"` attribute (injected by components like `Popover.Trigger`).
-   *
-   * This dual-resolution allows the component to work automatically with Radix
-   * primitives while also supporting explicit control when needed.
-   *
-   * @default undefined (falls back to Radix data-state)
-   */
-  open?: boolean;
-}
-
-/**
- * Container with an animated chevron indicator for expandable/collapsible UI.
- *
- * Extends `Interactive.Container` by adding a chevron-down icon on the right
- * side that rotates 180° when the element is "open". Commonly used for:
- *
- * - Popover triggers
- * - Dropdown menus
- * - Accordion headers
- * - Any expandable section
- *
- * The open state is determined by (in order of precedence):
- * 1. The explicit `open` prop
- * 2. Radix `data-state="open"` attribute (auto-injected by Radix primitives)
- *
- * This means it works automatically when used with Radix `Popover.Trigger`,
- * `DropdownMenu.Trigger`, etc., without any extra wiring.
- *
- * @example
- * ```tsx
- * // With Radix Popover (automatic open state)
- * <Popover>
- *   <Popover.Trigger asChild>
- *     <Interactive.Base>
- *       <Interactive.ChevronContainer border>
- *         <span>Select option</span>
- *       </Interactive.ChevronContainer>
- *     </Interactive.Base>
- *   </Popover.Trigger>
- *   <Popover.Content>...</Popover.Content>
- * </Popover>
- *
- * // With explicit open control
- * <Interactive.Base onClick={() => setOpen(!open)}>
- *   <Interactive.ChevronContainer open={open}>
- *     <span>Toggle section</span>
- *   </Interactive.ChevronContainer>
- * </Interactive.Base>
- * ```
- *
- * @see InteractiveChevronContainerProps for detailed prop documentation
- */
-function InteractiveChevronContainer({
-  open,
-  children,
-  ...containerProps
-}: InteractiveChevronContainerProps) {
-  // Derive open state: explicit prop → Radix data-state (injected via Slot chain)
-  const dataState = (containerProps as Record<string, unknown>)[
-    "data-state"
-  ] as string | undefined;
-  const isOpen = open ?? dataState === "open";
-
-  return (
-    <InteractiveContainer {...containerProps}>
-      <div className="flex flex-row items-center gap-2">
-        <div className="flex-1 min-w-0">{children}</div>
-        <SvgChevronDownSmall
-          className={cn(
-            "shrink-0 transition-transform duration-200",
-            isOpen && "-rotate-180"
-          )}
-          size={14}
-        />
-      </div>
-    </InteractiveContainer>
   );
 }
 
@@ -517,16 +429,13 @@ function InteractiveChevronContainer({
 /**
  * Interactive compound component for building clickable surfaces.
  *
- * Provides three sub-components:
+ * Provides two sub-components:
  *
  * - `Interactive.Base` — The foundational layer that applies hover/active/selected
  *   state styling via CSS data-attributes. Uses Radix Slot to merge onto child.
  *
  * - `Interactive.Container` — A structural `<div>` with design-system presets
  *   for border, padding, rounding, and height.
- *
- * - `Interactive.ChevronContainer` — Like `Container` but with an animated
- *   chevron icon for expandable UI (popovers, dropdowns, accordions).
  *
  * @example
  * ```tsx
@@ -542,7 +451,14 @@ function InteractiveChevronContainer({
 const Interactive = {
   Base: InteractiveBase,
   Container: InteractiveContainer,
-  ChevronContainer: InteractiveChevronContainer,
 };
 
-export { Interactive };
+export {
+  Interactive,
+  type InteractiveBaseProps,
+  type InteractiveBaseVariantProps,
+  type InteractiveContainerProps,
+  type InteractiveContainerHeightVariant,
+  type InteractiveContainerPaddingVariant,
+  type InteractiveContainerRoundingVariant,
+};
