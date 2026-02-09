@@ -7,6 +7,7 @@ from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import load_user_file
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -155,7 +156,10 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         with get_session_with_current_tenant() as db_session:
             chat_file = load_user_file(file_id, db_session)
 
-        if not chat_file.file_type.is_text_file():
+        # Only PLAIN_TEXT and CSV are guaranteed to contain actual text bytes.
+        # DOC type in a loaded file means plaintext extraction failed and the
+        # content is the original binary (e.g. raw PDF/DOCX bytes).
+        if chat_file.file_type not in (ChatFileType.PLAIN_TEXT, ChatFileType.CSV):
             raise ToolCallException(
                 message=f"File {file_id} is not a text file (type={chat_file.file_type})",
                 llm_facing_message=(
