@@ -161,7 +161,7 @@ Return the CloudNativePG Cluster name used by Onyx for POSTGRES_HOST and Cluster
 Deliberately independent from postgresql.nameOverride, which configures the operator chart.
 */}}
 {{- define "onyx.postgresql.clusterName" -}}
-{{- if and .Values.postgresql .Values.postgresql.cluster .Values.postgresql.cluster.name -}}
+{{- if and .Values.postgresql .Values.postgresql.cluster (not (empty .Values.postgresql.cluster.name)) -}}
 {{- .Values.postgresql.cluster.name -}}
 {{- else -}}
 {{- printf "%s-postgresql" .Release.Name -}}
