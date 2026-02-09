@@ -444,7 +444,7 @@ pytest-dotenv==0.5.2
     # via onyx
 pytest-repeat==0.9.4
     # via onyx
-pytest-xdist==3.6.1
+pytest-xdist==3.8.0
     # via onyx
 python-dateutil==2.8.2
     # via
