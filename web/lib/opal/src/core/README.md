@@ -46,6 +46,6 @@ This is selective — component authors decide per-instance which text responds 
 The following invariants hold across all combinations:
 
 1. For each variant, **secondary and ghost rows are identical** (e.g. `default+secondary` ≡ `default+ghost` across all states).
-2. **Hover and active/pressed columns are equal** for all rows, *except* `default+secondary` and `default+ghost`, where text progressively darkens (`text-03` → `text-04` → `text-05`).
+2. **Hover and pressed columns are always equal** (both background and foreground). Active is also equal to hover/pressed for all rows *except* `default+secondary` and `default+ghost`, where foreground progressively darkens (`text-03` → `text-04` → `text-05`) and active uses a distinct background (`tint-00` instead of `tint-02`).
 3. **`action+primary` and `danger+primary` are row-wise identical** (both use `--text-light-05` / `--text-01`).
 4. **`action+secondary`/`ghost` and `danger+secondary`/`ghost` are structurally identical** — only the colour family differs (`link` [blue] vs `danger` [red]).
