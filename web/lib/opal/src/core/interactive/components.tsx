@@ -11,11 +11,13 @@ import type { WithoutStyles } from "@opal/types";
 /**
  * Discriminated union tying `variant` to `subvariant`.
  *
- * - `"none"` and `"select"` accept no subvariant (`subvariant` must not be provided)
+ * - `"none"` accepts no subvariant (`subvariant` must not be provided)
+ * - `"select"` accepts an optional subvariant (defaults to `"light"`)
  * - `"default"`, `"action"`, and `"danger"` accept an optional subvariant
  */
 export type InteractiveBaseVariantProps =
-  | { variant?: "none" | "select"; subvariant?: never }
+  | { variant?: "none"; subvariant?: never }
+  | { variant?: "select"; subvariant?: "light" | "heavy" }
   | {
       variant?: "default" | "action" | "danger";
       subvariant?: "primary" | "secondary" | "ghost";
@@ -117,17 +119,17 @@ interface InteractiveBasePropsBase
   static?: boolean;
 
   /**
-   * When `true`, forces the active visual state regardless of
+   * When `true`, forces the selected visual state regardless of
    * actual pointer state.
    *
-   * This sets `data-active="true"` on the element, which the CSS uses to
-   * apply the hover-state background and foreground. Useful for toggle buttons,
-   * selected states, or any UI where you want to programmatically show an
-   * "active" appearance.
+   * This sets `data-selected="true"` on the element, which the CSS uses to
+   * apply the selected-state background and foreground. Useful for toggle
+   * buttons, select items, or any UI where you want to programmatically
+   * indicate that the element is currently chosen/active.
    *
    * @default false
    */
-  enabled?: boolean;
+  selected?: boolean;
 
   /**
    * When `true`, disables the interactive element.
@@ -145,7 +147,7 @@ interface InteractiveBasePropsBase
    * URL to navigate to when clicked.
    *
    * When provided, renders an `<a>` wrapper element instead of using Radix Slot.
-   * The `<a>` receives all interactive styling (hover/active/enabled states)
+   * The `<a>` receives all interactive styling (hover/active/selected states)
    * and children are rendered inside it.
    *
    * @example
@@ -166,7 +168,8 @@ interface InteractiveBasePropsBase
  * Intersects the base props with the {@link InteractiveBaseVariantProps}
  * discriminated union so that `variant` and `subvariant` are correlated:
  *
- * - `"none"` / `"select"` — `subvariant` must not be provided
+ * - `"none"` — `subvariant` must not be provided
+ * - `"select"` — `subvariant` is optional (defaults to `"light"`)
  * - `"default"` / `"action"` / `"danger"` — `subvariant` is optional (defaults to `"primary"`)
  */
 export type InteractiveBaseProps = InteractiveBasePropsBase &
@@ -181,9 +184,9 @@ export type InteractiveBaseProps = InteractiveBasePropsBase &
  * 1. The `.interactive` CSS class (flex layout, pointer cursor, color transitions)
  * 2. `data-interactive-base-variant` and `data-interactive-base-subvariant`
  *    attributes for variant-specific background colors (both omitted for `"none"`;
- *    subvariant omitted for `"select"`)
+ *    subvariant omitted when not provided)
  * 3. `data-static` attribute when hover feedback is disabled
- * 4. `data-active` attribute for forced active state
+ * 4. `data-selected` attribute for forced selected state
  * 5. `data-disabled` attribute for disabled styling
  *
  * All props are merged onto the single child element via Radix `Slot`, meaning
@@ -229,14 +232,16 @@ export type InteractiveBaseProps = InteractiveBasePropsBase &
 function InteractiveBase({
   ref,
   variant = "default",
-  subvariant = "primary",
+  subvariant,
   group,
   static: isStatic,
-  enabled,
+  selected,
   disabled,
   href,
   ...props
 }: InteractiveBaseProps) {
+  const effectiveSubvariant =
+    subvariant ?? (variant === "select" ? "light" : "primary");
   const classes = cn(
     "interactive",
     !props.onClick && !href && "!cursor-default !select-auto",
@@ -246,9 +251,9 @@ function InteractiveBase({
   const dataAttrs = {
     "data-interactive-base-variant": variant !== "none" ? variant : undefined,
     "data-interactive-base-subvariant":
-      variant !== "none" && variant !== "select" ? subvariant : undefined,
+      variant !== "none" ? effectiveSubvariant : undefined,
     "data-static": isStatic ? "true" : undefined,
-    "data-active": enabled ? "true" : undefined,
+    "data-selected": selected ? "true" : undefined,
     "data-disabled": disabled ? "true" : undefined,
     "aria-disabled": disabled || undefined,
   };
@@ -514,7 +519,7 @@ function InteractiveChevronContainer({
  *
  * Provides three sub-components:
  *
- * - `Interactive.Base` — The foundational layer that applies hover/active/enabled
+ * - `Interactive.Base` — The foundational layer that applies hover/active/selected
  *   state styling via CSS data-attributes. Uses Radix Slot to merge onto child.
  *
  * - `Interactive.Container` — A structural `<div>` with design-system presets

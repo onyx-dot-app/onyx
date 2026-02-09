@@ -8,7 +8,7 @@
 }
 
 /* ============================================================================
-   Variant + Subvariant combinations (9 total)
+   Variant + Subvariant combinations (9 + select)
 
    Each combination sets:
      - background-color (via @apply)
@@ -28,7 +28,7 @@
 .interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-04)];
@@ -53,7 +53,7 @@
 .interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -80,7 +80,7 @@
 .interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -107,7 +107,7 @@
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-link-04)];
@@ -132,7 +132,7 @@
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -157,7 +157,7 @@
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -182,7 +182,7 @@
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-danger-04)];
@@ -207,7 +207,7 @@
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -232,7 +232,7 @@
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-active="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -245,4 +245,59 @@
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
   --interactive-foreground: var(--action-danger-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Select (optional "heavy" subvariant)
+
+   Foreground is a 2D state machine: interaction × selected.
+   When not selected, text darkens on :active. When selected, foreground
+   switches to the action-link colour family and stays constant.
+
+   The "heavy" subvariant overrides the selected background to action-link-01
+   (instead of tint-02). All other states are identical.
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="select"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-04);
+}
+.interactive[data-interactive-base-variant="select"]:hover:not(
+    [data-static]
+  ):not([data-disabled]):not([data-selected="true"]) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:not(
+    [data-static]
+  ):not([data-disabled]) {
+  --interactive-foreground: var(--action-link-05);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:hover:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"]:active:not(
+    [data-static]
+  ):not([data-disabled]):not([data-selected="true"]) {
+  @apply bg-background-neutral-00;
+  --interactive-foreground: var(--text-05);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:active:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-neutral-00;
+}
+.interactive[data-interactive-base-variant="select"][data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-02);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"][data-disabled] {
+  --interactive-foreground: var(--action-link-03);
+}
+
+/* Heavy — selected background override */
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-[var(--action-link-01)];
 }
