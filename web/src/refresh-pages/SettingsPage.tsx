@@ -1010,7 +1010,9 @@ function ChatPreferencesSettings() {
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
             onBlur={() => void handleSavePersonalization()}
-            rows={3}
+            rows={4}
+            maxRows={10}
+            autoResize
             maxLength={500}
           />
           <CharacterCount
