@@ -17,7 +17,7 @@ branch_labels = None
 depends_on = None
 
 FILE_READER_TOOL = {
-    "name": "FileReaderTool",
+    "name": "read_file",
     "display_name": "File Reader",
     "description": (
         "Read sections of user-uploaded files by character offset. "
@@ -65,5 +65,23 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Keep the tool around on downgrade (safe no-op)
-    pass
+    conn = op.get_bind()
+    in_code_tool_id = FILE_READER_TOOL["in_code_tool_id"]
+
+    # Remove persona associations first (FK constraint)
+    conn.execute(
+        sa.text(
+            """
+            DELETE FROM persona__tool
+            WHERE tool_id IN (
+                SELECT id FROM tool WHERE in_code_tool_id = :in_code_tool_id
+            )
+            """
+        ),
+        {"in_code_tool_id": in_code_tool_id},
+    )
+
+    conn.execute(
+        sa.text("DELETE FROM tool WHERE in_code_tool_id = :in_code_tool_id"),
+        {"in_code_tool_id": in_code_tool_id},
+    )
