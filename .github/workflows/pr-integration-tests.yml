@@ -302,6 +302,8 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -478,6 +480,7 @@ jobs:
         run: |
           cd deployment/docker_compose
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+          LICENSE_ENFORCEMENT_ENABLED=false \
           MULTI_TENANT=true \
           AUTH_TYPE=cloud \
           REQUIRE_EMAIL_VERIFICATION=false \
