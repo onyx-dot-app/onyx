@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import * as dotenv from "dotenv";
+import path from "path";
 
 dotenv.config({ path: ".vscode/.env" });
 
@@ -8,6 +9,12 @@ export default defineConfig({
   timeout: 100000, // 100 seconds timeout
   expect: {
     timeout: 15000, // 15 seconds timeout for all assertions to reduce flakiness
+    toHaveScreenshot: {
+      // Allow up to 1% of pixels to differ (accounts for anti-aliasing, subpixel rendering)
+      maxDiffPixelRatio: 0.01,
+      // Threshold per-channel (0-1): how different a pixel can be before it counts as changed
+      threshold: 0.2,
+    },
   },
   retries: process.env.CI ? 2 : 0, // Retry failed tests 2 times in CI, 0 locally
 
@@ -17,9 +24,19 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined, // Limit to 2 parallel workers in CI to reduce flakiness
   // workers: 1,
 
+  // Snapshot path template — all baselines stored under tests/e2e/__screenshots__/
+  snapshotPathTemplate: path.join(
+    "tests",
+    "e2e",
+    "__screenshots__",
+    "{projectName}",
+    "{testFilePath}",
+    "{arg}{ext}"
+  ),
+
   reporter: [
     ["list"],
-    // Warning: uncommenting the html reporter may cause the chromatic-archives
+    // Warning: uncommenting the html reporter may cause the screenshot
     // directory to be deleted after the test run, which will break CI.
     // [
     //   'html',

@@ -65,7 +65,18 @@ Bring up the entire application.
 npx playwright install
 ```
 
-1. Run playwright
+1. Reset the instance
+
+```cd backend
+export PYTEST_IGNORE_SKIP=true
+pytest -s tests/integration/tests/playwright/test_playwright.py
+```
+
+```cd web
+npx playwright test create_and_edit_assistant.spec.ts --project=admin
+```
+
+2. Run playwright
 
 ```
 cd web
@@ -86,7 +97,7 @@ npx playwright test --ui
 npx playwright test --headed
 ```
 
-2. Inspect results
+3. Inspect results
 
 By default, playwright.config.ts is configured to output the results to:
 
@@ -94,12 +105,14 @@ By default, playwright.config.ts is configured to output the results to:
 web/test-results
 ```
 
-3. Upload results to Chromatic (Optional)
+4. Visual regression screenshots
 
-This step would normally not be run by third party developers, but first party devs
-may use this for local troubleshooting and testing.
+Screenshots are captured automatically during test runs when `VISUAL_REGRESSION=true`
+is set. Baselines are stored in `web/tests/e2e/__screenshots__/` and can be updated
+with `npx playwright test --update-snapshots`.
+
+To compare screenshots across CI runs, use:
 
 ```
-cd web
-npx chromatic --playwright --project-token={your token here}
+ods playwright-diff compare --run-id <CI_RUN_ID>
 ```

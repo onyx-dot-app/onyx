@@ -239,6 +239,42 @@ ods cherry-pick abc123 --release 2.5 --release 2.6
 ods cherry-pick abc123 def456 ghi789 --release 2.5
 ```
 
+### `playwright-diff` - Compare Playwright Screenshots
+
+Compare Playwright screenshots between CI runs, release tags, or local directories.
+Generates an HTML diff report with side-by-side comparisons.
+
+```shell
+ods playwright-diff --run-id <CI_RUN_ID>
+ods playwright-diff --tag <version>
+ods playwright-diff --dir /path/to/baseline
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--run-id` | | GitHub Actions run ID to compare against |
+| `--tag` | | Git tag (release version) to compare against |
+| `--dir` | | Local directory of baseline screenshots to compare against |
+| `--output` | `playwright-diff-report.html` | Output path for the HTML diff report |
+
+**Examples:**
+
+```shell
+# Compare local screenshots against a CI run
+ods playwright-diff --run-id 12345678
+
+# Compare against a tagged release
+ods playwright-diff --tag v2.10.4
+
+# Compare two local directories
+ods playwright-diff --dir /tmp/baseline-screenshots
+
+# Custom output location
+ods playwright-diff --run-id 12345678 --output /tmp/diff.html
+```
+
 ### Testing Changes Locally (Dry Run)
 
 Both `run-ci` and `cherry-pick` support `--dry-run` to test without making remote changes:
