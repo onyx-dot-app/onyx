@@ -12,14 +12,6 @@ export async function loginAs(
   page: Page,
   userType: "admin" | "user" | "admin2"
 ) {
-  // Skip authentication if SKIP_AUTH environment variable is set
-  if (process.env.SKIP_AUTH === "true") {
-    console.log(
-      `[loginAs] Skipping authentication for ${userType} (SKIP_AUTH=true)`
-    );
-    return;
-  }
-
   const { email, password } =
     userType === "admin"
       ? TEST_ADMIN_CREDENTIALS
@@ -151,12 +143,6 @@ const generateRandomCredentials = () => {
 
 // Function to sign up a new random user
 export async function loginAsRandomUser(page: Page) {
-  // Skip authentication if SKIP_AUTH environment variable is set
-  if (process.env.SKIP_AUTH === "true") {
-    console.log("[loginAsRandomUser] Skipping authentication (SKIP_AUTH=true)");
-    return { email: "skipped@local.test", password: "skipped" };
-  }
-
   const { email, password } = generateRandomCredentials();
 
   await page.goto("/auth/signup");
