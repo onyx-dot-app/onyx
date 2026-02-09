@@ -265,7 +265,7 @@ fastapi==0.128.0
     #   onyx
 fastapi-limiter==0.1.6
     # via onyx
-fastapi-users==15.0.2
+fastapi-users==15.0.4
     # via
     #   fastapi-users-db-sqlalchemy
     #   onyx
@@ -850,7 +850,7 @@ pygithub==2.5.0
     # via onyx
 pygments==2.19.2
     # via rich
-pyjwt==2.10.1
+pyjwt==2.11.0
     # via
     #   fastapi-users
     #   mcp
@@ -919,7 +919,7 @@ python-json-logger==4.0.0
     # via pydocket
 python-magic==0.4.27
     # via unstructured
-python-multipart==0.0.21
+python-multipart==0.0.22
     # via
     #   fastapi-users
     #   mcp

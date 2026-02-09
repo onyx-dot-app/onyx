@@ -397,7 +397,7 @@ pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.12.0
     # via mcp
-pyjwt==2.10.1
+pyjwt==2.11.0
     # via mcp
 python-dateutil==2.8.2
     # via
@@ -410,7 +410,7 @@ python-dotenv==1.1.1
     # via
     #   litellm
     #   pydantic-settings
-python-multipart==0.0.21
+python-multipart==0.0.22
     # via mcp
 pywin32==311 ; sys_platform == 'win32'
     # via mcp
