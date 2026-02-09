@@ -1718,7 +1718,7 @@ wheels = [
 
 [[package]]
 name = "fastapi-users"
-version = "15.0.2"
+version = "15.0.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "email-validator" },
@@ -1728,9 +1728,9 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/d5/e8f7b598c6b81e3e2955506e47b4c778a858b994ac435c0c85dd37923f40/fastapi_users-15.0.2.tar.gz", hash = "sha256:4cdcc471a5b9e48de3ec4e7dc97e7b7afb610dda5ec6d022d3ddc0a0c0699323", size = 120625, upload-time = "2025-12-19T07:36:31.901Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4b/52/fadeae2c8435fb457a9cd91e402639fa5c9a25b16e6d204e043bf00cd875/fastapi_users-15.0.4.tar.gz", hash = "sha256:62657a4323de929cd98697b0fbdea77773ef271a6b57ef359080b9f773ebe144", size = 121394, upload-time = "2026-02-05T09:36:41.194Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/c1/df04587c4125de11a10a663197c6715537eb16dffb9a6823417eeee675d5/fastapi_users-15.0.2-py3-none-any.whl", hash = "sha256:e52f7124f44ac3042b3b0866476bcd5818513609b225b4e485e8ac69f8d49161", size = 38594, upload-time = "2025-12-19T07:36:30.315Z" },
+    { url = "https://files.pythonhosted.org/packages/71/48/5fb2a18227ccbd5138515f21fc4fa8abcd9982238de43511d7f941e708db/fastapi_users-15.0.4-py3-none-any.whl", hash = "sha256:30940894825e1dd7b86f6013e4bc75eccc25ae8ce5261d1b180f6411bb28aff4", size = 39037, upload-time = "2026-02-05T09:36:42.195Z" },
 ]
 
 [[package]]
@@ -4809,7 +4809,7 @@ requires-dist = [
     { name = "faker", marker = "extra == 'dev'", specifier = "==37.1.0" },
     { name = "fastapi", specifier = "==0.128.0" },
     { name = "fastapi-limiter", marker = "extra == 'backend'", specifier = "==0.1.6" },
-    { name = "fastapi-users", marker = "extra == 'backend'", specifier = "==15.0.2" },
+    { name = "fastapi-users", marker = "extra == 'backend'", specifier = "==15.0.4" },
     { name = "fastapi-users-db-sqlalchemy", marker = "extra == 'backend'", specifier = "==7.0.0" },
     { name = "fastmcp", marker = "extra == 'backend'", specifier = "==2.14.2" },
     { name = "filelock", marker = "extra == 'backend'", specifier = "==3.20.3" },
@@ -4888,7 +4888,7 @@ requires-dist = [
     { name = "python-docx", marker = "extra == 'backend'", specifier = "==1.1.2" },
     { name = "python-dotenv", marker = "extra == 'backend'", specifier = "==1.1.1" },
     { name = "python-gitlab", marker = "extra == 'backend'", specifier = "==5.6.0" },
-    { name = "python-multipart", marker = "extra == 'backend'", specifier = "==0.0.21" },
+    { name = "python-multipart", marker = "extra == 'backend'", specifier = "==0.0.22" },
     { name = "python-pptx", marker = "extra == 'backend'", specifier = "==0.6.23" },
     { name = "python3-saml", marker = "extra == 'backend'", specifier = "==1.15.0" },
     { name = "pywikibot", marker = "extra == 'backend'", specifier = "==9.0.0" },
@@ -6145,11 +6145,11 @@ wheels = [
 
 [[package]]
 name = "pyjwt"
-version = "2.10.1"
+version = "2.11.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e7/46/bd74733ff231675599650d3e47f361794b22ef3e3770998dda30d3b63726/pyjwt-2.10.1.tar.gz", hash = "sha256:3cc5772eb20009233caf06e9d8a0577824723b44e6648ee0a2aedb6cf9381953", size = 87785, upload-time = "2024-11-28T03:43:29.933Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/5a/b46fa56bf322901eee5b0454a34343cdbdae202cd421775a8ee4e42fd519/pyjwt-2.11.0.tar.gz", hash = "sha256:35f95c1f0fbe5d5ba6e43f00271c275f7a1a4db1dab27bf708073b75318ea623", size = 98019, upload-time = "2026-01-30T19:59:55.694Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/ad/689f02752eeec26aed679477e80e632ef1b682313be70793d798c1d5fc8f/PyJWT-2.10.1-py3-none-any.whl", hash = "sha256:dcdd193e30abefd5debf142f9adfcdd2b58004e644f25406ffaebd50bd98dacb", size = 22997, upload-time = "2024-11-28T03:43:27.893Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/01/c26ce75ba460d5cd503da9e13b21a33804d38c2165dec7b716d06b13010c/pyjwt-2.11.0-py3-none-any.whl", hash = "sha256:94a6bde30eb5c8e04fee991062b534071fd1439ef58d2adc9ccb823e7bcd0469", size = 28224, upload-time = "2026-01-30T19:59:54.539Z" },
 ]
 
 [package.optional-dependencies]
@@ -6459,11 +6459,11 @@ wheels = [
 
 [[package]]
 name = "python-multipart"
-version = "0.0.21"
+version = "0.0.22"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/78/96/804520d0850c7db98e5ccb70282e29208723f0964e88ffd9d0da2f52ea09/python_multipart-0.0.21.tar.gz", hash = "sha256:7137ebd4d3bbf70ea1622998f902b97a29434a9e8dc40eb203bbcf7c2a2cba92", size = 37196, upload-time = "2025-12-17T09:24:22.446Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/01/979e98d542a70714b0cb2b6728ed0b7c46792b695e3eaec3e20711271ca3/python_multipart-0.0.22.tar.gz", hash = "sha256:7340bef99a7e0032613f56dc36027b959fd3b30a787ed62d310e951f7c3a3a58", size = 37612, upload-time = "2026-01-25T10:15:56.219Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/76/03af049af4dcee5d27442f71b6924f01f3efb5d2bd34f23fcd563f2cc5f5/python_multipart-0.0.21-py3-none-any.whl", hash = "sha256:cf7a6713e01c87aa35387f4774e812c4361150938d20d232800f75ffcf266090", size = 24541, upload-time = "2025-12-17T09:24:21.153Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/d0/397f9626e711ff749a95d96b7af99b9c566a9bb5129b8e4c10fc4d100304/python_multipart-0.0.22-py3-none-any.whl", hash = "sha256:2b2cd894c83d21bf49d702499531c7bafd057d730c201782048f7945d82de155", size = 24579, upload-time = "2026-01-25T10:15:54.811Z" },
 ]
 
 [[package]]
