@@ -79,9 +79,10 @@ class TestExternalStorageFileStore:
     """Test external storage file store functionality (S3-compatible)"""
 
     def test_get_default_file_store_s3(self) -> None:
-        """Test that external storage file store is returned"""
-        file_store = get_default_file_store()
-        assert isinstance(file_store, S3BackedFileStore)
+        """Test that S3 file store is returned when backend is s3"""
+        with patch("onyx.configs.app_configs.FILE_STORE_BACKEND", "s3"):
+            file_store = get_default_file_store()
+            assert isinstance(file_store, S3BackedFileStore)
 
     def test_s3_client_initialization_with_credentials(self) -> None:
         """Test S3 client initialization with explicit credentials"""
@@ -317,8 +318,21 @@ class TestExternalStorageFileStore:
 class TestFileStoreInterface:
     """Test the general file store interface"""
 
-    def test_file_store_always_external_storage(self) -> None:
-        """Test that external storage file store is always returned"""
-        # File store should always be S3BackedFileStore regardless of environment
+    def test_file_store_s3_when_configured(self) -> None:
+        """Test that S3 file store is returned when configured"""
+        with patch("onyx.configs.app_configs.FILE_STORE_BACKEND", "s3"):
+            file_store = get_default_file_store()
+            assert isinstance(file_store, S3BackedFileStore)
+
+    def test_file_store_postgres_when_configured(self) -> None:
+        """Test that Postgres file store is returned when configured"""
+        from onyx.file_store.postgres_file_store import PostgresBackedFileStore
+
+        with patch("onyx.configs.app_configs.FILE_STORE_BACKEND", "postgres"):
+            file_store = get_default_file_store()
+            assert isinstance(file_store, PostgresBackedFileStore)
+
+    def test_file_store_defaults_to_s3(self) -> None:
+        """Test that the default backend is s3"""
         file_store = get_default_file_store()
         assert isinstance(file_store, S3BackedFileStore)

@@ -48,6 +48,7 @@ import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Interactive } from "@opal/core";
+import { OpenButton } from "@opal/components";
 import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -333,28 +334,23 @@ function Header() {
                 <Popover.Trigger asChild>
                   <Interactive.Base
                     subvariant="secondary"
-                    transient={modePopoverOpen}
+                    selected={modePopoverOpen}
                   >
-                    <Interactive.ChevronContainer>
-                      <LineItemLayout
-                        icon={
-                          effectiveMode === "auto"
-                            ? SvgSparkle
-                            : effectiveMode === "search"
-                              ? SvgSearchMenu
-                              : SvgBubbleText
-                        }
-                        title={
-                          effectiveMode === "auto"
-                            ? "Auto"
-                            : effectiveMode === "search"
-                              ? "Search"
-                              : "Chat"
-                        }
-                        variant="secondary"
-                        center
-                      />
-                    </Interactive.ChevronContainer>
+                    <OpenButton
+                      icon={
+                        effectiveMode === "auto"
+                          ? SvgSparkle
+                          : effectiveMode === "search"
+                            ? SvgSearchMenu
+                            : SvgBubbleText
+                      }
+                    >
+                      {effectiveMode === "auto"
+                        ? "Auto"
+                        : effectiveMode === "search"
+                          ? "Search"
+                          : "Chat"}
+                    </OpenButton>
                   </Interactive.Base>
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">

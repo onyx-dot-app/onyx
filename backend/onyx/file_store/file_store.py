@@ -604,27 +604,23 @@ def get_s3_file_store() -> S3BackedFileStore:
 
 def get_default_file_store() -> FileStore:
     """
-    Returns the configured file store implementation.
+    Returns the configured file store implementation based on FILE_STORE_BACKEND.
 
-    Supports AWS S3, MinIO, and other S3-compatible storage.
+    When FILE_STORE_BACKEND=postgres (default):
+    - Files are stored in PostgreSQL using Large Objects.
+    - No external storage service (S3/MinIO) is required.
 
-    Configuration is handled via environment variables defined in app_configs.py:
-
-    AWS S3:
-    - S3_FILE_STORE_BUCKET_NAME=<bucket-name>
-    - S3_FILE_STORE_PREFIX=<prefix> (optional, defaults to 'onyx-files')
-    - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or use IAM roles)
-    - AWS_REGION_NAME=<region> (optional, defaults to 'us-east-2')
-
-    MinIO:
-    - S3_FILE_STORE_BUCKET_NAME=<bucket-name>
-    - S3_ENDPOINT_URL=<minio-endpoint> (e.g., http://localhost:9000)
-    - MINIO_ACCESS_KEY=<minio-access-key> (falls back to AWS_ACCESS_KEY_ID)
-    - MINIO_SECRET_KEY=<minio-secret-key> (falls back to AWS_SECRET_ACCESS_KEY)
-    - AWS_REGION_NAME=<any-region> (optional, defaults to 'us-east-2')
-    - S3_VERIFY_SSL=false (optional, for local development)
-
-    Other S3-compatible storage (Digital Ocean, Linode, etc.):
-    - Same as MinIO, but set appropriate S3_ENDPOINT_URL
+    When FILE_STORE_BACKEND=s3:
+    - Supports AWS S3, MinIO, and other S3-compatible storage.
+    - Configuration via environment variables:
+      - S3_FILE_STORE_BUCKET_NAME, S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, etc.
     """
+    from onyx.configs.app_configs import FILE_STORE_BACKEND
+    from onyx.configs.constants import FileStoreType
+
+    if FileStoreType(FILE_STORE_BACKEND) == FileStoreType.POSTGRES:
+        from onyx.file_store.postgres_file_store import PostgresBackedFileStore
+
+        return PostgresBackedFileStore()
+
     return get_s3_file_store()

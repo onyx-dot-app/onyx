@@ -24,6 +24,7 @@ from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ErrorResponse
 from tests.integration.common_utils.test_models import StreamedResponse
+from tests.integration.common_utils.test_models import ToolCallDebug
 from tests.integration.common_utils.test_models import ToolName
 from tests.integration.common_utils.test_models import ToolResult
 
@@ -40,6 +41,7 @@ class StreamPacketObj(TypedDict, total=False):
         "image_generation_start",
         "image_generation_heartbeat",
         "image_generation_final",
+        "tool_call_debug",
     ]
     content: str
     final_documents: list[dict[str, Any]]
@@ -47,6 +49,9 @@ class StreamPacketObj(TypedDict, total=False):
     images: list[dict[str, Any]]
     queries: list[str]
     documents: list[dict[str, Any]]
+    tool_call_id: str
+    tool_name: str
+    tool_args: dict[str, Any]
 
 
 class PlacementData(TypedDict, total=False):
@@ -109,6 +114,7 @@ class ChatSessionManager:
         use_existing_user_message: bool = False,
         forced_tool_ids: list[int] | None = None,
         chat_session: DATestChatSession | None = None,
+        mock_llm_response: str | None = None,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
@@ -120,6 +126,7 @@ class ChatSessionManager:
             query_override=query_override,
             regenerate=regenerate,
             llm_override=llm_override,
+            mock_llm_response=mock_llm_response,
             prompt_override=prompt_override,
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
@@ -179,6 +186,7 @@ class ChatSessionManager:
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
         forced_tool_ids: list[int] | None = None,
+        mock_llm_response: str | None = None,
     ) -> None:
         """
         Send a message and simulate client disconnect before stream completes.
@@ -210,6 +218,7 @@ class ChatSessionManager:
             query_override=query_override,
             regenerate=regenerate,
             llm_override=llm_override,
+            mock_llm_response=mock_llm_response,
             prompt_override=prompt_override,
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
@@ -253,6 +262,7 @@ class ChatSessionManager:
             ],
         )
         ind_to_tool_use: dict[int, ToolResult] = {}
+        tool_call_debug: list[ToolCallDebug] = []
         top_documents: list[SearchDoc] = []
         heartbeat_packets: list[StreamPacketData] = []
         full_message = ""
@@ -330,6 +340,16 @@ class ChatSessionManager:
                                 SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
                             )
                     ind_to_tool_use[ind].documents.extend(docs)
+                elif packet_type_str == StreamingType.TOOL_CALL_DEBUG.value:
+                    tool_call_debug.append(
+                        ToolCallDebug(
+                            tool_call_id=str(data_obj.get("tool_call_id", "")),
+                            tool_name=str(data_obj.get("tool_name", "")),
+                            tool_args=cast(
+                                dict[str, Any], data_obj.get("tool_args") or {}
+                            ),
+                        )
+                    )
         # If there's an error, assistant_message_id might not be present
         if not assistant_message_id and not error:
             raise ValueError("Assistant message id not found")
@@ -338,6 +358,7 @@ class ChatSessionManager:
             assistant_message_id=assistant_message_id or -1,  # Use -1 for error cases
             top_documents=top_documents,
             used_tools=list(ind_to_tool_use.values()),
+            tool_call_debug=tool_call_debug,
             heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
             error=error,
         )

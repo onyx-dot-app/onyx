@@ -265,7 +265,7 @@ fastapi==0.128.0
     #   onyx
 fastapi-limiter==0.1.6
     # via onyx
-fastapi-users==15.0.2
+fastapi-users==15.0.4
     # via
     #   fastapi-users-db-sqlalchemy
     #   onyx
@@ -362,23 +362,14 @@ greenlet==3.2.4
     #   sqlalchemy
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.67.1 ; python_full_version < '3.14'
+grpcio==1.76.0
     # via
     #   google-api-core
     #   google-cloud-resource-manager
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-grpcio==1.76.0 ; python_full_version >= '3.14'
-    # via
-    #   google-api-core
-    #   google-cloud-resource-manager
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
-grpcio-status==1.67.1 ; python_full_version < '3.14'
-    # via google-api-core
-grpcio-status==1.76.0 ; python_full_version >= '3.14'
+grpcio-status==1.76.0
     # via google-api-core
 h11==0.16.0
     # via
@@ -762,19 +753,7 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==5.29.5 ; python_full_version < '3.14'
-    # via
-    #   ddtrace
-    #   google-api-core
-    #   google-cloud-aiplatform
-    #   google-cloud-resource-manager
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
-    #   onnxruntime
-    #   opentelemetry-proto
-    #   proto-plus
-protobuf==6.33.4 ; python_full_version >= '3.14'
+protobuf==6.33.5
     # via
     #   ddtrace
     #   google-api-core
@@ -850,7 +829,7 @@ pygithub==2.5.0
     # via onyx
 pygments==2.19.2
     # via rich
-pyjwt==2.10.1
+pyjwt==2.11.0
     # via
     #   fastapi-users
     #   mcp
@@ -919,7 +898,7 @@ python-json-logger==4.0.0
     # via pydocket
 python-magic==0.4.27
     # via unstructured
-python-multipart==0.0.21
+python-multipart==0.0.22
     # via
     #   fastapi-users
     #   mcp

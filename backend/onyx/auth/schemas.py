@@ -58,3 +58,4 @@ class UserUpdate(schemas.BaseUserUpdate):
 class AuthBackend(str, Enum):
     REDIS = "redis"
     POSTGRES = "postgres"
+    JWT = "jwt"
