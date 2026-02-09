@@ -86,6 +86,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
+from onyx.tools.tool_constructor import FileReaderToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -98,6 +99,39 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+
+
+def _collect_available_file_ids(
+    chat_history: list[ChatMessage],
+    project_id: int | None,
+    user_id: UUID | None,
+    db_session: Session,
+) -> list[UUID]:
+    """Collect all file IDs the FileReaderTool should be allowed to access.
+
+    Includes files attached to chat messages and files belonging to
+    the project (if any)."""
+    file_ids: set[UUID] = set()
+
+    for msg in chat_history:
+        if not msg.files:
+            continue
+        for fd in msg.files:
+            try:
+                file_ids.add(UUID(fd["id"]))
+            except (ValueError, KeyError):
+                pass
+
+    if project_id:
+        project_files = get_user_files_from_project(
+            project_id=project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+        for uf in project_files:
+            file_ids.add(uf.id)
+
+    return list(file_ids)
 
 
 def _should_enable_slack_search(
@@ -514,6 +548,14 @@ def handle_stream_message_objects(
 
         emitter = get_default_emitter()
 
+        # Collect file IDs for the file reader tool to restrict access
+        available_file_ids = _collect_available_file_ids(
+            chat_history=chat_history,
+            project_id=chat_session.project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+
         # Construct tools based on the persona configurations
         tool_dict = construct_tools(
             persona=persona,
@@ -539,6 +581,9 @@ def handle_stream_message_objects(
                 message_id=user_message.id if user_message else None,
                 additional_headers=custom_tool_additional_headers,
                 mcp_headers=mcp_headers,
+            ),
+            file_reader_tool_config=FileReaderToolConfig(
+                available_file_ids=available_file_ids,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=project_search_config.search_usage,

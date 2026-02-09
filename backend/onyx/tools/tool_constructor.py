@@ -246,11 +246,11 @@ def construct_tools(
                     FileReaderTool(
                         tool_id=db_tool_model.id,
                         emitter=emitter,
-                        db_session=db_session,
                         available_file_ids=(
                             file_reader_tool_config.available_file_ids
                             if file_reader_tool_config
-                            else None
+                            and file_reader_tool_config.available_file_ids
+                            else []
                         ),
                     )
                 ]

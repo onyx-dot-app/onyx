@@ -1,7 +1,7 @@
 """add_file_reader_tool
 
 Revision ID: d3fd499c829c
-Revises: 01f8e6d95a33
+Revises: d56ffa94ca32
 Create Date: 2026-02-07 19:28:22.452337
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d3fd499c829c"
-down_revision = "01f8e6d95a33"
+down_revision = "d56ffa94ca32"
 branch_labels = None
 depends_on = None
 

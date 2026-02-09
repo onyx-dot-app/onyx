@@ -1,8 +1,8 @@
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
@@ -15,6 +15,9 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = setup_logger()
 
@@ -42,12 +45,10 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         self,
         tool_id: int,
         emitter: Emitter,
-        db_session: Session,
-        available_file_ids: list[UUID] | None = None,
+        available_file_ids: list[UUID],
     ) -> None:
         super().__init__(emitter=emitter)
         self._id = tool_id
-        self._db_session = db_session
         self._available_file_ids = available_file_ids
 
     @property
@@ -120,10 +121,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
                 llm_facing_message=f"'{raw_file_id}' is not a valid file UUID.",
             )
 
-        if (
-            self._available_file_ids is not None
-            and file_id not in self._available_file_ids
-        ):
+        if file_id not in self._available_file_ids:
             raise ToolCallException(
                 message=f"File {file_id} not in available files",
                 llm_facing_message=(
@@ -159,6 +157,15 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
 
         with get_session_with_current_tenant() as db_session:
             chat_file = load_user_file(file_id, db_session)
+
+        if not chat_file.file_type.is_text_file():
+            raise ToolCallException(
+                message=f"File {file_id} is not a text file (type={chat_file.file_type})",
+                llm_facing_message=(
+                    f"File '{chat_file.filename or file_id}' is a "
+                    f"{chat_file.file_type.value} file and cannot be read as text."
+                ),
+            )
 
         try:
             full_text = chat_file.content.decode("utf-8", errors="replace")
