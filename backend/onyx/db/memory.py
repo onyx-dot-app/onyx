@@ -47,7 +47,9 @@ class UserMemoryContext(BaseModel):
 
     def as_formatted_prompt(self) -> str:
         """Returns structured prompt sections for the system prompt."""
-        has_basic_info = self.user_info.name or self.user_info.email
+        has_basic_info = (
+            self.user_info.name or self.user_info.email or self.user_info.role
+        )
         if not has_basic_info and not self.user_preferences and not self.memories:
             return ""
 

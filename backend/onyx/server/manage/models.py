@@ -215,7 +215,7 @@ class PersonalizationUpdateRequest(BaseModel):
     role: str | None = None
     use_memories: bool | None = None
     memories: list[str] | None = None
-    user_preferences: str | None = None
+    user_preferences: str | None = Field(default=None, max_length=500)
 
 
 class SlackBotCreationRequest(BaseModel):

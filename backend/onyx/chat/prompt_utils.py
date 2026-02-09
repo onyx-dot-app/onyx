@@ -158,12 +158,15 @@ def build_system_prompt(
     )
 
     company_context = get_company_context()
-    if company_context or user_memory_context:
+    formatted_user_context = (
+        user_memory_context.as_formatted_prompt() if user_memory_context else ""
+    )
+    if company_context or formatted_user_context:
         system_prompt += USER_INFORMATION_HEADER
         if company_context:
             system_prompt += company_context
-        if user_memory_context:
-            system_prompt += user_memory_context.as_formatted_prompt()
+        if formatted_user_context:
+            system_prompt += formatted_user_context
 
     # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed
