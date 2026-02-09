@@ -7,77 +7,99 @@
   @apply cursor-not-allowed;
 }
 
+/* Utility class — descendants opt in to parent-controlled foreground color */
+.interactive-foreground {
+  color: var(--interactive-foreground);
+}
+
 /* ============================================================================
-   Variant + Subvariant combinations (9 total)
-   ============================================================================ */
+   Variant + Subvariant combinations (9 + select)
+
+   Each combination sets:
+     - background-color (via @apply)
+     - --interactive-foreground (CSS custom property for descendant text color)
+
+   Descendants opt in to text color via: color: var(--interactive-foreground);
+
+============================================================================ */
 
 /* ---------------------------------------------------------------------------
-   Standard + Primary
+   Default + Primary
    --------------------------------------------------------------------------- */
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"] {
   @apply bg-[var(--theme-primary-05)];
+  --interactive-foreground: var(--text-inverted-05);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"]:hover:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-04)];
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"]:active:not(
-    [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"]:active:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-06)];
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="primary"][data-disabled] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-background-neutral-04;
+  --interactive-foreground: var(--text-inverted-04);
 }
 
 /* ---------------------------------------------------------------------------
-   Standard + Secondary
+   Default + Secondary
    --------------------------------------------------------------------------- */
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"] {
   @apply bg-background-tint-01;
+  --interactive-foreground: var(--text-03);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"]:hover:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"]:active:not(
-    [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"]:active:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="secondary"][data-disabled] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-03;
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
-   Standard + Ghost
+   Default + Ghost
    --------------------------------------------------------------------------- */
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--text-03);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"]:hover:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"]:active:not(
-    [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"]:active:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
 }
-.interactive[data-interactive-base-variant="standard"][data-interactive-base-subvariant="ghost"][data-disabled] {
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
@@ -85,23 +107,24 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"] {
   @apply bg-[var(--action-link-05)];
+  --interactive-foreground: var(--text-light-05);
 }
-
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-link-04)];
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"]:active:not(
     [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
-    [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-link-06)];
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-[var(--action-link-02)];
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
@@ -109,22 +132,24 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"] {
   @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-link-05);
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"]:active:not(
     [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
-    [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-link-03);
 }
 
 /* ---------------------------------------------------------------------------
@@ -132,22 +157,24 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--action-text-link-05);
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"]:active:not(
     [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
-    [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-link-03);
 }
 
 /* ---------------------------------------------------------------------------
@@ -155,22 +182,24 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"] {
   @apply bg-[var(--action-danger-05)];
+  --interactive-foreground: var(--text-light-05);
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-danger-04)];
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"]:active:not(
     [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-pressed="true"]:not(
-    [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-danger-06)];
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-disabled] {
   @apply bg-[var(--action-danger-02)];
+  --interactive-foreground: var(--text-01);
 }
 
 /* ---------------------------------------------------------------------------
@@ -178,22 +207,24 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"] {
   @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-danger-05);
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"]:active:not(
     [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-pressed="true"]:not(
-    [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-disabled] {
   @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-danger-03);
 }
 
 /* ---------------------------------------------------------------------------
@@ -201,20 +232,87 @@
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"] {
   @apply bg-transparent;
+  --interactive-foreground: var(--action-text-danger-05);
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"]:active:not(
     [data-static]
-  ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-pressed="true"]:not(
-    [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-00;
 }
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-disabled] {
   @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-danger-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Select (optional "heavy" subvariant)
+
+   Foreground is a 2D state machine: interaction × selected.
+   When not selected, text darkens on :active. When selected, foreground
+   switches to the action-link colour family and stays constant.
+
+   The "heavy" subvariant overrides the selected background to action-link-01
+   (instead of tint-02). All other states are identical.
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="select"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-04);
+}
+.interactive[data-interactive-base-variant="select"]:hover:not(
+    [data-static]
+  ):not([data-disabled]):not([data-selected="true"]) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:not(
+    [data-static]
+  ):not([data-disabled]) {
+  --interactive-foreground: var(--action-link-05);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:hover:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"]:active:not(
+    [data-static]
+  ):not([data-disabled]):not([data-selected="true"]) {
+  @apply bg-background-neutral-00;
+  --interactive-foreground: var(--text-05);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:active:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-neutral-00;
+}
+.interactive[data-interactive-base-variant="select"][data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-02);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"][data-disabled] {
+  --interactive-foreground: var(--action-link-03);
+}
+
+/* Heavy — selected background overrides */
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-[var(--action-link-01)];
+}
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:hover:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:active:not(
+    [data-static]
+  ):not([data-disabled]) {
+  @apply bg-background-tint-00;
 }
