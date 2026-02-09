@@ -849,11 +849,6 @@ def update_user_personalization_api(
         if request.user_preferences is not None
         else user.user_preferences
     )
-    new_use_user_preferences = (
-        request.use_user_preferences
-        if request.use_user_preferences is not None
-        else user.use_user_preferences
-    )
 
     update_user_personalization(
         user.id,
@@ -862,7 +857,6 @@ def update_user_personalization_api(
         use_memories=new_use_memories,
         memories=new_memories,
         user_preferences=new_user_preferences,
-        use_user_preferences=new_use_user_preferences,
         db_session=db_session,
     )
 

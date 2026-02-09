@@ -9,7 +9,6 @@ const DEFAULT_PERSONALIZATION: UserPersonalization = {
   memories: [],
   use_memories: true,
   user_preferences: "",
-  use_user_preferences: false,
 };
 
 function derivePersonalizationFromUser(user: User | null): UserPersonalization {
@@ -24,7 +23,6 @@ function derivePersonalizationFromUser(user: User | null): UserPersonalization {
     use_memories:
       user.personalization.use_memories ?? DEFAULT_PERSONALIZATION.use_memories,
     user_preferences: user.personalization.user_preferences ?? "",
-    use_user_preferences: user.personalization.use_user_preferences ?? false,
   };
 }
 
@@ -137,16 +135,6 @@ export default function useUserPersonalization(
     }));
   }, []);
 
-  const toggleUseUserPreferences = useCallback(
-    (useUserPreferences: boolean) => {
-      setPersonalizationValues((prev) => ({
-        ...prev,
-        use_user_preferences: useUserPreferences,
-      }));
-    },
-    []
-  );
-
   const updateMemoryAtIndex = useCallback((index: number, value: string) => {
     setPersonalizationValues((prev) => {
       const updatedMemories = [...prev.memories];
@@ -213,7 +201,6 @@ export default function useUserPersonalization(
     updatePersonalizationField,
     toggleUseMemories,
     updateUserPreferences,
-    toggleUseUserPreferences,
     updateMemoryAtIndex,
     addMemory,
     setMemories,

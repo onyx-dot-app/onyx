@@ -50,7 +50,7 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
     )
 
     user_preferences = None
-    if user.use_user_preferences and user.user_preferences:
+    if user.user_preferences:
         user_preferences = user.user_preferences
 
     memory_rows = db_session.scalars(

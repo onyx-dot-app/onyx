@@ -948,7 +948,6 @@ function ChatPreferencesSettings() {
     personalizationValues,
     toggleUseMemories,
     updateUserPreferences,
-    toggleUseUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {});
 
@@ -1035,35 +1034,18 @@ function ChatPreferencesSettings() {
           )}
         </Card>
         <Card>
-          <InputLayouts.Horizontal
-            title="Use Custom Preferences"
-            description="Let Onyx reference your custom preferences in chats."
+          <InputLayouts.Vertical
+            title="Custom Preferences"
+            description="Add custom instructions that Onyx will consider in conversations."
           >
-            <Switch
-              checked={personalizationValues.use_user_preferences}
-              onCheckedChange={(checked) => {
-                toggleUseUserPreferences(checked);
-                void handleSavePersonalization({
-                  use_user_preferences: checked,
-                });
-              }}
+            <InputTextArea
+              placeholder="e.g., 'I prefer concise answers', 'Always include code examples', 'Use British English spelling'"
+              value={personalizationValues.user_preferences}
+              onChange={(e) => updateUserPreferences(e.target.value)}
+              onBlur={() => void handleSavePersonalization()}
+              rows={3}
             />
-          </InputLayouts.Horizontal>
-
-          {personalizationValues.use_user_preferences && (
-            <InputLayouts.Vertical
-              title="Your Preferences"
-              description="Add custom instructions that Onyx will consider in conversations."
-            >
-              <InputTextArea
-                placeholder="e.g., 'I prefer concise answers', 'Always include code examples', 'Use British English spelling'"
-                value={personalizationValues.user_preferences}
-                onChange={(e) => updateUserPreferences(e.target.value)}
-                onBlur={() => void handleSavePersonalization()}
-                rows={3}
-              />
-            </InputLayouts.Vertical>
-          )}
+          </InputLayouts.Vertical>
         </Card>
       </Section>
     </Section>
