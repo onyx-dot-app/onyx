@@ -551,7 +551,7 @@ class TestCheckForDocumentsForOpenSearchMigrationTask:
         )
         assert (
             tenant_record.num_times_observed_no_additional_docs_to_populate_migration_table
-            == 0
+            == 1
         )
         assert (
             tenant_record.overall_document_migration_status
