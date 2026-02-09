@@ -39,10 +39,12 @@ interface OpenRouterFormValues extends BaseLLMFormValues {
 
 async function fetchOpenRouterModels(params: {
   apiBase: string;
-  apiKey: string;
+  apiKey?: string;
+  apiKeyChanged?: boolean;
   providerName?: string;
 }): Promise<{ models: ModelConfiguration[]; error?: string }> {
-  if (!params.apiBase || !params.apiKey) {
+  const apiKeyChanged = params.apiKeyChanged ?? true;
+  if (!params.apiBase || (apiKeyChanged && !params.apiKey)) {
     return {
       models: [],
       error: "API Base and API Key are required to fetch models",
@@ -58,6 +60,7 @@ async function fetchOpenRouterModels(params: {
       body: JSON.stringify({
         api_base: params.apiBase,
         api_key: params.apiKey,
+        api_key_changed: apiKeyChanged,
         provider_name: params.providerName,
       }),
     });
@@ -186,6 +189,9 @@ export function OpenRouterForm({
                         fetchOpenRouterModels({
                           apiBase: formikProps.values.api_base,
                           apiKey: formikProps.values.api_key,
+                          apiKeyChanged:
+                            formikProps.values.api_key !==
+                            initialValues.api_key,
                           providerName: existingLlmProvider?.name,
                         })
                       }

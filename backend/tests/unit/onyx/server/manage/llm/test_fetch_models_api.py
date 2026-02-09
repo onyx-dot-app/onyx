@@ -313,3 +313,42 @@ class TestGetOpenRouterAvailableModels:
             # No DB operations should happen
             mock_session.execute.assert_not_called()
             mock_session.commit.assert_not_called()
+
+    def test_uses_stored_key_when_api_key_unchanged(
+        self, mock_openrouter_response: dict
+    ) -> None:
+        """Test that stored provider key is used when api_key_changed is False."""
+        from onyx.server.manage.llm.api import get_openrouter_available_models
+
+        mock_session = MagicMock()
+        mock_provider = MagicMock()
+        mock_provider.api_key = "stored-openrouter-key"
+        mock_provider.api_base = "https://openrouter.ai/api/v1"
+        mock_provider.custom_config = None
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch(
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider",
+                return_value=mock_provider,
+            ),
+            patch(
+                "onyx.server.manage.llm.api.sync_model_configurations",
+                return_value=0,
+            ),
+        ):
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_openrouter_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenRouterModelsRequest(
+                api_base="https://openrouter.ai/api/v1",
+                api_key="••••••••••",
+                api_key_changed=False,
+                provider_name="my-openrouter",
+            )
+            get_openrouter_available_models(request, MagicMock(), mock_session)
+
+            _, kwargs = mock_get.call_args
+            assert kwargs["headers"]["Authorization"] == "Bearer stored-openrouter-key"

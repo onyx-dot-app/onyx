@@ -124,6 +124,7 @@ export interface OllamaFetchParams {
 export interface OpenRouterFetchParams {
   api_base?: string;
   api_key?: string;
+  api_key_changed?: boolean;
   provider_name?: string;
 }
 

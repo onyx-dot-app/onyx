@@ -224,10 +224,11 @@ export const fetchOpenRouterModels = async (
 ): Promise<{ models: ModelConfiguration[]; error?: string }> => {
   const apiBase = params.api_base;
   const apiKey = params.api_key;
+  const apiKeyChanged = params.api_key_changed ?? true;
   if (!apiBase) {
     return { models: [], error: "API Base is required" };
   }
-  if (!apiKey) {
+  if (apiKeyChanged && !apiKey) {
     return { models: [], error: "API Key is required" };
   }
 
@@ -240,6 +241,7 @@ export const fetchOpenRouterModels = async (
       body: JSON.stringify({
         api_base: apiBase,
         api_key: apiKey,
+        api_key_changed: apiKeyChanged,
         provider_name: params.provider_name,
       }),
     });

@@ -985,8 +985,28 @@ def get_openrouter_available_models(
     Parses id, name (display), context_length, and architecture.input_modalities.
     """
 
+    fetch_api_key = request.api_key
+    if request.provider_name and not request.api_key_changed:
+        existing_provider = fetch_existing_llm_provider(
+            name=request.provider_name, db_session=db_session
+        )
+        if existing_provider:
+            _validate_llm_provider_change(
+                existing_api_base=existing_provider.api_base,
+                existing_custom_config=existing_provider.custom_config,
+                new_api_base=request.api_base,
+                new_custom_config=None,
+                api_key_changed=False,
+            )
+            fetch_api_key = existing_provider.api_key
+
+    if not fetch_api_key:
+        raise HTTPException(
+            status_code=400, detail="API key is required to fetch OpenRouter models"
+        )
+
     response_json = _get_openrouter_models_response(
-        api_base=request.api_base, api_key=request.api_key
+        api_base=request.api_base, api_key=fetch_api_key
     )
 
     data = response_json.get("data", [])

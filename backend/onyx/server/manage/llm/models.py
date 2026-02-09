@@ -382,7 +382,8 @@ class OllamaModelDetails(BaseModel):
 # OpenRouter dynamic models fetch
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
-    api_key: str
+    api_key: str | None = None
+    api_key_changed: bool = True
     provider_name: str | None = None  # Optional: to save models to existing provider
 
 
