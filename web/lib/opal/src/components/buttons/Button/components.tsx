@@ -1,7 +1,9 @@
 import "@opal/components/buttons/Button/styles.css";
+import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveBaseProps } from "@opal/core";
-import type { SizeVariant } from "@opal/components";
+import type { SizeVariant, TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,6 +21,12 @@ type ButtonProps = InteractiveBaseProps & {
 
   /** Size preset — controls gap, text size, and Container height/rounding. */
   size?: SizeVariant;
+
+  /** Tooltip text shown on hover. */
+  tooltip?: string;
+
+  /** Which side the tooltip appears on. */
+  tooltipSide?: TooltipSide;
 };
 
 // ---------------------------------------------------------------------------
@@ -30,13 +38,15 @@ function Button({
   children,
   rightIcon: RightIcon,
   size = "default",
+  tooltip,
+  tooltipSide = "top",
   variant,
   subvariant,
   ...baseProps
 }: ButtonProps) {
   const isCompact = size === "compact";
 
-  return (
+  const button = (
     <Interactive.Base
       {...({ variant, subvariant } as InteractiveBaseProps)}
       {...baseProps}
@@ -56,6 +66,23 @@ function Button({
         </div>
       </Interactive.Container>
     </Interactive.Base>
+  );
+
+  if (!tooltip) return button;
+
+  return (
+    <TooltipPrimitive.Root>
+      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Content
+          className="opal-tooltip"
+          side={tooltipSide}
+          sideOffset={4}
+        >
+          {tooltip}
+        </TooltipPrimitive.Content>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   );
 }
 

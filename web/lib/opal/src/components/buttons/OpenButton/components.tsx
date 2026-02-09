@@ -1,8 +1,10 @@
 import "@opal/components/buttons/OpenButton/styles.css";
+import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveBaseProps } from "@opal/core";
-import type { SizeVariant } from "@opal/components";
+import type { SizeVariant, TooltipSide } from "@opal/components";
 import { SvgChevronDownSmall } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,6 +22,12 @@ type OpenButtonProps = InteractiveBaseProps & {
 
   /** Size preset — controls Container height/rounding/padding. */
   size?: SizeVariant;
+
+  /** Tooltip text shown on hover. */
+  tooltip?: string;
+
+  /** Which side the tooltip appears on. */
+  tooltipSide?: TooltipSide;
 };
 
 // ---------------------------------------------------------------------------
@@ -32,6 +40,8 @@ function OpenButton({
   border,
   selected,
   size = "default",
+  tooltip,
+  tooltipSide = "top",
   variant,
   subvariant,
   ...baseProps
@@ -43,7 +53,7 @@ function OpenButton({
   const isOpen = selected ?? dataState === "open";
   const isCompact = size === "compact";
 
-  return (
+  const button = (
     <Interactive.Base
       {...({ variant, subvariant } as InteractiveBaseProps)}
       selected={selected}
@@ -66,6 +76,23 @@ function OpenButton({
         </div>
       </Interactive.Container>
     </Interactive.Base>
+  );
+
+  if (!tooltip) return button;
+
+  return (
+    <TooltipPrimitive.Root>
+      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Content
+          className="opal-tooltip"
+          side={tooltipSide}
+          sideOffset={4}
+        >
+          {tooltip}
+        </TooltipPrimitive.Content>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   );
 }
 
