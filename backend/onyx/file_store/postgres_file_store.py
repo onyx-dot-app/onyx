@@ -12,6 +12,7 @@ from typing import cast
 from typing import IO
 
 import puremagic
+from psycopg2.extensions import connection as Psycopg2Connection
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -39,12 +40,15 @@ POSTGRES_BUCKET_SENTINEL = "postgres"
 STREAM_CHUNK_SIZE = 8 * 1024 * 1024  # 8 MB
 
 
-def _get_raw_connection(db_session: Session) -> Any:
+def _get_raw_connection(db_session: Session) -> Psycopg2Connection:
     """Extract the raw psycopg2 connection from a SQLAlchemy session."""
-    return db_session.connection().connection.dbapi_connection
+    raw_conn = db_session.connection().connection.dbapi_connection
+    if raw_conn is None:
+        raise ValueError("Failed to get raw connection from session")
+    return cast(Psycopg2Connection, raw_conn)
 
 
-def _create_large_object(raw_conn: Any, data: bytes) -> int:
+def _create_large_object(raw_conn: Psycopg2Connection, data: bytes) -> int:
     """Create a new Large Object, write data, and return the OID."""
     lobj = raw_conn.lobject(0, "wb")
     lobj.write(data)
@@ -53,7 +57,7 @@ def _create_large_object(raw_conn: Any, data: bytes) -> int:
     return oid
 
 
-def _read_large_object(raw_conn: Any, oid: int) -> bytes:
+def _read_large_object(raw_conn: Psycopg2Connection, oid: int) -> bytes:
     """Read all bytes from a Large Object."""
     lobj = raw_conn.lobject(oid, "rb")
     data: bytes = lobj.read()
@@ -61,7 +65,7 @@ def _read_large_object(raw_conn: Any, oid: int) -> bytes:
     return data
 
 
-def _read_large_object_to_tempfile(raw_conn: Any, oid: int) -> IO[bytes]:
+def _read_large_object_to_tempfile(raw_conn: Psycopg2Connection, oid: int) -> IO[bytes]:
     """Stream a Large Object into a temporary file to avoid OOM on large files."""
     lobj = raw_conn.lobject(oid, "rb")
     temp = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
