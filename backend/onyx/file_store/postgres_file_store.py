@@ -130,6 +130,7 @@ class PostgresBackedFileStore(FileStore):
         created_lo = False
 
         with get_session_with_current_tenant_if_none(db_session) as session:
+            raw_conn, oid = None, None
             try:
                 raw_conn = _get_raw_connection(session)
 
@@ -174,7 +175,7 @@ class PostgresBackedFileStore(FileStore):
             except Exception as e:
                 session.rollback()
                 try:
-                    if created_lo:
+                    if created_lo and raw_conn is not None and oid is not None:
                         _delete_large_object(raw_conn, oid)
                 except Exception:
                     logger.exception(
