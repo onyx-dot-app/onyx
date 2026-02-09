@@ -1,7 +1,7 @@
 """add_user_preferences
 
 Revision ID: 175ea04c7087
-Revises: 01f8e6d95a33
+Revises: d56ffa94ca32
 Create Date: 2026-02-04 18:16:24.830873
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "175ea04c7087"
-down_revision = "01f8e6d95a33"
+down_revision = "d56ffa94ca32"
 branch_labels = None
 depends_on = None
 
