@@ -442,7 +442,7 @@ pygments==2.19.2
     # via
     #   ipython
     #   ipython-pygments-lexers
-pyjwt==2.10.1
+pyjwt==2.11.0
     # via mcp
 pyparsing==3.2.5
     # via matplotlib
@@ -477,7 +477,7 @@ python-dotenv==1.1.1
     #   litellm
     #   pydantic-settings
     #   pytest-dotenv
-python-multipart==0.0.21
+python-multipart==0.0.22
     # via mcp
 pywin32==311 ; sys_platform == 'win32'
     # via mcp
