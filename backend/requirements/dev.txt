@@ -642,7 +642,7 @@ typing-inspection==0.4.2
     #   mcp
     #   pydantic
     #   pydantic-settings
-tzdata==2025.2
+tzdata==2025.2 ; sys_platform == 'win32'
     # via faker
 urllib3==2.6.3
     # via
