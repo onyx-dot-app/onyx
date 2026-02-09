@@ -183,7 +183,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         has_more = end_char < total_chars
         header = (
             f"File: {chat_file.filename or file_id}\n"
-            f"Characters {start_char}–{end_char} of {total_chars}"
+            f"Characters {start_char}-{end_char} of {total_chars}"
         )
         if has_more:
             header += f" (use start_char={end_char} to continue reading)"
