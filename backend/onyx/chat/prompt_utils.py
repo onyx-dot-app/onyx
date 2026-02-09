@@ -13,7 +13,6 @@ from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
-from onyx.prompts.chat_prompts import USER_INFO_HEADER
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.prompts.prompt_utils import replace_citation_guidance_tag
@@ -26,6 +25,7 @@ from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
+from onyx.prompts.user_info import USER_INFORMATION_HEADER
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -159,15 +159,11 @@ def build_system_prompt(
 
     company_context = get_company_context()
     if company_context or user_memory_context:
-        system_prompt += USER_INFO_HEADER
+        system_prompt += USER_INFORMATION_HEADER
         if company_context:
             system_prompt += company_context
         if user_memory_context:
-            system_prompt += "\n".join(
-                "- " + memory.strip()
-                for memory in user_memory_context.as_formatted_list()
-                if memory.strip()
-            )
+            system_prompt += user_memory_context.as_formatted_prompt()
 
     # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed
