@@ -666,9 +666,9 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         )
         assert record is not None
         # In practice the task keeps trying docs until it either runs out of
-        # time or the lock is lost, which will not happen during this test
-        # because the migration record will just shift to permanently failed.
-        # Let's just test for that here.
+        # time or the lock is lost, which will not happen during this test.
+        # Because of this the migration record will just shift to permanently
+        # failed. Let's just test for that here.
         assert record.status == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
         # Verify chunks were indexed in OpenSearch.
         for document_id in doc_ids_that_have_chunks:
@@ -769,9 +769,9 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         )
         assert record is not None
         # In practice the task keeps trying docs until it either runs out of
-        # time or the lock is lost, which will not happen during this test
-        # because the migration record will just shift to permanently failed.
-        # Let's just test for that here.
+        # time or the lock is lost, which will not happen during this test.
+        # Because of this the migration record will just shift to permanently
+        # failed. Let's just test for that here.
         assert record.status == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
         assert record.error_message is not None
         assert "no chunk count" in record.error_message.lower()
