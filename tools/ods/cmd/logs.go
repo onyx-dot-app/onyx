@@ -16,34 +16,34 @@ func NewLogsCommand() *cobra.Command {
 	opts := &LogsOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "logs [profile]",
+		Use:   "logs [service...]",
 		Short: "View logs from Onyx docker containers",
 		Long: `View logs from running Onyx docker containers.
 
-Available profiles:
-  dev          Use dev configuration (exposes service ports for development)
-  multitenant  Use multitenant configuration
+All arguments are treated as service names to filter logs.
+If no services are specified, logs from all services are shown.
 
 Examples:
-  # View logs (follow mode)
+  # View logs from all services (follow mode)
   ods logs
 
-  # View logs for dev profile
-  ods logs dev
+  # View logs for a specific service
+  ods logs api_server
+
+  # View logs for multiple services
+  ods logs api_server background
 
   # View last 100 lines and follow
-  ods logs --tail 100
+  ods logs --tail 100 api_server
 
   # View logs without following
   ods logs --follow=false`,
-		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: validProfiles,
+		Args: cobra.ArbitraryArgs,
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return composeServiceNames(), cobra.ShellCompDirectiveNoFileComp
+		},
 		Run: func(cmd *cobra.Command, args []string) {
-			profile := ""
-			if len(args) > 0 {
-				profile = args[0]
-			}
-			runComposeLogs(profile, opts)
+			runComposeLogs(args, opts)
 		},
 	}
 
@@ -53,18 +53,16 @@ Examples:
 	return cmd
 }
 
-func runComposeLogs(profile string, opts *LogsOptions) {
-	validateProfile(profile)
-
-	args := baseArgs(profile)
-	args = append(args, "logs")
+func runComposeLogs(services []string, opts *LogsOptions) {
+	args := []string{"compose", "-p", composeProjectName, "logs"}
 	if opts.Follow {
 		args = append(args, "-f")
 	}
 	if opts.Tail != "" {
 		args = append(args, "--tail", opts.Tail)
 	}
+	args = append(args, services...)
 
-	log.Infof("Viewing logs with %s configuration...", profileLabel(profile))
+	log.Info("Viewing container logs...")
 	execDockerCompose(args, nil)
 }

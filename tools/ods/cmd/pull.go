@@ -15,31 +15,19 @@ func NewPullCommand() *cobra.Command {
 	opts := &PullOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "pull [profile]",
+		Use:   "pull",
 		Short: "Pull images for Onyx docker containers",
 		Long: `Pull the latest images for Onyx docker containers.
 
-Available profiles:
-  dev          Use dev configuration (exposes service ports for development)
-  multitenant  Use multitenant configuration
-
 Examples:
-  # Pull images with default configuration
+  # Pull images
   ods pull
-
-  # Pull images for dev profile
-  ods pull dev
 
   # Pull images with a specific tag
   ods pull --tag edge`,
-		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: validProfiles,
+		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			profile := ""
-			if len(args) > 0 {
-				profile = args[0]
-			}
-			runComposePull(profile, opts)
+			runComposePull(opts)
 		},
 	}
 
@@ -48,13 +36,11 @@ Examples:
 	return cmd
 }
 
-func runComposePull(profile string, opts *PullOptions) {
-	validateProfile(profile)
-
-	args := baseArgs(profile)
+func runComposePull(opts *PullOptions) {
+	args := baseArgs("")
 	args = append(args, "pull")
 
-	log.Infof("Pulling images with %s configuration...", profileLabel(profile))
+	log.Info("Pulling images...")
 	execDockerCompose(args, envForTag(opts.Tag))
 	log.Info("Images pulled successfully")
 }

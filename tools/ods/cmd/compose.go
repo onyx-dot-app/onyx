@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -13,6 +14,8 @@ import (
 )
 
 var validProfiles = []string{"dev", "multitenant"}
+
+const composeProjectName = "onyx"
 
 // ComposeOptions holds options for the compose command
 type ComposeOptions struct {
@@ -137,6 +140,35 @@ func execDockerCompose(args []string, extraEnv []string) {
 	if err := dockerCmd.Run(); err != nil {
 		log.Fatalf("Docker compose failed: %v", err)
 	}
+}
+
+// composeServiceNames returns the service names defined in the default docker
+// compose file by running "docker compose config --services".
+// On any error it returns nil (completions will just be empty).
+func composeServiceNames() []string {
+	gitRoot, err := paths.GitRoot()
+	if err != nil {
+		return nil
+	}
+	composeDir := filepath.Join(gitRoot, "deployment", "docker_compose")
+
+	args := baseArgs("")
+	args = append(args, "config", "--services")
+
+	cmd := exec.Command("docker", args...)
+	cmd.Dir = composeDir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var services []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line != "" {
+			services = append(services, line)
+		}
+	}
+	return services
 }
 
 // envForTag returns the environment slice needed to set IMAGE_TAG, or nil.
