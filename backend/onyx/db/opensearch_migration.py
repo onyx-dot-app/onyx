@@ -28,6 +28,14 @@ def get_paginated_document_batch(
 ) -> list[str]:
     """Gets a paginated batch of document IDs from the Document table.
 
+    We need some deterministic ordering to ensure that we don't miss any
+    documents when paginating. This function uses the document ID. It is
+    possible a document is inserted above a spot this function has already
+    passed. In that event we assume that the document will be indexed into
+    OpenSearch anyway and we don't need to migrate.
+    TODO(andrei): Consider ordering on last_modified in addition to ID to better
+    match get_opensearch_migration_records_needing_migration.
+
     Args:
         db_session: SQLAlchemy session.
         limit: Number of document IDs to fetch.
@@ -161,6 +169,20 @@ def get_total_document_count(db_session: Session) -> int:
     Used to check whether every document has been tracked for migration.
     """
     return db_session.query(Document).count()
+
+
+def try_insert_opensearch_tenant_migration_record_with_commit(
+    db_session: Session,
+) -> None:
+    """Tries to insert the singleton row on OpenSearchTenantMigrationRecord.
+
+    If the row already exists, does nothing.
+    """
+    stmt = insert(OpenSearchTenantMigrationRecord).on_conflict_do_nothing(
+        index_elements=[text("(true)")]
+    )
+    db_session.execute(stmt)
+    db_session.commit()
 
 
 def increment_num_times_observed_no_additional_docs_to_migrate_with_commit(
