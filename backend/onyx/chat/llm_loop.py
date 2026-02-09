@@ -22,6 +22,7 @@ from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
 )
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
@@ -36,6 +37,7 @@ from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import ToolCallDebug
 from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
@@ -600,6 +602,19 @@ def run_llm_loop(
             # each tool might have custom logic here
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
+
+            if INTEGRATION_TESTS_MODE and tool_calls:
+                for tool_call in tool_calls:
+                    emitter.emit(
+                        Packet(
+                            placement=tool_call.placement,
+                            obj=ToolCallDebug(
+                                tool_call_id=tool_call.tool_call_id,
+                                tool_name=tool_call.tool_name,
+                                tool_args=tool_call.tool_args,
+                            ),
+                        )
+                    )
 
             if len(tool_calls) > 1:
                 emitter.emit(
