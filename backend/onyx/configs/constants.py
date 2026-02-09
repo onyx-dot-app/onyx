@@ -573,8 +573,8 @@ class OnyxCeleryTask:
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"
     )
-    MIGRATE_DOCUMENT_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_document_from_vespa_to_opensearch_task"
+    MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
+        "migrate_documents_from_vespa_to_opensearch_task"
     )
 
 
