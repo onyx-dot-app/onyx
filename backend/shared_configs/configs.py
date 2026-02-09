@@ -38,6 +38,14 @@ CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
 # INTENT_MODEL_TAG = "v1.0.3"
 INTENT_MODEL_TAG: str | None = None
+
+# Search-Chat Classifier Model (for auto search vs chat mode)
+SEARCH_CHAT_CLASSIFIER_MODEL = os.environ.get(
+    "SEARCH_CHAT_CLASSIFIER_MODEL", "nmgarza5/search-chat-classifier"
+)
+SEARCH_CHAT_CLASSIFIER_TAG: str | None = os.environ.get(
+    "SEARCH_CHAT_CLASSIFIER_TAG", None
+)
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
 

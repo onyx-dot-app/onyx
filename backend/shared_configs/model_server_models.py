@@ -63,3 +63,12 @@ class IntentRequest(BaseModel):
 class IntentResponse(BaseModel):
     is_keyword: bool
     keywords: list[str]
+
+
+class SearchChatClassificationRequest(BaseModel):
+    query: str
+
+
+class SearchChatClassificationResponse(BaseModel):
+    is_search: bool
+    confidence: float
