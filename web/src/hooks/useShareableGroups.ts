@@ -10,6 +10,9 @@ export interface MinimalUserGroupSnapshot {
   name: string;
 }
 
+// TODO (@raunakab):
+// Refactor this hook to live inside of a special `ee` directory.
+
 export default function useShareableGroups() {
   const combinedSettings = useContext(SettingsContext);
   const isPaidEnterpriseFeaturesEnabled =
