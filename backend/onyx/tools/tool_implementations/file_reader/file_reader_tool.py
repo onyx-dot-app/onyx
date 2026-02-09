@@ -1,8 +1,8 @@
 from typing import Any
 from typing import cast
-from typing import TYPE_CHECKING
 from uuid import UUID
 
+from sqlalchemy.orm import Session
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
@@ -15,9 +15,6 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
-
-if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
 
 logger = setup_logger()
 
