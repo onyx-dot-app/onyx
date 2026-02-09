@@ -12,11 +12,18 @@ global:
 
 postgresql:
   enabled: true
+  # Note: if this chart is installing the operator and Cluster in the same release,
+  # a first install with `--wait=false` followed by `helm upgrade --wait` is recommended.
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
   # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
   # but since the subchart is aliased as "postgresql", Helm defaults to that name.
   nameOverride: cloudnative-pg
+  # The subchart installs the CloudNativePG operator. The Onyx chart template below
+  # creates the actual Postgres Cluster CR.
   cluster:
+    enabled: true
+    # Defaults to "<release-name>-<postgresql.nameOverride>" when empty.
+    name: ""
     instances: 1
     storage:
       storageClass: ""

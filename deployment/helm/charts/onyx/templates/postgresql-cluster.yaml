@@ -1,0 +1,26 @@
+{{- $postgresEnabled := dig "postgresql" "enabled" false .Values -}}
+{{- $postgresNameOverride := dig "postgresql" "nameOverride" "postgresql" .Values -}}
+{{- $clusterConfig := dig "postgresql" "cluster" (dict) .Values -}}
+{{- if and $postgresEnabled (ne (default true $clusterConfig.enabled) false) -}}
+{{- $clusterName := default (printf "%s-%s" .Release.Name $postgresNameOverride) $clusterConfig.name -}}
+{{- $storage := $clusterConfig.storage | default dict -}}
+{{- $superuserSecret := $clusterConfig.superuserSecret | default dict -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $clusterName }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  instances: {{ default 1 $clusterConfig.instances }}
+  storage:
+    size: {{ default "10Gi" $storage.size }}
+    {{- with $storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  {{- if (default true $clusterConfig.enableSuperuserAccess) }}
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: {{ default "onyx-postgresql" $superuserSecret.name }}
+  {{- end }}
+{{- end }}

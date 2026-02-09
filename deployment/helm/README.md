@@ -23,9 +23,11 @@
 
 ## Test the entire cluster manually
 * cd charts/onyx
-* helm install onyx . -n onyx --set postgresql.primary.persistence.enabled=false
-  * the postgres flag is to keep the storage ephemeral for testing. You probably don't want to set that in prod.
-  * no flag for ephemeral vespa storage yet, might be good for testing
+* helm install onyx . -n onyx --create-namespace --wait=false
+  * This chart installs operators (e.g. CloudNativePG) and their custom resources in one release.
+    On a fresh install, webhooks/operators may not be ready before dependent CRs are applied.
+* helm upgrade onyx . -n onyx --wait
+  * Running a second `upgrade --wait` once operators are up makes startup deterministic.
 * kubectl -n onyx port-forward service/onyx-nginx 8080:80
   * this will forward the local port 8080 to the installed chart for you to run tests, etc.
 * When you are finished
