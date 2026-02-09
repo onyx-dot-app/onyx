@@ -16,6 +16,6 @@
   @apply shrink-0 transition-transform duration-200;
 }
 
-.opal-open-button-chevron[data-open="true"] {
+.opal-open-button-chevron[data-selected="true"] {
   @apply -rotate-180;
 }

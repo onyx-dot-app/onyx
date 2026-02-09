@@ -1,12 +1,13 @@
 import "@opal/components/buttons/Button/styles.css";
-import { Interactive, type InteractiveBaseVariantProps } from "@opal/core";
+import { Interactive, type InteractiveBaseProps } from "@opal/core";
+import type { SizeVariant } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ButtonProps = InteractiveBaseVariantProps & {
+type ButtonProps = InteractiveBaseProps & {
   /** Left icon component (renders at 1rem x 1rem). */
   icon?: IconFunctionComponent;
 
@@ -17,19 +18,7 @@ type ButtonProps = InteractiveBaseVariantProps & {
   rightIcon?: IconFunctionComponent;
 
   /** Size preset — controls gap, text size, and Container height/rounding. */
-  size?: "default" | "compact";
-
-  /** When `true`, forces the selected visual state. */
-  selected?: boolean;
-
-  /** When `true`, disables the button. */
-  disabled?: boolean;
-
-  /** URL to navigate to when clicked (renders an `<a>` internally). */
-  href?: string;
-
-  /** Click handler. */
-  onClick?: React.MouseEventHandler<HTMLElement>;
+  size?: SizeVariant;
 };
 
 // ---------------------------------------------------------------------------
@@ -49,7 +38,7 @@ function Button({
 
   return (
     <Interactive.Base
-      {...({ variant, subvariant } as InteractiveBaseVariantProps)}
+      {...({ variant, subvariant } as InteractiveBaseProps)}
       {...baseProps}
     >
       <Interactive.Container

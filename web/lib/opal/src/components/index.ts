@@ -1,3 +1,6 @@
+/* Shared types */
+export type SizeVariant = "default" | "compact";
+
 /* Button */
 export {
   Button,
