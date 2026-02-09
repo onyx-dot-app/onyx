@@ -47,9 +47,10 @@ def log_function_time(
     def decorator(func: F) -> F:
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
-            start_time = time.time()
+            # Elapsed time should use monotonic.
+            start_time = time.monotonic()
             result = func(*args, **kwargs)
-            elapsed_time = time.time() - start_time
+            elapsed_time = time.monotonic() - start_time
             elapsed_time_str = f"{elapsed_time:.3f}"
             log_name = func_name or func.__name__
             args_str = ""
