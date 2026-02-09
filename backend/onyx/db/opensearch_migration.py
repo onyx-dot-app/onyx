@@ -9,6 +9,9 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
+)
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
 from onyx.db.models import Document
 from onyx.db.models import OpenSearchDocumentMigrationRecord
@@ -18,14 +21,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
-DEFAULT_BATCH_SIZE_OF_DOCUMENTS_TO_MIGRATE = 500
-DEFAULT_BATCH_SIZE_OF_DOCUMENTS_TO_CHECK_FOR_MIGRATION = 2000
-
-
 def get_paginated_document_batch(
     db_session: Session,
-    limit: int = DEFAULT_BATCH_SIZE_OF_DOCUMENTS_TO_CHECK_FOR_MIGRATION,
+    limit: int,
     prev_ending_document_id: str | None = None,
 ) -> list[str]:
     """Gets a paginated batch of document IDs from the Document table.
@@ -91,7 +89,7 @@ def create_opensearch_migration_records_with_commit(
 
 def get_opensearch_migration_records_needing_migration(
     db_session: Session,
-    limit: int = DEFAULT_BATCH_SIZE_OF_DOCUMENTS_TO_MIGRATE,
+    limit: int,
 ) -> list[OpenSearchDocumentMigrationRecord]:
     """Gets records of documents that need to be migrated.
 

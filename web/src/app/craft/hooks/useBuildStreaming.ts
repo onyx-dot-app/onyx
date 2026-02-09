@@ -393,7 +393,7 @@ export function useBuildStreaming() {
               }
 
               updateSessionData(sessionId, {
-                status: "completed",
+                status: "active",
                 streamItems: [],
               });
               break;
@@ -418,7 +418,7 @@ export function useBuildStreaming() {
         } else if (err instanceof RateLimitError) {
           console.warn("[Streaming] Rate limit exceeded");
           updateSessionData(sessionId, {
-            status: "completed",
+            status: "active",
             error: SessionErrorCode.RATE_LIMIT_EXCEEDED,
           });
         } else {

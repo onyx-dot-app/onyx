@@ -2,7 +2,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
 
 
-MAX_RESEARCH_CYCLES = 3
+MAX_RESEARCH_CYCLES = 8
 
 # ruff: noqa: E501, W605 start
 RESEARCH_AGENT_PROMPT = f"""

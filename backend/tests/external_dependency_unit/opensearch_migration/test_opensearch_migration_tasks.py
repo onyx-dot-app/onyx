@@ -14,6 +14,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
+)
 from onyx.background.celery.tasks.opensearch_migration.tasks import (
     check_for_documents_for_opensearch_migration_task,
 )
@@ -30,9 +33,6 @@ from onyx.db.models import OpenSearchDocumentMigrationRecord
 from onyx.db.models import OpenSearchTenantMigrationRecord
 from onyx.db.opensearch_migration import create_opensearch_migration_records_with_commit
 from onyx.db.opensearch_migration import get_last_opensearch_migration_document_id
-from onyx.db.opensearch_migration import (
-    TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
-)
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
@@ -665,7 +665,11 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
             .first()
         )
         assert record is not None
-        assert record.status == OpenSearchDocumentMigrationStatus.FAILED
+        # In practice the task keeps trying docs until it either runs out of
+        # time or the lock is lost, which will not happen during this test.
+        # Because of this the migration record will just shift to permanently
+        # failed. Let's just test for that here.
+        assert record.status == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
         # Verify chunks were indexed in OpenSearch.
         for document_id in doc_ids_that_have_chunks:
             chunks = _get_document_chunks_from_opensearch(
@@ -764,7 +768,11 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
             .first()
         )
         assert record is not None
-        assert record.status == OpenSearchDocumentMigrationStatus.FAILED
+        # In practice the task keeps trying docs until it either runs out of
+        # time or the lock is lost, which will not happen during this test.
+        # Because of this the migration record will just shift to permanently
+        # failed. Let's just test for that here.
+        assert record.status == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
         assert record.error_message is not None
         assert "no chunk count" in record.error_message.lower()
 

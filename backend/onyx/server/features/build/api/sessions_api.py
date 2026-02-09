@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
@@ -32,6 +33,8 @@ from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
+from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
@@ -362,14 +365,13 @@ def restore_session(
     lock_key = f"sandbox_restore:{sandbox.id}"
     lock = redis_client.lock(lock_key, timeout=RESTORE_LOCK_TIMEOUT_SECONDS)
 
-    # blocking=True means wait if another restore is in progress
-    acquired = lock.acquire(
-        blocking=True, blocking_timeout=RESTORE_LOCK_TIMEOUT_SECONDS
-    )
+    # Non-blocking: if another restore is already running, return 409 immediately
+    # instead of making the user wait. The frontend will retry.
+    acquired = lock.acquire(blocking=False)
     if not acquired:
         raise HTTPException(
-            status_code=503,
-            detail="Restore operation timed out waiting for lock",
+            status_code=409,
+            detail="Restore already in progress",
         )
 
     try:
@@ -379,15 +381,11 @@ def restore_session(
         # Also re-check if session workspace exists (another request may have
         # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
-            # Verify pod is healthy before proceeding
             is_healthy = sandbox_manager.health_check(sandbox.id, timeout=10.0)
             if is_healthy and sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             ):
-                logger.info(
-                    f"Session {session_id} workspace was restored by another request"
-                )
-                # Update heartbeat to mark sandbox as active
+                session.status = BuildSessionStatus.ACTIVE
                 update_sandbox_heartbeat(db_session, sandbox.id)
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
@@ -410,69 +408,82 @@ def restore_session(
                 # Fall through to TERMINATED handling below
 
         session_manager = SessionManager(db_session)
+        llm_config = session_manager._get_llm_config(None, None)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            # 1. Re-provision the pod
-            logger.info(f"Re-provisioning {sandbox.status.value} sandbox {sandbox.id}")
-            llm_config = session_manager._get_llm_config(None, None)
+            # Mark as PROVISIONING before the long-running provision() call
+            # so other requests know work is in progress
+            update_sandbox_status__no_commit(
+                db_session, sandbox.id, SandboxStatus.PROVISIONING
+            )
+            db_session.commit()
+
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
             )
+
+            # Mark as RUNNING after successful provision
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.RUNNING
             )
             db_session.commit()
-            db_session.refresh(sandbox)
 
         # 2. Check if session workspace needs to be loaded
         if sandbox.status == SandboxStatus.RUNNING:
-            if not sandbox_manager.session_workspace_exists(sandbox.id, session_id):
-                # Get latest snapshot and restore it
-                snapshot = get_latest_snapshot_for_session(db_session, session_id)
-                if snapshot:
-                    # Allocate a new port for the restored session
-                    new_port = allocate_nextjs_port(db_session)
-                    session.nextjs_port = new_port
+            workspace_exists = sandbox_manager.session_workspace_exists(
+                sandbox.id, session_id
+            )
+
+            if not workspace_exists:
+                # Allocate port if not already set (needed for both snapshot restore and fresh setup)
+                if not session.nextjs_port:
+                    session.nextjs_port = allocate_nextjs_port(db_session)
+                    # Commit port allocation before long-running operations
                     db_session.commit()
 
-                    logger.info(
-                        f"Restoring snapshot for session {session_id} "
-                        f"from {snapshot.storage_path} with port {new_port}"
-                    )
+                # Only Kubernetes backend supports snapshot restoration
+                snapshot = None
+                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
+                    snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
+                if snapshot:
                     try:
                         sandbox_manager.restore_snapshot(
                             sandbox_id=sandbox.id,
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
                             tenant_id=tenant_id,
-                            nextjs_port=new_port,
+                            nextjs_port=session.nextjs_port,
+                            llm_config=llm_config,
+                            use_demo_data=session.demo_data_enabled,
                         )
+                        session.status = BuildSessionStatus.ACTIVE
+                        db_session.commit()
                     except Exception as e:
-                        # Clear the port allocation on failure so it can be reused
                         logger.error(
-                            f"Failed to restore session {session_id}, "
-                            f"clearing port {new_port}: {e}"
+                            f"Snapshot restore failed for session {session_id}: {e}"
                         )
                         session.nextjs_port = None
                         db_session.commit()
                         raise
                 else:
                     # No snapshot - set up fresh workspace
-                    logger.info(
-                        f"No snapshot found for session {session_id}, "
-                        f"setting up fresh workspace"
-                    )
-                    llm_config = session_manager._get_llm_config(None, None)
                     sandbox_manager.setup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
-                        nextjs_port=session.nextjs_port or 3010,
+                        nextjs_port=session.nextjs_port,
                     )
+                    session.status = BuildSessionStatus.ACTIVE
+                    db_session.commit()
+        else:
+            logger.warning(
+                f"Sandbox {sandbox.id} status is {sandbox.status} after "
+                f"re-provision, expected RUNNING"
+            )
 
     except Exception as e:
         logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)

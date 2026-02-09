@@ -38,6 +38,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION_REASONING,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
+from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_RESEARCH_AGENT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
@@ -73,7 +74,6 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-RESEARCH_CYCLE_CAP = 8
 # 30 minute timeout per research agent
 RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
 RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
@@ -254,7 +254,7 @@ def run_research_agent_call(
 
             citation_mapping: dict[int, str] = {}
             most_recent_reasoning: str | None = None
-            while research_cycle_count <= RESEARCH_CYCLE_CAP:
+            while research_cycle_count <= MAX_RESEARCH_CYCLES:
                 # Check if we've exceeded the time limit - if so, skip LLM and generate report
                 elapsed_seconds = time.monotonic() - start_time
                 if elapsed_seconds > RESEARCH_AGENT_FORCE_REPORT_SECONDS:
@@ -264,7 +264,7 @@ def run_research_agent_call(
                     )
                     break
 
-                if research_cycle_count == RESEARCH_CYCLE_CAP:
+                if research_cycle_count == MAX_RESEARCH_CYCLES:
                     # Auto-generate report on last cycle
                     logger.debug("Auto-generating intermediate report on last cycle.")
                     break
