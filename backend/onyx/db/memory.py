@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,9 +25,11 @@ class UserInfo(BaseModel):
 
 
 class UserMemoryContext(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     user_info: UserInfo
     user_preferences: str | None = None
-    memories: list[str] = []
+    memories: tuple[str, ...] = ()
 
     def as_formatted_list(self) -> list[str]:
         """Returns combined list of user info, preferences, and memories."""
@@ -97,7 +100,7 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
     memory_rows = db_session.scalars(
         select(Memory).where(Memory.user_id == user.id).order_by(Memory.id.asc())
     ).all()
-    memories = [memory.memory_text for memory in memory_rows if memory.memory_text]
+    memories = tuple(memory.memory_text for memory in memory_rows if memory.memory_text)
 
     return UserMemoryContext(
         user_info=user_info,
