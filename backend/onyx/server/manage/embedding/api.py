@@ -16,7 +16,6 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.embedding.models import TestEmbeddingRequest
-from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
@@ -25,12 +24,6 @@ from shared_configs.enums import EmbedTextType
 
 
 logger = setup_logger()
-
-
-def _mask_embedding_provider_api_key(provider: CloudEmbeddingProvider) -> None:
-    """Mask the API key in the embedding provider to avoid leaking secrets."""
-    if provider.api_key:
-        provider.api_key = mask_string(provider.api_key)
 
 
 admin_router = APIRouter(prefix="/admin/embedding")
@@ -83,12 +76,10 @@ def list_embedding_providers(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[CloudEmbeddingProvider]:
-    embedding_providers = []
-    for embedding_provider_model in fetch_existing_embedding_providers(db_session):
-        provider = CloudEmbeddingProvider.from_request(embedding_provider_model)
-        _mask_embedding_provider_api_key(provider)
-        embedding_providers.append(provider)
-    return embedding_providers
+    return [
+        CloudEmbeddingProvider.from_request(embedding_provider_model)
+        for embedding_provider_model in fetch_existing_embedding_providers(db_session)
+    ]
 
 
 @admin_router.delete("/embedding-provider/{provider_type}")
@@ -115,6 +106,4 @@ def put_cloud_embedding_provider(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CloudEmbeddingProvider:
-    cloud_embedding_provider = upsert_cloud_embedding_provider(db_session, provider)
-    _mask_embedding_provider_api_key(cloud_embedding_provider)
-    return cloud_embedding_provider
+    return upsert_cloud_embedding_provider(db_session, provider)
