@@ -34,6 +34,9 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
         Returns:
             True if the feature is enabled for the user, False otherwise.
         """
+        if not posthog:
+            return False
+
         try:
             posthog.set(
                 distinct_id=user_id,
