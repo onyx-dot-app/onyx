@@ -1,5 +1,6 @@
 import time
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
@@ -26,6 +27,7 @@ from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
+from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
@@ -286,7 +288,24 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    if GEN_AI_API_KEY and fetch_default_llm_model(db_session) is None:
+    existing_provider_id = db_session.scalar(select(LLMProviderModel.id).limit(1))
+    has_existing_provider = existing_provider_id is not None
+
+    # Only seed a dev provider on a truly fresh instance.
+    # If providers exist but flow mappings/defaults are temporarily missing, avoid
+    # overriding the user's provider configuration.
+    should_seed_dev_provider = (
+        GEN_AI_API_KEY
+        and fetch_default_llm_model(db_session) is None
+        and not has_existing_provider
+    )
+
+    if GEN_AI_API_KEY and not should_seed_dev_provider and has_existing_provider:
+        logger.notice(
+            "Skipping default OpenAI LLM dev setup because existing LLM providers were found."
+        )
+
+    if should_seed_dev_provider:
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 
