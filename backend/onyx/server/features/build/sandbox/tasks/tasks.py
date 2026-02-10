@@ -326,20 +326,20 @@ def sync_sandbox_files(
             )
             return False
 
-            sandbox_manager = get_sandbox_manager()
-            result = sandbox_manager.sync_files(
-                sandbox_id=sandbox.id,
-                user_id=UUID(user_id),
-                tenant_id=tenant_id,
-                source=source,
-            )
+        sandbox_manager = get_sandbox_manager()
+        result = sandbox_manager.sync_files(
+            sandbox_id=sandbox.id,
+            user_id=UUID(user_id),
+            tenant_id=tenant_id,
+            source=source,
+        )
 
-            if result:
-                task_logger.info(f"File sync completed for user {user_id}{source_info}")
-            else:
-                task_logger.warning(f"File sync failed for user {user_id}{source_info}")
+        if result:
+            task_logger.info(f"File sync completed for user {user_id}{source_info}")
+        else:
+            task_logger.warning(f"File sync failed for user {user_id}{source_info}")
 
-            return result
+        return result
 
     finally:
         if lock.owned():
