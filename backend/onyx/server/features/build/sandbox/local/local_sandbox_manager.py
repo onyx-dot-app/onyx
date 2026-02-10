@@ -1187,7 +1187,6 @@ class LocalSandboxManager(SandboxManager):
         user_id: UUID,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         source: str | None = None,  # noqa: ARG002
-        exclude_paths: list[str] | None = None,  # noqa: ARG002
     ) -> bool:
         """No-op for local mode - files are directly accessible via symlink.
 

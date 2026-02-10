@@ -421,7 +421,6 @@ class SandboxManager(ABC):
         user_id: UUID,
         tenant_id: str,
         source: str | None = None,
-        exclude_paths: list[str] | None = None,
     ) -> bool:
         """Sync files from S3 to the sandbox's /workspace/files directory.
 

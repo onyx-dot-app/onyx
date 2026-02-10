@@ -2072,7 +2072,6 @@ echo "Session config regeneration complete"
         user_id: UUID,
         tenant_id: str,
         source: str | None = None,
-        exclude_paths: list[str] | None = None,
     ) -> bool:
         """Sync files from S3 to the running pod via the file-sync sidecar.
 
@@ -2081,6 +2080,10 @@ echo "Session config regeneration complete"
 
         This is safe to call multiple times - s5cmd sync is idempotent.
 
+        IMPORTANT: All files are synced to /workspace/files/ regardless of
+        exclude_paths. Session visibility is controlled via filtered symlinks
+        in setup_session_workspace(), not during sync.
+
         Args:
             sandbox_id: The sandbox UUID
             user_id: The user ID (for S3 path construction)
@@ -2088,9 +2091,8 @@ echo "Session config regeneration complete"
             source: Optional source type (e.g., "gmail", "google_drive").
                     If None, syncs all sources. If specified, only syncs
                     that source's directory.
-            exclude_paths: Optional list of relative paths to exclude from sync.
-                          Files at these paths will be excluded from s5cmd sync
-                          and deleted from sandbox if already present.
+            exclude_paths: DEPRECATED - ignored. Kept for API compatibility.
+                          Session visibility is controlled via symlinks.
 
         Returns:
             True if sync was successful, False otherwise.
@@ -2107,19 +2109,6 @@ echo "Session config regeneration complete"
             s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
             local_path = "/workspace/files/"
 
-        # Build exclude options for s5cmd
-        # s5cmd uses --exclude with glob patterns
-        # NOTE: We no longer delete excluded files from /workspace/files/.
-        # All files remain in the shared storage, and session visibility is
-        # controlled via filtered symlinks in setup_session_workspace().
-        exclude_options = ""
-        if exclude_paths:
-            for path in exclude_paths:
-                # Remove leading slash for pattern matching
-                pattern = path.lstrip("/")
-                # s5cmd --exclude uses glob patterns
-                exclude_options += f' --exclude "*{pattern}"'
-
         # s5cmd sync: high-performance parallel S3 sync
         # --delete: mirror S3 to local (remove files that no longer exist in source)
         #           Use --delete for external connectors (gmail, google_drive) where
@@ -2129,9 +2118,6 @@ echo "Session config regeneration complete"
         # timeout: prevent zombie processes from kubectl exec disconnections
         # trap: kill child processes on exit/disconnect
         source_info = f" (source={source})" if source else ""
-        exclude_info = (
-            f", excluding {len(exclude_paths)} files" if exclude_paths else ""
-        )
 
         # Only use --delete for external connectors where the source of truth is external.
         # For user_library, we only add files - deletions are handled explicitly.
@@ -2144,7 +2130,7 @@ echo "Session config regeneration complete"
 cleanup() {{ pkill -P $$ 2>/dev/null || true; }}
 trap cleanup EXIT INT TERM
 
-echo "Starting incremental file sync{source_info}{exclude_info}"
+echo "Starting incremental file sync{source_info}"
 echo "S3: {s3_path}"
 echo "Local: {local_path}"
 
@@ -2155,7 +2141,7 @@ mkdir -p "{local_path}"
 # Exit codes: 0=success, 1=success with warnings, 124=timeout
 sync_exit_code=0
 timeout --signal=TERM --kill-after=10s 5m \
-    /s5cmd --stat sync{delete_flag}{exclude_options} "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
+    /s5cmd --stat sync{delete_flag} "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
 
 echo "=== Sync finished (exit code: $sync_exit_code) ==="
 

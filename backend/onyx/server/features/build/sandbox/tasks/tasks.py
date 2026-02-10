@@ -396,7 +396,6 @@ def sync_sandbox_files(
                 user_id=UUID(user_id),
                 tenant_id=tenant_id,
                 source=source,
-                exclude_paths=exclude_paths,
             )
             if result:
                 task_logger.info(f"File sync completed for user {user_id}{source_info}")
