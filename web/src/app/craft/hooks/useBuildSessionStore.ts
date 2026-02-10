@@ -1230,22 +1230,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         });
       }
 
-      // Fetch messages from DB first - they don't depend on the sandbox
-      // being running. This ensures message history is visible immediately,
-      // even while a sandbox restore is in progress.
-      // NOTE: artifacts require sandbox filesystem access, so only fetch
-      // them when the sandbox is already running.
+      // Messages come from DB and don't need the sandbox running.
+      // Artifacts need sandbox filesystem, so skip during restore.
       const messages = await fetchMessages(sessionId);
       const artifacts = needsRestore ? [] : await fetchArtifacts(sessionId);
 
-      // If session is already streaming (e.g. pre-provisioned flow),
-      // preserve its current messages and status. Otherwise use DB messages.
+      // Preserve optimistic messages if actively streaming (pre-provisioned flow).
       const currentSession = get().sessions.get(sessionId);
       const isStreaming =
-        currentSession?.status === "running" ||
-        currentSession?.status === "creating";
+        (currentSession?.messages?.length ?? 0) > 0 &&
+        (currentSession?.status === "running" ||
+          currentSession?.status === "creating");
 
-      // Construct webapp URL if sandbox has a Next.js port and there's a webapp artifact
+      // Construct webapp URL
       let webappUrl: string | null = null;
       const hasWebapp = artifacts.some(
         (a) => a.type === "nextjs_app" || a.type === "web_app"
