@@ -1,0 +1,52 @@
+# =============================================================================
+# ONYX NO-VECTOR-DB OVERLAY
+# =============================================================================
+# Overlay to run Onyx without a vector database (Vespa) or indexing model
+# server. In this mode, connectors and RAG search are disabled, but the core
+# chat experience (LLM conversations, tools, user file uploads, Projects,
+# Agent knowledge) still works.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml up -d
+#
+# With dev ports:
+#   docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml \
+#                  -f docker-compose.dev.yml up -d --wait
+#
+# This overlay:
+#   - Moves the Vespa (index) and indexing model server to a "vectordb" profile
+#     so they do not start by default
+#   - Makes the depends_on references to those services optional
+#   - Sets DISABLE_VECTOR_DB=true on backend services
+#   - The inference model server is kept (needed for chat LLM)
+# =============================================================================
+
+name: onyx
+
+services:
+  api_server:
+    depends_on:
+      index:
+        condition: service_started
+        required: false
+    environment:
+      - DISABLE_VECTOR_DB=true
+
+  background:
+    depends_on:
+      index:
+        condition: service_started
+        required: false
+      indexing_model_server:
+        condition: service_started
+        required: false
+    environment:
+      - DISABLE_VECTOR_DB=true
+
+  # Move Vespa and indexing model server to a profile so they do not start.
+  # To bring them back, run with: --profile vectordb
+  index:
+    profiles: ["vectordb"]
+
+  indexing_model_server:
+    profiles: ["vectordb"]
