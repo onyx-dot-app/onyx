@@ -10,7 +10,7 @@ const SvgCircle = ({ size, ...props }: IconProps) => (
     stroke="currentColor"
     {...props}
   >
-    <circle cx="8" cy="8" r="6" strokeWidth={1.5} />
+    <circle cx="8" cy="8" r="4" strokeWidth={1.5} />
   </svg>
 );
 export default SvgCircle;
