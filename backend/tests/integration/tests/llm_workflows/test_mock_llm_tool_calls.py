@@ -52,11 +52,7 @@ def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> Non
         mock_llm_response='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
     )
 
-    assert response.error is None, (
-        "Unexpected stream error. "
-        "Ensure api_server is started with INTEGRATION_TESTS_MODE=true. "
-        f"error={response.error}"
-    )
+    assert response.error is None, f"Unexpected stream error: {response.error}"
     assert len(response.tool_call_debug) == 1
     assert response.tool_call_debug[0].tool_name == "internal_search"
     assert response.tool_call_debug[0].tool_args == {"queries": ["alpha"]}
@@ -87,11 +83,7 @@ def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> N
         mock_llm_response=mock_response,
     )
 
-    assert response.error is None, (
-        "Unexpected stream error. "
-        "Ensure api_server is started with INTEGRATION_TESTS_MODE=true. "
-        f"error={response.error}"
-    )
+    assert response.error is None, f"Unexpected stream error: {response.error}"
     assert len(response.tool_call_debug) == 2
     assert [entry.tool_name for entry in response.tool_call_debug] == [
         "internal_search",

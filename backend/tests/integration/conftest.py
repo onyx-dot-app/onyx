@@ -55,7 +55,8 @@ def load_env_vars(env_file: str = ".env") -> None:
                 line = line.strip()
                 if line and not line.startswith("#"):
                     key, value = line.split("=", 1)
-                    os.environ[key] = value.strip()
+                    # Preserve explicitly pre-set vars (e.g. INTEGRATION_TESTS_MODE).
+                    os.environ.setdefault(key, value.strip())
         print("Successfully loaded environment variables")
     except FileNotFoundError:
         print(f"File {env_file} not found")
@@ -63,8 +64,6 @@ def load_env_vars(env_file: str = ".env") -> None:
 
 # Load environment variables at the module level
 load_env_vars()
-# Keep integration mode deterministic even if .env sets a different value.
-os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
 
 """NOTE: for some reason using this seems to lead to misc
