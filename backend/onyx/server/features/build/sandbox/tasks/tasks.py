@@ -1,5 +1,7 @@
 """Celery tasks for sandbox operations (cleanup, file sync, etc.)."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 from celery import shared_task
@@ -248,13 +250,17 @@ def _list_session_directories(
         return []
 
 
-def _sandbox_file_sync_lock_key(user_id: str) -> str:
-    """Generate Redis lock key for sandbox file sync (per-user).
-
-    Only one sync can run at a time per user to prevent race conditions
-    when multiple indexing jobs complete simultaneously.
-    """
-    return f"{OnyxRedisLocks.SANDBOX_FILE_SYNC_LOCK_PREFIX}:{user_id}"
+@contextmanager
+def _acquire_sandbox_file_sync_lock(lock: RedisLock) -> Iterator[bool]:
+    """Acquire the sandbox file-sync lock with blocking timeout; release on exit."""
+    acquired = lock.acquire(
+        blocking_timeout=CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT,
+    )
+    try:
+        yield acquired
+    finally:
+        if lock.owned():
+            lock.release()
 
 
 @shared_task(
@@ -294,56 +300,45 @@ def sync_sandbox_files(
         f"{source_info}"
     )
 
-    # Per-user blocking lock - waits for any existing sync to complete
+    lock_timeout = CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
     redis_client = get_redis_client(tenant_id=tenant_id)
-    lock_key = _sandbox_file_sync_lock_key(user_id)
-    lock: RedisLock = redis_client.lock(
-        lock_key,
-        timeout=CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT,
+    lock = redis_client.lock(
+        f"{OnyxRedisLocks.SANDBOX_FILE_SYNC_LOCK_PREFIX}:{user_id}",
+        timeout=lock_timeout,
     )
 
-    # Blocking acquire - wait up to lock timeout for existing sync to complete
-    acquired = lock.acquire(blocking_timeout=CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT)
-    if not acquired:
-        task_logger.warning(
-            f"sync_sandbox_files - failed to acquire lock for user {user_id} "
-            f"after {CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT}s, skipping"
-        )
-        return False
-
-    try:
-        with get_session_with_current_tenant() as db_session:
-            sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
-
-            if sandbox is None:
-                task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
-                return False
-
-        if sandbox.status != SandboxStatus.RUNNING:
-            task_logger.debug(
-                f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
-                f"skipping sync"
+    with _acquire_sandbox_file_sync_lock(lock) as acquired:
+        if not acquired:
+            task_logger.warning(
+                f"sync_sandbox_files - failed to acquire lock for user {user_id} "
+                f"after {lock_timeout}s, skipping"
             )
             return False
 
-        sandbox_manager = get_sandbox_manager()
-        result = sandbox_manager.sync_files(
-            sandbox_id=sandbox.id,
-            user_id=UUID(user_id),
-            tenant_id=tenant_id,
-            source=source,
-        )
+        with get_session_with_current_tenant() as db_session:
+            sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
+            if sandbox is None:
+                task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
+                return False
+            if sandbox.status != SandboxStatus.RUNNING:
+                task_logger.debug(
+                    f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
+                    f"skipping sync"
+                )
+                return False
 
-        if result:
-            task_logger.info(f"File sync completed for user {user_id}{source_info}")
-        else:
-            task_logger.warning(f"File sync failed for user {user_id}{source_info}")
-
-        return result
-
-    finally:
-        if lock.owned():
-            lock.release()
+            sandbox_manager = get_sandbox_manager()
+            result = sandbox_manager.sync_files(
+                sandbox_id=sandbox.id,
+                user_id=UUID(user_id),
+                tenant_id=tenant_id,
+                source=source,
+            )
+            if result:
+                task_logger.info(f"File sync completed for user {user_id}{source_info}")
+            else:
+                task_logger.warning(f"File sync failed for user {user_id}{source_info}")
+            return result
 
 
 # NOTE: in the future, may need to add this. For now, will do manual cleanup.
