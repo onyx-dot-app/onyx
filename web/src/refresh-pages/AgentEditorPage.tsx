@@ -31,6 +31,7 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  FILE_READER_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
@@ -85,6 +86,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -449,6 +451,8 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -521,6 +525,9 @@ export default function AgentEditorPage({
   );
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
+  const fileReaderTool = availableTools?.find(
+    (t) => t.in_code_tool_id === FILE_READER_TOOL_ID
   );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
@@ -739,8 +746,14 @@ export default function AgentEditorPage({
       // Always look up tools in availableTools to ensure we can find all tools
 
       const toolIds = [];
-      if (values.enable_knowledge && searchTool) {
-        toolIds.push(searchTool.id);
+      if (values.enable_knowledge) {
+        // With vector DB: use SearchTool for RAG search
+        // Without vector DB: use FileReaderTool for direct file access
+        if (vectorDbEnabled && searchTool) {
+          toolIds.push(searchTool.id);
+        } else if (!vectorDbEnabled && fileReaderTool) {
+          toolIds.push(fileReaderTool.id);
+        }
       }
       if (values.image_generation && imageGenTool) {
         toolIds.push(imageGenTool.id);
@@ -1234,6 +1247,7 @@ export default function AgentEditorPage({
                           existingAgent?.attached_documents
                         }
                         initialHierarchyNodes={existingAgent?.hierarchy_nodes}
+                        vectorDbEnabled={vectorDbEnabled}
                       />
 
                       <Separator noPadding />
