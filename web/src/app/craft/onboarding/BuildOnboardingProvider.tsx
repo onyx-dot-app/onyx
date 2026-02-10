@@ -59,6 +59,7 @@ export function BuildOnboardingProvider({
         <BuildOnboardingModal
           mode={controller.mode}
           llmProviders={controller.llmProviders}
+          defaultLlm={controller.defaultText}
           initialValues={controller.initialValues}
           isAdmin={controller.isAdmin}
           hasUserInfo={controller.hasUserInfo}

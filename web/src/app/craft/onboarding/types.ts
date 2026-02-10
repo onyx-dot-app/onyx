@@ -36,6 +36,9 @@ export interface OnboardingModalController {
   llmProviders:
     | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
     | undefined;
+  defaultText:
+    | import("@/app/admin/configuration/llm/interfaces").DefaultModel
+    | undefined;
   initialValues: {
     firstName: string;
     lastName: string;
@@ -54,7 +57,9 @@ export interface OnboardingModalController {
   completeUserInfo: (info: BuildUserInfo) => Promise<void>;
   completeLlmSetup: () => Promise<void>;
   refetchLlmProviders: () => Promise<
-    | import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor[]
+    | import("@/app/admin/configuration/llm/interfaces").LLMProviderResponse<
+        import("@/app/admin/configuration/llm/interfaces").LLMProviderDescriptor
+      >
     | undefined
   >;
 }

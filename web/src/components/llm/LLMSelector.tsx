@@ -2,7 +2,10 @@
 
 import { useMemo } from "react";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { createIcon } from "@/components/icons/icons";
@@ -139,17 +142,6 @@ export default function LLMSelector({
     });
   }, [llmOptions]);
 
-  const defaultProvider = llmProviders.find(
-    (llmProvider) => llmProvider.is_default_provider
-  );
-
-  const defaultModelName = defaultProvider?.default_model_name;
-  const defaultModelConfig = defaultProvider?.model_configurations.find(
-    (m) => m.name === defaultModelName
-  );
-  const defaultModelDisplayName = defaultModelConfig
-    ? defaultModelConfig.display_name || defaultModelConfig.name
-    : defaultModelName || null;
   const defaultLabel = userSettings ? "System Default" : "User Default";
 
   // Determine if we should show grouped view (only if we have multiple vendors)
@@ -164,16 +156,7 @@ export default function LLMSelector({
 
       <InputSelect.Content>
         {!excludePublicProviders && (
-          <InputSelect.Item
-            value="default"
-            description={
-              userSettings && defaultModelDisplayName
-                ? `(${defaultModelDisplayName})`
-                : undefined
-            }
-          >
-            {defaultLabel}
-          </InputSelect.Item>
+          <InputSelect.Item value="default">{defaultLabel}</InputSelect.Item>
         )}
         {showGrouped
           ? groupedOptions.map((group) => (

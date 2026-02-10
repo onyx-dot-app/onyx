@@ -46,6 +46,7 @@ export function useOnboardingModal(): OnboardingModalController {
   const { user, isAdmin, refreshUser } = useUser();
   const {
     llmProviders,
+    defaultText,
     isLoading: isLoadingLlm,
     refetch: refetchLlmProviders,
   } = useLLMProviders();
@@ -168,6 +169,7 @@ export function useOnboardingModal(): OnboardingModalController {
     openLlmSetup,
     close,
     llmProviders,
+    defaultText: defaultText ?? undefined,
     initialValues,
     completeUserInfo,
     completeLlmSetup,
