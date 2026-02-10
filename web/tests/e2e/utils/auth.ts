@@ -6,20 +6,12 @@ import {
 } from "../constants";
 import { logPageState } from "./pageStateLogger";
 
-// Basic function which logs in a user (either admin or regular user) to the application
-// It handles both successful login attempts and potential timeouts, with a retry mechanism
+// Logs in a user (admin, user, or admin2) to the application.
+// Users must already be provisioned (see global-setup.ts).
 export async function loginAs(
   page: Page,
   userType: "admin" | "user" | "admin2"
 ) {
-  // Skip authentication if SKIP_AUTH environment variable is set
-  if (process.env.SKIP_AUTH === "true") {
-    console.log(
-      `[loginAs] Skipping authentication for ${userType} (SKIP_AUTH=true)`
-    );
-    return;
-  }
-
   const { email, password } =
     userType === "admin"
       ? TEST_ADMIN_CREDENTIALS
@@ -80,34 +72,14 @@ export async function loginAs(
       `[loginAs] Redirected to /app for ${userType}. URL: ${page.url()}`
     );
   } catch {
-    console.log(`[loginAs] Timeout to /app. Current URL: ${page.url()}`);
-
-    // If redirect to /app doesn't happen and we were on login, try signup as fallback
-    if (!isOnSignup) {
-      console.log(`[loginAs] Navigating to /auth/signup as fallback`);
-      await page.goto("/auth/signup");
-      await logPageState(
-        page,
-        `[loginAs] Landed on /auth/signup fallback (${userType})`,
-        "[login-debug]"
-      );
-
-      await fillCredentials("loginAs fallback form");
-
-      // Click the submit button
-      await page.click('button[type="submit"]');
-
-      try {
-        await page.waitForURL(/\/app.*/, { timeout: 10000 });
-        console.log(
-          `[loginAs] Fallback redirected to /app for ${userType}. URL: ${page.url()}`
-        );
-      } catch {
-        console.log(
-          `[loginAs] Fallback timeout again. Current URL: ${page.url()}`
-        );
-      }
-    }
+    await logPageState(
+      page,
+      `[loginAs] Timeout waiting for /app redirect (${userType}). URL: ${page.url()}`,
+      "[login-debug]"
+    );
+    throw new Error(
+      `[loginAs] Failed to login as ${userType}. Current URL: ${page.url()}`
+    );
   }
 
   try {
@@ -151,12 +123,6 @@ const generateRandomCredentials = () => {
 
 // Function to sign up a new random user
 export async function loginAsRandomUser(page: Page) {
-  // Skip authentication if SKIP_AUTH environment variable is set
-  if (process.env.SKIP_AUTH === "true") {
-    console.log("[loginAsRandomUser] Skipping authentication (SKIP_AUTH=true)");
-    return { email: "skipped@local.test", password: "skipped" };
-  }
-
   const { email, password } = generateRandomCredentials();
 
   await page.goto("/auth/signup");
@@ -184,54 +150,6 @@ export async function loginAsRandomUser(page: Page) {
   }
 
   return { email, password };
-}
-
-export async function inviteAdmin2AsAdmin1(page: Page) {
-  await page.goto("/admin/users");
-  // Wait for 400ms to ensure the page has loaded completely
-  await page.waitForTimeout(400);
-
-  // Log all currently visible test ids
-  const testIds = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll("[data-testid]")).map((el) =>
-      el.getAttribute("data-testid")
-    );
-  });
-  console.log("Currently visible test ids:", testIds);
-
-  try {
-    // Wait for the dropdown trigger to be visible and click it
-    await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
-      .waitFor({ state: "visible", timeout: 5000 });
-    await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
-      .click();
-
-    // Wait for the admin option to be visible
-    await page
-      .getByTestId("user-role-dropdown-admin")
-      .waitFor({ state: "visible", timeout: 5000 });
-
-    // Click the admin option
-    await page.getByTestId("user-role-dropdown-admin").click();
-
-    // Wait for any potential loading or update to complete
-    await page.waitForTimeout(1000);
-
-    // Verify that the change was successful (you may need to adjust this based on your UI)
-    const newRole = await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
-      .textContent();
-    if (newRole?.toLowerCase().includes("admin")) {
-      console.log("Successfully invited admin2 as admin");
-    } else {
-      throw new Error("Failed to update user role to admin");
-    }
-  } catch (error: unknown) {
-    console.error("Error inviting admin2 as admin:", error);
-    throw error;
-  }
 }
 
 export async function loginWithCredentials(
