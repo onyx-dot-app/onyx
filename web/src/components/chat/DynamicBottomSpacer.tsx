@@ -242,7 +242,6 @@ const DynamicBottomSpacer = React.memo(
     useEffect(() => {
       const anchorChanged = prevAnchorNodeIdRef.current !== anchorNodeId;
       const streamingStarted = isStreaming && !wasStreamingRef.current;
-      const streamingEnded = !isStreaming && wasStreamingRef.current;
 
       prevAnchorNodeIdRef.current = anchorNodeId;
       wasStreamingRef.current = isStreaming;
@@ -258,10 +257,10 @@ const DynamicBottomSpacer = React.memo(
       }
 
       // Note: smoothScrollActive is cleared by the 600ms timeout inside activate().
-      // We intentionally do NOT clear it on streamingEnded — for fast responses,
+      // We intentionally do NOT clear it when streaming ends — for fast responses,
       // streaming can end before the smooth scroll animation completes, which would
       // remove the suppression too early and flash the scroll-to-bottom button.
-    }, [anchorNodeId, isStreaming, activate, getScrollContainer]);
+    }, [anchorNodeId, isStreaming, activate]);
 
     /**
      * Reset when anchor is cleared
