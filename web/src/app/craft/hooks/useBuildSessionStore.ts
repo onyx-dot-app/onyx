@@ -1221,27 +1221,29 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           !sessionData.session_loaded_in_sandbox);
 
       if (needsRestore) {
-        // Update UI: show sandbox as "restoring" and session as loading
+        // Show sandbox as "restoring" while we load messages + restore
         updateSessionData(sessionId, {
           status: "creating",
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : null,
         });
-
-        // Call restore endpoint (blocks until complete)
-        sessionData = await restoreSession(sessionId);
-
-        // Clear the "creating" loading indicator so subsequent logic
-        // doesn't mistake this for an active streaming session.
-        updateSessionData(sessionId, { status: "idle" });
       }
 
-      // Now fetch messages and artifacts
+      // Always fetch messages from DB first - they don't depend on the
+      // sandbox being running. This ensures message history is visible
+      // immediately, even while a sandbox restore is in progress.
       const [messages, artifacts] = await Promise.all([
         fetchMessages(sessionId),
         fetchArtifacts(sessionId),
       ]);
+
+      // If session is already streaming (e.g. pre-provisioned flow),
+      // preserve its current messages and status. Otherwise use DB messages.
+      const currentSession = get().sessions.get(sessionId);
+      const isStreaming =
+        currentSession?.status === "running" ||
+        currentSession?.status === "creating";
 
       // Construct webapp URL if sandbox has a Next.js port and there's a webapp artifact
       let webappUrl: string | null = null;
@@ -1252,50 +1254,55 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
       }
 
-      // Re-fetch existing session to check for optimistic messages
-      const currentSession = get().sessions.get(sessionId);
-      const hasOptimisticMessages = (currentSession?.messages.length ?? 0) > 0;
-      const isCurrentlyStreaming =
-        currentSession?.status === "running" ||
-        currentSession?.status === "creating";
-
-      // Consolidate messages into proper conversation turns
-      // Each assistant turn becomes a single message with streamItems in metadata
-      // If there are optimistic messages (active streaming), preserve current state
-      const messagesToUse = hasOptimisticMessages
-        ? currentSession!.messages
-        : consolidateMessagesIntoTurns(messages);
-      // Session-level streamItems are only for current streaming response
-      // When loading from history, they should be empty (each message has its own streamItems)
-      const streamItemsToUse = hasOptimisticMessages
-        ? currentSession!.streamItems
-        : [];
-      // Preserve streaming status if currently streaming, otherwise use backend status
-      const statusToUse = isCurrentlyStreaming
-        ? currentSession!.status
-        : sessionData.status === "active"
-          ? "active"
-          : "idle";
-
       updateSessionData(sessionId, {
-        status: statusToUse,
-        // Preserve optimistic messages if they exist (e.g., from pre-provisioned flow)
-        messages: messagesToUse,
-        streamItems: streamItemsToUse,
+        status: isStreaming
+          ? currentSession!.status
+          : sessionData.status === "active"
+            ? "active"
+            : "idle",
+        messages: isStreaming
+          ? currentSession!.messages
+          : consolidateMessagesIntoTurns(messages),
+        streamItems: isStreaming ? currentSession!.streamItems : [],
         artifacts,
         webappUrl,
-        sandbox: sessionData.sandbox,
+        sandbox: needsRestore
+          ? { ...sessionData.sandbox!, status: "restoring" as const }
+          : sessionData.sandbox,
         error: null,
         isLoaded: true,
-        // After restore, bump webappNeedsRefresh so OutputPanel's SWR refetches
-        // webapp-info. Done here (not earlier) so all session data is set atomically.
-        ...(needsRestore
-          ? {
-              webappNeedsRefresh:
-                (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
-            }
-          : {}),
       });
+
+      // Now restore the sandbox if needed (messages are already visible).
+      // The backend enforces a timeout and returns an error if restore
+      // takes too long, so no frontend timeout needed here.
+      if (needsRestore) {
+        try {
+          sessionData = await restoreSession(sessionId);
+
+          // Recompute webapp URL with potentially new nextjs_port
+          let restoredWebappUrl: string | null = null;
+          if (hasWebapp && sessionData.sandbox?.nextjs_port) {
+            restoredWebappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
+          }
+
+          updateSessionData(sessionId, {
+            status: sessionData.status === "active" ? "active" : "idle",
+            webappUrl: restoredWebappUrl,
+            sandbox: sessionData.sandbox,
+            webappNeedsRefresh:
+              (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
+          });
+        } catch (restoreErr) {
+          console.error("Sandbox restore failed:", restoreErr);
+          updateSessionData(sessionId, {
+            status: "idle",
+            sandbox: sessionData.sandbox
+              ? { ...sessionData.sandbox, status: "failed" }
+              : null,
+          });
+        }
+      }
     } catch (err) {
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {
