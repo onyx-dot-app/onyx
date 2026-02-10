@@ -55,6 +55,7 @@ import ChatScrollContainer, {
 } from "@/components/chat/ChatScrollContainer";
 import MessageList from "@/components/chat/MessageList";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
+import AgentDescription from "@/app/app/components/AgentDescription";
 import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import {
@@ -745,6 +746,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       onboardingState.currentStep !== OnboardingStep.Complete)
                   }
                 />
+
+                {/* Agent description below input */}
+                {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                  !isDefaultAgent && (
+                    <>
+                      <AgentDescription agent={liveAssistant} />
+                      <Spacer rem={1.5} />
+                    </>
+                  )}
 
                 {/* ProjectChatSessionsUI */}
                 {appFocus.isProject() && <ProjectChatSessionList />}

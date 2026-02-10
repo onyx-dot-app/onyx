@@ -16,6 +16,7 @@ from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
@@ -165,7 +166,7 @@ class SearchToolOverrideKwargs(BaseModel):
     # without help and a specific custom prompt for this
     original_query: str | None = None
     message_history: list[ChatMinimalTextMessage] | None = None
-    memories: list[str] | None = None
+    user_memory_context: UserMemoryContext | None = None
     user_info: str | None = None
 
     # Used for tool calls after the first one but in the same chat turn. The reason for this is that if the initial pass through
