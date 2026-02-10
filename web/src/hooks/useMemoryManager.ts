@@ -36,12 +36,21 @@ export function useMemoryManager({
     initialMemoriesRef.current = memories;
   }, [memories]);
 
-  const handleAddMemory = useCallback(() => {
+  const handleAddMemory = useCallback((): number => {
+    const existingEmpty = localMemories.find(
+      (m) => m.isNew && !m.content.trim()
+    );
+    if (existingEmpty) {
+      return existingEmpty.id;
+    }
+
+    const newId = Date.now();
     setLocalMemories((prev) => [
-      { id: Date.now(), content: "", isNew: true },
+      { id: newId, content: "", isNew: true },
       ...prev,
     ]);
-  }, []);
+    return newId;
+  }, [localMemories]);
 
   const handleUpdateMemory = useCallback((index: number, value: string) => {
     setLocalMemories((prev) =>

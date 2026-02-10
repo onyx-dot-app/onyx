@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -9,6 +9,7 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import CharacterCount from "@/refresh-components/CharacterCount";
+import Separator from "@/refresh-components/Separator";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
@@ -27,6 +28,8 @@ interface MemoryItemProps {
   onUpdate: (index: number, value: string) => void;
   onBlur: (index: number) => void;
   onRemove: (index: number) => void;
+  shouldFocus?: boolean;
+  onFocused?: () => void;
 }
 
 function MemoryItem({
@@ -35,14 +38,25 @@ function MemoryItem({
   onUpdate,
   onBlur,
   onRemove,
+  shouldFocus,
+  onFocused,
 }: MemoryItemProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (shouldFocus) {
+      textareaRef.current?.focus();
+      onFocused?.();
+    }
+  }, [shouldFocus, onFocused]);
 
   return (
     <div className="rounded-08 hover:bg-background-tint-00 w-full p-0.5">
       <Section gap={0.25} alignItems="start">
         <Section flexDirection="row" alignItems="start" gap={0.5}>
           <InputTextArea
+            ref={textareaRef}
             placeholder="Type or paste in a personal note or memory"
             value={memory.content}
             onChange={(e) => onUpdate(originalIndex, e.target.value)}
@@ -86,6 +100,7 @@ export default function MemoriesModal({
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const { popup, setPopup } = usePopup();
+  const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
 
   const {
     searchQuery,
@@ -101,6 +116,11 @@ export default function MemoriesModal({
     onSaveMemories,
     onNotify: (message, type) => setPopup({ message, type }),
   });
+
+  const onAddLine = () => {
+    const id = handleAddMemory();
+    setFocusMemoryId(id);
+  };
 
   return (
     <Modal open onOpenChange={(open) => !open && close?.()}>
@@ -120,11 +140,7 @@ export default function MemoriesModal({
               leftSearchIcon
               className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
             />
-            <Button
-              onClick={handleAddMemory}
-              tertiary
-              rightIcon={SvgPlusCircle}
-            >
+            <Button onClick={onAddLine} tertiary rightIcon={SvgPlusCircle}>
               Add Line
             </Button>
           </Section>
@@ -142,14 +158,19 @@ export default function MemoriesModal({
           ) : (
             <Section gap={0.5}>
               {filteredMemories.map(({ memory, originalIndex }) => (
-                <MemoryItem
-                  key={memory.id}
-                  memory={memory}
-                  originalIndex={originalIndex}
-                  onUpdate={handleUpdateMemory}
-                  onBlur={handleBlurMemory}
-                  onRemove={handleRemoveMemory}
-                />
+                <>
+                  <MemoryItem
+                    key={memory.id}
+                    memory={memory}
+                    originalIndex={originalIndex}
+                    onUpdate={handleUpdateMemory}
+                    onBlur={handleBlurMemory}
+                    onRemove={handleRemoveMemory}
+                    shouldFocus={memory.id === focusMemoryId}
+                    onFocused={() => setFocusMemoryId(null)}
+                  />
+                  {memory.isNew && <Separator noPadding />}
+                </>
               ))}
             </Section>
           )}
