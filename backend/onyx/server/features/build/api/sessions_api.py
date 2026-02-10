@@ -47,6 +47,7 @@ from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -328,6 +329,9 @@ def delete_session(
 
 # Lock timeout should be longer than max restore time (5 minutes)
 RESTORE_LOCK_TIMEOUT_SECONDS = 300
+RESTORE_TIMEOUT_SECONDS = (
+    90  # Per-operation timeout (provision, snapshot restore, etc.)
+)
 
 
 @router.post("/{session_id}/restore", response_model=DetailedSessionResponse)
@@ -418,7 +422,9 @@ def restore_session(
             )
             db_session.commit()
 
-            sandbox_manager.provision(
+            run_with_timeout(
+                RESTORE_TIMEOUT_SECONDS,
+                sandbox_manager.provision,
                 sandbox_id=sandbox.id,
                 user_id=user.id,
                 tenant_id=tenant_id,
@@ -451,7 +457,9 @@ def restore_session(
 
                 if snapshot:
                     try:
-                        sandbox_manager.restore_snapshot(
+                        run_with_timeout(
+                            RESTORE_TIMEOUT_SECONDS,
+                            sandbox_manager.restore_snapshot,
                             sandbox_id=sandbox.id,
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
@@ -462,6 +470,8 @@ def restore_session(
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
+                    except TimeoutError:
+                        raise
                     except Exception as e:
                         logger.error(
                             f"Snapshot restore failed for session {session_id}: {e}"
@@ -471,7 +481,9 @@ def restore_session(
                         raise
                 else:
                     # No snapshot - set up fresh workspace
-                    sandbox_manager.setup_session_workspace(
+                    run_with_timeout(
+                        RESTORE_TIMEOUT_SECONDS,
+                        sandbox_manager.setup_session_workspace,
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
@@ -485,6 +497,12 @@ def restore_session(
                 f"re-provision, expected RUNNING"
             )
 
+    except TimeoutError as e:
+        logger.error(f"Restore timed out for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=504,
+            detail="Sandbox restore timed out",
+        )
     except Exception as e:
         logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
         raise HTTPException(
