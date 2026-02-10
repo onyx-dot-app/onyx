@@ -72,9 +72,18 @@ function Button({
         roundingVariant={isCompact ? "compact" : "default"}
         paddingVariant={isCompact ? "thin" : "default"}
       >
-        <div className="opal-button interactive-foreground" data-size={size}>
+        <div className="opal-button interactive-foreground">
           {iconWrapper(Icon, isCompact)}
-          {children && <span className="opal-button-label">{children}</span>}
+          {children && (
+            <span
+              className={cn(
+                "opal-button-label",
+                isCompact ? "font-secondary-action" : "font-main-ui-action"
+              )}
+            >
+              {children}
+            </span>
+          )}
           {iconWrapper(RightIcon, isCompact)}
         </div>
       </Interactive.Container>

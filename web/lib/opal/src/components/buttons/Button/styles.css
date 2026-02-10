@@ -5,9 +5,5 @@
 }
 
 .opal-button-label {
-  @apply whitespace-nowrap font-main-ui-action;
-}
-
-.opal-button[data-size="compact"] .opal-button-label {
-  @apply font-secondary-action;
+  @apply whitespace-nowrap;
 }
