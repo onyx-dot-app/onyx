@@ -428,8 +428,6 @@ jobs:
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          # Create test-results directory to ensure it exists for artifact upload
-          mkdir -p test-results
           npx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -437,7 +435,15 @@ jobs:
         with:
           # Includes test results and trace.zip files
           name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
-          path: ./web/test-results/
+          path: ./web/output/playwright/
+          retention-days: 30
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/screenshots/
           retention-days: 30
 
       # save before stopping the containers so the logs can be captured
