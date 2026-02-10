@@ -1,6 +1,7 @@
 {
   "name": "web",
   "version": "1.0.0-dev",
+  "version-comment": "version field must be SemVer",
   "private": true,
   "workspaces": [
     "lib/opal"

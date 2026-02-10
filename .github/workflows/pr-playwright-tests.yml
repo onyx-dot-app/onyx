@@ -427,9 +427,12 @@ jobs:
         working-directory: ./web
         env:
           PROJECT: ${{ matrix.project }}
+          # Set VISUAL_REGRESSION=true to fail on screenshot diffs (disabled by default)
+          # VISUAL_REGRESSION: "true"
         run: |
-          # Create test-results directory to ensure it exists for artifact upload
+          # Create directories to ensure they exist for artifact upload
           mkdir -p test-results
+          mkdir -p screenshots
           npx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -439,6 +442,15 @@ jobs:
           name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
           path: ./web/test-results/
           retention-days: 30
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/screenshots/
+          retention-days: 90
+          if-no-files-found: ignore
 
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
