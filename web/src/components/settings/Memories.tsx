@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import Text from "@/refresh-components/texts/Text";
 import Tile from "@/refresh-components/tiles/Tile";
 import { SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
-import { Interactive } from "@opal/core";
-import { Card } from "@/refresh-components/cards";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import { Icon } from "lucide-react";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 interface MemoriesProps {
   memories: string[];
@@ -19,24 +19,18 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
   return (
     <>
       {memories.length === 0 ? (
-        <Interactive.Base
-          variant="default"
-          subvariant="ghost"
+        <LineItem
+          skeleton
+          description="Add personal note or memory that Onyx should remember."
           onClick={() => setShowModal(true)}
-        >
-          <Card
-            variant="tertiary"
-            className="rounded-08"
-            padding={0.5}
-            flexDirection="row"
-            justifyContent="between"
-          >
-            <Text secondaryBody text03>
-              Add personal note or memory that Onyx should remember.
-            </Text>
-            <SvgPlusCircle className="stroke-text-02" size={16} />
-          </Card>
-        </Interactive.Base>
+          rightChildren={
+            <IconButton
+              internal
+              icon={SvgPlusCircle}
+              onClick={() => setShowModal(true)}
+            />
+          }
+        />
       ) : (
         <div className="flex flex-row flex-wrap items-center gap-2">
           {memories.map((memory, index) => (
