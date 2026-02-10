@@ -23,7 +23,7 @@ jobs:
         run: npx --yes vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
-        run: npx --yes vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: INTERNAL_URL=https://cloud.onyx.app/api npx --yes vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel
         run: npx --yes vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
