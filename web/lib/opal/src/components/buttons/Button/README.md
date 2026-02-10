@@ -7,34 +7,36 @@ A single component that handles both labeled buttons and icon-only buttons. It r
 ## Architecture
 
 ```
-Interactive.Base          <- variant/subvariant, selected, disabled, href, onClick
-  └─ Interactive.Container  <- height, rounding, padding (derived from `size`)
+Interactive.Base            <- variant/subvariant, transient, disabled, href, onClick
+  └─ Interactive.Container  <- height, rounding, padding (derived from `size`), border (auto for secondary)
        └─ div.opal-button.interactive-foreground  <- flexbox row layout
-            ├─ Icon?          .opal-button-icon   (1rem x 1rem, shrink-0)
-            ├─ <span>?        .opal-button-label  (whitespace-nowrap, font)
-            └─ RightIcon?     .opal-button-icon
+            ├─ div.p-0.5 > Icon?      (compact: 12px, default: 16px, shrink-0)
+            ├─ <span>?                 .opal-button-label  (whitespace-nowrap, font)
+            └─ div.p-0.5 > RightIcon?  (compact: 12px, default: 16px, shrink-0)
 ```
 
 - **Colors are not in the Button.** `Interactive.Base` sets `background-color` and `--interactive-foreground` per variant/subvariant/state. The `.interactive-foreground` utility class on the content div sets `color: var(--interactive-foreground)`, which both the `<span>` text and `stroke="currentColor"` SVG icons inherit automatically.
-- **Layout is in `styles.css`.** The CSS classes (`.opal-button`, `.opal-button-icon`, `.opal-button-label`) handle flexbox alignment, gap, icon sizing, and text styling. A `[data-size="compact"]` selector tightens the gap and reduces font size.
+- **Layout is in `styles.css`.** The CSS classes (`.opal-button`, `.opal-button-label`) handle flexbox alignment, gap, and text styling. Default labels use `font-main-ui-action` (14px/600); compact labels use `font-secondary-action` (12px/600) via a `[data-size="compact"]` selector.
 - **Sizing is delegated to `Interactive.Container` presets.** The `size` prop maps to Container height/rounding/padding presets:
   - `"default"` -> height 2.25rem, rounding 12px, padding 8px
   - `"compact"` -> height 1.75rem, rounding 8px, padding 4px
 - **Icon-only buttons render as squares** because `Interactive.Container` enforces `min-width >= height` for every height preset.
+- **Border is automatic for `subvariant="secondary"`.** The Container receives `border={subvariant === "secondary"}` internally — there is no external `border` prop.
 
 ## Props
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `variant` | `"default" \| "action" \| "danger" \| "none" \| "select"` | `"default"` | Top-level color variant (maps to `Interactive.Base`) |
-| `subvariant` | Depends on `variant` | `"primary"` | Color subvariant -- e.g. `"primary"`, `"secondary"`, `"ghost"` for default/action/danger |
+| `subvariant` | Depends on `variant` | `"primary"` | Color subvariant -- e.g. `"primary"`, `"secondary"`, `"ghost"` for default/action/danger. `"secondary"` automatically renders a border. |
 | `icon` | `IconFunctionComponent` | -- | Left icon component |
 | `children` | `string` | -- | Button label text. Omit for icon-only buttons |
 | `rightIcon` | `IconFunctionComponent` | -- | Right icon component |
-| `size` | `SizeVariant` | `"default"` | Size preset controlling height, rounding, padding, gap, and font size |
+| `size` | `SizeVariant` | `"default"` | Size preset controlling height, rounding, padding, icon size, and font style |
 | `tooltip` | `string` | -- | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
-| `selected` | `boolean` | `false` | Forces the selected visual state (data-selected) |
+| `selected` | `boolean` | `false` | Switches foreground to action-link colours (only available with `variant="select"`) |
+| `transient` | `boolean` | `false` | Forces the transient (hover) visual state (data-transient) |
 | `disabled` | `boolean` | `false` | Disables the button (data-disabled, aria-disabled) |
 | `href` | `string` | -- | URL; renders an `<a>` wrapper instead of Radix Slot |
 | `onClick` | `MouseEventHandler<HTMLElement>` | -- | Click handler |
@@ -59,7 +61,7 @@ import { SvgPlus, SvgArrowRight } from "@opal/icons";
   Add item
 </Button>
 
-// Labeled button with right icon
+// Secondary button (automatically renders a border)
 <Button rightIcon={SvgArrowRight} variant="default" subvariant="secondary">
   Continue
 </Button>
@@ -74,8 +76,8 @@ import { SvgPlus, SvgArrowRight } from "@opal/icons";
   Settings
 </Button>
 
-// Selected state (e.g. inside a popover trigger)
-<Button icon={SvgFilter} subvariant="ghost" selected={isOpen} />
+// Transient state (e.g. inside a popover trigger)
+<Button icon={SvgFilter} subvariant="ghost" transient={isOpen} />
 
 // With tooltip
 <Button icon={SvgPlus} subvariant="ghost" tooltip="Add item" />
@@ -91,7 +93,7 @@ import { SvgPlus, SvgArrowRight } from "@opal/icons";
 | `primary` | `subvariant="primary"` (default, can be omitted) |
 | `secondary` | `subvariant="secondary"` |
 | `tertiary` | `subvariant="ghost"` |
-| `transient={x}` | `selected={x}` |
+| `transient={x}` | `transient={x}` |
 | `size="md"` | `size="compact"` |
 | `size="lg"` | `size="default"` (default, can be omitted) |
 | `leftIcon={X}` | `icon={X}` |

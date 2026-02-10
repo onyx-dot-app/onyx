@@ -56,6 +56,9 @@ from onyx.db.opensearch_migration import (
     increment_num_times_observed_no_additional_docs_to_populate_migration_table_with_commit,
 )
 from onyx.db.opensearch_migration import should_document_migration_be_permanently_failed
+from onyx.db.opensearch_migration import (
+    try_insert_opensearch_tenant_migration_record_with_commit,
+)
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -228,6 +231,13 @@ def check_for_documents_for_opensearch_migration_task(
                     db_session, document_ids
                 )
                 num_documents_found_for_record_creation += len(document_ids)
+
+                # Try to create the singleton row in
+                # OpenSearchTenantMigrationRecord if it doesn't already exist.
+                # This is a reasonable place to put it because we already have a
+                # lock, a session, and error handling, at the cost of running
+                # this small set of logic for every batch.
+                try_insert_opensearch_tenant_migration_record_with_commit(db_session)
     except Exception:
         task_logger.exception("Error in the OpenSearch migration check task.")
         return False

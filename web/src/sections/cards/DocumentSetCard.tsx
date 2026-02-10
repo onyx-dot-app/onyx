@@ -41,7 +41,7 @@ export default function DocumentSetCard({
           <Interactive.Container
             data-testid={`document-set-card-${documentSet.id}`}
             border
-            heightVariant="full"
+            heightVariant="fit"
             paddingVariant="none"
           >
             <AttachmentItemLayout

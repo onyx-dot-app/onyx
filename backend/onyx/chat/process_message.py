@@ -94,10 +94,6 @@ from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
-from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -374,21 +370,16 @@ def handle_stream_message_objects(
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
-        # Track user message in PostHog for analytics
-        fetch_versioned_implementation_with_fallback(
-            module="onyx.utils.telemetry",
-            attribute="event_telemetry",
-            fallback=noop_fallback,
-        )(
+        mt_cloud_telemetry(
+            tenant_id=tenant_id,
             distinct_id=user.email if not user.is_anonymous else tenant_id,
-            event="user_message_sent",
+            event=MilestoneRecordType.USER_MESSAGE_SENT,
             properties={
                 "origin": new_msg_req.origin.value,
                 "has_files": len(new_msg_req.file_descriptors) > 0,
                 "has_project": chat_session.project_id is not None,
                 "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
                 "deep_research": new_msg_req.deep_research,
-                "tenant_id": tenant_id,
             },
         )
 

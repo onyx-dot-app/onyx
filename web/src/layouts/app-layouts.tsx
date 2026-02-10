@@ -332,26 +332,21 @@ function Header() {
             !classification && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
-                  <Interactive.Base
-                    subvariant="secondary"
-                    selected={modePopoverOpen}
-                  >
-                    <OpenButton
-                      icon={
-                        effectiveMode === "auto"
-                          ? SvgSparkle
-                          : effectiveMode === "search"
-                            ? SvgSearchMenu
-                            : SvgBubbleText
-                      }
-                    >
-                      {effectiveMode === "auto"
-                        ? "Auto"
+                  <OpenButton
+                    icon={
+                      effectiveMode === "auto"
+                        ? SvgSparkle
                         : effectiveMode === "search"
-                          ? "Search"
-                          : "Chat"}
-                    </OpenButton>
-                  </Interactive.Base>
+                          ? SvgSearchMenu
+                          : SvgBubbleText
+                    }
+                  >
+                    {effectiveMode === "auto"
+                      ? "Auto"
+                      : effectiveMode === "search"
+                        ? "Search"
+                        : "Chat"}
+                  </OpenButton>
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">
                   <Popover.Menu>

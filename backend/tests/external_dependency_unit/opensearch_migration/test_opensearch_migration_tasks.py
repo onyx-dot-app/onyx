@@ -28,6 +28,7 @@ from onyx.configs.constants import SOURCE_TYPE
 from onyx.context.search.models import IndexFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
+from onyx.db.enums import OpenSearchTenantMigrationStatus
 from onyx.db.models import Document
 from onyx.db.models import OpenSearchDocumentMigrationRecord
 from onyx.db.models import OpenSearchTenantMigrationRecord
@@ -524,6 +525,40 @@ class TestCheckForDocumentsForOpenSearchMigrationTask:
             tenant_record.num_times_observed_no_additional_docs_to_populate_migration_table
             >= 1
         )
+
+    def test_creates_singleton_migration_record(
+        self,
+        db_session: Session,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
+    ) -> None:
+        """Tests that singleton migration record is created."""
+        # Under test.
+        result = check_for_documents_for_opensearch_migration_task(
+            tenant_id=get_current_tenant_id()
+        )
+
+        # Postcondition.
+        assert result is True
+        # Expire the session cache to see the committed changes from the task.
+        db_session.expire_all()
+        # Verify the singleton migration record was created.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        assert (
+            tenant_record.document_migration_record_table_population_status
+            == OpenSearchTenantMigrationStatus.PENDING
+        )
+        assert (
+            tenant_record.num_times_observed_no_additional_docs_to_populate_migration_table
+            == 1
+        )
+        assert (
+            tenant_record.overall_document_migration_status
+            == OpenSearchTenantMigrationStatus.PENDING
+        )
+        assert tenant_record.num_times_observed_no_additional_docs_to_migrate == 0
+        assert tenant_record.last_updated_at is not None
 
 
 class TestMigrateDocumentsFromVespaToOpenSearchTask:

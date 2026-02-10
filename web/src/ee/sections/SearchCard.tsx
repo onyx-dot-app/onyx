@@ -56,7 +56,7 @@ export default function SearchCard({
 
   return (
     <Interactive.Base onClick={handleClick} subvariant="secondary">
-      <Interactive.Container heightVariant="full" paddingVariant="thin">
+      <Interactive.Container heightVariant="fit" paddingVariant="thin">
         <Section alignItems="start" gap={0} padding={0}>
           {/* Title Row */}
           <Section

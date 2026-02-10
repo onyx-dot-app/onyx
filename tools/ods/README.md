@@ -22,7 +22,7 @@ source .venv/bin/activate
 
 Some commands require external tools to be installed and configured:
 
-- **Docker** - Required for `compose` command
+- **Docker** - Required for `compose`, `logs`, and `pull` commands
   - Install from [docker.com](https://docs.docker.com/get-docker/)
 
 - **GitHub CLI** (`gh`) - Required for `run-ci` and `cherry-pick` commands
@@ -72,6 +72,15 @@ ods compose [profile]
 - `dev` - Use dev configuration (exposes service ports for development)
 - `multitenant` - Use multitenant configuration
 
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--down` | `false` | Stop running containers instead of starting them |
+| `--wait` | `true` | Wait for services to be healthy before returning |
+| `--force-recreate` | `false` | Force recreate containers even if unchanged |
+| `--tag` | | Set the `IMAGE_TAG` for docker compose (e.g. `edge`, `v2.10.4`) |
+
 **Examples:**
 
 ```shell
@@ -90,9 +99,72 @@ ods compose dev --down
 
 # Start without waiting for services to be healthy
 ods compose --wait=false
+
+# Force recreate containers
+ods compose --force-recreate
+
+# Use a specific image tag
+ods compose --tag edge
 ```
 
-By default, `--wait` is enabled, which waits for services to be healthy before returning.
+### `logs` - View Docker Container Logs
+
+View logs from running Onyx docker containers. Service names are available as
+arguments to filter output, with tab-completion support.
+
+```shell
+ods logs [service...]
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--follow` | `true` | Follow log output |
+| `--tail` | | Number of lines to show from the end of the logs |
+
+**Examples:**
+
+```shell
+# View logs from all services (follow mode)
+ods logs
+
+# View logs for a specific service
+ods logs api_server
+
+# View logs for multiple services
+ods logs api_server background
+
+# View last 100 lines and follow
+ods logs --tail 100 api_server
+
+# View logs without following
+ods logs --follow=false
+```
+
+### `pull` - Pull Docker Images
+
+Pull the latest images for Onyx docker containers.
+
+```shell
+ods pull
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--tag` | | Set the `IMAGE_TAG` for docker compose (e.g. `edge`, `v2.10.4`) |
+
+**Examples:**
+
+```shell
+# Pull images
+ods pull
+
+# Pull images with a specific tag
+ods pull --tag edge
+```
 
 ### `db` - Database Administration
 

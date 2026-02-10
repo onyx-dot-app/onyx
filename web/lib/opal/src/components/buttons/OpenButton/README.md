@@ -2,40 +2,42 @@
 
 **Import:** `import { OpenButton, type OpenButtonProps } from "@opal/components";`
 
-A trigger button with a built-in chevron that rotates when `selected` is true (or when a Radix parent injects `data-state="open"`). Designed to work automatically with Radix primitives while also supporting explicit control.
+A trigger button with a built-in chevron that rotates when open. Hardcodes `variant="select"` and delegates to `Button`, adding automatic open-state detection from Radix `data-state`. Designed to work automatically with Radix primitives while also supporting explicit control via the `transient` prop.
 
 ## Architecture
 
 ```
-Interactive.Base            <- variant/subvariant, selected, disabled, href, onClick, group, static
-  └─ Interactive.Container  <- height, rounding, padding (derived from `size`), border
-       └─ div.opal-open-button.interactive-foreground  <- full-width flexbox row
-            ├─ Icon?               .opal-open-button-icon     (1rem x 1rem, shrink-0)
-            ├─ <div>               .opal-open-button-content  (flex-1, min-w-0)
-            └─ SvgChevronDownSmall .opal-open-button-chevron  (rotates 180° when selected)
+OpenButton
+  └─ Button (variant="select", rightIcon=ChevronIcon)
+       └─ Interactive.Base                 <- select variant, transient, selected, disabled, href, onClick
+            └─ Interactive.Container       <- height, rounding, padding, border (auto for secondary)
+                 └─ div.opal-button.interactive-foreground
+                      ├─ div.p-0.5 > Icon?
+                      ├─ <span>?                   .opal-button-label
+                      └─ div.p-0.5 > ChevronIcon   .opal-open-button-chevron
 ```
 
-- **Selected-state detection** is dual-resolution: the `selected` prop takes priority; otherwise the component reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`). The `selected` prop drives both the `Interactive.Base` visual state and the chevron rotation.
-- **Sizing** uses the shared `SizeVariant` type (same as Button), mapping to Container height/rounding/padding presets.
-- **Colors** are handled by `Interactive.Base` -- the `.interactive-foreground` class ensures icon, text, and chevron all track the current state color.
+- **Always uses `variant="select"`.** OpenButton omits `variant` and `subvariant` from its own props; it hardcodes `variant="select"` and only exposes `InteractiveBaseSelectVariantProps` (`subvariant?: "light" | "heavy"`, `selected?: boolean`).
+- **`transient` controls both the chevron and the hover visual state.** When `transient` is true (explicitly or via Radix `data-state="open"`), the chevron rotates 180° and the `Interactive.Base` hover background activates. There is no separate `open` prop.
+- **Open-state detection** is dual-resolution: the explicit `transient` prop takes priority; otherwise the component reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`).
+- **Chevron rotation** is CSS-driven via `.interactive[data-transient="true"] .opal-open-button-chevron { rotate: -180deg }`. The `ChevronIcon` is a stable named component (not an inline function) to preserve React element identity across renders, ensuring CSS transitions fire correctly.
 
 ## Props
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `variant` | `"default" \| "action" \| "danger" \| "none" \| "select"` | `"default"` | Top-level color variant |
-| `subvariant` | Depends on `variant` | `"primary"` | Color subvariant |
+| `subvariant` | `"light" \| "heavy"` | `"light"` | Select subvariant. `"heavy"` shows a tinted background when selected. |
+| `selected` | `boolean` | `false` | Switches foreground to action-link colours |
+| `transient` | `boolean` | -- | Forces transient (hover) visual state and chevron rotation. Falls back to Radix `data-state="open"` when omitted. |
 | `icon` | `IconFunctionComponent` | -- | Left icon component |
 | `children` | `string` | -- | Content between icon and chevron |
-| `border` | `boolean` | `false` | Applies a 1px border to the container |
 | `size` | `SizeVariant` | `"default"` | Size preset controlling height, rounding, and padding |
 | `tooltip` | `string` | -- | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
-| `selected` | `boolean` | `false` | Forces selected visual state and rotates chevron |
 | `disabled` | `boolean` | `false` | Disables the button |
 | `href` | `string` | -- | URL; renders an `<a>` wrapper |
 | `onClick` | `MouseEventHandler<HTMLElement>` | -- | Click handler |
-| _...and all other `InteractiveBaseProps`_ | | | `group`, `static`, `ref`, etc. |
+| _...and all other `ButtonProps` (minus variant props) / `InteractiveBaseProps`_ | | | `group`, `static`, `ref`, etc. |
 
 ## Usage examples
 
@@ -43,20 +45,25 @@ Interactive.Base            <- variant/subvariant, selected, disabled, href, onC
 import { OpenButton } from "@opal/components";
 import { SvgFilter } from "@opal/icons";
 
-// Basic usage with Radix Popover (auto-detects open state)
+// Basic usage with Radix Popover (auto-detects open state from data-state)
 <Popover.Trigger asChild>
-  <OpenButton variant="default" subvariant="ghost" border>
+  <OpenButton>
     Select option
   </OpenButton>
 </Popover.Trigger>
 
-// Explicit selected control
-<OpenButton selected={isExpanded} onClick={toggle}>
+// Explicit transient control (chevron rotates AND button shows hover state)
+<OpenButton transient={isExpanded} onClick={toggle}>
   Advanced settings
 </OpenButton>
 
-// With left icon
-<OpenButton icon={SvgFilter} variant="default" subvariant="secondary" border>
+// With selected state (action-link foreground)
+<OpenButton selected={isActive} transient={isExpanded} onClick={toggle}>
+  Active filter
+</OpenButton>
+
+// With left icon and heavy subvariant (tinted background when selected)
+<OpenButton icon={SvgFilter} subvariant="heavy" selected={isActive}>
   Filters
 </OpenButton>
 
@@ -66,7 +73,7 @@ import { SvgFilter } from "@opal/icons";
 </OpenButton>
 
 // With tooltip
-<OpenButton tooltip="Expand filters" icon={SvgFilter} border>
+<OpenButton tooltip="Expand filters" icon={SvgFilter}>
   Filters
 </OpenButton>
 ```

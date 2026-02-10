@@ -178,7 +178,7 @@ export function FileCard({
           <Interactive.Container
             paddingVariant="none"
             border
-            heightVariant="full"
+            heightVariant="fit"
           >
             <AttachmentItemLayout
               icon={isProcessing ? SimpleLoader : SvgFileText}
