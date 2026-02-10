@@ -1,17 +1,13 @@
 /* Button — layout only; colors handled by Interactive.Base */
 
 .opal-button {
-  @apply flex flex-row items-center;
+  @apply flex flex-row items-center gap-1;
 }
 
 .opal-button-label {
-  @apply whitespace-nowrap leading-none text-sm font-medium;
-}
-
-.opal-button {
-  @apply gap-1;
+  @apply whitespace-nowrap font-main-ui-action;
 }
 
 .opal-button[data-size="compact"] .opal-button-label {
-  @apply text-sm;
+  @apply font-secondary-action;
 }

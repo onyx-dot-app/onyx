@@ -16,7 +16,7 @@ Interactive.Base            <- variant/subvariant, transient, disabled, href, on
 ```
 
 - **Colors are not in the Button.** `Interactive.Base` sets `background-color` and `--interactive-foreground` per variant/subvariant/state. The `.interactive-foreground` utility class on the content div sets `color: var(--interactive-foreground)`, which both the `<span>` text and `stroke="currentColor"` SVG icons inherit automatically.
-- **Layout is in `styles.css`.** The CSS classes (`.opal-button`, `.opal-button-icon`, `.opal-button-label`) handle flexbox alignment, gap, icon sizing, and text styling. A `[data-size="compact"]` selector tightens the gap and reduces font size.
+- **Layout is in `styles.css`.** The CSS classes (`.opal-button`, `.opal-button-label`) handle flexbox alignment, gap, and text styling. Default labels use `font-main-ui-action` (14px/600); compact labels use `font-secondary-action` (12px/600) via a `[data-size="compact"]` selector.
 - **Sizing is delegated to `Interactive.Container` presets.** The `size` prop maps to Container height/rounding/padding presets:
   - `"default"` -> height 2.25rem, rounding 12px, padding 8px
   - `"compact"` -> height 1.75rem, rounding 8px, padding 4px
@@ -32,7 +32,7 @@ Interactive.Base            <- variant/subvariant, transient, disabled, href, on
 | `icon` | `IconFunctionComponent` | -- | Left icon component |
 | `children` | `string` | -- | Button label text. Omit for icon-only buttons |
 | `rightIcon` | `IconFunctionComponent` | -- | Right icon component |
-| `size` | `SizeVariant` | `"default"` | Size preset controlling height, rounding, padding, gap, and font size |
+| `size` | `SizeVariant` | `"default"` | Size preset controlling height, rounding, padding, icon size, and font style |
 | `tooltip` | `string` | -- | Tooltip text shown on hover |
 | `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
 | `selected` | `boolean` | `false` | Switches foreground to action-link colours (only available with `variant="select"`) |
