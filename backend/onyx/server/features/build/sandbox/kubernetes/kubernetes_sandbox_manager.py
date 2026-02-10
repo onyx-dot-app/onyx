@@ -1087,9 +1087,7 @@ done
         user_work_area: str | None = None,
         user_level: str | None = None,
         use_demo_data: bool = False,
-        excluded_user_library_paths: (  # noqa: ARG002 - handled via sync_files
-            list[str] | None
-        ) = None,
+        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1118,6 +1116,10 @@ done
             user_level: User's level for demo persona (e.g., "ic", "manager")
             use_demo_data: If True, symlink files/ to /workspace/demo_data;
                           else to /workspace/files (S3-synced user files)
+            excluded_user_library_paths: List of paths within user_library/ to exclude
+                (e.g., ["/data/file.xlsx"]). These files won't be accessible in the session.
+            user_id: User ID for S3 path construction (required if not use_demo_data)
+            tenant_id: Tenant ID for S3 path construction (required if not use_demo_data)
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1197,6 +1199,75 @@ printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_str
 # Create files symlink to demo data (baked into image)
 echo "Creating files symlink to demo data: {symlink_target}"
 ln -sf {symlink_target} {session_path}/files
+"""
+        elif excluded_user_library_paths:
+            # User files with exclusions: create filtered symlink structure
+            # Instead of symlinking to /workspace/files directly, create a directory
+            # with symlinks to each top-level item, then filter user_library contents
+            excluded_paths_str = " ".join(
+                f'"{p.lstrip("/")}"' for p in excluded_user_library_paths
+            )
+            files_symlink_setup = f"""
+# Create filtered files directory with exclusions
+echo "Creating filtered files structure with exclusions"
+mkdir -p {session_path}/files
+
+# Symlink all top-level directories except user_library
+for item in /workspace/files/*; do
+    [ -e "$item" ] || continue
+    name=$(basename "$item")
+    if [ "$name" != "user_library" ]; then
+        ln -sf "$item" {session_path}/files/"$name"
+    fi
+done
+
+# Create filtered user_library with symlinks to enabled files only
+EXCLUDED_PATHS=({excluded_paths_str})
+is_excluded() {{
+    local path="$1"
+    for excl in "${{EXCLUDED_PATHS[@]}}"; do
+        if [ "$path" = "$excl" ] || [[ "$path" == "$excl"/* ]]; then
+            return 0
+        fi
+    done
+    return 1
+}}
+
+# Recursively create symlinks for non-excluded files
+create_filtered_symlinks() {{
+    local src_dir="$1"
+    local dst_dir="$2"
+    local rel_base="$3"
+
+    for item in "$src_dir"/*; do
+        [ -e "$item" ] || continue
+        local name=$(basename "$item")
+        local rel_path="${{rel_base:+$rel_base/}}$name"
+
+        if is_excluded "$rel_path"; then
+            echo "Excluding: $rel_path"
+            continue
+        fi
+
+        if [ -d "$item" ]; then
+            # Recurse into directory
+            mkdir -p "$dst_dir/$name"
+            create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
+            # Remove empty directories
+            rmdir "$dst_dir/$name" 2>/dev/null || true
+        else
+            # Symlink file
+            ln -sf "$item" "$dst_dir/$name"
+        fi
+    done
+}}
+
+if [ -d "/workspace/files/user_library" ]; then
+    mkdir -p {session_path}/files/user_library
+    create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
+    # Remove user_library if empty
+    rmdir {session_path}/files/user_library 2>/dev/null || true
+fi
 """
         else:
             # Normal mode: symlink to user's S3-synced knowledge files
