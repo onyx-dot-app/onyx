@@ -1,5 +1,7 @@
 from onyx.configs import app_configs
+from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.tool import ToolManager
@@ -23,8 +25,17 @@ def _assert_integration_mode_enabled() -> None:
     ), "Integration tests require INTEGRATION_TESTS_MODE=true."
 
 
+def _seed_connector_for_search_tool(admin_user: DATestUser) -> None:
+    # SearchTool is only exposed when at least one non-default connector exists.
+    CCPairManager.create_from_scratch(
+        source=DocumentSource.INGESTION_API,
+        user_performing_action=admin_user,
+    )
+
+
 def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> None:
     _assert_integration_mode_enabled()
+    _seed_connector_for_search_tool(admin_user)
 
     LLMProviderManager.create(
         user_performing_action=admin_user,
@@ -49,6 +60,7 @@ def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> Non
 
 def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> None:
     _assert_integration_mode_enabled()
+    _seed_connector_for_search_tool(admin_user)
 
     LLMProviderManager.create(
         user_performing_action=admin_user,
