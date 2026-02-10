@@ -11,7 +11,10 @@ import type { IconProps } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-type OpenButtonProps = Omit<ButtonProps, keyof InteractiveBaseVariantProps> &
+type OpenButtonProps = Omit<
+  ButtonProps,
+  keyof InteractiveBaseVariantProps | "foldable"
+> &
   InteractiveBaseSelectVariantProps;
 
 // ---------------------------------------------------------------------------
@@ -38,14 +41,16 @@ function OpenButton({ transient, ...baseProps }: OpenButtonProps) {
     | undefined;
   const transient_ = transient ?? dataState === "open";
 
-  return (
-    <Button
-      variant="select"
-      transient={transient_}
-      rightIcon={ChevronIcon}
-      {...baseProps}
-    />
-  );
+  // Assertion is safe: OpenButton is a controlled wrapper that always supplies
+  // rightIcon (ChevronIcon) and variant="select", satisfying Button's union.
+  const buttonProps = {
+    ...baseProps,
+    variant: "select" as const,
+    transient: transient_,
+    rightIcon: ChevronIcon,
+  } as ButtonProps;
+
+  return <Button {...buttonProps} />;
 }
 
 export { OpenButton, type OpenButtonProps };
