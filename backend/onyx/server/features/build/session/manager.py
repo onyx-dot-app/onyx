@@ -563,6 +563,22 @@ class SessionManager:
         user_name = user.personal_name if user else None
         user_role = user.personal_role if user else None
 
+        # Get excluded user library paths (files with sync_disabled=True)
+        # Only query if not using demo data (user library only applies to user files)
+        excluded_user_library_paths: list[str] | None = None
+        if not demo_data_enabled:
+            from onyx.server.features.build.sandbox.tasks.tasks import (
+                _get_disabled_user_library_paths,
+            )
+
+            excluded_user_library_paths = _get_disabled_user_library_paths(
+                self._db_session, str(user_id)
+            )
+            if excluded_user_library_paths:
+                logger.debug(
+                    f"Excluding {len(excluded_user_library_paths)} disabled user library paths"
+                )
+
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
@@ -575,7 +591,32 @@ class SessionManager:
             user_work_area=user_work_area,
             user_level=user_level,
             use_demo_data=demo_data_enabled,
+            excluded_user_library_paths=excluded_user_library_paths,
         )
+
+        # For K8s backend: trigger immediate sync with exclusions to remove disabled files
+        # In K8s, the init container syncs all files from S3, but disabled files need to be
+        # removed. LocalSandboxManager handles this during setup_session_workspace via
+        # filtered symlinks, but K8sSandboxManager needs an explicit sync_files call.
+        # This is a no-op for LocalSandboxManager (sync_files returns immediately).
+        if excluded_user_library_paths and not demo_data_enabled:
+            logger.debug(
+                f"Triggering sync with exclusions for {len(excluded_user_library_paths)} disabled paths"
+            )
+            # _get_disabled_user_library_paths returns paths like "/data/file.xlsx"
+            # When using source="user_library", exclude_paths should be relative to
+            # user_library directory, so we just strip the leading slash
+            exclude_paths_for_sync = [
+                path.lstrip("/") for path in excluded_user_library_paths
+            ]
+            self._sandbox_manager.sync_files(
+                sandbox_id=sandbox.id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                source="user_library",
+                exclude_paths=exclude_paths_for_sync,
+            )
+
         sandbox_id = sandbox.id
         logger.info(
             f"Successfully created session {session_id} with workspace in sandbox {sandbox.id}"
