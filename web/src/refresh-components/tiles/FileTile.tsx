@@ -102,7 +102,7 @@ export default function FileTile({
         </div>
 
         {(title || description || onOpen) && (
-          <div className="min-w-0 flex pl-1 h-full">
+          <div className="min-w-0 flex pl-1 w-full justify-between h-full">
             {isMuted ? (
               <div className="flex flex-col min-w-0">
                 {title && (
