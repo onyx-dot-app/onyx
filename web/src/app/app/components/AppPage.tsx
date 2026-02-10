@@ -657,8 +657,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     isStreaming={isStreaming}
                     onScrollButtonVisibilityChange={setShowScrollButton}
                   >
-                    {/* Spacer for the header height */}
-                    <div className="h-16 shrink-0" data-chat-header-spacer />
                     <MessageList
                       liveAssistant={liveAssistant}
                       llmManager={llmManager}
