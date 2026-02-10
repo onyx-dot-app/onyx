@@ -58,7 +58,7 @@ const NameStep = React.memo(
           value={userName || ""}
           onChange={(e) => updateName(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="w-[26%] min-w-40"
+          className="max-w-60"
         />
       </div>
     ) : (
