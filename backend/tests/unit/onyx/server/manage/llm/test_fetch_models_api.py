@@ -73,6 +73,10 @@ class TestGetOllamaAvailableModels:
             # Check display names are generated
             assert any("Llama" in r.display_name for r in results)
             assert any("Mistral" in r.display_name for r in results)
+            # Results should be alphabetically sorted by model name
+            assert [r.name for r in results] == sorted(
+                [r.name for r in results], key=str.lower
+            )
 
     def test_syncs_to_db_when_provider_name_specified(
         self, mock_ollama_tags_response: dict, mock_ollama_show_response: dict

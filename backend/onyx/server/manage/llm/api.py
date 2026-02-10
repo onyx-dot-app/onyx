@@ -938,6 +938,11 @@ def get_ollama_available_models(
             )
         )
 
+    sorted_results = sorted(
+        all_models_with_context_size_and_vision,
+        key=lambda m: m.name.lower(),
+    )
+
     # Sync new models to DB if provider_name is specified
     if request.provider_name:
         try:
@@ -948,7 +953,7 @@ def get_ollama_available_models(
                     "max_input_tokens": r.max_input_tokens,
                     "supports_image_input": r.supports_image_input,
                 }
-                for r in all_models_with_context_size_and_vision
+                for r in sorted_results
             ]
             new_count = sync_model_configurations(
                 db_session=db_session,
@@ -962,7 +967,7 @@ def get_ollama_available_models(
         except ValueError as e:
             logger.warning(f"Failed to sync Ollama models to DB: {e}")
 
-    return all_models_with_context_size_and_vision
+    return sorted_results
 
 
 def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:
