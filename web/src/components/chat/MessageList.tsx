@@ -10,7 +10,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import Spacer from "@/refresh-components/Spacer";
-import DynamicBottomSpacer from "./DynamicBottomSpacer";
+import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,
   useCurrentMessageTree,

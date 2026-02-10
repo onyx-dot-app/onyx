@@ -8,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ScrollContainerProvider } from "./ScrollContainerContext";
+import { ScrollContainerProvider } from "@/components/chat/ScrollContainerContext";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem

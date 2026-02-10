@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useCallback } from "react";
 import { useCurrentChatState } from "@/app/app/stores/useChatSessionStore";
-import { useScrollContainer } from "./ScrollContainerContext";
+import { useScrollContainer } from "@/components/chat/ScrollContainerContext";
 
 // Small offset from the top of the scroll viewport where the anchor should appear.
 // The header is outside the scroll container, so when scrolled to the bottom
