@@ -1230,13 +1230,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         });
       }
 
-      // Always fetch messages from DB first - they don't depend on the
-      // sandbox being running. This ensures message history is visible
-      // immediately, even while a sandbox restore is in progress.
-      const [messages, artifacts] = await Promise.all([
-        fetchMessages(sessionId),
-        fetchArtifacts(sessionId),
-      ]);
+      // Fetch messages from DB first - they don't depend on the sandbox
+      // being running. This ensures message history is visible immediately,
+      // even while a sandbox restore is in progress.
+      // NOTE: artifacts require sandbox filesystem access, so only fetch
+      // them when the sandbox is already running.
+      const messages = await fetchMessages(sessionId);
+      const artifacts = needsRestore ? [] : await fetchArtifacts(sessionId);
 
       // If session is already streaming (e.g. pre-provisioned flow),
       // preserve its current messages and status. Otherwise use DB messages.
@@ -1254,21 +1254,29 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         webappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
       }
 
-      updateSessionData(sessionId, {
-        status: isStreaming
-          ? currentSession!.status
+      const status = isStreaming
+        ? currentSession!.status
+        : needsRestore
+          ? "creating"
           : sessionData.status === "active"
             ? "active"
-            : "idle",
-        messages: isStreaming
-          ? currentSession!.messages
-          : consolidateMessagesIntoTurns(messages),
-        streamItems: isStreaming ? currentSession!.streamItems : [],
+            : "idle";
+      const resolvedMessages = isStreaming
+        ? currentSession!.messages
+        : consolidateMessagesIntoTurns(messages);
+      const streamItems = isStreaming ? currentSession!.streamItems : [];
+      const sandbox =
+        needsRestore && sessionData.sandbox
+          ? { ...sessionData.sandbox, status: "restoring" as const }
+          : sessionData.sandbox;
+
+      updateSessionData(sessionId, {
+        status,
+        messages: resolvedMessages,
+        streamItems,
         artifacts,
         webappUrl,
-        sandbox: needsRestore
-          ? { ...sessionData.sandbox!, status: "restoring" as const }
-          : sessionData.sandbox,
+        sandbox,
         error: null,
         isLoaded: true,
       });
@@ -1280,16 +1288,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         try {
           sessionData = await restoreSession(sessionId);
 
-          // Recompute webapp URL with potentially new nextjs_port
-          let restoredWebappUrl: string | null = null;
-          if (hasWebapp && sessionData.sandbox?.nextjs_port) {
-            restoredWebappUrl = `http://localhost:${sessionData.sandbox.nextjs_port}`;
-          }
+          // Sandbox is now running - fetch artifacts
+          const restoredArtifacts = await fetchArtifacts(sessionId);
 
           updateSessionData(sessionId, {
             status: sessionData.status === "active" ? "active" : "idle",
-            webappUrl: restoredWebappUrl,
+            artifacts: restoredArtifacts,
             sandbox: sessionData.sandbox,
+            // Bump so OutputPanel's SWR refetches webapp-info (which
+            // derives the actual webappUrl from the backend).
             webappNeedsRefresh:
               (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
           });
