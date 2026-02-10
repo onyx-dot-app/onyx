@@ -30,7 +30,10 @@ type ButtonProps = InteractiveBaseProps & {
   tooltipSide?: TooltipSide;
 };
 
-function iconWrapper(isCompact: boolean, Icon?: IconFunctionComponent) {
+function iconWrapper(
+  Icon: IconFunctionComponent | undefined,
+  isCompact: boolean
+) {
   return Icon ? (
     <div className="p-0.5">
       <Icon
@@ -70,9 +73,9 @@ function Button({
         paddingVariant={isCompact ? "thin" : "default"}
       >
         <div className="opal-button interactive-foreground">
-          {iconWrapper(isCompact, Icon)}
+          {iconWrapper(Icon, isCompact)}
           {children && <span className="opal-button-label">{children}</span>}
-          {iconWrapper(isCompact, RightIcon)}
+          {iconWrapper(RightIcon, isCompact)}
         </div>
       </Interactive.Container>
     </Interactive.Base>
