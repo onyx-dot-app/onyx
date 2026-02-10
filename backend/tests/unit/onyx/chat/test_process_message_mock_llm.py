@@ -6,16 +6,13 @@ from onyx.chat import process_message
 from onyx.configs import app_configs
 from onyx.server.query_and_chat.models import SendMessageRequest
 
+pytestmark = pytest.mark.skipif(
+    app_configs.INTEGRATION_TESTS_MODE,
+    reason="This unit test validates default (non-integration) mode behavior.",
+)
 
-def test_mock_llm_response_requires_integration_mode(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Patch both the runtime lookup used by process_message and the config source.
-    # Today, handle_stream_message_objects reads process_message.INTEGRATION_TESTS_MODE,
-    # but patching both keeps this test deterministic if that implementation changes.
-    monkeypatch.setattr(app_configs, "INTEGRATION_TESTS_MODE", False)
-    monkeypatch.setattr(process_message, "INTEGRATION_TESTS_MODE", False)
 
+def test_mock_llm_response_requires_integration_mode() -> None:
     request = SendMessageRequest(
         message="test",
         mock_llm_response='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
