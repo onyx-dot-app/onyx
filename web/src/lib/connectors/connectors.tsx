@@ -992,6 +992,15 @@ export const connectorConfigs: Record<
 For example, specifying .*-support.* as a "channel" will cause the connector to include any channels with "-support" in the name.`,
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include bot messages?",
+        label: "Include Bot Messages",
+        name: "include_bot_messages",
+        description:
+          "If enabled, messages from bots and apps will be indexed. Useful for channels that are primarily bot-driven feeds (e.g. CRM updates, automated notes).",
+        optional: true,
+      },
     ],
   },
   slab: {
@@ -1892,6 +1901,7 @@ export interface SlackConfig {
   workspace: string;
   channels?: string[];
   channel_regex_enabled?: boolean;
+  include_bot_messages?: boolean;
 }
 
 export interface SlabConfig {
