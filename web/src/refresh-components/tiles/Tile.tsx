@@ -158,7 +158,7 @@ function FileTile({
             )}
             {onOpen && (
               <div className="h-full">
-                <IconButton internal icon={ExternalLink} />
+                <IconButton small icon={ExternalLink} />
               </div>
             )}
           </div>
