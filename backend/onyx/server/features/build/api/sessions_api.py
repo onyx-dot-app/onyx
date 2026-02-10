@@ -329,9 +329,8 @@ def delete_session(
 
 # Lock timeout should be longer than max restore time (5 minutes)
 RESTORE_LOCK_TIMEOUT_SECONDS = 300
-RESTORE_TIMEOUT_SECONDS = (
-    90  # Per-operation timeout (provision, snapshot restore, etc.)
-)
+# If more than this, probably failed to restore
+RESTORE_TIMEOUT_SECONDS = 120
 
 
 @router.post("/{session_id}/restore", response_model=DetailedSessionResponse)
