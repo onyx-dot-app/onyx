@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
@@ -405,6 +406,7 @@ def construct_tools(
     if (
         not added_search_tool
         and search_usage_forcing_setting == SearchToolUsage.ENABLED
+        and not DISABLE_VECTOR_DB
     ):
         # Get the database tool model for SearchTool
         search_tool_db_model = get_builtin_tool(db_session, SearchTool)
