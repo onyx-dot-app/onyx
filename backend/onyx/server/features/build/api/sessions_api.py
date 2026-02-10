@@ -329,7 +329,8 @@ def delete_session(
 
 # Lock timeout should be longer than max restore time (5 minutes)
 RESTORE_LOCK_TIMEOUT_SECONDS = 300
-# If more than this, probably failed to restore
+# Per-operation timeout (provision, snapshot restore, etc.)
+# If more than this, probably failed to restore.
 RESTORE_TIMEOUT_SECONDS = 120
 
 
