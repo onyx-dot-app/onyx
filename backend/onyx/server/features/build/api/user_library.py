@@ -719,10 +719,6 @@ def toggle_file_sync(
 
     db_session.commit()
 
-    # Trigger sync to apply changes to running sandboxes
-    # The sync task will query the DB for disabled files and exclude them
-    _trigger_sandbox_sync(str(user.id), tenant_id, source="user_library")
-
     return {"success": True, "sync_enabled": enabled}
 
 

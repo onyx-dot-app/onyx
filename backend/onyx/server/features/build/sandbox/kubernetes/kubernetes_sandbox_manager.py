@@ -2109,33 +2109,36 @@ echo "Session config regeneration complete"
 
         # Build exclude options for s5cmd
         # s5cmd uses --exclude with glob patterns
+        # NOTE: We no longer delete excluded files from /workspace/files/.
+        # All files remain in the shared storage, and session visibility is
+        # controlled via filtered symlinks in setup_session_workspace().
         exclude_options = ""
-        delete_commands = ""
-        cleanup_empty_dirs = ""
         if exclude_paths:
             for path in exclude_paths:
                 # Remove leading slash for pattern matching
                 pattern = path.lstrip("/")
                 # s5cmd --exclude uses glob patterns
                 exclude_options += f' --exclude "*{pattern}"'
-                # Also delete any existing files at these paths
-                delete_commands += (
-                    f'rm -f "{local_path}{pattern}" 2>/dev/null || true\n'
-                )
-            # After deleting files, clean up any empty directories
-            # find -depth ensures we process deepest dirs first (bottom-up)
-            cleanup_empty_dirs = (
-                f'find "{local_path}" -type d -empty -delete 2>/dev/null || true'
-            )
 
         # s5cmd sync: high-performance parallel S3 sync
         # --delete: mirror S3 to local (remove files that no longer exist in source)
+        #           Use --delete for external connectors (gmail, google_drive) where
+        #           files can be removed from the source.
+        #           Do NOT use --delete for user_library - files are only added by user
+        #           uploads, and deletions are handled explicitly by the delete_file endpoint.
         # timeout: prevent zombie processes from kubectl exec disconnections
         # trap: kill child processes on exit/disconnect
         source_info = f" (source={source})" if source else ""
         exclude_info = (
             f", excluding {len(exclude_paths)} files" if exclude_paths else ""
         )
+
+        # Only use --delete for external connectors where the source of truth is external.
+        # For user_library, we only add files - deletions are handled explicitly.
+        # When source is None (sync all), we also skip --delete to be safe.
+        use_delete = source is not None and source != "user_library"
+        delete_flag = " --delete" if use_delete else ""
+
         sync_script = f"""
 # Kill child processes on exit/disconnect to prevent zombie s5cmd workers
 cleanup() {{ pkill -P $$ 2>/dev/null || true; }}
@@ -2148,16 +2151,11 @@ echo "Local: {local_path}"
 # Ensure destination exists (needed for source-specific syncs)
 mkdir -p "{local_path}"
 
-# Delete any excluded files that might exist
-{delete_commands}
-# Clean up any empty directories left after file deletion
-{cleanup_empty_dirs}
-
 # Run s5cmd with 5-minute timeout (SIGKILL after 10s if SIGTERM ignored)
 # Exit codes: 0=success, 1=success with warnings, 124=timeout
 sync_exit_code=0
 timeout --signal=TERM --kill-after=10s 5m \
-    /s5cmd --stat sync --delete{exclude_options} "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
+    /s5cmd --stat sync{delete_flag}{exclude_options} "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
 
 echo "=== Sync finished (exit code: $sync_exit_code) ==="
 
