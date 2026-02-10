@@ -21,7 +21,7 @@ jobs:
 
       - name: Install node dependencies
         working-directory: ./web
-        run: npm install --only=dev
+        run: npm install -D
 
       - name: Pull Vercel Environment Information
         working-directory: ./web
