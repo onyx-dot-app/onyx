@@ -8,4 +8,4 @@ End-users *can* use these components directly when needed, but in most cases the
 
 | Primitive | Description | Docs |
 |-----------|-------------|------|
-| [Interactive](./interactive/) | Foundational hover/active/disabled/selected state styling | [README](./interactive/README.md) |
+| [Interactive](./interactive/) | Foundational hover/active/disabled/transient state styling | [README](./interactive/README.md) |
