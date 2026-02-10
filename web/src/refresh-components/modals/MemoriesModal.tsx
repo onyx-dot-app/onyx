@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -7,6 +8,7 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
+import CharacterCount from "@/refresh-components/CharacterCount";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
@@ -30,6 +32,8 @@ function MemoryItem({
   onBlur,
   onRemove,
 }: MemoryItemProps) {
+  const [isFocused, setIsFocused] = useState(false);
+
   return (
     <div className="rounded-08 hover:bg-background-tint-00 w-full p-0.5">
       <Section gap={0.25} alignItems="start">
@@ -38,7 +42,11 @@ function MemoryItem({
             placeholder="Type or paste in a personal note or memory"
             value={memory.content}
             onChange={(e) => onUpdate(originalIndex, e.target.value)}
-            onBlur={() => void onBlur(originalIndex)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => {
+              setIsFocused(false);
+              void onBlur(originalIndex);
+            }}
             rows={3}
             maxLength={MAX_MEMORY_LENGTH}
           />
@@ -51,9 +59,9 @@ function MemoryItem({
             tooltip="Remove Line"
           />
         </Section>
-        <Text secondaryBody text03>
-          ({memory.content.length}/{MAX_MEMORY_LENGTH} characters)
-        </Text>
+        {isFocused && (
+          <CharacterCount value={memory.content} limit={MAX_MEMORY_LENGTH} />
+        )}
       </Section>
     </div>
   );
