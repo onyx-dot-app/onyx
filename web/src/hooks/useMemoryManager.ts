@@ -24,6 +24,7 @@ export function useMemoryManager({
   const [localMemories, setLocalMemories] = useState<LocalMemory[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const initialMemoriesRef = useRef<MemoryItem[]>([]);
+  const isSavingRef = useRef(false);
 
   // Initialize local memories from props
   useEffect(() => {
@@ -33,7 +34,10 @@ export function useMemoryManager({
       isNew: false,
     }));
 
-    setLocalMemories(existingMemories);
+    setLocalMemories((prev) => {
+      const emptyNewItems = prev.filter((m) => m.isNew && !m.content.trim());
+      return [...emptyNewItems, ...existingMemories];
+    });
     initialMemoriesRef.current = memories;
   }, [memories]);
 
@@ -51,13 +55,40 @@ export function useMemoryManager({
       return existingEmpty.id;
     }
 
+    // Save any unsaved new item with content before creating a new one
+    const unsavedNewItem = localMemories.find(
+      (m) => m.isNew && m.content.trim()
+    );
+    if (unsavedNewItem && !isSavingRef.current) {
+      const newMemories: MemoryItem[] = localMemories
+        .filter((m) => m.content.trim())
+        .map((m) => ({ id: m.isNew ? null : m.id, content: m.content }));
+
+      const memoriesChanged =
+        JSON.stringify(newMemories) !==
+        JSON.stringify(initialMemoriesRef.current);
+
+      if (memoriesChanged) {
+        isSavingRef.current = true;
+        onSaveMemories(newMemories).then((success) => {
+          isSavingRef.current = false;
+          if (success) {
+            initialMemoriesRef.current = newMemories;
+            onNotify("Memory saved", "success");
+          } else {
+            onNotify("Failed to save memory", "error");
+          }
+        });
+      }
+    }
+
     const newId = Date.now();
     setLocalMemories((prev) => [
       { id: newId, content: "", isNew: true },
       ...prev,
     ]);
     return newId;
-  }, [localMemories]);
+  }, [localMemories, onSaveMemories, onNotify]);
 
   const handleUpdateMemory = useCallback((index: number, value: string) => {
     setLocalMemories((prev) =>
@@ -96,6 +127,7 @@ export function useMemoryManager({
     async (index: number) => {
       const memory = localMemories[index];
       if (!memory || !memory.content.trim()) return;
+      if (isSavingRef.current) return;
 
       const newMemories: MemoryItem[] = localMemories
         .filter((m) => m.content.trim())
@@ -107,7 +139,9 @@ export function useMemoryManager({
 
       if (!memoriesChanged) return;
 
+      isSavingRef.current = true;
       const success = await onSaveMemories(newMemories);
+      isSavingRef.current = false;
       if (success) {
         initialMemoriesRef.current = newMemories;
         onNotify("Memory saved", "success");
