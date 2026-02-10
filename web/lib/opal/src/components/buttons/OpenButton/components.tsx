@@ -11,10 +11,7 @@ import type { IconProps } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-type OpenButtonProps = Omit<
-  ButtonProps,
-  keyof InteractiveBaseVariantProps | "foldable"
-> &
+type OpenButtonProps = Omit<ButtonProps, keyof InteractiveBaseVariantProps> &
   InteractiveBaseSelectVariantProps;
 
 // ---------------------------------------------------------------------------
