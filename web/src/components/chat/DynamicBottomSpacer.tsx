@@ -34,7 +34,8 @@ const DynamicBottomSpacer = React.memo(
     const isStreaming = chatState === "streaming" || chatState === "loading";
 
     // Get scroll container refs from context (provided by ChatScrollContainer)
-    const { scrollContainerRef, contentWrapperRef } = useScrollContainer();
+    const { scrollContainerRef, contentWrapperRef, spacerHeightRef } =
+      useScrollContainer();
 
     // Track state with refs to avoid re-renders
     const isActiveRef = useRef(false);
@@ -51,13 +52,17 @@ const DynamicBottomSpacer = React.memo(
     /**
      * Set spacer height directly on DOM (no re-renders)
      */
-    const setHeight = useCallback((height: number) => {
-      const h = Math.max(0, Math.round(height));
-      currentSpacerHeightRef.current = h;
-      if (spacerRef.current) {
-        spacerRef.current.style.height = `${h}px`;
-      }
-    }, []);
+    const setHeight = useCallback(
+      (height: number) => {
+        const h = Math.max(0, Math.round(height));
+        currentSpacerHeightRef.current = h;
+        spacerHeightRef.current = h;
+        if (spacerRef.current) {
+          spacerRef.current.style.height = `${h}px`;
+        }
+      },
+      [spacerHeightRef]
+    );
 
     /**
      * Get the scroll container element from context ref

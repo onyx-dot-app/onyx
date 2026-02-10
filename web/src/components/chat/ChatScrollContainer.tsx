@@ -77,6 +77,7 @@ const ChatScrollContainer = React.memo(
       const buttonThresholdPx = DEFAULT_BUTTON_THRESHOLD_PX;
       const scrollContainerRef = useRef<HTMLDivElement>(null);
       const contentWrapperRef = useRef<HTMLDivElement>(null);
+      const spacerHeightRef = useRef(0);
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
@@ -113,12 +114,8 @@ const ChatScrollContainer = React.memo(
 
         // Exclude the dynamic spacer — it's cosmetic (push-up effect) and
         // shouldn't make the system think there's real content below the viewport.
-        const dynamicSpacer = container.querySelector(
-          "[data-dynamic-spacer]"
-        ) as HTMLElement | null;
-        const spacerHeight = dynamicSpacer?.offsetHeight ?? 0;
-
-        const contentEnd = endDivRef.current.offsetTop - spacerHeight;
+        const contentEnd =
+          endDivRef.current.offsetTop - spacerHeightRef.current;
         const viewportBottom = container.scrollTop + container.clientHeight;
         const contentBelowViewport = contentEnd - viewportBottom;
 
@@ -369,6 +366,7 @@ const ChatScrollContainer = React.memo(
               <ScrollContainerProvider
                 scrollContainerRef={scrollContainerRef}
                 contentWrapperRef={contentWrapperRef}
+                spacerHeightRef={spacerHeightRef}
               >
                 {children}
               </ScrollContainerProvider>
