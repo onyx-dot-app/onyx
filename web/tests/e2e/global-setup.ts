@@ -83,12 +83,12 @@ async function ensureUserExists(
  * Requires an authenticated context (admin storage state).
  */
 async function promoteToAdmin(
-  apiBase: string,
+  baseURL: string,
   adminStorageState: string,
   email: string
 ): Promise<void> {
   const ctx = await request.newContext({
-    baseURL: apiBase,
+    baseURL,
     storageState: adminStorageState,
   });
   try {
@@ -100,6 +100,16 @@ async function promoteToAdmin(
     });
     if (res.ok()) {
       console.log(`[global-setup] Promoted ${email} to admin`);
+    } else if (res.status() === 403) {
+      throw new Error(
+        `[global-setup] Cannot promote ${email} — the primary admin account ` +
+          `(${TEST_ADMIN_CREDENTIALS.email}) does not have the admin role.\n\n` +
+          `This usually happens when running tests against a non-fresh database ` +
+          `where another user was registered first.\n\n` +
+          `To fix this, either:\n` +
+          `  1. Promote the user manually: ${baseURL}/admin/users\n` +
+          `  2. Reset to a seeded database: ods db restore --fetch-seeded\n`
+      );
     } else {
       const body = await res.text();
       console.warn(
