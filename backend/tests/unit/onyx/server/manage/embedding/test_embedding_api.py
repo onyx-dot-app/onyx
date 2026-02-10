@@ -101,4 +101,5 @@ def test_search_settings_api_key_property_returns_raw_value_for_runtime_use() ->
         cloud_provider=SimpleNamespace(api_key=_build_sensitive_value(raw_api_key))
     )
 
-    assert SearchSettings.api_key.fget(fake_search_settings) == raw_api_key
+    api_key_property = SearchSettings.__dict__["api_key"]
+    assert api_key_property.fget(fake_search_settings) == raw_api_key
