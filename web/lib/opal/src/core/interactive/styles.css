@@ -1,6 +1,6 @@
 /* Interactive — base (structural only, no color changes) */
 .interactive {
-  @apply cursor-pointer select-none transition-colors;
+  @apply cursor-pointer select-none transition-all;
 }
 
 .interactive[data-disabled] {
@@ -33,7 +33,7 @@
 .interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="primary"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--theme-primary-04)];
@@ -58,7 +58,7 @@
 .interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="secondary"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -85,7 +85,7 @@
 .interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="default"][data-interactive-base-subvariant="ghost"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -112,7 +112,7 @@
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="primary"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-link-04)];
@@ -137,7 +137,7 @@
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="secondary"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -162,7 +162,7 @@
 .interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="action"][data-interactive-base-subvariant="ghost"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -187,7 +187,7 @@
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="primary"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-[var(--action-danger-04)];
@@ -212,7 +212,7 @@
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="secondary"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -237,7 +237,7 @@
 .interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"]:hover:not(
     [data-static]
   ):not([data-disabled]),
-.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-selected="true"]:not(
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-subvariant="ghost"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
@@ -259,8 +259,11 @@
    When not selected, text darkens on :active. When selected, foreground
    switches to the action-link colour family and stays constant.
 
+   `data-transient` forces the hover background (same as all other variants).
+   `data-selected` switches the foreground to action-link colours.
+
    The "heavy" subvariant overrides the selected background to action-link-01
-   (instead of tint-02). All other states are identical.
+   (instead of transparent). All other states are identical.
    --------------------------------------------------------------------------- */
 .interactive[data-interactive-base-variant="select"] {
   @apply bg-transparent;
@@ -268,18 +271,16 @@
 }
 .interactive[data-interactive-base-variant="select"]:hover:not(
     [data-static]
-  ):not([data-disabled]):not([data-selected="true"]) {
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="select"][data-transient="true"]:not(
+    [data-static]
+  ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }
 .interactive[data-interactive-base-variant="select"][data-selected="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   --interactive-foreground: var(--action-link-05);
-}
-.interactive[data-interactive-base-variant="select"][data-selected="true"]:hover:not(
-    [data-static]
-  ):not([data-disabled]) {
-  @apply bg-background-tint-02;
 }
 .interactive[data-interactive-base-variant="select"]:active:not(
     [data-static]
@@ -307,6 +308,9 @@
   @apply bg-[var(--action-link-01)];
 }
 .interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:hover:not(
+    [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"][data-transient="true"]:not(
     [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;

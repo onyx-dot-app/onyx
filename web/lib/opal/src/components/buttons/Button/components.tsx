@@ -4,6 +4,7 @@ import { Interactive, type InteractiveBaseProps } from "@opal/core";
 import type { SizeVariant, TooltipSide } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,6 +30,25 @@ type ButtonProps = InteractiveBaseProps & {
   tooltipSide?: TooltipSide;
 };
 
+function iconWrapper(
+  Icon: IconFunctionComponent | undefined,
+  isCompact: boolean
+) {
+  return Icon ? (
+    <div className="p-0.5">
+      <Icon
+        className={cn(
+          "shrink-0",
+          isCompact ? "h-[0.75rem] w-[0.75rem]" : "h-[1rem] w-[1rem]"
+        )}
+        size={isCompact ? 12 : 16}
+      />
+    </div>
+  ) : (
+    <div className="w-[0.125rem]" />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Button
 // ---------------------------------------------------------------------------
@@ -40,29 +60,31 @@ function Button({
   size = "default",
   tooltip,
   tooltipSide = "top",
-  variant,
-  subvariant,
-  ...baseProps
+  ...interactiveBaseProps
 }: ButtonProps) {
   const isCompact = size === "compact";
 
   const button = (
-    <Interactive.Base
-      {...({ variant, subvariant } as InteractiveBaseProps)}
-      {...baseProps}
-    >
+    <Interactive.Base {...interactiveBaseProps}>
       <Interactive.Container
+        border={interactiveBaseProps.subvariant === "secondary"}
         heightVariant={isCompact ? "compact" : "default"}
         roundingVariant={isCompact ? "compact" : "default"}
         paddingVariant={isCompact ? "thin" : "default"}
       >
-        <div
-          className="opal-button interactive-foreground"
-          data-size={isCompact ? "compact" : undefined}
-        >
-          {Icon && <Icon className="opal-button-icon" />}
-          {children && <span className="opal-button-label">{children}</span>}
-          {RightIcon && <RightIcon className="opal-button-icon" />}
+        <div className="opal-button interactive-foreground">
+          {iconWrapper(Icon, isCompact)}
+          {children && (
+            <span
+              className={cn(
+                "opal-button-label",
+                isCompact ? "font-secondary-action" : "font-main-ui-action"
+              )}
+            >
+              {children}
+            </span>
+          )}
+          {iconWrapper(RightIcon, isCompact)}
         </div>
       </Interactive.Container>
     </Interactive.Base>

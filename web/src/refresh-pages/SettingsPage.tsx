@@ -1453,7 +1453,7 @@ function AccountsAccessSettings() {
                       >
                         <Interactive.Container
                           paddingVariant="none"
-                          heightVariant="full"
+                          heightVariant="fit"
                         >
                           <AttachmentItemLayout
                             icon={SvgKey}

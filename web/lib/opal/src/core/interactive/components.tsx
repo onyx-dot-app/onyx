@@ -8,19 +8,27 @@ import type { WithoutStyles } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
+type InteractiveBaseSelectVariantProps = {
+  variant?: "select";
+  subvariant?: "light" | "heavy";
+  selected?: boolean;
+};
+
 /**
  * Discriminated union tying `variant` to `subvariant`.
  *
  * - `"none"` accepts no subvariant (`subvariant` must not be provided)
- * - `"select"` accepts an optional subvariant (defaults to `"light"`)
+ * - `"select"` accepts an optional subvariant (defaults to `"light"`) and
+ *   an optional `selected` boolean that switches foreground to action-link colours
  * - `"default"`, `"action"`, and `"danger"` accept an optional subvariant
  */
 type InteractiveBaseVariantProps =
-  | { variant?: "none"; subvariant?: never }
-  | { variant?: "select"; subvariant?: "light" | "heavy" }
+  | { variant?: "none"; subvariant?: never; selected?: never }
+  | InteractiveBaseSelectVariantProps
   | {
       variant?: "default" | "action" | "danger";
       subvariant?: "primary" | "secondary" | "ghost";
+      selected?: never;
     };
 
 /**
@@ -28,19 +36,19 @@ type InteractiveBaseVariantProps =
  *
  * - `"default"` — Default height of 2.25rem (36px), suitable for most buttons/items
  * - `"compact"` — Reduced height of 1.75rem (28px), for denser UIs or inline elements
- * - `"full"` — Expands to fill parent height (`h-full`), for flexible layouts
+ * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
   keyof typeof interactiveContainerHeightVariants;
 const interactiveContainerHeightVariants = {
   default: "h-[2.25rem]",
   compact: "h-[1.75rem]",
-  full: "h-full",
+  fit: "h-fit",
 } as const;
 const interactiveContainerMinWidthVariants = {
   default: "min-w-[2.25rem]",
   compact: "min-w-[1.75rem]",
-  full: "",
+  fit: "",
 } as const;
 
 /**
@@ -124,17 +132,17 @@ interface InteractiveBasePropsBase
   static?: boolean;
 
   /**
-   * When `true`, forces the selected visual state regardless of
+   * When `true`, forces the transient (hover) visual state regardless of
    * actual pointer state.
    *
-   * This sets `data-selected="true"` on the element, which the CSS uses to
-   * apply the selected-state background and foreground. Useful for toggle
-   * buttons, select items, or any UI where you want to programmatically
-   * indicate that the element is currently chosen/active.
+   * This sets `data-transient="true"` on the element, which the CSS uses to
+   * apply the hover-state background and foreground. Useful for popover
+   * triggers, toggle buttons, or any UI where you want to programmatically
+   * indicate that the element is currently active.
    *
    * @default false
    */
-  selected?: boolean;
+  transient?: boolean;
 
   /**
    * When `true`, disables the interactive element.
@@ -152,7 +160,7 @@ interface InteractiveBasePropsBase
    * URL to navigate to when clicked.
    *
    * When provided, renders an `<a>` wrapper element instead of using Radix Slot.
-   * The `<a>` receives all interactive styling (hover/active/selected states)
+   * The `<a>` receives all interactive styling (hover/active/transient states)
    * and children are rendered inside it.
    *
    * @example
@@ -174,7 +182,7 @@ interface InteractiveBasePropsBase
  * discriminated union so that `variant` and `subvariant` are correlated:
  *
  * - `"none"` — `subvariant` must not be provided
- * - `"select"` — `subvariant` is optional (defaults to `"light"`)
+ * - `"select"` — `subvariant` is optional (defaults to `"light"`); `selected` switches foreground to action-link colours
  * - `"default"` / `"action"` / `"danger"` — `subvariant` is optional (defaults to `"primary"`)
  */
 type InteractiveBaseProps = InteractiveBasePropsBase &
@@ -191,7 +199,7 @@ type InteractiveBaseProps = InteractiveBasePropsBase &
  *    attributes for variant-specific background colors (both omitted for `"none"`;
  *    subvariant omitted when not provided)
  * 3. `data-static` attribute when hover feedback is disabled
- * 4. `data-selected` attribute for forced selected state
+ * 4. `data-transient` attribute for forced transient (hover) state
  * 5. `data-disabled` attribute for disabled styling
  *
  * All props are merged onto the single child element via Radix `Slot`, meaning
@@ -238,9 +246,10 @@ function InteractiveBase({
   ref,
   variant = "default",
   subvariant,
+  selected,
   group,
   static: isStatic,
-  selected,
+  transient,
   disabled,
   href,
   ...props
@@ -258,6 +267,7 @@ function InteractiveBase({
     "data-interactive-base-subvariant":
       variant !== "none" ? effectiveSubvariant : undefined,
     "data-static": isStatic ? "true" : undefined,
+    "data-transient": transient ? "true" : undefined,
     "data-selected": selected ? "true" : undefined,
     "data-disabled": disabled ? "true" : undefined,
     "aria-disabled": disabled || undefined,
@@ -431,7 +441,7 @@ function InteractiveContainer({
  *
  * Provides two sub-components:
  *
- * - `Interactive.Base` — The foundational layer that applies hover/active/selected
+ * - `Interactive.Base` — The foundational layer that applies hover/active/transient
  *   state styling via CSS data-attributes. Uses Radix Slot to merge onto child.
  *
  * - `Interactive.Container` — A structural `<div>` with design-system presets
@@ -457,6 +467,7 @@ export {
   Interactive,
   type InteractiveBaseProps,
   type InteractiveBaseVariantProps,
+  type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
   type InteractiveContainerHeightVariant,
   type InteractiveContainerPaddingVariant,
