@@ -1579,7 +1579,7 @@ def update_document_metadata__no_commit(
     db_session: Session,
     document_id: str,
     doc_metadata: dict[str, Any],
-) -> int:
+) -> None:
     """Update the doc_metadata field for a document.
 
     Note: Does not commit. Caller is responsible for committing.
@@ -1588,17 +1588,13 @@ def update_document_metadata__no_commit(
         db_session: Database session
         document_id: The ID of the document to update
         doc_metadata: The new metadata dictionary to set
-
-    Returns:
-        Number of rows updated (0 if document not found, 1 if updated).
     """
     stmt = (
         update(DbDocument)
         .where(DbDocument.id == document_id)
         .values(doc_metadata=doc_metadata)
     )
-    result = db_session.execute(stmt)
-    return result.rowcount
+    db_session.execute(stmt)
 
 
 def delete_document_by_id__no_commit(

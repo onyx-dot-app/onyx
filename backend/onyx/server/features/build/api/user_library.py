@@ -179,7 +179,7 @@ def _get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int
         get_connector_credential_pairs_for_user,
     )
     from onyx.db.credentials import create_credential
-    from onyx.db.credentials import fetch_credentials
+    from onyx.db.credentials import fetch_credentials_for_user
     from onyx.db.enums import AccessType
     from onyx.db.enums import ProcessingMode
     from onyx.server.documents.models import ConnectorBase
@@ -231,7 +231,7 @@ def _get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int
         connector_id = connector_response.id
 
     # Try to reuse an existing User Library credential for this user
-    existing_credentials = fetch_credentials(
+    existing_credentials = fetch_credentials_for_user(
         db_session=db_session,
         user=user,
     )
@@ -632,7 +632,7 @@ def create_directory(
         credential_id=credential_id,
         document_id=doc_id,
         semantic_identifier=f"user_library{dir_path}",
-        first_link=None,
+        first_link="",
         doc_metadata={
             "is_directory": True,
         },
