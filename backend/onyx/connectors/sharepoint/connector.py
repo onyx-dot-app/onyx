@@ -1111,20 +1111,9 @@ class SharepointConnector(
         site.execute_query()  # Execute the query to actually fetch the data
         site_id = site.id
 
-        # Get the token acquisition function from the GraphClient
-        token_data = self._acquire_token()
-        access_token = token_data.get("access_token")
-        if not access_token:
-            raise RuntimeError("Failed to acquire access token")
-
         # Construct the SharePoint Pages API endpoint
         # Using API directly, since the Graph Client doesn't support the Pages API
         pages_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/pages/microsoft.graph.sitePage"
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
 
         # Add expand parameter to get canvas layout content
         params = {"$expand": "canvasLayout"}
@@ -1135,14 +1124,7 @@ class SharepointConnector(
         total_items = 0
 
         while next_url:
-            response = requests.get(
-                next_url,
-                headers=headers,
-                params=next_params,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            pages_data = response.json()
+            pages_data = self._graph_get_json_with_retry(next_url, params=next_params)
             page_items = pages_data.get("value", [])
             total_pages += 1
             total_items += len(page_items)
