@@ -126,7 +126,7 @@ def get_idle_sandboxes(
     )
 
     stmt = select(Sandbox).where(
-        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE]),
+        Sandbox.status == SandboxStatus.RUNNING,
         or_(
             Sandbox.last_heartbeat < threshold_time,
             and_(
@@ -138,34 +138,39 @@ def get_idle_sandboxes(
     return list(db_session.execute(stmt).scalars().all())
 
 
-def get_running_sandbox_count_by_tenant(db_session: Session, tenant_id: str) -> int:
+def get_running_sandbox_count_by_tenant(
+    db_session: Session, tenant_id: str  # noqa: ARG001
+) -> int:
     """Get count of running sandboxes for a tenant (for limit enforcement).
 
     Note: tenant_id parameter is kept for API compatibility but is not used
     since Sandbox model no longer has tenant_id. This function returns
     the count of all running sandboxes.
     """
-    stmt = select(func.count(Sandbox.id)).where(
-        Sandbox.status.in_([SandboxStatus.RUNNING, SandboxStatus.IDLE])
-    )
+    stmt = select(func.count(Sandbox.id)).where(Sandbox.status == SandboxStatus.RUNNING)
     result = db_session.execute(stmt).scalar()
     return result or 0
 
 
-def create_snapshot(
+def create_snapshot__no_commit(
     db_session: Session,
     session_id: UUID,
     storage_path: str,
     size_bytes: int,
 ) -> Snapshot:
-    """Create a snapshot record for a session."""
+    """Create a snapshot record for a session.
+
+    NOTE: Uses flush() instead of commit(). The caller (cleanup task) is
+    responsible for committing after all snapshots + status updates are done,
+    so the entire operation is atomic.
+    """
     snapshot = Snapshot(
         session_id=session_id,
         storage_path=storage_path,
         size_bytes=size_bytes,
     )
     db_session.add(snapshot)
-    db_session.commit()
+    db_session.flush()
     return snapshot
 
 
@@ -193,7 +198,7 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
 
 
 def delete_old_snapshots(
-    db_session: Session, tenant_id: str, retention_days: int
+    db_session: Session, tenant_id: str, retention_days: int  # noqa: ARG001
 ) -> int:
     """Delete snapshots older than retention period, return count deleted.
 

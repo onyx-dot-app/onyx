@@ -447,12 +447,17 @@ function fillSourceMetadata(
 }
 
 export function getSourceMetadata(sourceType: ValidSources): SourceMetadata {
-  const response = fillSourceMetadata(
-    SOURCE_METADATA_MAP[sourceType],
-    sourceType
-  );
+  const partialMetadata = SOURCE_METADATA_MAP[sourceType];
 
-  return response;
+  // Fallback to not_applicable if sourceType not found in map
+  if (!partialMetadata) {
+    return fillSourceMetadata(
+      SOURCE_METADATA_MAP[ValidSources.NotApplicable],
+      ValidSources.NotApplicable
+    );
+  }
+
+  return fillSourceMetadata(partialMetadata, sourceType);
 }
 
 export function listSourceMetadata(): SourceMetadata[] {

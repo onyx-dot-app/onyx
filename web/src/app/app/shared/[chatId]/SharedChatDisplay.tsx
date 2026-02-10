@@ -6,12 +6,12 @@ import { BackendChatSession } from "@/app/app/interfaces";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
-import AIMessage from "@/app/app/message/messageComponents/AIMessage";
+import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import { Callout } from "@/components/ui/callout";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import TextView from "@/components/chat/TextView";
+import TextViewModal from "@/sections/modals/TextViewModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
@@ -63,7 +63,7 @@ export default function SharedChatDisplay({
   return (
     <>
       {presentingDocument && (
-        <TextView
+        <TextViewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />
@@ -93,16 +93,14 @@ export default function SharedChatDisplay({
                 );
               } else if (message.type === "assistant") {
                 return (
-                  <AIMessage
+                  <AgentMessage
                     key={message.messageId}
                     rawPackets={message.packets}
                     chatState={{
                       assistant: persona,
                       docs: message.documents,
-                      userFiles: [],
                       citations: message.citations,
                       setPresentingDocument: setPresentingDocument,
-                      regenerate: undefined, // No regeneration in shared chat
                       overriddenModel: message.overridden_model,
                     }}
                     nodeId={message.nodeId}

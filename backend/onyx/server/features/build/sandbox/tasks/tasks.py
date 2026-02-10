@@ -16,6 +16,9 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
+from onyx.server.features.build.db.build_session import (
+    mark_user_sessions_idle__no_commit,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -36,7 +39,7 @@ TIMEOUT_SECONDS = 6000
     bind=True,
     ignore_result=True,
 )
-def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
+def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """Put idle sandboxes to sleep after snapshotting all sessions.
 
     This task:
@@ -75,12 +78,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
     try:
         # Import here to avoid circular imports
         from onyx.db.enums import SandboxStatus
-        from onyx.server.features.build.db.sandbox import create_snapshot
+        from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
         from onyx.server.features.build.db.sandbox import get_idle_sandboxes
         from onyx.server.features.build.db.sandbox import (
             update_sandbox_status__no_commit,
         )
-        from onyx.server.features.build.sandbox import get_sandbox_manager
 
         sandbox_manager = get_sandbox_manager()
 
@@ -128,7 +130,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
                             )
                             if snapshot_result:
                                 # Create DB record for the snapshot
-                                create_snapshot(
+                                create_snapshot__no_commit(
                                     db_session,
                                     session_id,
                                     snapshot_result.storage_path,
@@ -154,7 +156,15 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:
                         f"{sandbox.user_id}"
                     )
 
-                    # Mark sandbox as SLEEPING (not TERMINATED)
+                    # Mark all active sessions as IDLE
+                    idled = mark_user_sessions_idle__no_commit(
+                        db_session, sandbox.user_id
+                    )
+                    task_logger.debug(
+                        f"Marked {idled} sessions as IDLE for user "
+                        f"{sandbox.user_id}"
+                    )
+
                     update_sandbox_status__no_commit(
                         db_session, sandbox_id, SandboxStatus.SLEEPING
                     )
@@ -243,14 +253,16 @@ def _list_session_directories(
     bind=True,
     ignore_result=True,
 )
-def sync_sandbox_files(self: Task, *, user_id: str, tenant_id: str) -> bool:
+def sync_sandbox_files(
+    self: Task, *, user_id: str, tenant_id: str  # noqa: ARG001
+) -> bool:
     """Sync files from S3 to a user's running sandbox.
 
     This task is triggered after documents are written to S3 during indexing.
-    It executes `aws s3 sync` in the file-sync sidecar container to download
+    It executes `s5cmd sync` in the file-sync sidecar container to download
     any new or changed files.
 
-    This is safe to call multiple times - aws s3 sync is idempotent.
+    This is safe to call multiple times - s5cmd sync is idempotent.
 
     Args:
         user_id: The user ID whose sandbox should be synced
@@ -270,7 +282,7 @@ def sync_sandbox_files(self: Task, *, user_id: str, tenant_id: str) -> bool:
             task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
             return False
 
-        if sandbox.status not in [SandboxStatus.RUNNING, SandboxStatus.IDLE]:
+        if sandbox.status != SandboxStatus.RUNNING:
             task_logger.debug(
                 f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
                 f"skipping sync"

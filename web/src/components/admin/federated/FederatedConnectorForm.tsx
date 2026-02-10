@@ -619,6 +619,9 @@ export function FederatedConnectorForm({
       );
     }
 
+    const channelInputPlaceholder =
+      "Type channel name or regex pattern and press Enter";
+
     return (
       <>
         {Object.entries(formState.configurationSchema).map(
@@ -688,9 +691,9 @@ export function FederatedConnectorForm({
                             }
                           }}
                           placeholder={
-                            fieldSpec.example &&
-                            Array.isArray(fieldSpec.example)
-                              ? `e.g., ${fieldSpec.example.join(", ")}`
+                            fieldKey === "channels" ||
+                            fieldKey === "exclude_channels"
+                              ? channelInputPlaceholder
                               : "Type and press Enter to add an item"
                           }
                           disabled={disableSlackChannelInput(fieldKey)}

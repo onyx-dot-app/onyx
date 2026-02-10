@@ -73,6 +73,10 @@ class TestGetOllamaAvailableModels:
             # Check display names are generated
             assert any("Llama" in r.display_name for r in results)
             assert any("Mistral" in r.display_name for r in results)
+            # Results should be alphabetically sorted by model name
+            assert [r.name for r in results] == sorted(
+                [r.name for r in results], key=str.lower
+            )
 
     def test_syncs_to_db_when_provider_name_specified(
         self, mock_ollama_tags_response: dict, mock_ollama_show_response: dict
@@ -108,7 +112,7 @@ class TestGetOllamaAvailableModels:
             get_ollama_available_models(request, MagicMock(), mock_session)
 
             # Verify DB operations were called
-            assert mock_session.execute.call_count == 3  # 3 models inserted
+            assert mock_session.execute.call_count == 6
             mock_session.commit.assert_called_once()
 
     def test_no_sync_when_provider_name_not_specified(
@@ -250,7 +254,7 @@ class TestGetOpenRouterAvailableModels:
             get_openrouter_available_models(request, MagicMock(), mock_session)
 
             # Verify DB operations were called
-            assert mock_session.execute.call_count == 3  # 3 models inserted
+            assert mock_session.execute.call_count == 8
             mock_session.commit.assert_called_once()
 
     def test_preserves_existing_models_on_sync(
@@ -288,7 +292,7 @@ class TestGetOpenRouterAvailableModels:
             get_openrouter_available_models(request, MagicMock(), mock_session)
 
             # Only 2 new models should be inserted (claude already exists)
-            assert mock_session.execute.call_count == 2
+            assert mock_session.execute.call_count == 5
 
     def test_no_sync_when_provider_name_not_specified(
         self, mock_openrouter_response: dict

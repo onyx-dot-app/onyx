@@ -386,7 +386,7 @@ class TestGatedTenantHandling:
         mock_config_t2.guild_id = 222222
         mock_config_t2.enabled = True
 
-        def mock_get_configs(db: MagicMock) -> list[MagicMock]:
+        def mock_get_configs(db: MagicMock) -> list[MagicMock]:  # noqa: ARG001
             # Track which tenant this was called for
             return [mock_config_t1]  # Always return same for simplicity
 

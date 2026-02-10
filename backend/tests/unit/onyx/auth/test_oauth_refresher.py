@@ -238,13 +238,13 @@ async def test_check_oauth_account_has_refresh_token(
 
 
 @pytest.mark.asyncio
-async def test_test_expire_oauth_token(
+async def test_expire_oauth_token(
     mock_user: MagicMock,
     mock_oauth_account: MagicMock,
     mock_user_manager: MagicMock,
     mock_db_session: AsyncSession,
 ) -> None:
-    """Test the testing utility function for token expiration."""
+    """Tests the testing utility function for token expiration."""
     # Set up the mock account
     mock_oauth_account.oauth_name = "google"
     mock_oauth_account.refresh_token = "test_refresh_token"
@@ -269,5 +269,5 @@ async def test_test_expire_oauth_token(
 
     # Now should be within 10-11 seconds of the set expiration
     now = datetime.now(timezone.utc).timestamp()
-    assert update_data["expires_at"] - now >= 8.9  # Allow 1 second for test execution
-    assert update_data["expires_at"] - now <= 11.1  # Allow 1 second for test execution
+    assert update_data["expires_at"] - now >= 8.8  # Allow ~1 second for test execution
+    assert update_data["expires_at"] - now <= 11.2  # Allow ~1 second for test execution

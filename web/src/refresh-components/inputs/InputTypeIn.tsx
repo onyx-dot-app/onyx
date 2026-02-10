@@ -5,7 +5,6 @@ import { cn, noProp } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import {
   innerClasses,
-  MIN_WIDTH_CLASS,
   textClasses,
   Variants,
   wrapperClasses,
@@ -128,8 +127,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
     return (
       <div
         className={cn(
-          "flex flex-row items-center justify-between w-full h-fit p-1.5 rounded-08 relative",
-          MIN_WIDTH_CLASS,
+          "flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full",
           wrapperClasses[variant],
           className
         )}

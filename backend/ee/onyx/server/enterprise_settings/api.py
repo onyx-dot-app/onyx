@@ -139,7 +139,7 @@ def put_logo(
     upload_logo(file=file, is_logotype=is_logotype)
 
 
-def fetch_logo_helper(db_session: Session) -> Response:
+def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
     try:
         file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
@@ -155,7 +155,7 @@ def fetch_logo_helper(db_session: Session) -> Response:
         return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
 
 
-def fetch_logotype_helper(db_session: Session) -> Response:
+def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
     try:
         file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())

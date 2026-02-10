@@ -10,7 +10,7 @@ export default async function Page() {
   const requestCookies = await cookies();
 
   return (
-    <AppLayouts.Root disableFooter>
+    <AppLayouts.Root>
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
         <NRFPage />

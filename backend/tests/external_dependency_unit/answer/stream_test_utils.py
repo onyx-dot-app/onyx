@@ -12,6 +12,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.db.models import ChatSession
 from onyx.db.models import User
+from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
@@ -35,7 +36,11 @@ def create_placement(
 
 
 def submit_query(
-    query: str, chat_session_id: UUID | None, db_session: Session, user: User
+    query: str,
+    chat_session_id: UUID | None,
+    db_session: Session,
+    user: User,
+    llm_override: LLMOverride | None = None,
 ) -> Iterator[AnswerStreamPart]:
     request = SendMessageRequest(
         message=query,
@@ -44,6 +49,7 @@ def submit_query(
         chat_session_info=(
             ChatSessionCreationRequest() if chat_session_id is None else None
         ),
+        llm_override=llm_override,
     )
 
     return handle_stream_message_objects(

@@ -22,7 +22,7 @@ class SlackRenderer(HTMLRenderer):
             text = text.replace(special, replacement)
         return text
 
-    def heading(self, text: str, level: int, **attrs: Any) -> str:
+    def heading(self, text: str, level: int, **attrs: Any) -> str:  # noqa: ARG002
         return f"*{text}*\n"
 
     def emphasis(self, text: str) -> str:
@@ -34,7 +34,7 @@ class SlackRenderer(HTMLRenderer):
     def strikethrough(self, text: str) -> str:
         return f"~{text}~"
 
-    def list(self, text: str, ordered: bool, **attrs: Any) -> str:
+    def list(self, text: str, ordered: bool, **attrs: Any) -> str:  # noqa: ARG002
         lines = text.split("\n")
         count = 0
         for i, line in enumerate(lines):
@@ -63,7 +63,7 @@ class SlackRenderer(HTMLRenderer):
     def codespan(self, text: str) -> str:
         return f"`{text}`"
 
-    def block_code(self, code: str, info: str | None = None) -> str:
+    def block_code(self, code: str, info: str | None = None) -> str:  # noqa: ARG002
         return f"```\n{code}\n```\n"
 
     def paragraph(self, text: str) -> str:

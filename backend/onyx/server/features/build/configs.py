@@ -110,6 +110,21 @@ SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
 # ============================================================================
+# SSE Streaming Configuration
+# ============================================================================
+
+# SSE keepalive interval in seconds - send keepalive comment if no events
+SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
+
+# ============================================================================
+# ACP (Agent Communication Protocol) Configuration
+# ============================================================================
+
+# Timeout for ACP message processing in seconds
+# This is the maximum time to wait for a complete response from the agent
+ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
+
+# ============================================================================
 # Rate Limiting Configuration
 # ============================================================================
 

@@ -703,8 +703,8 @@ class EmbeddingModel:
     async def _make_direct_api_call(
         self,
         embed_request: EmbedRequest,
-        tenant_id: str | None = None,
-        request_id: str | None = None,
+        tenant_id: str | None = None,  # noqa: ARG002
+        request_id: str | None = None,  # noqa: ARG002
     ) -> EmbedResponse:
         """Make direct API call to cloud provider, bypassing model server."""
         if self.provider_type is None:
@@ -1166,8 +1166,8 @@ def warm_up_retry(
     func: Callable[..., Any],
     tries: int = 20,
     delay: int = 5,
-    *args: Any,
-    **kwargs: Any,
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
 ) -> Callable[..., Any]:
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:

@@ -161,6 +161,7 @@ def get_chunks_via_visit_api(
     filters: IndexFilters,
     field_names: list[str] | None = None,
     get_large_chunks: bool = False,
+    short_tensor_format: bool = False,
 ) -> list[dict]:
     # Constructing the URL for the Visit API
     # NOTE: visit API uses the same URL as the document API, but with different params
@@ -180,7 +181,7 @@ def get_chunks_via_visit_api(
 
     if MULTI_TENANT:
         tenant_id_fieldset_entry = f"{TENANT_ID}"
-        if tenant_id_fieldset_entry not in field_set_list:
+        if field_set_list and tenant_id_fieldset_entry not in field_set_list:
             field_set_list.append(tenant_id_fieldset_entry)
 
     if field_set_list:
@@ -213,6 +214,10 @@ def get_chunks_via_visit_api(
         "wantedDocumentCount": 1_000,
         "fieldSet": field_set,
     }
+    # Vespa can supply tensors in various different formats. This explicitly
+    # asks to retrieve tensor data in "short-value" format.
+    if short_tensor_format:
+        params["format.tensors"] = "short-value"
 
     document_chunks: list[dict] = []
     while True:

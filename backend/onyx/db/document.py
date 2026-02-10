@@ -226,38 +226,109 @@ def get_documents_by_ids(
     return list(documents)
 
 
-def _apply_document_cursor_filter(
+def _apply_last_updated_cursor_filter(
     stmt: Select,
     cursor_last_modified: datetime | None,
     cursor_last_synced: datetime | None,
     cursor_document_id: str | None,
+    is_ascending: bool,
 ) -> Select:
+    """Apply cursor filter for last_updated sorting.
+
+    ASC uses nulls_first (NULLs at start), DESC uses nulls_last (NULLs at end).
+    This affects which extra clauses are needed when the cursor has NULL last_synced
+    vs non-NULL last_synced.
+    """
     if not cursor_last_modified or not cursor_document_id:
         return stmt
+
+    # Pick comparison operators based on sort direction
+    if is_ascending:
+        modified_cmp = DbDocument.last_modified > cursor_last_modified
+        synced_cmp = DbDocument.last_synced > cursor_last_synced
+        id_cmp = DbDocument.id > cursor_document_id
+    else:
+        modified_cmp = DbDocument.last_modified < cursor_last_modified
+        synced_cmp = DbDocument.last_synced < cursor_last_synced
+        id_cmp = DbDocument.id < cursor_document_id
+
     if cursor_last_synced is None:
-        return stmt.where(
-            or_(
-                DbDocument.last_modified < cursor_last_modified,
-                and_(
-                    DbDocument.last_modified == cursor_last_modified,
-                    DbDocument.last_synced.is_(None),
-                    DbDocument.id < cursor_document_id,
-                ),
-            )
-        )
-    return stmt.where(
-        or_(
-            DbDocument.last_modified < cursor_last_modified,
+        # Cursor has NULL last_synced
+        # ASC (nulls_first): NULL is at start, so non-NULL values come after
+        # DESC (nulls_last): NULL is at end, so nothing with non-NULL comes after
+        base_clauses = [
+            modified_cmp,
             and_(
                 DbDocument.last_modified == cursor_last_modified,
-                or_(
-                    DbDocument.last_synced < cursor_last_synced,
-                    DbDocument.last_synced.is_(None),
-                    and_(
-                        DbDocument.last_synced == cursor_last_synced,
-                        DbDocument.id < cursor_document_id,
-                    ),
-                ),
+                DbDocument.last_synced.is_(None),
+                id_cmp,
+            ),
+        ]
+        if is_ascending:
+            # Any non-NULL last_synced comes after NULL when nulls_first
+            base_clauses.append(
+                and_(
+                    DbDocument.last_modified == cursor_last_modified,
+                    DbDocument.last_synced.is_not(None),
+                )
+            )
+        return stmt.where(or_(*base_clauses))
+
+    # Cursor has non-NULL last_synced
+    # ASC (nulls_first): NULLs came before, so no NULL clause needed
+    # DESC (nulls_last): NULLs come after non-NULL values
+    synced_clauses = [
+        synced_cmp,
+        and_(DbDocument.last_synced == cursor_last_synced, id_cmp),
+    ]
+    if not is_ascending:
+        # NULLs come after all non-NULL values when nulls_last
+        synced_clauses.append(DbDocument.last_synced.is_(None))
+
+    return stmt.where(
+        or_(
+            modified_cmp,
+            and_(
+                DbDocument.last_modified == cursor_last_modified,
+                or_(*synced_clauses),
+            ),
+        )
+    )
+
+
+def _apply_name_cursor_filter_asc(
+    stmt: Select,
+    cursor_name: str | None,
+    cursor_document_id: str | None,
+) -> Select:
+    """Apply cursor filter for name ASC sorting."""
+    if not cursor_name or not cursor_document_id:
+        return stmt
+    return stmt.where(
+        or_(
+            DbDocument.semantic_id > cursor_name,
+            and_(
+                DbDocument.semantic_id == cursor_name,
+                DbDocument.id > cursor_document_id,
+            ),
+        )
+    )
+
+
+def _apply_name_cursor_filter_desc(
+    stmt: Select,
+    cursor_name: str | None,
+    cursor_document_id: str | None,
+) -> Select:
+    """Apply cursor filter for name DESC sorting."""
+    if not cursor_name or not cursor_document_id:
+        return stmt
+    return stmt.where(
+        or_(
+            DbDocument.semantic_id < cursor_name,
+            and_(
+                DbDocument.semantic_id == cursor_name,
+                DbDocument.id < cursor_document_id,
             ),
         )
     )
@@ -268,26 +339,60 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     parent_hierarchy_node_id: int,
     user_email: str | None,
     external_group_ids: list[str],
-    cursor_last_modified: datetime | None,
-    cursor_last_synced: datetime | None,
-    cursor_document_id: str | None,
     limit: int,
+    # Sort options
+    sort_by_name: bool = False,
+    sort_ascending: bool = False,
+    # Cursor fields for last_updated sorting
+    cursor_last_modified: datetime | None = None,
+    cursor_last_synced: datetime | None = None,
+    # Cursor field for name sorting
+    cursor_name: str | None = None,
+    # Document ID for tie-breaking (used by both sort types)
+    cursor_document_id: str | None = None,
 ) -> list[DbDocument]:
     stmt = select(DbDocument).where(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
     stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
-    stmt = _apply_document_cursor_filter(
-        stmt,
-        cursor_last_modified=cursor_last_modified,
-        cursor_last_synced=cursor_last_synced,
-        cursor_document_id=cursor_document_id,
-    )
-    stmt = stmt.order_by(
-        DbDocument.last_modified.desc(),
-        DbDocument.last_synced.desc().nulls_last(),
-        DbDocument.id.desc(),
-    )
+
+    # Apply cursor filter based on sort type and direction
+    if sort_by_name:
+        if sort_ascending:
+            stmt = _apply_name_cursor_filter_asc(stmt, cursor_name, cursor_document_id)
+            stmt = stmt.order_by(DbDocument.semantic_id.asc(), DbDocument.id.asc())
+        else:
+            stmt = _apply_name_cursor_filter_desc(stmt, cursor_name, cursor_document_id)
+            stmt = stmt.order_by(DbDocument.semantic_id.desc(), DbDocument.id.desc())
+    else:
+        # Sort by last_updated
+        if sort_ascending:
+            stmt = _apply_last_updated_cursor_filter(
+                stmt,
+                cursor_last_modified,
+                cursor_last_synced,
+                cursor_document_id,
+                is_ascending=True,
+            )
+            stmt = stmt.order_by(
+                DbDocument.last_modified.asc(),
+                DbDocument.last_synced.asc().nulls_first(),
+                DbDocument.id.asc(),
+            )
+        else:
+            stmt = _apply_last_updated_cursor_filter(
+                stmt,
+                cursor_last_modified,
+                cursor_last_synced,
+                cursor_document_id,
+                is_ascending=False,
+            )
+            stmt = stmt.order_by(
+                DbDocument.last_modified.desc(),
+                DbDocument.last_synced.desc().nulls_last(),
+                DbDocument.id.desc(),
+            )
+
     # Use distinct to avoid duplicates when a document belongs to multiple cc_pairs
     stmt = stmt.distinct()
     stmt = stmt.limit(limit)

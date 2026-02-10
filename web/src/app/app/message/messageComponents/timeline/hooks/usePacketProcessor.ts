@@ -32,7 +32,12 @@ export interface UsePacketProcessorResult {
   stopReason: StopReason | undefined;
   hasSteps: boolean;
   expectedBranchesPerTurn: Map<number, number>;
-  uniqueToolNames: string[];
+  isGeneratingImage: boolean;
+  generatedImageCount: number;
+  // Whether final answer is coming (MESSAGE_START seen)
+  finalAnswerComing: boolean;
+  // Tool processing duration from backend (via MESSAGE_START packet)
+  toolProcessingDuration: number | undefined;
 
   // Completion: stopPacketSeen && renderComplete
   isComplete: boolean;
@@ -74,18 +79,18 @@ export function usePacketProcessor(
   }
 
   // Track for transition detection
-  const prevLastProcessed = stateRef.current.lastProcessedIndex;
+  const prevNextPacketIndex = stateRef.current.nextPacketIndex;
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
 
   // Detect stream reset (packets shrunk)
-  if (prevLastProcessed > rawPackets.length) {
+  if (prevNextPacketIndex > rawPackets.length) {
     stateRef.current = createInitialState(nodeId);
     setRenderComplete(false);
     setForceShowAnswer(false);
   }
 
   // Process packets synchronously (incremental) - only if new packets arrived
-  if (rawPackets.length > stateRef.current.lastProcessedIndex) {
+  if (rawPackets.length > stateRef.current.nextPacketIndex) {
     stateRef.current = processPackets(stateRef.current, rawPackets);
   }
 
@@ -141,7 +146,10 @@ export function usePacketProcessor(
     stopReason: state.stopReason,
     hasSteps: toolTurnGroups.length > 0,
     expectedBranchesPerTurn: state.expectedBranches,
-    uniqueToolNames: state.uniqueToolNamesArray,
+    isGeneratingImage: state.isGeneratingImage,
+    generatedImageCount: state.generatedImageCount,
+    finalAnswerComing: state.finalAnswerComing,
+    toolProcessingDuration: state.toolProcessingDuration,
 
     // Completion: stopPacketSeen && renderComplete
     isComplete: state.stopPacketSeen && renderComplete,

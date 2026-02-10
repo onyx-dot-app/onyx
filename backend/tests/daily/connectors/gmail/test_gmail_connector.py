@@ -75,7 +75,7 @@ _THREAD_1_BY_ID: dict[str, dict[str, Any]] = {
     return_value=None,
 )
 def test_slim_docs_retrieval(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_gmail_service_acct_connector_factory: Callable[..., GmailConnector],
 ) -> None:
     print("\n\nRunning test_slim_docs_retrieval")
@@ -102,7 +102,7 @@ def test_slim_docs_retrieval(
     return_value=None,
 )
 def test_docs_retrieval(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_gmail_service_acct_connector_factory: Callable[..., GmailConnector],
 ) -> None:
     print("\n\nRunning test_docs_retrieval")

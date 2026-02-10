@@ -11,6 +11,7 @@ from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import LicenseSource
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.db.models import License
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
@@ -107,7 +108,8 @@ def get_used_seats(tenant_id: str | None = None) -> int:
     Get current seat usage directly from database.
 
     For multi-tenant: counts users in UserTenantMapping for this tenant.
-    For self-hosted: counts all active users (excludes EXT_PERM_USER role).
+    For self-hosted: counts all active users (excludes EXT_PERM_USER role
+    and the anonymous system user).
 
     TODO: Exclude API key dummy users from seat counting. API keys create
     users with emails like `__DANSWER_API_KEY_*` that should not count toward
@@ -127,6 +129,7 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                 .where(
                     User.is_active == True,  # type: ignore  # noqa: E712
                     User.role != UserRole.EXT_PERM_USER,
+                    User.email != ANONYMOUS_USER_EMAIL,  # type: ignore
                 )
             )
             return result.scalar() or 0

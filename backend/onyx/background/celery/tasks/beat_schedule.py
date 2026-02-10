@@ -6,6 +6,7 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
@@ -205,6 +206,41 @@ if SCHEDULED_EVAL_DATASET_NAMES:
             ),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
+
+# Add OpenSearch migration task if enabled.
+if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+    beat_task_templates.append(
+        {
+            "name": "check-for-documents-for-opensearch-migration",
+            "task": OnyxCeleryTask.CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK,
+            # Try to enqueue an invocation of this task with this frequency.
+            "schedule": timedelta(seconds=120),  # 2 minutes
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                # If the task was not dequeued in this time, revoke it.
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
+    beat_task_templates.append(
+        {
+            "name": "migrate-documents-from-vespa-to-opensearch",
+            "task": OnyxCeleryTask.MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK,
+            # Try to enqueue an invocation of this task with this frequency.
+            # NOTE: If MIGRATION_TASK_SOFT_TIME_LIMIT_S is greater than this
+            # value and the task is maximally busy, we can expect to see some
+            # enqueued tasks be revoked over time. This is ok; by erring on the
+            # side of "there will probably always be at least one task of this
+            # type in the queue", we are minimizing this task's idleness while
+            # still giving chances for other tasks to execute.
+            "schedule": timedelta(seconds=120),  # 2 minutes
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                # If the task was not dequeued in this time, revoke it.
                 "expires": BEAT_EXPIRES_DEFAULT,
             },
         }

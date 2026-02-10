@@ -42,6 +42,18 @@ logger = setup_logger()
 QUERIES_FIELD = "queries"
 
 
+def _sanitize_query(query: str) -> str:
+    """Remove control characters and normalize whitespace in a query.
+
+    LLMs sometimes produce queries with null characters or other control
+    characters that need to be stripped before sending to search providers.
+    """
+    # Remove control characters (ASCII 0-31 and 127 DEL)
+    sanitized = "".join(c for c in query if ord(c) >= 32 and ord(c) != 127)
+    # Collapse multiple whitespace characters into single space and strip
+    return " ".join(sanitized.split())
+
+
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
     NAME = "web_search"
     DESCRIPTION = "Search the web for information."
@@ -57,7 +69,11 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             if provider_model is None:
                 raise RuntimeError("No web search provider configured.")
             provider_type = WebSearchProviderType(provider_model.provider_type)
-            api_key = provider_model.api_key
+            api_key = (
+                provider_model.api_key.get_value(apply_mask=False)
+                if provider_model.api_key
+                else None
+            )
             config = provider_model.config
 
         # TODO - This should just be enforced at the DB level
@@ -113,7 +129,8 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                         QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "One or more queries to look up on the web.",
+                            "description": "One or more queries to look up on the web. "
+                            "Must contain only printable characters",
                         },
                     },
                     "required": [QUERIES_FIELD],
@@ -159,12 +176,22 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the web search tool with multiple queries in parallel"""
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in web_search tool call",
+                llm_facing_message=(
+                    f"The web_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
         raw_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Normalize queries:
-        # - strip leading/trailing whitespace
-        # - drop empty/whitespace-only queries (e.g. "\n", "\r\n", "   ")
-        queries = [q.strip() for q in raw_queries if q.strip()]
+        # - remove control characters (null bytes, etc.) that LLMs sometimes produce
+        # - collapse whitespace and strip
+        # - drop empty/whitespace-only queries
+        queries = [sanitized for q in raw_queries if (sanitized := _sanitize_query(q))]
         if not queries:
             raise ToolCallException(
                 message=(

@@ -80,6 +80,7 @@ from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -351,10 +352,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         )
 
                     if tenant_slack_bot:
-                        bot_token = tenant_slack_bot.bot_token
-                        access_token = (
-                            tenant_slack_bot.user_token or tenant_slack_bot.bot_token
+                        bot_token = (
+                            tenant_slack_bot.bot_token.get_value(apply_mask=False)
+                            if tenant_slack_bot.bot_token
+                            else None
                         )
+                        user_token = (
+                            tenant_slack_bot.user_token.get_value(apply_mask=False)
+                            if tenant_slack_bot.user_token
+                            else None
+                        )
+                        access_token = user_token or bot_token
                 except Exception as e:
                     logger.warning(f"Could not fetch Slack bot tokens: {e}")
 
@@ -374,8 +382,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         None,
                     )
 
-                    if slack_oauth_token:
-                        access_token = slack_oauth_token.token
+                    if slack_oauth_token and slack_oauth_token.token:
+                        access_token = slack_oauth_token.token.get_value(
+                            apply_mask=False
+                        )
                         entities = slack_oauth_token.federated_connector.config or {}
                 except Exception as e:
                     logger.warning(f"Could not fetch Slack OAuth token: {e}")
@@ -531,6 +541,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This prevents transaction conflicts when multiple search tools run in parallel
         db_session = self._get_thread_safe_session()
         try:
+            if QUERIES_FIELD not in llm_kwargs:
+                raise ToolCallException(
+                    message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                    llm_facing_message=(
+                        f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                        f"containing an array of search queries. Please provide the queries "
+                        f'like: {{"queries": ["your search query here"]}}'
+                    ),
+                )
             llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
             # Run semantic and keyword query expansion in parallel (unless skipped)

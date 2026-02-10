@@ -1,0 +1,9 @@
+/* Button — layout only; colors handled by Interactive.Base */
+
+.opal-button {
+  @apply flex flex-row items-center gap-1;
+}
+
+.opal-button-label {
+  @apply whitespace-nowrap;
+}

@@ -23,7 +23,7 @@ logger = getLogger(__name__)
 REDIS_PASSWORD = ""
 
 
-def celery_purge_queue(queue: str, tenant_id: str) -> None:
+def celery_purge_queue(queue: str, tenant_id: str) -> None:  # noqa: ARG001
     """Purging a celery queue is extremely difficult because the queue is a list
     and the only way an item can be removed from a list is by VALUE, which is
     a linear scan.  Therefore, to purge the list of many values is roughly

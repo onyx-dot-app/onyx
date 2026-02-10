@@ -66,7 +66,7 @@ export interface LineItemProps
   rightChildren?: React.ReactNode;
   href?: string;
   ref?: React.Ref<HTMLButtonElement>;
-  children: string;
+  children: React.ReactNode;
 }
 
 /**

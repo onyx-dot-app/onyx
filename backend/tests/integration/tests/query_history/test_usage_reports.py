@@ -7,7 +7,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.seeding.chat_history_seeding import seed_chat_history
 
 
-def test_usage_reports(reset: None) -> None:
+def test_usage_reports(reset: None) -> None:  # noqa: ARG001
     EXPECTED_SESSIONS = 2048
     MESSAGES_PER_SESSION = 4
 

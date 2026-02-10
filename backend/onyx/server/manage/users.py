@@ -6,6 +6,7 @@ from datetime import timedelta
 from datetime import timezone
 from typing import cast
 
+import jwt
 from email_validator import EmailNotValidError
 from email_validator import EmailUndeliverableError
 from email_validator import validate_email
@@ -25,6 +26,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.schemas import UserRole
+from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
@@ -36,6 +38,7 @@ from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
+from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -645,7 +648,9 @@ def get_current_auth_token_creation_redis(
         return None
 
 
-def get_current_token_creation(user: User, db_session: Session) -> datetime | None:
+def get_current_token_creation_postgres(
+    user: User, db_session: Session
+) -> datetime | None:
     # Anonymous users don't have auth tokens
     if user.is_anonymous:
         return None
@@ -658,32 +663,64 @@ def get_current_token_creation(user: User, db_session: Session) -> datetime | No
         return None
 
 
+def get_current_token_creation_jwt(user: User, request: Request) -> datetime | None:
+    """Extract token creation time from the ``iat`` claim of a JWT cookie."""
+    if user.is_anonymous:
+        return None
+
+    token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        return None
+
+    try:
+        payload = jwt.decode(
+            token,
+            USER_AUTH_SECRET,
+            algorithms=["HS256"],
+            audience=["fastapi-users:auth"],
+        )
+        iat = payload.get("iat")
+        if iat is None:
+            return None
+        return datetime.fromtimestamp(iat, tz=timezone.utc)
+    except jwt.PyJWTError:
+        logger.error("Failed to decode JWT for iat claim")
+        return None
+
+
+def _get_token_created_at(
+    user: User, request: Request, db_session: Session
+) -> datetime | None:
+    if AUTH_BACKEND == AuthBackend.REDIS:
+        return get_current_auth_token_creation_redis(user, request)
+    if AUTH_BACKEND == AuthBackend.JWT:
+        return get_current_token_creation_jwt(user, request)
+    return get_current_token_creation_postgres(user, db_session)
+
+
 @router.get("/me", tags=PUBLIC_API_TAGS)
 def verify_user_logged_in(
     request: Request,
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
-    # User should no longer be None (unless not auth-ed).
-    # However, we need to use optional_user dependency
-    # to allow unverified users to access this endpoint
+    tenant_id = get_current_tenant_id()
+
+    # User can be None if not authenticated.
+    # We use optional_user to allow unverified users to access this endpoint.
     if user is None:
+        # If anonymous access is enabled, return anonymous user info
+        if anonymous_user_enabled(tenant_id=tenant_id):
+            store = get_kv_store()
+            return fetch_anonymous_user_info(store)
         raise BasicAuthenticationError(detail="Unauthorized")
-    # If anonymous user, return the fake UserInfo (maintains backward compatibility)
-    if user.is_anonymous:
-        store = get_kv_store()
-        return fetch_anonymous_user_info(store)
 
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
         raise BasicAuthenticationError(
             detail="Access denied. User's OIDC token has expired.",
         )
 
-    token_created_at = (
-        get_current_auth_token_creation_redis(user, request)
-        if AUTH_BACKEND == AuthBackend.REDIS
-        else get_current_token_creation(user, db_session)
-    )
+    token_created_at = _get_token_created_at(user, request, db_session)
 
     team_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None

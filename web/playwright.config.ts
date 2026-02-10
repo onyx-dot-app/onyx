@@ -49,14 +49,6 @@ export default defineConfig({
       grepInvert: /@exclusive/,
     },
     {
-      name: "no-auth",
-      use: {
-        ...devices["Desktop Chrome"],
-        viewport: { width: 1280, height: 720 },
-      },
-      grepInvert: /@exclusive/,
-    },
-    {
       // this suite runs independently and serially + slower
       // we should be cautious about bloating this suite
       name: "exclusive",

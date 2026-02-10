@@ -162,7 +162,7 @@ export default function LLMSelector({
     >
       <InputSelect.Trigger id={name} name={name} placeholder={defaultLabel} />
 
-      <InputSelect.Content className="min-w-[280px]">
+      <InputSelect.Content>
         {!excludePublicProviders && (
           <InputSelect.Item
             value="default"

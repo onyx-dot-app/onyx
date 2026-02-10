@@ -19,11 +19,11 @@ import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
-import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useChatController } from "@/app/app/hooks/useChatController";
-import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
-import { useAssistantController } from "@/app/app/hooks/useAssistantController";
+import { useProjectsContext } from "@/providers/ProjectsContext";
+import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import useChatController from "@/hooks/useChatController";
+import useChatSessionController from "@/hooks/useChatSessionController";
+import useAgentController from "@/hooks/useAgentController";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -34,7 +34,6 @@ import MessageList from "@/components/chat/MessageList";
 import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
-import * as AppLayouts from "@/layouts/app-layouts";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
 import Spacer from "@/refresh-components/Spacer";
@@ -49,7 +48,7 @@ import {
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import TextView from "@/components/chat/TextView";
+import TextViewModal from "@/sections/modals/TextViewModal";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -107,7 +106,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
-    useAssistantController({
+    useAgentController({
       selectedChatSession: undefined,
       onAssistantSelect: () => {},
     });
@@ -392,49 +391,38 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
-            {/* ChatInputBar container - absolutely positioned when in chat, centered when no messages */}
+            {/* ChatInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
-              className={cn(
-                "flex justify-center",
-                hasMessages
-                  ? "absolute bottom-6 left-0 right-0 pointer-events-none"
-                  : "w-full"
-              )}
+              className="w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4"
             >
-              <div
-                className={cn(
-                  "w-[min(50rem,100%)] flex flex-col px-4",
-                  hasMessages && "pointer-events-auto"
-                )}
-              >
-                <ChatInputBar
-                  ref={chatInputBarRef}
-                  deepResearchEnabled={deepResearchEnabled}
-                  toggleDeepResearch={toggleDeepResearch}
-                  toggleDocumentSidebar={() => {}}
-                  filterManager={filterManager}
-                  llmManager={llmManager}
-                  removeDocs={() => {}}
-                  retrievalEnabled={false}
-                  selectedDocuments={[]}
-                  initialMessage={message}
-                  stopGenerating={stopGenerating}
-                  onSubmit={handleChatInputSubmit}
-                  chatState={currentChatState}
-                  currentSessionFileTokenCount={currentSessionFileTokenCount}
-                  availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
-                  selectedAssistant={liveAssistant ?? undefined}
-                  handleFileUpload={handleFileUpload}
-                  disabled={
-                    !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
-                  }
-                />
-                <Spacer rem={0.5} />
-              </div>
+              <ChatInputBar
+                ref={chatInputBarRef}
+                deepResearchEnabled={deepResearchEnabled}
+                toggleDeepResearch={toggleDeepResearch}
+                toggleDocumentSidebar={() => {}}
+                filterManager={filterManager}
+                llmManager={llmManager}
+                removeDocs={() => {}}
+                retrievalEnabled={false}
+                selectedDocuments={[]}
+                initialMessage={message}
+                stopGenerating={stopGenerating}
+                onSubmit={handleChatInputSubmit}
+                chatState={currentChatState}
+                currentSessionFileTokenCount={currentSessionFileTokenCount}
+                availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
+                selectedAssistant={liveAssistant ?? undefined}
+                handleFileUpload={handleFileUpload}
+                disabled={
+                  !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
+                }
+              />
+              <Spacer rem={0.5} />
             </div>
+
+            {/* Spacer to push content up when showing welcome message */}
             {!hasMessages && <div className="flex-1 w-full" />}
-            <AppLayouts.Footer />
           </div>
         )}
       </Dropzone>
@@ -456,7 +444,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Text/document preview modal */}
       {presentingDocument && (
-        <TextView
+        <TextViewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />

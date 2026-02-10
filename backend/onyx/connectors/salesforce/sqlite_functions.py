@@ -12,6 +12,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
+from onyx.connectors.salesforce.utils import remove_sqlite_db_files
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.connectors.salesforce.utils import validate_salesforce_id
@@ -20,6 +21,9 @@ from shared_configs.utils import batch_list
 
 
 logger = setup_logger()
+
+
+SQLITE_DISK_IO_ERROR = "disk I/O error"
 
 
 class OnyxSalesforceSQLite:
@@ -99,8 +103,37 @@ class OnyxSalesforceSQLite:
     def apply_schema(self) -> None:
         """Initialize the SQLite database with required tables if they don't exist.
 
-        Non-destructive operation.
+        Non-destructive operation. If a disk I/O error is encountered (often due
+        to stale WAL/SHM files from a previous crash), this method will attempt
+        to recover by removing the corrupted files and recreating the database.
         """
+        try:
+            self._apply_schema_impl()
+        except sqlite3.OperationalError as e:
+            if SQLITE_DISK_IO_ERROR not in str(e):
+                raise
+
+            logger.warning(f"SQLite disk I/O error detected, attempting recovery: {e}")
+            self._recover_from_corruption()
+            self._apply_schema_impl()
+
+    def _recover_from_corruption(self) -> None:
+        """Recover from SQLite corruption by removing all database files and reconnecting."""
+        logger.info(f"Removing corrupted SQLite files: {self.filename}")
+
+        # Close existing connection
+        self.close()
+
+        # Remove all SQLite files (main db, WAL, SHM)
+        remove_sqlite_db_files(self.filename)
+
+        # Reconnect - this will create a fresh database
+        self.connect()
+
+        logger.info("SQLite recovery complete, fresh database created")
+
+    def _apply_schema_impl(self) -> None:
+        """Internal implementation of apply_schema."""
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
 

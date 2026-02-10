@@ -38,6 +38,7 @@ from fastapi_users import schemas
 from fastapi_users import UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend
 from fastapi_users.authentication import CookieTransport
+from fastapi_users.authentication import JWTStrategy
 from fastapi_users.authentication import RedisStrategy
 from fastapi_users.authentication import Strategy
 from fastapi_users.authentication.strategy.db import AccessTokenDatabase
@@ -780,7 +781,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
     async def on_after_forgot_password(
-        self, user: User, token: str, request: Optional[Request] = None
+        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
     ) -> None:
         if not EMAIL_CONFIGURED:
             logger.error(
@@ -799,7 +800,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
-        self, user: User, token: str, request: Optional[Request] = None
+        self, user: User, token: str, request: Optional[Request] = None  # noqa: ARG002
     ) -> None:
         verify_email_domain(user.email)
 
@@ -983,7 +984,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         except (exceptions.UserNotExists, exceptions.InvalidID, KeyError):
             return None
 
-    async def destroy_token(self, token: str, user: User) -> None:
+    async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
         """Properly delete the token from async redis."""
         redis = await get_async_redis_connection()
         await redis.delete(f"{self.key_prefix}{token}")
@@ -1046,6 +1047,61 @@ class RefreshableDatabaseStrategy(DatabaseStrategy[User, uuid.UUID, AccessToken]
         return token
 
 
+class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
+    """Stateless JWT strategy for single-tenant deployments.
+
+    Tokens are self-contained and verified via signature — no Redis or DB
+    lookup required per request. An ``iat`` claim is embedded so that
+    downstream code can determine when the token was created without
+    querying an external store.
+
+    Refresh is implemented by issuing a brand-new JWT (the old one remains
+    valid until its natural expiry).  ``destroy_token`` is a no-op because
+    JWTs cannot be server-side invalidated.
+    """
+
+    def __init__(
+        self,
+        secret: SecretType,
+        lifetime_seconds: int | None = SESSION_EXPIRE_TIME_SECONDS,
+        token_audience: list[str] | None = None,
+        algorithm: str = "HS256",
+        public_key: SecretType | None = None,
+    ):
+        super().__init__(
+            secret=secret,
+            lifetime_seconds=lifetime_seconds,
+            token_audience=token_audience or ["fastapi-users:auth"],
+            algorithm=algorithm,
+            public_key=public_key,
+        )
+
+    async def write_token(self, user: User) -> str:
+        data = {
+            "sub": str(user.id),
+            "aud": self.token_audience,
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+        }
+        return generate_jwt(
+            data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
+        )
+
+    async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
+        # JWTs are stateless — nothing to invalidate server-side.
+        # NOTE: a compromise that makes JWT auth stateful but revocable
+        # is to include a token_version claim in the JWT payload. The token_version
+        # is incremented whenever the user logs out (or gets login revoked). Whenever
+        # the JWT is used, it is only valid if the token_version claim is the same as the one
+        # in the db. If not, the JWT is invalid and the user needs to login again.
+        return
+
+    async def refresh_token(
+        self, token: Optional[str], user: User  # noqa: ARG002
+    ) -> str:
+        """Issue a fresh JWT with a new expiry."""
+        return await self.write_token(user)
+
+
 def get_redis_strategy() -> TenantAwareRedisStrategy:
     return TenantAwareRedisStrategy()
 
@@ -1058,6 +1114,22 @@ def get_database_strategy(
     )
 
 
+def get_jwt_strategy() -> SingleTenantJWTStrategy:
+    return SingleTenantJWTStrategy(
+        secret=USER_AUTH_SECRET,
+        lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS,
+    )
+
+
+if AUTH_BACKEND == AuthBackend.JWT:
+    if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
+        raise ValueError(
+            "JWT auth backend is only supported for single-tenant, self-hosted deployments. "
+            "Use 'redis' or 'postgres' instead."
+        )
+    if not USER_AUTH_SECRET:
+        raise ValueError("USER_AUTH_SECRET is required for JWT auth backend.")
+
 if AUTH_BACKEND == AuthBackend.REDIS:
     auth_backend = AuthenticationBackend(
         name="redis", transport=cookie_transport, get_strategy=get_redis_strategy
@@ -1065,6 +1137,10 @@ if AUTH_BACKEND == AuthBackend.REDIS:
 elif AUTH_BACKEND == AuthBackend.POSTGRES:
     auth_backend = AuthenticationBackend(
         name="postgres", transport=cookie_transport, get_strategy=get_database_strategy
+    )
+elif AUTH_BACKEND == AuthBackend.JWT:
+    auth_backend = AuthenticationBackend(
+        name="jwt", transport=cookie_transport, get_strategy=get_jwt_strategy
     )
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
@@ -1327,14 +1403,6 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-
-    tenant_id = get_current_tenant_id()
-    if (
-        user is not None
-        and user.is_anonymous
-        and anonymous_user_enabled(tenant_id=tenant_id)
-    ):
-        return get_anonymous_user()
 
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object

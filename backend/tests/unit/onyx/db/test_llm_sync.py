@@ -46,7 +46,9 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 2  # Two new models
-            assert mock_session.execute.call_count == 2
+            assert (
+                mock_session.execute.call_count == 2 * 3
+            )  # 2 models * (model insert + chat insert + vision insert)
             mock_session.commit.assert_called_once()
 
     def test_skips_existing_models(self) -> None:
@@ -86,7 +88,7 @@ class TestSyncModelConfigurations:
             )
 
             assert result == 1  # Only one new model
-            assert mock_session.execute.call_count == 1
+            assert mock_session.execute.call_count == 3
 
     def test_no_commit_when_no_new_models(self) -> None:
         """Test that commit is not called when no new models."""

@@ -91,7 +91,45 @@ class DocumentBatchStorage(ABC):
     def _deserialize_documents(self, data: str) -> list[Document]:
         """Deserialize documents from JSON string."""
         doc_dicts = json.loads(data)
-        return [Document.model_validate(doc_dict) for doc_dict in doc_dicts]
+        return [
+            Document.model_validate(self._normalize_doc_dict(doc_dict))
+            for doc_dict in doc_dicts
+        ]
+
+    def _normalize_doc_dict(self, doc_dict: dict) -> dict:
+        """Normalize document dict to handle legacy data with non-string metadata values.
+
+        Before the _convert_to_metadata_value fix, Salesforce connector stored raw
+        types (bool, float, None) in metadata. This converts them to strings for
+        backward compatibility.
+        """
+        if "metadata" not in doc_dict:
+            return doc_dict
+
+        metadata = doc_dict["metadata"]
+        if not isinstance(metadata, dict):
+            return doc_dict
+
+        normalized_metadata: dict[str, str | list[str]] = {}
+        converted_keys: list[str] = []
+        for key, value in metadata.items():
+            if isinstance(value, list):
+                normalized_metadata[key] = [str(item) for item in value]
+            elif isinstance(value, str):
+                normalized_metadata[key] = value
+            else:
+                # Convert bool, int, float, None to string
+                converted_keys.append(f"{key}={type(value).__name__}")
+                normalized_metadata[key] = str(value)
+
+        if converted_keys:
+            doc_id = doc_dict.get("id", "unknown")
+            logger.warning(
+                f"Normalized legacy metadata for document {doc_id}: {converted_keys}"
+            )
+
+        doc_dict["metadata"] = normalized_metadata
+        return doc_dict
 
     def _per_cc_pair_base_path(self) -> str:
         """Get the base path for the cc pair."""

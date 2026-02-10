@@ -244,7 +244,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
     # it's unclear to me whether using the hub's timer or the bootstep timer is better
     requires = {"celery.worker.components:Hub"}
 
-    def __init__(self, worker: Any, **kwargs: Any) -> None:
+    def __init__(self, worker: Any, **kwargs: Any) -> None:  # noqa: ARG002
         self.interval = CELERY_PRIMARY_WORKER_LOCK_TIMEOUT / 8  # Interval in seconds
         self.task_tref = None
 
@@ -300,7 +300,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
         except Exception:
             task_logger.exception("Periodic task failed.")
 
-    def stop(self, worker: Any) -> None:
+    def stop(self, worker: Any) -> None:  # noqa: ARG002
         # Cancel the scheduled task when the worker stops
         if self.task_tref:
             self.task_tref.cancel()
@@ -325,5 +325,6 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.vespa",
         "onyx.background.celery.tasks.llm_model_update",
         "onyx.background.celery.tasks.user_file_processing",
+        "onyx.background.celery.tasks.opensearch_migration",
     ]
 )

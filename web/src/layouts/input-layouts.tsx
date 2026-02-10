@@ -119,10 +119,10 @@ function HorizontalInputLayout({
         justifyContent="between"
         alignItems={center ? "center" : "start"}
       >
-        <TitleLayout {...titleLayoutProps} />
-        <Section alignItems="end" width="fit">
-          {children}
-        </Section>
+        <div className="flex flex-col self-stretch flex-[2]">
+          <TitleLayout {...titleLayoutProps} />
+        </div>
+        <div className="flex flex-col flex-[1] items-end">{children}</div>
       </Section>
       {name && <ErrorLayout name={name} />}
     </Section>
@@ -255,7 +255,7 @@ function ErrorLayout({ name }: ErrorLayoutProps) {
 
 export type ErrorTextType = "error" | "warning";
 interface ErrorTextLayoutProps {
-  children?: string;
+  children?: React.ReactNode;
   type?: ErrorTextType;
 }
 function ErrorTextLayout({ children, type = "error" }: ErrorTextLayoutProps) {

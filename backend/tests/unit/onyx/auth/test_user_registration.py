@@ -77,8 +77,8 @@ class TestDisposableEmailValidation:
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
     async def test_blocks_disposable_email_before_tenant_provision(
         self,
-        mock_get_user_count: MagicMock,
-        mock_session_manager: MagicMock,
+        mock_get_user_count: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,  # noqa: ARG002
         mock_fetch_ee: MagicMock,
         mock_is_disposable: MagicMock,
         mock_user_create: UserCreate,
@@ -161,8 +161,8 @@ class TestMultiTenantInviteLogic:
         mock_get_user_count: MagicMock,
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
-        mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_sql_alchemy_db: MagicMock,
         mock_user_create: UserCreate,
         mock_async_session: MagicMock,
@@ -209,8 +209,8 @@ class TestMultiTenantInviteLogic:
         mock_get_user_count: MagicMock,
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
-        mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_sql_alchemy_db: MagicMock,
         mock_user_create: UserCreate,
         mock_async_session: MagicMock,
@@ -260,8 +260,8 @@ class TestSingleTenantInviteLogic:
         mock_get_user_count: MagicMock,
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
-        mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_user_create: UserCreate,
         mock_async_session: MagicMock,
     ) -> None:
@@ -404,7 +404,7 @@ class TestCaseInsensitiveEmailMatching:
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_async_session: MagicMock,
     ) -> None:
         """Existing user check should use case-insensitive email comparison."""

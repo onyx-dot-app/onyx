@@ -6,7 +6,7 @@ import { UserFileStatus } from "@/app/app/projects/projectsService";
 import { cn, isImageFile } from "@/lib/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgFileText, SvgX } from "@opal/icons";
-import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
 import Spacer from "@/refresh-components/Spacer";
 
@@ -174,12 +174,11 @@ export function FileCard({
       }
     >
       <div className="max-w-[12rem]">
-        <Hoverable asChild nonInteractive>
-          <HoverableContainer
-            padding={0}
-            rounded="rounded-12"
-            width="fit"
+        <Interactive.Base variant="none" static>
+          <Interactive.Container
+            paddingVariant="none"
             border
+            heightVariant="fit"
           >
             <AttachmentItemLayout
               icon={isProcessing ? SimpleLoader : SvgFileText}
@@ -193,8 +192,8 @@ export function FileCard({
               }
             />
             <Spacer horizontal rem={0.5} />
-          </HoverableContainer>
-        </Hoverable>
+          </Interactive.Container>
+        </Interactive.Base>
       </div>
     </Removable>
   );

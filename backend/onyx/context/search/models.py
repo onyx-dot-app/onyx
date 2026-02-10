@@ -122,7 +122,6 @@ class BasicChunkRequest(BaseModel):
     recency_bias_multiplier: float = 1.0
 
     limit: int | None = None
-    offset: int | None = None  # This one is not set currently
 
 
 class ChunkSearchRequest(BasicChunkRequest):

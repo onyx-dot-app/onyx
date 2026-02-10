@@ -180,7 +180,7 @@ export default function Page() {
     provider?: WebContentProviderView
   ) => {
     const hasStoredKey = provider?.has_api_key ?? false;
-    const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v1/scrape";
+    const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v2/scrape";
 
     // For Exa content provider, check if we can use the shared Exa key
     const isExa = providerType === "exa";
@@ -774,7 +774,7 @@ export default function Page() {
     const storedBaseUrl = getSingleContentConfigFieldValueForForm(
       selectedContentProviderType,
       existingProvider,
-      "https://api.firecrawl.dev/v1/scrape"
+      "https://api.firecrawl.dev/v2/scrape"
     );
     const configChanged =
       selectedContentProviderType === "firecrawl" &&
