@@ -6,13 +6,15 @@ from onyx.chat import process_message
 from onyx.configs import app_configs
 from onyx.server.query_and_chat.models import SendMessageRequest
 
-pytestmark = pytest.mark.skipif(
-    app_configs.INTEGRATION_TESTS_MODE,
-    reason="This unit test validates default (non-integration) mode behavior.",
-)
-
 
 def test_mock_llm_response_requires_integration_mode() -> None:
+    assert (
+        app_configs.INTEGRATION_TESTS_MODE is False
+    ), "Unit tests expect INTEGRATION_TESTS_MODE=false."
+    assert (
+        process_message.INTEGRATION_TESTS_MODE is False
+    ), "process_message should reflect INTEGRATION_TESTS_MODE=false in unit tests."
+
     request = SendMessageRequest(
         message="test",
         mock_llm_response='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
