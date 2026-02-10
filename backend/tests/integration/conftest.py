@@ -3,6 +3,9 @@ from collections.abc import Callable
 
 import pytest
 
+# Integration tests rely on this mode to enable mock_llm_response paths.
+os.environ["INTEGRATION_TESTS_MODE"] = "true"
+
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -60,6 +63,8 @@ def load_env_vars(env_file: str = ".env") -> None:
 
 # Load environment variables at the module level
 load_env_vars()
+# Keep integration mode deterministic even if .env sets a different value.
+os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
 
 """NOTE: for some reason using this seems to lead to misc

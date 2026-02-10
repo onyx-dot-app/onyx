@@ -1,17 +1,10 @@
-import pytest
-
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs import app_configs
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 
-
-pytestmark = pytest.mark.skipif(
-    not INTEGRATION_TESTS_MODE,
-    reason="mock_llm_response is only available when INTEGRATION_TESTS_MODE=true",
-)
 
 _DUMMY_OPENAI_API_KEY = "sk-mock-llm-workflow-tests"
 
@@ -24,7 +17,15 @@ def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
     raise AssertionError("SearchTool must exist for this test")
 
 
+def _assert_integration_mode_enabled() -> None:
+    assert (
+        app_configs.INTEGRATION_TESTS_MODE is True
+    ), "Integration tests require INTEGRATION_TESTS_MODE=true."
+
+
 def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> None:
+    _assert_integration_mode_enabled()
+
     LLMProviderManager.create(
         user_performing_action=admin_user,
         api_key=_DUMMY_OPENAI_API_KEY,
@@ -47,6 +48,8 @@ def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> Non
 
 
 def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> None:
+    _assert_integration_mode_enabled()
+
     LLMProviderManager.create(
         user_performing_action=admin_user,
         api_key=_DUMMY_OPENAI_API_KEY,
