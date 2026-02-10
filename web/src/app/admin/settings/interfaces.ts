@@ -46,6 +46,11 @@ export interface Settings {
   // Enterprise features flag - controlled by license enforcement at runtime
   // True when user has a valid license, False for community edition
   ee_features_enabled?: boolean;
+
+  // Vector DB availability flag - false when DISABLE_VECTOR_DB is set.
+  // When false, connectors, RAG search, document sets, and related features
+  // are unavailable.
+  vector_db_enabled?: boolean;
 }
 
 export enum NotificationType {
