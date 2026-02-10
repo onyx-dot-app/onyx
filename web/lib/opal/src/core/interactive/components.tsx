@@ -419,14 +419,14 @@ function InteractiveContainer({
       ref={ref}
       {...rest}
       className={cn(
-        "flex items-center justify-center",
-        border && "border",
+        "interactive-container",
         interactiveContainerRoundingVariants[roundingVariant],
         interactiveContainerPaddingVariants[paddingVariant],
         interactiveContainerHeightVariants[heightVariant],
         interactiveContainerMinWidthVariants[heightVariant],
         slotClassName
       )}
+      data-border={border ? "true" : undefined}
       style={slotStyle}
     />
   );

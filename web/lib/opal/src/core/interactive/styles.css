@@ -12,6 +12,14 @@
   color: var(--interactive-foreground);
 }
 
+.interactive-container {
+  @apply flex self-stretch items-center justify-center;
+}
+
+.interactive-container[data-border="true"] {
+  @apply border;
+}
+
 /* ============================================================================
    Variant + Subvariant combinations (9 + select)
 
