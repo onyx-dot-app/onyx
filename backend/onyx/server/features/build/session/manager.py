@@ -592,8 +592,6 @@ class SessionManager:
             user_level=user_level,
             use_demo_data=demo_data_enabled,
             excluded_user_library_paths=excluded_user_library_paths,
-            user_id=user_id,
-            tenant_id=tenant_id,
         )
 
         sandbox_id = sandbox.id

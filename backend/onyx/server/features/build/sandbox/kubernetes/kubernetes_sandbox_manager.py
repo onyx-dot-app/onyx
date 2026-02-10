@@ -1118,8 +1118,6 @@ done
                           else to /workspace/files (S3-synced user files)
             excluded_user_library_paths: List of paths within user_library/ to exclude
                 (e.g., ["/data/file.xlsx"]). These files won't be accessible in the session.
-            user_id: User ID for S3 path construction (required if not use_demo_data)
-            tenant_id: Tenant ID for S3 path construction (required if not use_demo_data)
 
         Raises:
             RuntimeError: If workspace setup fails
