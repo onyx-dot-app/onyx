@@ -498,6 +498,11 @@ def restore_session(
             )
 
     except TimeoutError as e:
+        # Do NOT release the Redis lock here. The timed-out operation is
+        # still running in a background thread. Releasing the lock would
+        # allow a concurrent restore to start on the same sandbox. The
+        # lock's TTL (RESTORE_LOCK_TIMEOUT_SECONDS) will expire it once
+        # the orphaned operation has had time to finish.
         logger.error(f"Restore timed out for session {session_id}: {e}")
         raise HTTPException(
             status_code=504,
@@ -505,15 +510,16 @@ def restore_session(
         )
     except Exception as e:
         logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
+        if lock.owned():
+            lock.release()
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",
         )
-    finally:
-        if lock.owned():
-            lock.release()
 
-    # Update heartbeat to mark sandbox as active after successful restore
+    # Success - release the lock and update heartbeat
+    if lock.owned():
+        lock.release()
     update_sandbox_heartbeat(db_session, sandbox.id)
 
     base_response = SessionResponse.from_model(session, sandbox)
