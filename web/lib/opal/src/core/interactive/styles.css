@@ -309,6 +309,9 @@
 }
 .interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"]:hover:not(
     [data-static]
+  ):not([data-disabled]),
+.interactive[data-interactive-base-variant="select"][data-interactive-base-subvariant="heavy"][data-selected="true"][data-transient="true"]:not(
+    [data-static]
   ):not([data-disabled]) {
   @apply bg-background-tint-02;
 }

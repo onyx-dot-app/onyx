@@ -36,7 +36,7 @@ type InteractiveBaseVariantProps =
  *
  * - `"default"` — Default height of 2.25rem (36px), suitable for most buttons/items
  * - `"compact"` — Reduced height of 1.75rem (28px), for denser UIs or inline elements
- * - `"full"` — Expands to fill parent height (`h-full`), for flexible layouts
+ * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
   keyof typeof interactiveContainerHeightVariants;
