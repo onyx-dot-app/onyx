@@ -31,7 +31,7 @@ export function useMemoryManager({
     const existingMemories: LocalMemory[] = memories.map((mem, index) => ({
       id: mem.id ?? -(index + 1),
       content: mem.content,
-      isNew: false,
+      isNew: mem.id === null,
     }));
 
     setLocalMemories((prev) => {

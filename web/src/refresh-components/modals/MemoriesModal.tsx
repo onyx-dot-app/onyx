@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -215,9 +215,8 @@ export default function MemoriesModal({
           ) : (
             <Section gap={0.5}>
               {filteredMemories.map(({ memory, originalIndex }) => (
-                <>
+                <Fragment key={memory.id}>
                   <MemoryItem
-                    key={memory.id}
                     memory={memory}
                     originalIndex={originalIndex}
                     onUpdate={handleUpdateMemory}
@@ -232,7 +231,7 @@ export default function MemoriesModal({
                     }}
                   />
                   {memory.isNew && <Separator noPadding />}
-                </>
+                </Fragment>
               ))}
             </Section>
           )}

@@ -25,12 +25,18 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
         <LineItem
           skeleton
           description="Add personal note or memory that Onyx should remember."
-          onClick={() => memoriesModal.toggle(true)}
+          onClick={() => {
+            setTargetMemoryId(null);
+            memoriesModal.toggle(true);
+          }}
           rightChildren={
             <IconButton
               internal
               icon={SvgPlusCircle}
-              onClick={() => memoriesModal.toggle(true)}
+              onClick={() => {
+                setTargetMemoryId(null);
+                memoriesModal.toggle(true);
+              }}
             />
           }
         />
@@ -52,7 +58,10 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
             title="View/Add"
             description="All notes"
             icon={SvgAddLines}
-            onClick={() => memoriesModal.toggle(true)}
+            onClick={() => {
+              setTargetMemoryId(null);
+              memoriesModal.toggle(true);
+            }}
           />
         </div>
       )}
