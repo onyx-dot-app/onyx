@@ -1,6 +1,7 @@
 import time
 
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
@@ -57,6 +58,103 @@ from shared_configs.configs import MULTI_TENANT
 
 
 logger = setup_logger()
+
+
+def _backfill_llm_model_flow_mappings(db_session: Session) -> bool:
+    """Best-effort recovery for instances with provider rows but missing flow mappings."""
+    flow_table_exists = db_session.scalar(
+        text("SELECT to_regclass('llm_model_flow') IS NOT NULL")
+    )
+    if not flow_table_exists:
+        return False
+
+    # Backfill chat flow mappings for non-image-generation models.
+    db_session.execute(
+        text(
+            """
+            INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
+            SELECT
+                'CHAT' AS llm_model_flow_type,
+                FALSE AS is_default,
+                mc.id AS model_configuration_id
+            FROM model_configuration mc
+            WHERE NOT EXISTS (
+                SELECT 1 FROM image_generation_config igc
+                WHERE igc.model_configuration_id = mc.id
+            )
+            ON CONFLICT (llm_model_flow_type, model_configuration_id) DO NOTHING
+            """
+        )
+    )
+
+    # Backfill vision flow mappings for image-capable models.
+    db_session.execute(
+        text(
+            """
+            INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
+            SELECT
+                'VISION' AS llm_model_flow_type,
+                FALSE AS is_default,
+                mc.id AS model_configuration_id
+            FROM model_configuration mc
+            WHERE mc.supports_image_input IS TRUE
+            ON CONFLICT (llm_model_flow_type, model_configuration_id) DO NOTHING
+            """
+        )
+    )
+
+    # If flow default is missing, recover chat default from legacy provider defaults.
+    has_chat_default = db_session.scalar(
+        text(
+            """
+            SELECT id
+            FROM llm_model_flow
+            WHERE llm_model_flow_type = 'CHAT'
+              AND is_default IS TRUE
+            LIMIT 1
+            """
+        )
+    )
+    if not has_chat_default:
+        db_session.execute(
+            text(
+                """
+                UPDATE llm_model_flow
+                SET is_default = FALSE
+                WHERE llm_model_flow_type = 'CHAT'
+                  AND is_default IS TRUE
+                """
+            )
+        )
+        db_session.execute(
+            text(
+                """
+                UPDATE llm_model_flow AS mf
+                SET is_default = TRUE
+                FROM model_configuration mc
+                JOIN llm_provider lp ON lp.id = mc.llm_provider_id
+                WHERE mf.model_configuration_id = mc.id
+                  AND mf.llm_model_flow_type = 'CHAT'
+                  AND lp.is_default_provider IS TRUE
+                  AND lp.default_model_name = mc.name
+                """
+            )
+        )
+        db_session.execute(
+            text(
+                """
+                UPDATE model_configuration AS mc
+                SET is_visible = TRUE
+                FROM llm_provider lp
+                WHERE mc.llm_provider_id = lp.id
+                  AND lp.is_default_provider IS TRUE
+                  AND lp.default_model_name = mc.name
+                """
+            )
+        )
+
+    db_session.commit()
+    return True
 
 
 def setup_onyx(
@@ -291,13 +389,19 @@ def setup_postgres(db_session: Session) -> None:
     existing_provider_id = db_session.scalar(select(LLMProviderModel.id).limit(1))
     has_existing_provider = existing_provider_id is not None
 
+    default_llm_model = fetch_default_llm_model(db_session)
+    if has_existing_provider and default_llm_model is None:
+        if _backfill_llm_model_flow_mappings(db_session):
+            logger.notice(
+                "Recovered LLM flow mappings from existing provider/model state."
+            )
+            default_llm_model = fetch_default_llm_model(db_session)
+
     # Only seed a dev provider on a truly fresh instance.
     # If providers exist but flow mappings/defaults are temporarily missing, avoid
     # overriding the user's provider configuration.
     should_seed_dev_provider = (
-        GEN_AI_API_KEY
-        and fetch_default_llm_model(db_session) is None
-        and not has_existing_provider
+        GEN_AI_API_KEY and default_llm_model is None and not has_existing_provider
     )
 
     if GEN_AI_API_KEY and not should_seed_dev_provider and has_existing_provider:

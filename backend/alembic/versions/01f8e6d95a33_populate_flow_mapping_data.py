@@ -17,8 +17,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add each model config to the conversation flow, setting the global default if it exists
-    # Exclude models that are part of ImageGenerationConfig
+    # Add each model config to the conversation flow.
+    # Exclude models that are part of ImageGenerationConfig.
+    # Use ON CONFLICT to make this migration idempotent in cases where startup logic
+    # already backfilled rows before this migration runs.
     op.execute(
         """
         INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
@@ -35,11 +37,12 @@ def upgrade() -> None:
         WHERE NOT EXISTS (
             SELECT 1 FROM image_generation_config igc
             WHERE igc.model_configuration_id = mc.id
-        );
+        )
+        ON CONFLICT (llm_model_flow_type, model_configuration_id) DO NOTHING;
         """
     )
 
-    # Add models with supports_image_input to the vision flow
+    # Add models with supports_image_input to the vision flow.
     op.execute(
         """
         INSERT INTO llm_model_flow (llm_model_flow_type, is_default, model_configuration_id)
@@ -53,7 +56,49 @@ def upgrade() -> None:
         FROM model_configuration mc
         LEFT JOIN llm_provider lp
             ON lp.id = mc.llm_provider_id
-        WHERE mc.supports_image_input IS TRUE;
+        WHERE mc.supports_image_input IS TRUE
+        ON CONFLICT (llm_model_flow_type, model_configuration_id) DO NOTHING;
+        """
+    )
+
+    # Recompute defaults from legacy provider flags so values are correct even if rows
+    # already existed before this migration.
+    op.execute(
+        """
+        UPDATE llm_model_flow
+        SET is_default = FALSE
+        WHERE llm_model_flow_type IN ('CHAT', 'VISION');
+        """
+    )
+
+    op.execute(
+        """
+        UPDATE llm_model_flow AS mf
+        SET is_default = TRUE
+        FROM model_configuration mc
+        JOIN llm_provider lp ON lp.id = mc.llm_provider_id
+        WHERE mf.model_configuration_id = mc.id
+          AND mf.llm_model_flow_type = 'CHAT'
+          AND lp.is_default_provider IS TRUE
+          AND lp.default_model_name = mc.name
+          AND NOT EXISTS (
+              SELECT 1 FROM image_generation_config igc
+              WHERE igc.model_configuration_id = mc.id
+          );
+        """
+    )
+
+    op.execute(
+        """
+        UPDATE llm_model_flow AS mf
+        SET is_default = TRUE
+        FROM model_configuration mc
+        JOIN llm_provider lp ON lp.id = mc.llm_provider_id
+        WHERE mf.model_configuration_id = mc.id
+          AND mf.llm_model_flow_type = 'VISION'
+          AND mc.supports_image_input IS TRUE
+          AND lp.is_default_vision_provider IS TRUE
+          AND lp.default_vision_model = mc.name;
         """
     )
 
