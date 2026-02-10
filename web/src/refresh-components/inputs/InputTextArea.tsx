@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn, mergeRefs } from "@/lib/utils";
 import {
   innerClasses,
   textClasses,
@@ -50,12 +50,61 @@ import {
 export interface InputTextAreaProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "disabled"> {
   variant?: Variants;
+  autoResize?: boolean;
+  maxRows?: number;
 }
 const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
-  ({ variant = "primary", className, rows = 4, readOnly, ...props }, ref) => {
+  (
+    {
+      variant = "primary",
+      className,
+      rows = 4,
+      readOnly,
+      autoResize = false,
+      maxRows,
+      ...props
+    },
+    ref
+  ) => {
     const disabled = variant === "disabled";
     const isReadOnlyVariant = variant === "readOnly";
     const isReadOnly = isReadOnlyVariant || readOnly;
+
+    const internalRef = React.useRef<HTMLTextAreaElement | null>(null);
+    const cachedLineHeight = React.useRef<number | null>(null);
+
+    const adjustHeight = React.useCallback(() => {
+      const textarea = internalRef.current;
+      if (!textarea || !autoResize) return;
+
+      if (cachedLineHeight.current === null) {
+        cachedLineHeight.current =
+          parseFloat(getComputedStyle(textarea).lineHeight) || 20;
+      }
+      const lineHeight = cachedLineHeight.current;
+
+      // Reset to auto so scrollHeight reflects actual content
+      textarea.style.height = "auto";
+      textarea.style.overflowY = "hidden";
+
+      const minHeight = rows * lineHeight;
+      const maxHeight = maxRows ? maxRows * lineHeight : Infinity;
+
+      const contentHeight = textarea.scrollHeight;
+      const clampedHeight = Math.min(
+        Math.max(contentHeight, minHeight),
+        maxHeight
+      );
+
+      textarea.style.height = `${clampedHeight}px`;
+      textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+    }, [autoResize, rows, maxRows]);
+
+    React.useEffect(() => {
+      adjustHeight();
+    }, [adjustHeight, props.value]);
+
+    const resizeClass = autoResize ? "resize-none" : "resize-y";
 
     return (
       <div
@@ -67,11 +116,12 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
         )}
       >
         <textarea
-          ref={ref}
+          ref={mergeRefs(internalRef, ref)}
           disabled={disabled}
           readOnly={isReadOnly}
           className={cn(
-            "w-full min-h-[3rem] bg-transparent focus:outline-none resize-y p-0.5",
+            "w-full min-h-[3rem] bg-transparent focus:outline-none p-0.5",
+            resizeClass,
             innerClasses[variant],
             textClasses[variant]
           )}

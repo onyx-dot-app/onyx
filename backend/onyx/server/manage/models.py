@@ -79,6 +79,7 @@ class UserPersonalization(BaseModel):
     role: str = ""
     use_memories: bool = True
     memories: list[str] = Field(default_factory=list)
+    user_preferences: str = ""
 
 
 class TenantSnapshot(BaseModel):
@@ -160,6 +161,7 @@ class UserInfo(BaseModel):
                 role=user.personal_role or "",
                 use_memories=user.use_memories,
                 memories=[memory.memory_text for memory in (user.memories or [])],
+                user_preferences=user.user_preferences or "",
             ),
         )
 
@@ -213,6 +215,7 @@ class PersonalizationUpdateRequest(BaseModel):
     role: str | None = None
     use_memories: bool | None = None
     memories: list[str] | None = None
+    user_preferences: str | None = Field(default=None, max_length=500)
 
 
 class SlackBotCreationRequest(BaseModel):
