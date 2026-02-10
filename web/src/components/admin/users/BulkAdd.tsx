@@ -1,23 +1,31 @@
 "use client";
 
 import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
+import { BulkInviteUsersResponse } from "@/lib/types";
 import Button from "@/refresh-components/buttons/Button";
 
 const WHITESPACE_SPLIT = /\s+/;
 const EMAIL_REGEX = /[^@]+@[^.]+\.[^.]/;
 
 const addUsers = async (url: string, { arg }: { arg: Array<string> }) => {
-  return await fetch(url, {
+  const response = await fetch(url, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ emails: arg }),
   });
+
+  let data: BulkInviteUsersResponse | null = null;
+  if (response.ok) {
+    data = (await response.json()) as BulkInviteUsersResponse;
+  }
+
+  return { response, data };
 };
 
 interface FormProps {
-  onSuccess: () => void;
+  onSuccess: (response: BulkInviteUsersResponse) => void;
   onFailure: (res: Response) => void;
 }
 
@@ -82,11 +90,11 @@ const AddUserForm = withFormik<FormProps, FormValues>({
     const emails = normalizeEmails(values.emails);
     formikBag.setSubmitting(true);
     await addUsers("/api/manage/admin/users", { arg: emails })
-      .then((res) => {
-        if (res.ok) {
-          formikBag.props.onSuccess();
+      .then(({ response, data }) => {
+        if (response.ok && data) {
+          formikBag.props.onSuccess(data);
         } else {
-          formikBag.props.onFailure(res);
+          formikBag.props.onFailure(response);
         }
       })
       .finally(() => {

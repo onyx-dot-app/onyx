@@ -15,6 +15,7 @@ import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import BulkAdd from "@/components/admin/users/BulkAdd";
 import Text from "@/refresh-components/texts/Text";
+import { BulkInviteUsersResponse } from "@/lib/types";
 import { InvitedUserSnapshot } from "@/lib/types";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -300,11 +301,18 @@ const AddUserButton = ({
     invitedUsers &&
     invitedUsers.length === 0;
 
-  const onSuccess = () => {
+  const onSuccess = (response: BulkInviteUsersResponse) => {
     mutate(
       (key) => typeof key === "string" && key.startsWith("/api/manage/users")
     );
     setBulkAddUsersModal(false);
+    if (response.email_invite_warning) {
+      setPopup({
+        message: response.email_invite_warning,
+        type: "warning",
+      });
+      return;
+    }
     setPopup({
       message: "Users invited!",
       type: "success",

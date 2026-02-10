@@ -123,6 +123,11 @@ export interface InvitedUserSnapshot {
   email: string;
 }
 
+export interface BulkInviteUsersResponse {
+  number_of_invited_users: number;
+  email_invite_warning: string | null;
+}
+
 export interface MinimalUserSnapshot {
   id: string;
   email: string;

@@ -75,6 +75,7 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import BulkInviteUsersResponse
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
@@ -362,7 +363,7 @@ def bulk_invite_users(
     emails: list[str] = Body(..., embed=True),
     current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> int:
+) -> BulkInviteUsersResponse:
     """emails are string validated. If any email fails validation, no emails are
     invited and an exception is raised."""
     tenant_id = get_current_tenant_id()
@@ -414,16 +415,43 @@ def bulk_invite_users(
     all_emails = list(set(new_invited_emails) | set(initial_invited_users))
     number_of_invited_users = write_invited_users(all_emails)
 
+    email_invite_warning: str | None = None
+
     # send out email invitations if enabled
     if ENABLE_EMAIL_INVITES:
-        try:
-            for email in new_invited_emails:
+        failed_email_invites = 0
+        for email in new_invited_emails:
+            try:
                 send_user_email_invite(email, current_user, AUTH_TYPE)
-        except Exception as e:
-            logger.error(f"Error sending email invite to invited users: {e}")
+            except Exception:
+                failed_email_invites += 1
+                logger.exception("Failed to send invite email to %s", email)
+
+        if failed_email_invites > 0:
+            if failed_email_invites == len(new_invited_emails):
+                email_invite_warning = (
+                    "Users were invited, but we couldn't confirm that invitation "
+                    "emails were sent. Please verify your SMTP or SendGrid settings."
+                )
+            else:
+                email_invite_warning = (
+                    f"Users were invited, but {failed_email_invites} invitation "
+                    "email(s) could not be sent. Please verify your SMTP or "
+                    "SendGrid settings."
+                )
+    elif new_invited_emails:
+        email_invite_warning = (
+            "Users were invited, but email invitations are disabled so no "
+            "invitation emails were sent."
+        )
+
+    response = BulkInviteUsersResponse(
+        number_of_invited_users=number_of_invited_users,
+        email_invite_warning=email_invite_warning,
+    )
 
     if not MULTI_TENANT or DEV_MODE:
-        return number_of_invited_users
+        return response
 
     # for billing purposes, write to the control plane about the number of new users
     try:
@@ -432,7 +460,7 @@ def bulk_invite_users(
             "onyx.server.tenants.billing", "register_tenant_users", None
         )(tenant_id, get_live_users_count(db_session))
 
-        return number_of_invited_users
+        return response
     except Exception as e:
         logger.error(f"Failed to register tenant users: {str(e)}")
         logger.info(

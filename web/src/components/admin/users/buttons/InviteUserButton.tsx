@@ -1,4 +1,5 @@
 import {
+  type BulkInviteUsersResponse,
   type InvitedUserSnapshot,
   type AcceptedUserSnapshot,
 } from "@/lib/types";
@@ -33,15 +34,22 @@ export const InviteUserButton = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      return response.json();
+      return (await response.json()) as BulkInviteUsersResponse;
     },
     {
-      onSuccess: () => {
+      onSuccess: (response) => {
         setShowInviteModal(false);
         if (typeof mutate === "function") {
           mutate();
         } else {
           mutate.forEach((fn) => fn());
+        }
+        if (response.email_invite_warning) {
+          setPopup({
+            message: response.email_invite_warning,
+            type: "warning",
+          });
+          return;
         }
         setPopup({
           message: "User invited successfully!",

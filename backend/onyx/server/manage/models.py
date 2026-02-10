@@ -373,6 +373,11 @@ class AllUsersResponse(BaseModel):
     slack_users_pages: int
 
 
+class BulkInviteUsersResponse(BaseModel):
+    number_of_invited_users: int
+    email_invite_warning: str | None = None
+
+
 class SlackChannel(BaseModel):
     id: str
     name: str
