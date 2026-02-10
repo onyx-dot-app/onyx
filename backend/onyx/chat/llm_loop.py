@@ -14,6 +14,7 @@ from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
@@ -184,6 +185,7 @@ def construct_message_history(
     project_files: ExtractedProjectFiles | None,
     available_tokens: int,
     last_n_user_messages: int | None = None,
+    token_counter: Callable[[str], int] | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
@@ -216,6 +218,12 @@ def construct_message_history(
                 project_files, token_counter=None
             )
             result.append(project_message)
+        elif project_files and project_files.file_metadata_for_tool and token_counter:
+            result.append(
+                _create_file_tool_metadata_message(
+                    project_files.file_metadata_for_tool, token_counter
+                )
+            )
         if reminder_message:
             result.append(reminder_message)
         return result
@@ -315,6 +323,12 @@ def construct_message_history(
             project_files, token_counter=None
         )
         result.append(project_message)
+    elif project_files and project_files.file_metadata_for_tool and token_counter:
+        result.append(
+            _create_file_tool_metadata_message(
+                project_files.file_metadata_for_tool, token_counter
+            )
+        )
 
     # 4. Add last user message (with project images attached)
     result.append(last_user_message)
@@ -327,6 +341,32 @@ def construct_message_history(
         result.append(reminder_message)
 
     return result
+
+
+def _create_file_tool_metadata_message(
+    file_metadata: list[FileToolMetadata],
+    token_counter: Callable[[str], int],
+) -> ChatMessageSimple:
+    """Build a lightweight metadata-only message listing files available via FileReaderTool.
+
+    Used when files are too large to fit in context and the vector DB is
+    disabled, so the LLM must use ``read_file`` to inspect them.
+    """
+    lines = [
+        "You have access to the following files. Use the read_file tool to "
+        "read sections of any file:"
+    ]
+    for meta in file_metadata:
+        lines.append(
+            f'- {meta.file_id}: "{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        )
+
+    message_content = "\n".join(lines)
+    return ChatMessageSimple(
+        message=message_content,
+        token_count=token_counter(message_content),
+        message_type=MessageType.USER,
+    )
 
 
 def _create_project_files_message(
@@ -551,6 +591,7 @@ def run_llm_loop(
                 reminder_message=reminder_msg,
                 project_files=project_files,
                 available_tokens=available_tokens,
+                token_counter=token_counter,
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result

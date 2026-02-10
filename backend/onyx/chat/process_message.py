@@ -34,6 +34,7 @@ from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ProjectSearchConfig
@@ -43,6 +44,7 @@ from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -58,6 +60,7 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.projects import get_project_token_count
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import get_tools
@@ -266,6 +269,24 @@ def _extract_project_file_texts_and_images(
                     )
                     project_image_files.append(chat_loaded_file)
     else:
+        if DISABLE_VECTOR_DB:
+            # Without a vector DB we can't use project-as-filter search.
+            # Instead, build lightweight metadata so the LLM can call the
+            # FileReaderTool to inspect individual files on demand.
+            file_metadata_for_tool = _build_file_tool_metadata_for_project(
+                project_id=project_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
+            return ExtractedProjectFiles(
+                project_file_texts=[],
+                project_image_files=[],
+                project_as_filter=False,
+                total_token_count=0,
+                project_file_metadata=[],
+                project_uncapped_token_count=project_tokens,
+                file_metadata_for_tool=file_metadata_for_tool,
+            )
         project_as_filter = True
 
     return ExtractedProjectFiles(
@@ -276,6 +297,49 @@ def _extract_project_file_texts_and_images(
         project_file_metadata=project_file_metadata,
         project_uncapped_token_count=project_tokens,
     )
+
+
+APPROX_CHARS_PER_TOKEN = 4
+
+
+def _build_file_tool_metadata_for_project(
+    project_id: int,
+    user_id: UUID | None,
+    db_session: Session,
+) -> list[FileToolMetadata]:
+    """Build lightweight FileToolMetadata for every file in a project.
+
+    Used when files are too large to fit in context and the vector DB is
+    disabled, so the LLM needs to know which files it can read via the
+    FileReaderTool.
+    """
+    project_user_files = get_user_files_from_project(
+        project_id=project_id,
+        user_id=user_id,
+        db_session=db_session,
+    )
+    return [
+        FileToolMetadata(
+            file_id=str(uf.id),
+            filename=uf.name,
+            approx_char_count=(uf.token_count or 0) * APPROX_CHARS_PER_TOKEN,
+        )
+        for uf in project_user_files
+    ]
+
+
+def _build_file_tool_metadata_for_user_files(
+    user_files: list[UserFile],
+) -> list[FileToolMetadata]:
+    """Build lightweight FileToolMetadata from a list of UserFile records."""
+    return [
+        FileToolMetadata(
+            file_id=str(uf.id),
+            filename=uf.name,
+            approx_char_count=(uf.token_count or 0) * APPROX_CHARS_PER_TOKEN,
+        )
+        for uf in user_files
+    ]
 
 
 def _get_project_search_availability(
@@ -522,6 +586,16 @@ def handle_stream_message_objects(
             db_session=db_session,
         )
 
+        # When the vector DB is disabled, persona-attached user_files have no
+        # search pipeline path. Inject them as file_metadata_for_tool so the
+        # LLM can read them via the FileReaderTool.
+        if DISABLE_VECTOR_DB and persona.user_files:
+            persona_file_metadata = _build_file_tool_metadata_for_user_files(
+                persona.user_files
+            )
+            # Merge persona file metadata into the extracted project files
+            extracted_project_files.file_metadata_for_tool.extend(persona_file_metadata)
+
         # Build a mapping of tool_id to tool_name for history reconstruction
         all_tools = get_tools(db_session)
         tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
@@ -555,6 +629,11 @@ def handle_stream_message_objects(
             user_id=user_id,
             db_session=db_session,
         )
+        # Also grant access to persona-attached user files
+        if persona.user_files:
+            for uf in persona.user_files:
+                if uf.id not in available_file_ids:
+                    available_file_ids.append(uf.id)
 
         # Construct tools based on the persona configurations
         tool_dict = construct_tools(

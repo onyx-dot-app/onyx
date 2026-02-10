@@ -254,6 +254,19 @@ class ProjectFileMetadata(BaseModel):
     file_content: str
 
 
+class FileToolMetadata(BaseModel):
+    """Lightweight metadata for exposing files to the FileReaderTool.
+
+    Used when files cannot be loaded directly into context (project too large
+    or persona-attached user_files without direct-load path). The LLM receives
+    a listing of these so it knows which files it can read via ``read_file``.
+    """
+
+    file_id: str
+    filename: str
+    approx_char_count: int
+
+
 class ExtractedProjectFiles(BaseModel):
     project_file_texts: list[str]
     project_image_files: list[ChatLoadedFile]
@@ -263,6 +276,9 @@ class ExtractedProjectFiles(BaseModel):
     project_file_metadata: list[ProjectFileMetadata]
     # None if not a project
     project_uncapped_token_count: int | None
+    # Lightweight metadata for files exposed via FileReaderTool
+    # (populated when files don't fit in context and vector DB is disabled)
+    file_metadata_for_tool: list[FileToolMetadata] = []
 
 
 class LlmStepResult(BaseModel):
