@@ -1031,7 +1031,8 @@ class SlackConnector(
             range_percent_complete = range_complete / range_total * 100.0
 
             num_filtered = num_bot_filtered_messages + num_other_filtered_messages
-            logger.info(
+            log_func = logger.warning if num_bot_filtered_messages > 0 else logger.info
+            log_func(
                 f"Message processing stats: "
                 f"batch_len={len(message_batch)} "
                 f"batch_yielded={num_threads_processed} "
@@ -1039,13 +1040,6 @@ class SlackConnector(
                 f"(bot={num_bot_filtered_messages} other={num_other_filtered_messages}) "
                 f"total_threads_seen={len(seen_thread_ts)}"
             )
-
-            if num_bot_filtered_messages > 0:
-                logger.warning(
-                    f"Filtered out {num_bot_filtered_messages}/{len(message_batch)} "
-                    f"messages in channel '{channel['name']}' due to bot/app origin. "
-                    f"Bot-generated messages are not indexed."
-                )
 
             logger.info(
                 f"Current channel processing stats: "
