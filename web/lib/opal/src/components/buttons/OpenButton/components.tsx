@@ -11,7 +11,15 @@ import type { IconProps } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-type OpenButtonProps = Omit<ButtonProps, keyof InteractiveBaseVariantProps> &
+/** Omit that distributes over unions, preserving discriminated-union branches. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+type OpenButtonProps = DistributiveOmit<
+  ButtonProps,
+  keyof InteractiveBaseVariantProps
+> &
   InteractiveBaseSelectVariantProps;
 
 // ---------------------------------------------------------------------------
