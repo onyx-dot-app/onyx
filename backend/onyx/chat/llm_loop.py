@@ -177,6 +177,27 @@ def _build_project_file_citation_mapping(
     return citation_mapping
 
 
+def _build_project_message(
+    project_files: ExtractedProjectFiles | None,
+    token_counter: Callable[[str], int] | None,
+) -> ChatMessageSimple | None:
+    """Build the appropriate project files message based on available data.
+
+    Returns the full-text message when file texts are available, a lightweight
+    metadata message when only file metadata is available (and a token_counter
+    is provided), or None if no project message is needed.
+    """
+    if not project_files:
+        return None
+    if project_files.project_file_texts:
+        return _create_project_files_message(project_files, token_counter=None)
+    if project_files.file_metadata_for_tool and token_counter:
+        return _create_file_tool_metadata_message(
+            project_files.file_metadata_for_tool, token_counter
+        )
+    return None
+
+
 def construct_message_history(
     system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
@@ -193,13 +214,17 @@ def construct_message_history(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
 
+    # Build the project message up front so we can use its actual token count
+    # for the budget rather than relying on total_token_count (which is 0 when
+    # only lightweight file metadata is available).
+    project_message = _build_project_message(project_files, token_counter)
+
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
-    if project_files:
-        history_token_budget -= project_files.total_token_count
+    history_token_budget -= project_message.token_count if project_message else 0
     history_token_budget -= reminder_message.token_count if reminder_message else 0
 
     if history_token_budget < 0:
@@ -213,17 +238,8 @@ def construct_message_history(
         result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
-        if project_files and project_files.project_file_texts:
-            project_message = _create_project_files_message(
-                project_files, token_counter=None
-            )
+        if project_message:
             result.append(project_message)
-        elif project_files and project_files.file_metadata_for_tool and token_counter:
-            result.append(
-                _create_file_tool_metadata_message(
-                    project_files.file_metadata_for_tool, token_counter
-                )
-            )
         if reminder_message:
             result.append(reminder_message)
         return result
@@ -318,17 +334,8 @@ def construct_message_history(
         result.append(custom_agent_prompt)
 
     # 3. Add project files message (inserted before last user message)
-    if project_files and project_files.project_file_texts:
-        project_message = _create_project_files_message(
-            project_files, token_counter=None
-        )
+    if project_message:
         result.append(project_message)
-    elif project_files and project_files.file_metadata_for_tool and token_counter:
-        result.append(
-            _create_file_tool_metadata_message(
-                project_files.file_metadata_for_tool, token_counter
-            )
-        )
 
     # 4. Add last user message (with project images attached)
     result.append(last_user_message)
