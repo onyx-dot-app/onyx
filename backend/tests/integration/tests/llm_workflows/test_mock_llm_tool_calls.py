@@ -1,12 +1,10 @@
 import pytest
-from sqlalchemy import select
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import Tool
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -18,13 +16,12 @@ pytestmark = pytest.mark.skipif(
 _DUMMY_OPENAI_API_KEY = "sk-mock-llm-workflow-tests"
 
 
-def _get_internal_search_tool_id() -> int:
-    with get_session_with_current_tenant() as db_session:
-        search_tool = db_session.execute(
-            select(Tool).where(Tool.in_code_tool_id == SEARCH_TOOL_ID)
-        ).scalar_one_or_none()
-        assert search_tool is not None, "SearchTool must exist for this test"
-        return search_tool.id
+def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
+    tools = ToolManager.list_tools(user_performing_action=admin_user)
+    for tool in tools:
+        if tool.in_code_tool_id == SEARCH_TOOL_ID:
+            return tool.id
+    raise AssertionError("SearchTool must exist for this test")
 
 
 def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> None:
@@ -33,7 +30,7 @@ def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> Non
         api_key=_DUMMY_OPENAI_API_KEY,
     )
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
-    search_tool_id = _get_internal_search_tool_id()
+    search_tool_id = _get_internal_search_tool_id(admin_user)
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
@@ -55,7 +52,7 @@ def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> N
         api_key=_DUMMY_OPENAI_API_KEY,
     )
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
-    search_tool_id = _get_internal_search_tool_id()
+    search_tool_id = _get_internal_search_tool_id(admin_user)
 
     mock_response = "\n".join(
         [
