@@ -109,22 +109,37 @@ def test_tool_call_debug_packet_contract(admin_user: DATestUser) -> None:
     )
 
     tool_call_debug_packets: list[dict] = []
+    max_packets = 500
     with requests.post(
         f"{API_SERVER_URL}/chat/send-message",
         json=req.model_dump(),
         headers=admin_user.headers,
         stream=True,
         cookies=admin_user.cookies,
+        timeout=(5, 30),
     ) as response:
-        for line in response.iter_lines():
+        assert response.status_code == 200
+
+        for packet_count, line in enumerate(response.iter_lines(), start=1):
+            if packet_count > max_packets:
+                pytest.fail(
+                    "Exceeded packet limit while waiting for tool_call_debug packet"
+                )
+
             if not line:
                 continue
             packet = json.loads(line.decode("utf-8"))
-            packet_obj = packet.get("obj") or {}
-            if packet_obj.get("type") == StreamingType.TOOL_CALL_DEBUG.value:
-                tool_call_debug_packets.append(packet)
 
-        assert response.status_code == 200
+            if "error" in packet:
+                pytest.fail(f"Received stream error packet: {packet['error']}")
+
+            packet_obj = packet.get("obj") or {}
+            packet_type = packet_obj.get("type")
+            if packet_type == StreamingType.TOOL_CALL_DEBUG.value:
+                tool_call_debug_packets.append(packet)
+                break
+            if packet_type == StreamingType.STOP.value:
+                break
 
     assert len(tool_call_debug_packets) == 1
 
