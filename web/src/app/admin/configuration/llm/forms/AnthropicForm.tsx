@@ -52,7 +52,7 @@ export function AnthropicForm({
             modelConfigurations
           ),
           api_key: existingLlmProvider?.api_key ?? "",
-          api_base: existingLlmProvider?.api_base ?? "",
+          api_base: existingLlmProvider?.api_base ?? undefined,
           default_model_name:
             existingLlmProvider?.default_model_name ??
             wellKnownLLMProvider?.recommended_default_model?.name ??
