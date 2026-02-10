@@ -36,7 +36,7 @@ global_version = OnyxVersion()
 # Eventually, ENABLE_PAID_ENTERPRISE_EDITION_FEATURES will be removed
 # and license enforcement will be the only mechanism for EE features.
 _LICENSE_ENFORCEMENT_ENABLED = (
-    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "").lower() == "true"
+    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "true").lower() == "true"
 )
 
 
