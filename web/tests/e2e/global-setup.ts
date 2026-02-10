@@ -14,7 +14,7 @@ const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
  * Fails fast with a clear error so developers don't see cryptic browser errors.
  */
 async function waitForServer(baseURL: string): Promise<void> {
-  const healthURL = `${baseURL}/api/health`;
+  const healthURL = baseURL;
   const deadline = Date.now() + PREFLIGHT_TIMEOUT_MS;
 
   console.log(`[global-setup] Waiting for server at ${healthURL} ...`);
