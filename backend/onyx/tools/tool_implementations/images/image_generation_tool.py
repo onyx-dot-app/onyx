@@ -94,7 +94,11 @@ class ImageGenerationTool(Tool[None]):
 
             llm_provider = config.model_configuration.llm_provider
             credentials = ImageGenerationProviderCredentials(
-                api_key=llm_provider.api_key,
+                api_key=(
+                    llm_provider.api_key.get_value(apply_mask=False)
+                    if llm_provider.api_key
+                    else None
+                ),
                 api_base=llm_provider.api_base,
                 api_version=llm_provider.api_version,
                 deployment_name=llm_provider.deployment_name,

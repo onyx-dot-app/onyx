@@ -112,7 +112,10 @@ def test_gdrive_perm_sync_with_real_data(
     mock_cc_pair.connector = MagicMock()
     mock_cc_pair.connector.connector_specific_config = {}
     mock_cc_pair.credential_id = 1
-    mock_cc_pair.credential.credential_json = {}
+    # Import and use the mock helper
+    from onyx.utils.sensitive import make_mock_sensitive_value
+
+    mock_cc_pair.credential.credential_json = make_mock_sensitive_value({})
     mock_cc_pair.last_time_perm_sync = None
     mock_cc_pair.last_time_external_group_sync = None
 

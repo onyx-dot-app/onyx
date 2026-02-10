@@ -19,6 +19,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
 
@@ -204,6 +205,21 @@ def remove_user_from_mcp_server(
 
 
 # MCPConnectionConfig operations
+def extract_connection_data(
+    config: MCPConnectionConfig | None, apply_mask: bool = False
+) -> MCPConnectionData:
+    """Extract MCPConnectionData from a connection config, with proper typing.
+
+    This helper encapsulates the cast from the JSON column's dict[str, Any]
+    to the typed MCPConnectionData structure.
+    """
+    if config is None or config.config is None:
+        return MCPConnectionData(headers={})
+    if isinstance(config.config, SensitiveValue):
+        return cast(MCPConnectionData, config.config.get_value(apply_mask=apply_mask))
+    return cast(MCPConnectionData, config.config)
+
+
 def get_connection_config_by_id(
     config_id: int, db_session: Session
 ) -> MCPConnectionConfig:
@@ -269,7 +285,7 @@ def update_connection_config(
     config = get_connection_config_by_id(config_id, db_session)
 
     if config_data is not None:
-        config.config = config_data
+        config.config = config_data  # type: ignore[assignment]
         # Force SQLAlchemy to detect the change by marking the field as modified
         flag_modified(config, "config")
 
@@ -287,7 +303,7 @@ def upsert_user_connection_config(
     existing_config = get_user_connection_config(server_id, user_email, db_session)
 
     if existing_config:
-        existing_config.config = config_data
+        existing_config.config = config_data  # type: ignore[assignment]
         db_session.flush()  # Don't commit yet, let caller decide when to commit
         return existing_config
     else:

@@ -349,7 +349,11 @@ class SessionManager:
         return LLMProviderConfig(
             provider=default_model.llm_provider.provider,
             model_name=default_model.name,
-            api_key=default_model.llm_provider.api_key,
+            api_key=(
+                default_model.llm_provider.api_key.get_value(apply_mask=False)
+                if default_model.llm_provider.api_key
+                else None
+            ),
             api_base=default_model.llm_provider.api_base,
         )
 
