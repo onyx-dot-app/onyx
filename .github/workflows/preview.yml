@@ -29,4 +29,4 @@ jobs:
 
       - name: Deploy Project Artifacts to Vercel
         working-directory: ./web
-        run: npx --yes vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
