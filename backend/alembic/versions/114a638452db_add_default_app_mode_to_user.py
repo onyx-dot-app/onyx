@@ -24,7 +24,7 @@ def upgrade() -> None:
             "default_app_mode",
             sa.String(),
             nullable=False,
-            server_default="CHAT",
+            server_default="chat",
         ),
     )
 
