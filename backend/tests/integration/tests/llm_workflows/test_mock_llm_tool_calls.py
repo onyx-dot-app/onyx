@@ -1,10 +1,16 @@
+import json
+
 import pytest
+import requests
 from sqlalchemy import select
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Tool
+from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.constants import SEARCH_TOOL_ID
+from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -81,3 +87,55 @@ def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> N
         {"queries": ["alpha"]},
         {"queries": ["beta"]},
     ]
+
+
+def test_tool_call_debug_packet_contract(admin_user: DATestUser) -> None:
+    LLMProviderManager.create(
+        user_performing_action=admin_user,
+        api_key=_DUMMY_OPENAI_API_KEY,
+    )
+    chat_session = ChatSessionManager.create(user_performing_action=admin_user)
+    search_tool_id = _get_internal_search_tool_id()
+
+    req = CreateChatMessageRequest(
+        chat_session_id=chat_session.id,
+        parent_message_id=None,
+        message="verify tool call packet contract",
+        file_descriptors=[],
+        search_doc_ids=[],
+        retrieval_options=None,
+        forced_tool_ids=[search_tool_id],
+        mock_llm_response='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+    )
+
+    tool_call_debug_packets: list[dict] = []
+    with requests.post(
+        f"{API_SERVER_URL}/chat/send-message",
+        json=req.model_dump(),
+        headers=admin_user.headers,
+        stream=True,
+        cookies=admin_user.cookies,
+    ) as response:
+        for line in response.iter_lines():
+            if not line:
+                continue
+            packet = json.loads(line.decode("utf-8"))
+            packet_obj = packet.get("obj") or {}
+            if packet_obj.get("type") == StreamingType.TOOL_CALL_DEBUG.value:
+                tool_call_debug_packets.append(packet)
+
+        assert response.status_code == 200
+
+    assert len(tool_call_debug_packets) == 1
+
+    packet = tool_call_debug_packets[0]
+    packet_obj = packet["obj"]
+    placement = packet.get("placement") or {}
+
+    assert packet_obj["type"] == StreamingType.TOOL_CALL_DEBUG.value
+    assert packet_obj["tool_name"] == "internal_search"
+    assert packet_obj["tool_args"] == {"queries": ["alpha"]}
+    assert isinstance(packet_obj["tool_call_id"], str) and packet_obj["tool_call_id"]
+
+    assert isinstance(placement.get("turn_index"), int)
+    assert isinstance(placement.get("tab_index"), int)
