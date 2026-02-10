@@ -130,11 +130,12 @@ def test_tool_call_debug_packet_contract(admin_user: DATestUser) -> None:
                 continue
             packet = json.loads(line.decode("utf-8"))
 
-            if "error" in packet:
-                pytest.fail(f"Received stream error packet: {packet['error']}")
-
             packet_obj = packet.get("obj") or {}
             packet_type = packet_obj.get("type")
+            if "error" in packet:
+                pytest.fail(f"Received stream error packet: {packet['error']}")
+            if packet_type == StreamingType.ERROR.value:
+                pytest.fail(f"Received packet-level error: {packet_obj}")
             if packet_type == StreamingType.TOOL_CALL_DEBUG.value:
                 tool_call_debug_packets.append(packet)
                 break
