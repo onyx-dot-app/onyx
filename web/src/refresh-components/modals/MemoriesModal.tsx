@@ -52,7 +52,8 @@ function MemoryItem({
             }}
             rows={3}
             maxLength={MAX_MEMORY_LENGTH}
-            className={cn("resize-none", !isFocused && "bg-transparent")}
+            resizable={false}
+            className={cn(!isFocused && "bg-transparent")}
           />
           <IconButton
             icon={SvgMinusCircle}
