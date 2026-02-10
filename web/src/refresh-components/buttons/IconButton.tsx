@@ -370,9 +370,9 @@ export default function IconButton({
       type="button"
       className={cn(
         "flex items-center justify-center h-fit w-fit group/IconButton",
-        small ? "p-0.5" : internal ? "p-1" : "p-2",
+        small || internal ? "p-1" : "p-2",
         disabled && "cursor-not-allowed",
-        internal || small ? "rounded-08" : "rounded-12",
+        small || internal ? "rounded-08" : "rounded-12",
         buttonClass,
         className
       )}

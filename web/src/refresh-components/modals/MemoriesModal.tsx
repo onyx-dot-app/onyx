@@ -30,6 +30,8 @@ interface MemoryItemProps {
   onRemove: (index: number) => void;
   shouldFocus?: boolean;
   onFocused?: () => void;
+  shouldHighlight?: boolean;
+  onHighlighted?: () => void;
 }
 
 function MemoryItem({
@@ -40,9 +42,13 @@ function MemoryItem({
   onRemove,
   shouldFocus,
   onFocused,
+  shouldHighlight,
+  onHighlighted,
 }: MemoryItemProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const [isHighlighting, setIsHighlighting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (shouldFocus) {
@@ -51,8 +57,29 @@ function MemoryItem({
     }
   }, [shouldFocus, onFocused]);
 
+  useEffect(() => {
+    if (!shouldHighlight) return;
+
+    wrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    setIsHighlighting(true);
+
+    const timer = setTimeout(() => {
+      setIsHighlighting(false);
+      onHighlighted?.();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [shouldHighlight, onHighlighted]);
+
   return (
-    <div className="rounded-08 hover:bg-background-tint-00 w-full p-0.5">
+    <div
+      ref={wrapperRef}
+      className={cn(
+        "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
+        "transition-colors ",
+        isHighlighting && "bg-background-tint-00 duration-700"
+      )}
+    >
       <Section gap={0.25} alignItems="start">
         <Section flexDirection="row" alignItems="start" gap={0.5}>
           <InputTextArea
@@ -91,16 +118,31 @@ interface MemoriesModalProps {
   memories: MemoryItem[];
   onSaveMemories: (memories: MemoryItem[]) => Promise<boolean>;
   onClose?: () => void;
+  initialTargetMemoryId?: number | null;
+  onTargetHandled?: () => void;
 }
 
 export default function MemoriesModal({
   memories,
   onSaveMemories,
   onClose,
+  initialTargetMemoryId,
+  onTargetHandled,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const { popup, setPopup } = usePopup();
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
+
+  // Drives scroll-into-view + highlight when opening from a FileTile click
+  const [highlightMemoryId, setHighlightMemoryId] = useState<number | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (initialTargetMemoryId != null) {
+      setHighlightMemoryId(initialTargetMemoryId);
+    }
+  }, [initialTargetMemoryId]);
 
   const {
     searchQuery,
@@ -138,6 +180,7 @@ export default function MemoriesModal({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               leftSearchIcon
+              showClearButton={false}
               className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
             />
             <Button onClick={onAddLine} tertiary rightIcon={SvgPlusCircle}>
@@ -168,6 +211,11 @@ export default function MemoriesModal({
                     onRemove={handleRemoveMemory}
                     shouldFocus={memory.id === focusMemoryId}
                     onFocused={() => setFocusMemoryId(null)}
+                    shouldHighlight={memory.id === highlightMemoryId}
+                    onHighlighted={() => {
+                      setHighlightMemoryId(null);
+                      onTargetHandled?.();
+                    }}
                   />
                   {memory.isNew && <Separator noPadding />}
                 </>

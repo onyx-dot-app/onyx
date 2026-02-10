@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import FileTile from "@/refresh-components/tiles/FileTile";
 import ButtonTile from "@/refresh-components/tiles/ButtonTile";
 import { SvgAddLines, SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
@@ -16,6 +17,7 @@ interface MemoriesProps {
 
 export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
   const memoriesModal = useCreateModal();
+  const [targetMemoryId, setTargetMemoryId] = useState<number | null>(null);
 
   return (
     <>
@@ -36,7 +38,14 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
         <div className="self-stretch flex flex-row items-center justify-between gap-2">
           <div className="flex flex-row items-center gap-2">
             {memories.slice(0, 2).map((memory, index) => (
-              <FileTile key={memory.id ?? index} description={memory.content} />
+              <FileTile
+                key={memory.id ?? index}
+                description={memory.content}
+                onOpen={() => {
+                  setTargetMemoryId(memory.id);
+                  memoriesModal.toggle(true);
+                }}
+              />
             ))}
           </div>
           <ButtonTile
@@ -49,7 +58,12 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
       )}
 
       <memoriesModal.Provider>
-        <MemoriesModal memories={memories} onSaveMemories={onSaveMemories} />
+        <MemoriesModal
+          memories={memories}
+          onSaveMemories={onSaveMemories}
+          initialTargetMemoryId={targetMemoryId}
+          onTargetHandled={() => setTargetMemoryId(null)}
+        />
       </memoriesModal.Provider>
     </>
   );

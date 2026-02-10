@@ -122,6 +122,7 @@ export default function FileTile({
                     secondaryBody
                     text02
                     className={cn(
+                      "line-clamp-2",
                       state === "processing" && "group-hover/Tile:text-text-03"
                     )}
                   >
@@ -137,7 +138,7 @@ export default function FileTile({
                   </Truncated>
                 )}
                 {description && (
-                  <Text secondaryBody text03>
+                  <Text secondaryBody text03 className="line-clamp-2">
                     {description}
                   </Text>
                 )}
@@ -145,7 +146,7 @@ export default function FileTile({
             )}
             {onOpen && (
               <div className="h-full">
-                <IconButton small icon={SvgMaximize2} />
+                <IconButton small icon={SvgMaximize2} onClick={onOpen} />
               </div>
             )}
           </div>
