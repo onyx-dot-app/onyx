@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Tile from "@/refresh-components/tiles/Tile";
-import { SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
+import FileTile from "@/refresh-components/tiles/FileTile";
+import ButtonTile from "@/refresh-components/tiles/ButtonTile";
+import { SvgAddLines, SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { Icon } from "lucide-react";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
 interface MemoriesProps {
@@ -34,13 +34,12 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
       ) : (
         <div className="flex flex-row flex-wrap items-center gap-2">
           {memories.map((memory, index) => (
-            <Tile key={index} type="file" icon={SvgMenu} description={memory} />
+            <FileTile key={index} description={memory} />
           ))}
-          <Tile
-            type="button"
+          <ButtonTile
             title="View/Add"
             description="All notes"
-            icon={SvgFilter}
+            icon={SvgAddLines}
             onClick={() => setShowModal(true)}
           />
         </div>
