@@ -6,12 +6,14 @@ import os
 import re
 import time
 from collections import deque
+from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
+from urllib.parse import quote
 from urllib.parse import unquote
 from urllib.parse import urlsplit
 
@@ -68,6 +70,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
+DEFAULT_GRAPH_PAGE_SIZE = 200
+GRAPH_REQUEST_MAX_RETRIES = 3
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -153,6 +157,8 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
 
     # Track yielded hierarchy nodes by their raw_node_id (URLs) to avoid duplicates
     seen_hierarchy_node_raw_ids: set[str] = Field(default_factory=set)
+    # Persist Graph deltaLink per Site+Drive+Folder scope for incremental sync
+    delta_links_by_scope: dict[str, str] = Field(default_factory=dict)
 
 
 class SharepointAuthMethod(Enum):
@@ -702,6 +708,7 @@ class SharepointConnector(
         sites: list[str] = [],
         include_site_pages: bool = True,
         include_site_documents: bool = True,
+        graph_page_size: int = DEFAULT_GRAPH_PAGE_SIZE,
     ) -> None:
         self.batch_size = batch_size
         self.sites = list(sites)
@@ -712,6 +719,7 @@ class SharepointConnector(
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
+        self.graph_page_size = graph_page_size
         self.sp_tenant_domain: str | None = None
 
     def validate_connector_settings(self) -> None:
@@ -817,11 +825,12 @@ class SharepointConnector(
         drive_name: str,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> tuple[list[DriveItem], str | None]:
+        checkpoint: SharepointConnectorCheckpoint | None = None,
+    ) -> tuple[Generator[DriveItem, None, None], str | None]:
         """Fetch drive items for a given drive name.
 
         Returns:
-            A tuple of (list of DriveItem, drive_web_url).
+            A tuple of (generator of DriveItem, drive_web_url).
             drive_web_url is the actual web_url from the Drive API for use as hierarchy node ID.
         """
         try:
@@ -841,73 +850,54 @@ class SharepointConnector(
             drive = drives[0] if len(drives) > 0 else None
             if drive is None:
                 logger.warning(f"Drive '{drive_name}' not found")
-                return [], None
+                return iter(()), None
 
             drive_web_url: str | None = drive.web_url
             logger.info(f"Found drive: {drive.name} (web_url: {drive_web_url})")
-            try:
-                root_folder = drive.root
-                if site_descriptor.folder_path:
-                    for folder_part in site_descriptor.folder_path.split("/"):
-                        root_folder = root_folder.get_by_path(folder_part)
+            if drive.id is None:
+                logger.warning(f"Drive id missing for '{drive_name}'")
+                return iter(()), drive_web_url
 
-                logger.info(f"Found root folder: {root_folder.name}")
+            delta_scope_key = self._build_delta_scope_key(
+                site_url=site_descriptor.url,
+                drive_id=drive.id,
+                folder_path=site_descriptor.folder_path,
+            )
+            persisted_delta_link = (
+                checkpoint.delta_links_by_scope.get(delta_scope_key)
+                if checkpoint is not None
+                else None
+            )
 
-                # TODO: consider ways to avoid materializing the entire list of files in memory
-                query = root_folder.get_files(
-                    recursive=True,
-                    page_size=1000,
-                )
-                driveitems = query.execute_query()
-                logger.info(f"Found {len(driveitems)} items in drive '{drive_name}'")
+            def _store_delta_link(delta_link: str) -> None:
+                if checkpoint is None:
+                    return
+                checkpoint.delta_links_by_scope[delta_scope_key] = delta_link
 
-                # Filter items based on folder path if specified
-                if site_descriptor.folder_path:
-                    # Filter items to ensure they're in the specified folder or its subfolders
-                    # The path will be in format: /drives/{drive_id}/root:/folder/path
-                    driveitems = [
-                        item
-                        for item in driveitems
-                        if item.parent_reference.path
-                        and "root:/" in item.parent_reference.path
-                        and (
-                            item.parent_reference.path.split("root:/")[1]
-                            == site_descriptor.folder_path
-                            or item.parent_reference.path.split("root:/")[1].startswith(
-                                site_descriptor.folder_path + "/"
-                            )
-                        )
-                    ]
-                    if len(driveitems) == 0:
-                        all_paths = [item.parent_reference.path for item in driveitems]
+            def _item_stream() -> Generator[DriveItem, None, None]:
+                for graph_item in self._iter_graph_drive_file_items(
+                    drive_id=drive.id,
+                    folder_path=site_descriptor.folder_path,
+                    start=start,
+                    end=end,
+                    delta_link=persisted_delta_link,
+                    on_delta_link=_store_delta_link,
+                ):
+                    item_id = graph_item.get("id")
+                    if not item_id:
+                        continue
+
+                    try:
+                        driveitem = drive.items[item_id].get().execute_query()
+                    except Exception as e:
                         logger.warning(
-                            f"Nothing found for folder '{site_descriptor.folder_path}' "
-                            f"in; any of valid paths: {all_paths}"
+                            f"Failed to fetch DriveItem details for '{item_id}' in '{drive_name}': {e}"
                         )
-                    logger.info(
-                        f"Found {len(driveitems)} items in drive '{drive_name}' for the folder '{site_descriptor.folder_path}'"
-                    )
+                        continue
 
-                # Filter items based on time window if specified
-                if start is not None and end is not None:
-                    driveitems = [
-                        item
-                        for item in driveitems
-                        if item.last_modified_datetime
-                        and start
-                        <= item.last_modified_datetime.replace(tzinfo=timezone.utc)
-                        <= end
-                    ]
-                    logger.info(
-                        f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
-                    )
+                    yield cast(DriveItem, driveitem)
 
-                return list(driveitems), drive_web_url
-
-            except Exception as e:
-                # Some drives might not be accessible
-                logger.warning(f"Failed to process drive: {str(e)}")
-                return [], None
+            return _item_stream(), drive_web_url
 
         except Exception as e:
             err_str = str(e)
@@ -921,136 +911,164 @@ class SharepointConnector(
             # Sites include things that do not contain drives so this fails
             # but this is fine, as there are no actual documents in those
             logger.warning(f"Failed to process site: {site_descriptor.url} - {err_str}")
-            return [], None
+            return iter(()), None
 
-    def _fetch_driveitems(
+    @staticmethod
+    def _normalize_folder_path(folder_path: str | None) -> str | None:
+        if folder_path is None:
+            return None
+        normalized = folder_path.strip("/")
+        return normalized or None
+
+    @staticmethod
+    def _is_within_folder(target_path: str | None, parent_path: str | None) -> bool:
+        if target_path is None:
+            return True
+        if not parent_path or "root:/" not in parent_path:
+            return False
+
+        normalized_target = target_path.strip("/")
+        item_parent = parent_path.split("root:/", 1)[1].strip("/")
+        return item_parent == normalized_target or item_parent.startswith(
+            normalized_target + "/"
+        )
+
+    def _build_delta_scope_key(
+        self, site_url: str, drive_id: str, folder_path: str | None
+    ) -> str:
+        normalized_folder_path = self._normalize_folder_path(folder_path) or ""
+        return f"{site_url}|{drive_id}|{normalized_folder_path}"
+
+    def _graph_get_json_with_retry(
+        self, url: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        for attempt in range(1, GRAPH_REQUEST_MAX_RETRIES + 1):
+            token_data = self._acquire_token()
+            access_token = token_data.get("access_token")
+            if not access_token:
+                raise RuntimeError("Failed to acquire access token")
+
+            headers = {"Authorization": f"Bearer {access_token}"}
+            try:
+                response = requests.get(
+                    url,
+                    headers=headers,
+                    params=params,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                if response.status_code in (429, 503):
+                    retry_after = int(response.headers.get("Retry-After", "5"))
+                    logger.warning(
+                        f"Graph API throttled ({response.status_code}) for {url}. "
+                        f"Retrying in {retry_after}s (attempt {attempt}/{GRAPH_REQUEST_MAX_RETRIES})"
+                    )
+                    time.sleep(retry_after)
+                    continue
+
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as e:
+                if attempt == GRAPH_REQUEST_MAX_RETRIES:
+                    raise
+
+                delay = min(30, 2**attempt)
+                logger.warning(
+                    f"Graph request failed for {url}: {e}. "
+                    f"Retrying in {delay}s (attempt {attempt}/{GRAPH_REQUEST_MAX_RETRIES})"
+                )
+                time.sleep(delay)
+
+        raise RuntimeError(f"Failed to fetch Graph API URL: {url}")
+
+    def _graph_iterate_items(
+        self, initial_url: str, params: dict[str, Any] | None = None
+    ) -> Generator[dict[str, Any], None, None]:
+        next_url = initial_url
+        next_params = params
+        page_count = 0
+
+        while next_url:
+            page_count += 1
+            page_data = self._graph_get_json_with_retry(next_url, params=next_params)
+            next_params = None
+            items = page_data.get("value", [])
+            logger.debug(
+                f"Graph pagination page {page_count}: {len(items)} items from {next_url}"
+            )
+            for item in items:
+                yield item
+
+            next_url = page_data.get("@odata.nextLink")
+
+    def _iter_graph_drive_file_items(
         self,
-        site_descriptor: SiteDescriptor,
+        drive_id: str,
+        folder_path: str | None,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[tuple[DriveItem, str, str | None]]:
-        """Fetch all drive items for a site.
+        delta_link: str | None = None,
+        on_delta_link: Callable[[str], None] | None = None,
+    ) -> Generator[dict[str, Any], None, None]:
+        """Enumerate file items via Microsoft Graph Delta API (streaming, incremental)."""
+        normalized_folder_path = self._normalize_folder_path(folder_path)
+        if delta_link:
+            next_url: str | None = delta_link
+            next_params: dict[str, Any] | None = None
+            logger.info(
+                f"Using persisted deltaLink for incremental sync on drive '{drive_id}'"
+            )
+        else:
+            if normalized_folder_path:
+                encoded_path = quote(normalized_folder_path, safe="/")
+                next_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{encoded_path}:/delta"
+            else:
+                next_url = (
+                    f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/delta"
+                )
+            next_params = {"$top": self.graph_page_size}
 
-        Returns:
-            A list of tuples (DriveItem, drive_name, drive_web_url).
-            drive_web_url is the actual web_url from the Drive API for use as hierarchy node ID.
-        """
-        final_driveitems: list[tuple[DriveItem, str, str | None]] = []
-        try:
-            site = self.graph_client.sites.get_by_url(site_descriptor.url)
+        latest_delta_link: str | None = None
+        while next_url:
+            page_data = self._graph_get_json_with_retry(next_url, params=next_params)
+            next_params = None
 
-            # Get all drives in the site
-            drives = site.drives.get().execute_query()
-            logger.debug(f"Found drives: {[drive.name for drive in drives]}")
+            for item in page_data.get("value", []):
+                if "deleted" in item or "folder" in item:
+                    continue
 
-            # Filter drives based on the requested drive name
-            if site_descriptor.drive_name:
-                drives = [
-                    drive
-                    for drive in drives
-                    if drive.name == site_descriptor.drive_name
-                    or (
-                        drive.name in SHARED_DOCUMENTS_MAP
-                        and SHARED_DOCUMENTS_MAP[drive.name]
-                        == site_descriptor.drive_name
-                    )
-                ]  # NOTE: right now we only support english, german and spanish drive names
-                # add to SHARED_DOCUMENTS_MAP if you want to support more languages
-                if not drives:
-                    logger.warning(f"Drive '{site_descriptor.drive_name}' not found")
-                    return []
+                file_name = item.get("name", "")
+                file_ext = get_file_ext(file_name)
+                if file_ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+                    continue
 
-            # Process each matching drive
-            for drive in drives:
-                try:
-                    root_folder = drive.root
-                    if site_descriptor.folder_path:
-                        # If a specific folder is requested, navigate to it
-                        for folder_part in site_descriptor.folder_path.split("/"):
-                            root_folder = root_folder.get_by_path(folder_part)
+                if normalized_folder_path and not self._is_within_folder(
+                    normalized_folder_path, item.get("parentReference", {}).get("path")
+                ):
+                    continue
 
-                    # Get all items recursively
-                    # TODO: consider ways to avoid materializing the entire list of files in memory
-                    query = root_folder.get_files(
-                        recursive=True,
-                        page_size=1000,
-                    )
-                    driveitems = query.execute_query()
-                    logger.debug(
-                        f"Found {len(driveitems)} items in drive '{drive.name}'"
-                    )
-
-                    # Use "Shared Documents" as the library name for the default "Documents" drive
-                    # NOTE: right now we only support english, german and spanish drive names
-                    # add to SHARED_DOCUMENTS_MAP if you want to support more languages
-                    drive_name = (
-                        SHARED_DOCUMENTS_MAP[drive.name]
-                        if drive.name in SHARED_DOCUMENTS_MAP
-                        else cast(str, drive.name)
-                    )
-
-                    # Filter items based on folder path if specified
-                    if site_descriptor.folder_path:
-                        # Filter items to ensure they're in the specified folder or its subfolders
-                        # The path will be in format: /drives/{drive_id}/root:/folder/path
-                        driveitems = [
-                            item
-                            for item in driveitems
-                            if item.parent_reference.path
-                            and "root:/" in item.parent_reference.path
-                            and (
-                                item.parent_reference.path.split("root:/")[1]
-                                == site_descriptor.folder_path
-                                or item.parent_reference.path.split("root:/")[
-                                    1
-                                ].startswith(site_descriptor.folder_path + "/")
-                            )
-                        ]
-                        if len(driveitems) == 0:
-                            all_paths = [
-                                item.parent_reference.path for item in driveitems
-                            ]
-                            logger.warning(
-                                f"Nothing found for folder '{site_descriptor.folder_path}' "
-                                f"in; any of valid paths: {all_paths}"
-                            )
-
-                    # Filter items based on time window if specified
-                    if start is not None and end is not None:
-                        driveitems = [
-                            item
-                            for item in driveitems
-                            if item.last_modified_datetime
-                            and start
-                            <= item.last_modified_datetime.replace(tzinfo=timezone.utc)
-                            <= end
-                        ]
-                        logger.debug(
-                            f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
+                if start is not None and end is not None:
+                    modified_at_str = item.get("lastModifiedDateTime")
+                    if not modified_at_str:
+                        continue
+                    try:
+                        modified_at = datetime.fromisoformat(
+                            modified_at_str.replace("Z", "+00:00")
                         )
+                    except Exception:
+                        logger.debug(
+                            f"Skipping item with unparsable modified time: {file_name}"
+                        )
+                        continue
+                    if modified_at < start or modified_at > end:
+                        continue
 
-                    drive_web_url: str | None = drive.web_url
-                    for item in driveitems:
-                        final_driveitems.append((item, drive_name or "", drive_web_url))
+                yield item
 
-                except Exception as e:
-                    # Some drives might not be accessible
-                    logger.warning(f"Failed to process drive '{drive.name}': {str(e)}")
+            latest_delta_link = page_data.get("@odata.deltaLink") or latest_delta_link
+            next_url = page_data.get("@odata.nextLink")
 
-        except Exception as e:
-            err_str = str(e)
-            if (
-                "403 Client Error" in err_str
-                or "404 Client Error" in err_str
-                or "invalid_client" in err_str
-            ):
-                raise e
-
-            # Sites include things that do not contain drives so this fails
-            # but this is fine, as there are no actual documents in those
-            logger.warning(f"Failed to process site: {err_str}")
-
-        return final_driveitems
+        if latest_delta_link and on_delta_link is not None:
+            on_delta_link(latest_delta_link)
 
     def _handle_paginated_sites(
         self, sites: SitesWithRoot
@@ -1085,8 +1103,8 @@ class SharepointConnector(
         site_descriptor: SiteDescriptor,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[dict[str, Any]]:
-        """Fetch SharePoint site pages (.aspx files) using the SharePoint Pages API."""
+    ) -> Generator[dict[str, Any], None, None]:
+        """Fetch SharePoint site pages incrementally using @odata.nextLink."""
 
         # Get the site to extract the site ID
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
@@ -1111,50 +1129,45 @@ class SharepointConnector(
         # Add expand parameter to get canvas layout content
         params = {"$expand": "canvasLayout"}
 
-        response = requests.get(
-            pages_endpoint,
-            headers=headers,
-            params=params,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        pages_data = response.json()
-        all_pages = pages_data.get("value", [])
+        next_url: str | None = pages_endpoint
+        next_params: dict[str, Any] | None = params
+        total_pages = 0
+        total_items = 0
 
-        # Handle pagination if there are more pages
-        # TODO: This accumulates all pages in memory and can be heavy on large tenants.
-        #       We should process each page incrementally to avoid unbounded growth.
-        while "@odata.nextLink" in pages_data:
-            next_url = pages_data["@odata.nextLink"]
+        while next_url:
             response = requests.get(
-                next_url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+                next_url,
+                headers=headers,
+                params=next_params,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             pages_data = response.json()
-            all_pages.extend(pages_data.get("value", []))
+            page_items = pages_data.get("value", [])
+            total_pages += 1
+            total_items += len(page_items)
 
-        logger.debug(f"Found {len(all_pages)} site pages in {site_descriptor.url}")
-
-        # Filter pages based on time window if specified
-        if start is not None or end is not None:
-            filtered_pages: list[dict[str, Any]] = []
-            for page in all_pages:
+            for page in page_items:
                 page_modified = page.get("lastModifiedDateTime")
-                if page_modified:
-                    if isinstance(page_modified, str):
-                        page_modified = datetime.fromisoformat(
-                            page_modified.replace("Z", "+00:00")
-                        )
+                parsed_modified: datetime | None = None
+                if isinstance(page_modified, str):
+                    parsed_modified = datetime.fromisoformat(
+                        page_modified.replace("Z", "+00:00")
+                    )
 
-                    if start is not None and page_modified < start:
-                        continue
-                    if end is not None and page_modified > end:
-                        continue
+                if start is not None and parsed_modified and parsed_modified < start:
+                    continue
+                if end is not None and parsed_modified and parsed_modified > end:
+                    continue
+                yield page
 
-                filtered_pages.append(page)
-            all_pages = filtered_pages
+            next_url = pages_data.get("@odata.nextLink")
+            next_params = None
 
-        return all_pages
+        logger.debug(
+            f"Finished paginating site pages for {site_descriptor.url}: "
+            f"{total_items} pages across {total_pages} requests"
+        )
 
     def _acquire_token(self) -> dict[str, Any]:
         """
@@ -1201,46 +1214,67 @@ class SharepointConnector(
 
             # Process site documents if flag is True
             if self.include_site_documents:
-                driveitems = self._fetch_driveitems(site_descriptor=site_descriptor)
-                for driveitem, drive_name, drive_web_url in driveitems:
+                drive_names = (
+                    [site_descriptor.drive_name]
+                    if site_descriptor.drive_name
+                    else self._get_drive_names_for_site(site_descriptor.url)
+                )
+
+                for requested_drive_name in drive_names:
+                    driveitems, drive_web_url = self._get_drive_items_for_drive_name(
+                        site_descriptor=site_descriptor,
+                        drive_name=requested_drive_name,
+                        checkpoint=temp_checkpoint,
+                    )
+                    normalized_drive_name = SHARED_DOCUMENTS_MAP.get(
+                        requested_drive_name, requested_drive_name
+                    )
+
                     # Yield drive hierarchy node using helper
                     if drive_web_url:
                         doc_batch.extend(
                             self._yield_drive_hierarchy_node(
-                                site_url, drive_web_url, drive_name, temp_checkpoint
-                            )
-                        )
-
-                    # Extract folder path and yield folder hierarchy nodes using helper
-                    folder_path = self._extract_folder_path_from_parent_reference(
-                        driveitem.parent_reference.path
-                        if driveitem.parent_reference
-                        else None
-                    )
-                    if folder_path and drive_web_url:
-                        doc_batch.extend(
-                            self._yield_folder_hierarchy_nodes(
                                 site_url,
                                 drive_web_url,
-                                drive_name,
-                                folder_path,
+                                normalized_drive_name,
                                 temp_checkpoint,
                             )
                         )
 
-                    try:
-                        logger.debug(f"Processing: {driveitem.web_url}")
-                        doc_batch.append(
-                            _convert_driveitem_to_slim_document(
-                                driveitem, drive_name, ctx, self.graph_client
-                            )
+                    for driveitem in driveitems:
+                        # Extract folder path and yield folder hierarchy nodes using helper
+                        folder_path = self._extract_folder_path_from_parent_reference(
+                            driveitem.parent_reference.path
+                            if driveitem.parent_reference
+                            else None
                         )
-                    except Exception as e:
-                        logger.warning(f"Failed to process driveitem: {str(e)}")
+                        if folder_path and drive_web_url:
+                            doc_batch.extend(
+                                self._yield_folder_hierarchy_nodes(
+                                    site_url,
+                                    drive_web_url,
+                                    normalized_drive_name,
+                                    folder_path,
+                                    temp_checkpoint,
+                                )
+                            )
 
-                    if len(doc_batch) >= SLIM_BATCH_SIZE:
-                        yield doc_batch
-                        doc_batch = []
+                        try:
+                            logger.debug(f"Processing: {driveitem.web_url}")
+                            doc_batch.append(
+                                _convert_driveitem_to_slim_document(
+                                    driveitem,
+                                    normalized_drive_name,
+                                    ctx,
+                                    self.graph_client,
+                                )
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to process driveitem: {str(e)}")
+
+                        if len(doc_batch) >= SLIM_BATCH_SIZE:
+                            yield doc_batch
+                            doc_batch = []
 
             # Process site pages if flag is True
             if self.include_site_pages:
@@ -1698,19 +1732,14 @@ class SharepointConnector(
                     f"Fetching drive items for drive name: {current_drive_name}"
                 )
                 driveitems, drive_web_url = self._get_drive_items_for_drive_name(
-                    site_descriptor, current_drive_name, start_dt, end_dt
+                    site_descriptor,
+                    current_drive_name,
+                    start_dt,
+                    end_dt,
+                    checkpoint=checkpoint,
                 )
                 # Store drive_web_url in checkpoint for hierarchy tracking
                 checkpoint.current_drive_web_url = drive_web_url
-
-                if not driveitems:
-                    logger.warning(
-                        f"No drive items found in drive '{current_drive_name}' for site: {site_descriptor.url}"
-                    )
-                else:
-                    logger.info(
-                        f"Found {len(driveitems)} items to process in drive '{current_drive_name}'"
-                    )
             except Exception as e:
                 logger.error(
                     f"Failed to retrieve items from drive '{current_drive_name}' in site: {site_descriptor.url}: {e}"
@@ -1741,7 +1770,9 @@ class SharepointConnector(
                     checkpoint,
                 )
 
+            seen_items = 0
             for driveitem in driveitems:
+                seen_items += 1
                 driveitem_extension = get_file_ext(driveitem.name)
                 if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
                     logger.warning(
@@ -1810,6 +1841,11 @@ class SharepointConnector(
                     yield self._create_document_failure(
                         driveitem, f"Failed to process: {str(e)}", e
                     )
+
+            if seen_items == 0:
+                logger.warning(
+                    f"No drive items found in drive '{current_drive_name}' for site: {site_descriptor.url}"
+                )
 
             # Clear current drive after processing
             checkpoint.current_drive_name = None
