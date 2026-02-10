@@ -1,0 +1,128 @@
+import { useRef, useCallback, useEffect, useState } from "react";
+
+export interface LocalMemory {
+  id: number;
+  content: string;
+  isNew: boolean;
+}
+
+export const MAX_MEMORY_LENGTH = 200;
+
+interface UseMemoryManagerArgs {
+  memories: string[];
+  onSaveMemories: (memories: string[]) => Promise<boolean>;
+  onNotify: (message: string, type: "success" | "error") => void;
+}
+
+export function useMemoryManager({
+  memories,
+  onSaveMemories,
+  onNotify,
+}: UseMemoryManagerArgs) {
+  const [localMemories, setLocalMemories] = useState<LocalMemory[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const initialMemoriesRef = useRef<string[]>([]);
+
+  // Initialize local memories from props
+  useEffect(() => {
+    const existingMemories: LocalMemory[] = memories.map((content, index) => ({
+      id: index + 1,
+      content,
+      isNew: false,
+    }));
+
+    setLocalMemories(existingMemories);
+    initialMemoriesRef.current = memories;
+  }, [memories]);
+
+  const handleAddMemory = useCallback(() => {
+    setLocalMemories((prev) => [
+      { id: Date.now(), content: "", isNew: true },
+      ...prev,
+    ]);
+  }, []);
+
+  const handleUpdateMemory = useCallback((index: number, value: string) => {
+    setLocalMemories((prev) =>
+      prev.map((memory, i) =>
+        i === index ? { ...memory, content: value } : memory
+      )
+    );
+  }, []);
+
+  const handleRemoveMemory = useCallback(
+    async (index: number) => {
+      const memory = localMemories[index];
+      if (!memory) return;
+
+      if (memory.isNew) {
+        setLocalMemories((prev) => prev.filter((_, i) => i !== index));
+        return;
+      }
+
+      const newMemories = localMemories
+        .filter((_, i) => i !== index)
+        .filter((m) => !m.isNew || m.content.trim())
+        .map((m) => m.content);
+
+      const success = await onSaveMemories(newMemories);
+      if (success) {
+        onNotify("Memory deleted", "success");
+      } else {
+        onNotify("Failed to delete memory", "error");
+      }
+    },
+    [localMemories, onSaveMemories, onNotify]
+  );
+
+  const handleBlurMemory = useCallback(
+    async (index: number) => {
+      const memory = localMemories[index];
+      if (!memory || !memory.content.trim()) return;
+
+      const newMemories = localMemories
+        .filter((m) => m.content.trim())
+        .map((m) => m.content);
+
+      const memoriesChanged =
+        JSON.stringify(newMemories) !==
+        JSON.stringify(initialMemoriesRef.current);
+
+      if (!memoriesChanged) return;
+
+      const success = await onSaveMemories(newMemories);
+      if (success) {
+        initialMemoriesRef.current = newMemories;
+        onNotify("Memory saved", "success");
+      } else {
+        onNotify("Failed to save memory", "error");
+      }
+    },
+    [localMemories, onSaveMemories, onNotify]
+  );
+
+  const filteredMemories = localMemories
+    .map((memory, originalIndex) => ({ memory, originalIndex }))
+    .filter(({ memory }) => {
+      if (!searchQuery.trim()) return true;
+      return memory.content
+        .toLowerCase()
+        .includes(searchQuery.trim().toLowerCase());
+    });
+
+  const totalLineCount = localMemories.filter(
+    (m) => m.content.trim() || m.isNew
+  ).length;
+
+  return {
+    localMemories,
+    searchQuery,
+    setSearchQuery,
+    filteredMemories,
+    totalLineCount,
+    handleAddMemory,
+    handleUpdateMemory,
+    handleRemoveMemory,
+    handleBlurMemory,
+  };
+}
