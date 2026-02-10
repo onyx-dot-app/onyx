@@ -125,6 +125,7 @@ class SandboxManager(ABC):
         user_work_area: str | None = None,
         user_level: str | None = None,
         use_demo_data: bool = False,
+        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -149,6 +150,9 @@ class SandboxManager(ABC):
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
             use_demo_data: If True, symlink files/ to demo data; else to user files
+            excluded_user_library_paths: List of paths within user_library to exclude
+                from the sandbox (e.g., ["/data/file.xlsx"]). Only applies when
+                use_demo_data=False. Files at these paths won't be accessible.
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -417,6 +421,7 @@ class SandboxManager(ABC):
         user_id: UUID,
         tenant_id: str,
         source: str | None = None,
+        exclude_paths: list[str] | None = None,
     ) -> bool:
         """Sync files from S3 to the sandbox's /workspace/files directory.
 
@@ -432,6 +437,9 @@ class SandboxManager(ABC):
             source: Optional source type (e.g., "gmail", "google_drive").
                     If None, syncs all sources. If specified, only syncs
                     that source's directory.
+            exclude_paths: Optional list of relative paths to exclude from sync
+                          (e.g., ["/data/file.xlsx"]). Files matching these paths
+                          will be skipped during sync and deleted from sandbox if present.
 
         Returns:
             True if sync was successful, False otherwise.

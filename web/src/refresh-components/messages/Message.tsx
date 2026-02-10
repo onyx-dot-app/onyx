@@ -331,7 +331,7 @@ function MessageInner(
 
       {/* Actions */}
       {actions && (
-        <div className="flex items-start justify-end shrink-0">
+        <div className="flex items-center justify-end shrink-0 self-center pr-2">
           <Button
             secondary
             onClick={onAction}
