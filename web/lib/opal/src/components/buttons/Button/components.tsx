@@ -65,7 +65,7 @@ function iconWrapper(
       />
     </div>
   ) : includeSpacer ? (
-    <div className="w-[0.125rem]" />
+    <div />
   ) : null;
 }
 
