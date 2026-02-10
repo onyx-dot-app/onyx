@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.document_set import check_document_sets_are_public
@@ -54,11 +55,12 @@ def create_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-    )
+    if not DISABLE_VECTOR_DB:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+        )
 
     return document_set_db_model.id
 
@@ -96,11 +98,12 @@ def patch_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-    )
+    if not DISABLE_VECTOR_DB:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+        )
 
 
 @router.delete("/admin/document-set/{document_set_id}")
@@ -139,11 +142,12 @@ def delete_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-    )
+    if not DISABLE_VECTOR_DB:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+        )
 
 
 """Endpoints for non-admins"""

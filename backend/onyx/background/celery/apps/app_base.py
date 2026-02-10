@@ -573,3 +573,28 @@ class LivenessProbe(bootsteps.StartStopStep):
 
 def get_bootsteps() -> list[type]:
     return [LivenessProbe]
+
+
+# Task modules that require a vector DB (Vespa/OpenSearch).
+# When DISABLE_VECTOR_DB is True these are excluded from autodiscover lists.
+_VECTOR_DB_TASK_MODULES: set[str] = {
+    "onyx.background.celery.tasks.connector_deletion",
+    "onyx.background.celery.tasks.docprocessing",
+    "onyx.background.celery.tasks.docfetching",
+    "onyx.background.celery.tasks.pruning",
+    "onyx.background.celery.tasks.vespa",
+    "onyx.background.celery.tasks.shared",
+    "onyx.background.celery.tasks.opensearch_migration",
+    "onyx.background.celery.tasks.doc_permission_syncing",
+    "onyx.background.celery.tasks.hierarchyfetching",
+    # EE modules that are vector-DB-dependent
+    "ee.onyx.background.celery.tasks.doc_permission_syncing",
+    "ee.onyx.background.celery.tasks.external_group_syncing",
+}
+
+
+def filter_task_modules(modules: list[str]) -> list[str]:
+    """Remove vector-DB-dependent task modules when DISABLE_VECTOR_DB is True."""
+    if not DISABLE_VECTOR_DB:
+        return modules
+    return [m for m in modules if m not in _VECTOR_DB_TASK_MODULES]
