@@ -102,6 +102,7 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^9.0.1",
     "vaul": "^1.1.1",
+    "vercel": "^50.14.1",
     "yup": "^1.4.0",
     "zustand": "^5.0.8"
   },
