@@ -419,7 +419,7 @@ function InteractiveContainer({
       ref={ref}
       {...rest}
       className={cn(
-        "flex items-center justify-center",
+        "flex self-stretch items-center justify-center",
         border && "border",
         interactiveContainerRoundingVariants[roundingVariant],
         interactiveContainerPaddingVariants[paddingVariant],
