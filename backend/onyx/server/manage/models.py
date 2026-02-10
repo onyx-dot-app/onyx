@@ -218,12 +218,24 @@ class ChatBackgroundRequest(BaseModel):
     chat_background: str | None
 
 
+MAX_MEMORY_COUNT = 10
+
+
 class PersonalizationUpdateRequest(BaseModel):
     name: str | None = None
     role: str | None = None
     use_memories: bool | None = None
     memories: list[MemoryItem] | None = None
     user_preferences: str | None = Field(default=None, max_length=500)
+
+    @field_validator("memories", mode="before")
+    @classmethod
+    def validate_memory_count(
+        cls, value: list[MemoryItem] | None
+    ) -> list[MemoryItem] | None:
+        if value is not None and len(value) > MAX_MEMORY_COUNT:
+            raise ValueError(f"Maximum of {MAX_MEMORY_COUNT} memories allowed")
+        return value
 
 
 class SlackBotCreationRequest(BaseModel):

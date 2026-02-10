@@ -8,6 +8,7 @@ export interface LocalMemory {
 }
 
 export const MAX_MEMORY_LENGTH = 200;
+export const MAX_MEMORY_COUNT = 10;
 
 interface UseMemoryManagerArgs {
   memories: MemoryItem[];
@@ -36,7 +37,13 @@ export function useMemoryManager({
     initialMemoriesRef.current = memories;
   }, [memories]);
 
-  const handleAddMemory = useCallback((): number => {
+  const canAddMemory = localMemories.length < MAX_MEMORY_COUNT;
+
+  const handleAddMemory = useCallback((): number | null => {
+    if (localMemories.length >= MAX_MEMORY_COUNT) {
+      return null;
+    }
+
     const existingEmpty = localMemories.find(
       (m) => m.isNew && !m.content.trim()
     );
@@ -130,6 +137,7 @@ export function useMemoryManager({
     setSearchQuery,
     filteredMemories,
     totalLineCount,
+    canAddMemory,
     handleAddMemory,
     handleUpdateMemory,
     handleRemoveMemory,

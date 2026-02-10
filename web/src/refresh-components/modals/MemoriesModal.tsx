@@ -17,6 +17,7 @@ import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
   useMemoryManager,
   MAX_MEMORY_LENGTH,
+  MAX_MEMORY_COUNT,
   LocalMemory,
 } from "@/hooks/useMemoryManager";
 import { cn } from "@/lib/utils";
@@ -149,6 +150,7 @@ export default function MemoriesModal({
     setSearchQuery,
     filteredMemories,
     totalLineCount,
+    canAddMemory,
     handleAddMemory,
     handleUpdateMemory,
     handleRemoveMemory,
@@ -161,7 +163,9 @@ export default function MemoriesModal({
 
   const onAddLine = () => {
     const id = handleAddMemory();
-    setFocusMemoryId(id);
+    if (id !== null) {
+      setFocusMemoryId(id);
+    }
   };
 
   return (
@@ -183,7 +187,17 @@ export default function MemoriesModal({
               showClearButton={false}
               className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
             />
-            <Button onClick={onAddLine} tertiary rightIcon={SvgPlusCircle}>
+            <Button
+              onClick={onAddLine}
+              tertiary
+              rightIcon={SvgPlusCircle}
+              disabled={!canAddMemory}
+              title={
+                !canAddMemory
+                  ? `Maximum of ${MAX_MEMORY_COUNT} memories reached`
+                  : undefined
+              }
+            >
               Add Line
             </Button>
           </Section>
