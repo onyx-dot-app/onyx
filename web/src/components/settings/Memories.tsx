@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import FileTile from "@/refresh-components/tiles/FileTile";
 import ButtonTile from "@/refresh-components/tiles/ButtonTile";
 import { SvgAddLines, SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 interface MemoriesProps {
   memories: string[];
@@ -14,7 +14,7 @@ interface MemoriesProps {
 }
 
 export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
-  const [showModal, setShowModal] = useState(false);
+  const memoriesModal = useCreateModal();
 
   return (
     <>
@@ -22,12 +22,12 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
         <LineItem
           skeleton
           description="Add personal note or memory that Onyx should remember."
-          onClick={() => setShowModal(true)}
+          onClick={() => memoriesModal.toggle(true)}
           rightChildren={
             <IconButton
               internal
               icon={SvgPlusCircle}
-              onClick={() => setShowModal(true)}
+              onClick={() => memoriesModal.toggle(true)}
             />
           }
         />
@@ -40,18 +40,14 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
             title="View/Add"
             description="All notes"
             icon={SvgAddLines}
-            onClick={() => setShowModal(true)}
+            onClick={() => memoriesModal.toggle(true)}
           />
         </div>
       )}
 
-      {showModal && (
-        <MemoriesModal
-          memories={memories}
-          onSaveMemories={onSaveMemories}
-          onClose={() => setShowModal(false)}
-        />
-      )}
+      <memoriesModal.Provider>
+        <MemoriesModal memories={memories} onSaveMemories={onSaveMemories} />
+      </memoriesModal.Provider>
     </>
   );
 }

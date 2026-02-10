@@ -9,13 +9,16 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import CharacterCount from "@/refresh-components/CharacterCount";
+import TextSeparator from "@/refresh-components/TextSeparator";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
   useMemoryManager,
   MAX_MEMORY_LENGTH,
   LocalMemory,
 } from "@/hooks/useMemoryManager";
+import { cn } from "@/lib/utils";
 
 interface MemoryItemProps {
   memory: LocalMemory;
@@ -49,6 +52,7 @@ function MemoryItem({
             }}
             rows={3}
             maxLength={MAX_MEMORY_LENGTH}
+            className={cn("resize-none", !isFocused && "bg-transparent")}
           />
           <IconButton
             icon={SvgMinusCircle}
@@ -70,7 +74,7 @@ function MemoryItem({
 interface MemoriesModalProps {
   memories: string[];
   onSaveMemories: (memories: string[]) => Promise<boolean>;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export default function MemoriesModal({
@@ -78,6 +82,7 @@ export default function MemoriesModal({
   onSaveMemories,
   onClose,
 }: MemoriesModalProps) {
+  const close = useModalClose(onClose);
   const { popup, setPopup } = usePopup();
 
   const {
@@ -96,14 +101,14 @@ export default function MemoriesModal({
   });
 
   return (
-    <Modal open onOpenChange={(open) => !open && onClose()}>
+    <Modal open onOpenChange={(open) => !open && close?.()}>
       {popup}
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgAddLines}
           title="Memory"
           description="Let Onyx reference these stored notes and memories in chats."
-          onClose={onClose}
+          onClose={close}
         >
           <Section flexDirection="row" gap={0.5}>
             <InputTypeIn
@@ -133,7 +138,7 @@ export default function MemoriesModal({
               </Text>
             </Section>
           ) : (
-            <Section gap={0.75}>
+            <Section gap={0.5}>
               {filteredMemories.map(({ memory, originalIndex }) => (
                 <MemoryItem
                   key={memory.id}
@@ -146,13 +151,11 @@ export default function MemoriesModal({
               ))}
             </Section>
           )}
+          <TextSeparator
+            count={totalLineCount}
+            text={totalLineCount === 1 ? "Line" : "Lines"}
+          />
         </Modal.Body>
-
-        <Modal.Footer justifyContent="center">
-          <Text secondaryBody text03>
-            {totalLineCount} {totalLineCount === 1 ? "Line" : "Lines"}
-          </Text>
-        </Modal.Footer>
       </Modal.Content>
     </Modal>
   );
