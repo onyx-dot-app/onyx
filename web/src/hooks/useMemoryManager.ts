@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect, useState } from "react";
+import { MemoryItem } from "@/lib/types";
 
 export interface LocalMemory {
   id: number;
@@ -9,8 +10,8 @@ export interface LocalMemory {
 export const MAX_MEMORY_LENGTH = 200;
 
 interface UseMemoryManagerArgs {
-  memories: string[];
-  onSaveMemories: (memories: string[]) => Promise<boolean>;
+  memories: MemoryItem[];
+  onSaveMemories: (memories: MemoryItem[]) => Promise<boolean>;
   onNotify: (message: string, type: "success" | "error") => void;
 }
 
@@ -21,13 +22,13 @@ export function useMemoryManager({
 }: UseMemoryManagerArgs) {
   const [localMemories, setLocalMemories] = useState<LocalMemory[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const initialMemoriesRef = useRef<string[]>([]);
+  const initialMemoriesRef = useRef<MemoryItem[]>([]);
 
   // Initialize local memories from props
   useEffect(() => {
-    const existingMemories: LocalMemory[] = memories.map((content, index) => ({
-      id: index + 1,
-      content,
+    const existingMemories: LocalMemory[] = memories.map((mem, index) => ({
+      id: mem.id ?? -(index + 1),
+      content: mem.content,
       isNew: false,
     }));
 
@@ -60,10 +61,10 @@ export function useMemoryManager({
         return;
       }
 
-      const newMemories = localMemories
+      const newMemories: MemoryItem[] = localMemories
         .filter((_, i) => i !== index)
         .filter((m) => !m.isNew || m.content.trim())
-        .map((m) => m.content);
+        .map((m) => ({ id: m.isNew ? null : m.id, content: m.content }));
 
       const success = await onSaveMemories(newMemories);
       if (success) {
@@ -80,9 +81,9 @@ export function useMemoryManager({
       const memory = localMemories[index];
       if (!memory || !memory.content.trim()) return;
 
-      const newMemories = localMemories
+      const newMemories: MemoryItem[] = localMemories
         .filter((m) => m.content.trim())
-        .map((m) => m.content);
+        .map((m) => ({ id: m.isNew ? null : m.id, content: m.content }));
 
       const memoriesChanged =
         JSON.stringify(newMemories) !==

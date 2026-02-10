@@ -19,6 +19,7 @@ import {
   LocalMemory,
 } from "@/hooks/useMemoryManager";
 import { cn } from "@/lib/utils";
+import type { MemoryItem } from "@/lib/types";
 
 interface MemoryItemProps {
   memory: LocalMemory;
@@ -73,8 +74,8 @@ function MemoryItem({
 }
 
 interface MemoriesModalProps {
-  memories: string[];
-  onSaveMemories: (memories: string[]) => Promise<boolean>;
+  memories: MemoryItem[];
+  onSaveMemories: (memories: MemoryItem[]) => Promise<boolean>;
   onClose?: () => void;
 }
 

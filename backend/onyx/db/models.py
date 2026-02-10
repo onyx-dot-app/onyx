@@ -312,6 +312,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
+        order_by="desc(Memory.id)",
     )
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
         "OAuthUserToken",

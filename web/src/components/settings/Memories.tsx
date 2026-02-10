@@ -7,10 +7,11 @@ import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { MemoryItem } from "@/lib/types";
 
 interface MemoriesProps {
-  memories: string[];
-  onSaveMemories: (memories: string[]) => Promise<boolean>;
+  memories: MemoryItem[];
+  onSaveMemories: (memories: MemoryItem[]) => Promise<boolean>;
 }
 
 export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
@@ -32,10 +33,12 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
           }
         />
       ) : (
-        <div className="flex flex-row flex-wrap items-center gap-2">
-          {memories.map((memory, index) => (
-            <FileTile key={index} description={memory} />
-          ))}
+        <div className="self-stretch flex flex-row items-center justify-between gap-2">
+          <div className="flex flex-row items-center gap-2">
+            {memories.slice(0, 2).map((memory, index) => (
+              <FileTile key={memory.id ?? index} description={memory.content} />
+            ))}
+          </div>
           <ButtonTile
             title="View/Add"
             description="All notes"

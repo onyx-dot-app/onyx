@@ -28,7 +28,7 @@ import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
-import { ThemePreference } from "@/lib/types";
+import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
@@ -789,7 +789,7 @@ function ChatPreferencesSettings() {
 
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
-    async (newMemories: string[]): Promise<boolean> => {
+    async (newMemories: MemoryItem[]): Promise<boolean> => {
       const result = await handleSavePersonalization({ memories: newMemories });
       return !!result;
     },
