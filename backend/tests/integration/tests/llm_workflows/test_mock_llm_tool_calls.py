@@ -15,6 +15,8 @@ pytestmark = pytest.mark.skipif(
     reason="mock_llm_response is only available when INTEGRATION_TESTS_MODE=true",
 )
 
+_DUMMY_OPENAI_API_KEY = "sk-mock-llm-workflow-tests"
+
 
 def _get_internal_search_tool_id() -> int:
     with get_session_with_current_tenant() as db_session:
@@ -26,7 +28,10 @@ def _get_internal_search_tool_id() -> int:
 
 
 def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> None:
-    LLMProviderManager.create(user_performing_action=admin_user)
+    LLMProviderManager.create(
+        user_performing_action=admin_user,
+        api_key=_DUMMY_OPENAI_API_KEY,
+    )
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
     search_tool_id = _get_internal_search_tool_id()
 
@@ -45,7 +50,10 @@ def test_mock_llm_response_single_tool_call_debug(admin_user: DATestUser) -> Non
 
 
 def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> None:
-    LLMProviderManager.create(user_performing_action=admin_user)
+    LLMProviderManager.create(
+        user_performing_action=admin_user,
+        api_key=_DUMMY_OPENAI_API_KEY,
+    )
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
     search_tool_id = _get_internal_search_tool_id()
 
