@@ -43,12 +43,12 @@ type InteractiveContainerHeightVariant =
 const interactiveContainerHeightVariants = {
   default: "h-[2.25rem]",
   compact: "h-[1.75rem]",
-  full: "h-full",
+  fit: "h-fit",
 } as const;
 const interactiveContainerMinWidthVariants = {
   default: "min-w-[2.25rem]",
   compact: "min-w-[1.75rem]",
-  full: "",
+  fit: "",
 } as const;
 
 /**
