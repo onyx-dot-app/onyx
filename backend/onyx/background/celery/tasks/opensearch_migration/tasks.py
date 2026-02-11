@@ -141,10 +141,15 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 large_chunks_enabled=False,
             )
 
+            sanitized_doc_start_time = time.monotonic()
             # We reconstruct this mapping for every task invocation because a
             # document may have been added in the time between two tasks.
             sanitized_to_original_doc_id_mapping = (
                 build_sanitized_to_original_doc_id_mapping(db_session)
+            )
+            task_logger.debug(
+                f"Built sanitized_to_original_doc_id_mapping with {len(sanitized_to_original_doc_id_mapping)} entries "
+                f"in {time.monotonic() - sanitized_doc_start_time:.3f} seconds."
             )
 
             while (
@@ -167,6 +172,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     f"Continuation token: {continuation_token}"
                 )
 
+                get_vespa_chunks_start_time = time.monotonic()
                 raw_vespa_chunks, next_continuation_token = (
                     vespa_document_index.get_all_raw_document_chunks_paginated(
                         continuation_token=continuation_token,
@@ -174,7 +180,8 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     )
                 )
                 task_logger.debug(
-                    f"Read {len(raw_vespa_chunks)} chunks from Vespa. Next continuation token: {next_continuation_token}"
+                    f"Read {len(raw_vespa_chunks)} chunks from Vespa in {time.monotonic() - get_vespa_chunks_start_time:.3f} "
+                    f"seconds. Next continuation token: {next_continuation_token}"
                 )
 
                 opensearch_document_chunks: list[DocumentChunk] = (
@@ -190,8 +197,13 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                         f"number of chunks in Vespa ({len(raw_vespa_chunks)})."
                     )
 
+                index_opensearch_chunks_start_time = time.monotonic()
                 opensearch_document_index.index_raw_chunks(
                     chunks=opensearch_document_chunks
+                )
+                task_logger.debug(
+                    f"Indexed {len(opensearch_document_chunks)} chunks into OpenSearch in "
+                    f"{time.monotonic() - index_opensearch_chunks_start_time:.3f} seconds."
                 )
 
                 total_chunks_migrated_this_task += len(opensearch_document_chunks)
@@ -201,7 +213,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     chunks_processed=len(opensearch_document_chunks),
                 )
 
-                if continuation_token is None and len(raw_vespa_chunks) == 0:
+                if next_continuation_token is None and len(raw_vespa_chunks) == 0:
                     task_logger.info("Vespa reported no more chunks to migrate.")
                     break
     except Exception:
