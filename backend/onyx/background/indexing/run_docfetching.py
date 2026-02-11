@@ -817,17 +817,19 @@ def connector_document_extraction(
         if processing_mode == ProcessingMode.FILE_SYSTEM:
             creator_id = index_attempt.connector_credential_pair.creator_id
             if creator_id:
+                source_value = db_connector.source.value
                 app.send_task(
                     OnyxCeleryTask.SANDBOX_FILE_SYNC,
                     kwargs={
                         "user_id": str(creator_id),
                         "tenant_id": tenant_id,
+                        "source": source_value,
                     },
                     queue=OnyxCeleryQueues.SANDBOX,
                 )
                 logger.info(
                     f"Triggered sandbox file sync for user {creator_id} "
-                    f"after indexing complete"
+                    f"source={source_value} after indexing complete"
                 )
 
     except Exception as e:
