@@ -52,7 +52,7 @@ import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
-import Memories from "@/components/settings/Memories";
+import Memories from "@/sections/settings/Memories";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import {
   CHAT_BACKGROUND_OPTIONS,
