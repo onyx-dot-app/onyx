@@ -20,6 +20,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.utils.logger import setup_logger
 
 
@@ -133,13 +134,12 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
             user_role=override_kwargs.user_role,
         )
 
-        # TODO: the data should be return and processed outside of the tool
-        # Persisted to the db for future conversations
-        # The actual persistence of the memory will be handled by the caller
-        # This tool just returns the memory to be saved
         logger.info(f"New memory to be added: {memory_text}")
 
         return ToolResponse(
-            rich_response=memory_text,
+            rich_response=MemoryToolResponse(
+                memory_text=memory_text,
+                index_to_replace=index_to_replace,
+            ),
             llm_facing_response=f"New memory added: {memory_text}",
         )

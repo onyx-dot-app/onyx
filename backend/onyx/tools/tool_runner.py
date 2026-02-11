@@ -367,7 +367,21 @@ def run_tool_calls(
             starting_citation_num += 100
 
         elif isinstance(tool, MemoryTool):
-            raise NotImplementedError("MemoryTool is not implemented")
+            override_kwargs = MemoryToolOverrideKwargs(
+                user_name=(
+                    user_memory_context.user_info.name if user_memory_context else None
+                ),
+                user_email=(
+                    user_memory_context.user_info.email if user_memory_context else None
+                ),
+                user_role=(
+                    user_memory_context.user_info.role if user_memory_context else None
+                ),
+                existing_memories=(
+                    list(user_memory_context.memories) if user_memory_context else []
+                ),
+                chat_history=minimal_history,
+            )
 
         tool_run_params.append((tool, tool_call, override_kwargs))
 

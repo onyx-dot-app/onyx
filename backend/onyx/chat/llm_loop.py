@@ -27,6 +27,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import add_memory
+from onyx.db.memory import update_memory_at_index
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
 from onyx.llm.interfaces import LLM
@@ -49,6 +51,7 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -708,6 +711,23 @@ def run_llm_loop(
                     tool_response.rich_response, FinalImageGenerationResponse
                 ):
                     generated_images = tool_response.rich_response.generated_images
+
+                # Persist memory if this is a memory tool response
+                if isinstance(tool_response.rich_response, MemoryToolResponse):
+                    if user_memory_context and user_memory_context.user_id:
+                        if tool_response.rich_response.index_to_replace is not None:
+                            update_memory_at_index(
+                                user_id=user_memory_context.user_id,
+                                index=tool_response.rich_response.index_to_replace,
+                                new_text=tool_response.rich_response.memory_text,
+                                db_session=db_session,
+                            )
+                        else:
+                            add_memory(
+                                user_id=user_memory_context.user_id,
+                                memory_text=tool_response.rich_response.memory_text,
+                                db_session=db_session,
+                            )
 
                 saved_response = (
                     tool_response.rich_response
