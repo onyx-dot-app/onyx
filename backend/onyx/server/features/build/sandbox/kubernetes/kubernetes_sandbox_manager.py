@@ -1203,93 +1203,76 @@ ln -sf {symlink_target} {session_path}/files
             # Instead of symlinking to /workspace/files directly, create a directory
             # with symlinks to each top-level item, then filter user_library contents
             excluded_paths_str = " ".join(
-                f'"{p.lstrip("/")}"' for p in excluded_user_library_paths
+                p.lstrip("/") for p in excluded_user_library_paths
             )
             files_symlink_setup = f"""
 # Create filtered files directory with exclusions
 echo "Creating filtered files structure with exclusions"
-echo "Excluded paths: {excluded_paths_str}"
 mkdir -p {session_path}/files
 
 # Symlink all top-level directories except user_library
-echo "Symlinking top-level directories from /workspace/files/"
-ls -la /workspace/files/ || echo "ERROR: Cannot list /workspace/files/"
 for item in /workspace/files/*; do
     [ -e "$item" ] || continue
     name=$(basename "$item")
-    echo "  Found: $name"
     if [ "$name" != "user_library" ]; then
         ln -sf "$item" {session_path}/files/"$name"
-        echo "    -> Symlinked $item"
-    else
-        echo "    -> Skipping user_library (will filter)"
     fi
 done
 
-# Create filtered user_library with symlinks to enabled files only
-EXCLUDED_PATHS=({excluded_paths_str})
-echo "EXCLUDED_PATHS array: ${{EXCLUDED_PATHS[@]}}"
-
-is_excluded() {{
-    local path="$1"
-    for excl in "${{EXCLUDED_PATHS[@]}}"; do
-        if [ "$path" = "$excl" ] || [[ "$path" == "$excl"/* ]]; then
-            return 0
-        fi
-    done
-    return 1
-}}
+# Excluded paths
+EXCLUDED_PATHS="{excluded_paths_str}"
 
 # Recursively create symlinks for non-excluded files
+# Using a simple approach: iterate and check each path against exclusions
 create_filtered_symlinks() {{
-    local src_dir="$1"
-    local dst_dir="$2"
-    local rel_base="$3"
-
-    echo "create_filtered_symlinks: src=$src_dir dst=$dst_dir rel_base=$rel_base"
+    src_dir="$1"
+    dst_dir="$2"
+    rel_base="$3"
 
     for item in "$src_dir"/*; do
         [ -e "$item" ] || continue
-        local name=$(basename "$item")
-        local rel_path="${{rel_base:+$rel_base/}}$name"
+        name=$(basename "$item")
+        if [ -n "$rel_base" ]; then
+            rel_path="$rel_base/$name"
+        else
+            rel_path="$name"
+        fi
 
-        echo "  Checking: $rel_path"
+        # Check if this path is excluded
+        excluded=0
+        for excl in $EXCLUDED_PATHS; do
+            if [ "$rel_path" = "$excl" ]; then
+                excluded=1
+                break
+            fi
+            # Check if rel_path starts with excl/ (is a child of excluded dir)
+            case "$rel_path" in
+                "$excl"/*) excluded=1; break ;;
+            esac
+        done
 
-        if is_excluded "$rel_path"; then
-            echo "    -> EXCLUDED"
+        if [ $excluded -eq 1 ]; then
+            echo "Excluding: $rel_path"
             continue
         fi
 
         if [ -d "$item" ]; then
-            echo "    -> Directory, recursing"
             mkdir -p "$dst_dir/$name"
             create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
             # Remove empty directories
             rmdir "$dst_dir/$name" 2>/dev/null || true
         else
-            echo "    -> File, symlinking"
             ln -sf "$item" "$dst_dir/$name"
         fi
     done
 }}
 
 if [ -d "/workspace/files/user_library" ]; then
-    echo "Processing /workspace/files/user_library"
-    ls -la /workspace/files/user_library/ || echo "ERROR: Cannot list user_library"
     mkdir -p {session_path}/files/user_library
     create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
     # Remove user_library if empty
-    if rmdir {session_path}/files/user_library 2>/dev/null; then
-        echo "user_library was empty, removed"
-    else
-        echo "user_library has content"
-    fi
-else
-    echo "WARNING: /workspace/files/user_library does not exist"
+    rmdir {session_path}/files/user_library 2>/dev/null || true
 fi
-
-echo "Final files/ structure:"
-ls -laR {session_path}/files/ || echo "ERROR: Cannot list session files"
 """
         else:
             # Normal mode: symlink to user's S3-synced knowledge files
