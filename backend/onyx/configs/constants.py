@@ -102,7 +102,6 @@ DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service"
 
 # Key-Value store keys
 KV_REINDEX_KEY = "needs_reindexing"
-KV_SEARCH_SETTINGS = "search_settings"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
 KV_PENDING_USERS_KEY = "PENDING_USERS"

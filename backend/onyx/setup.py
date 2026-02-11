@@ -7,7 +7,6 @@ from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import GEN_AI_API_KEY
@@ -28,9 +27,7 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
-from onyx.db.search_settings import update_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import DocumentIndex
@@ -111,8 +108,6 @@ def setup_onyx(
     # setup Postgres with default credential, llm providers, etc.
     setup_postgres(db_session)
 
-    translate_saved_search_settings(db_session)
-
     # Does the user need to trigger a reindexing to bring the document index
     # into a good state, marked in the kv store
     if not MULTI_TENANT:
@@ -156,49 +151,6 @@ def setup_onyx(
 
     # update multipass indexing setting based on GPU availability
     update_default_multipass_indexing(db_session)
-
-
-def translate_saved_search_settings(db_session: Session) -> None:
-    kv_store = get_kv_store()
-
-    try:
-        search_settings_dict = kv_store.load(KV_SEARCH_SETTINGS)
-        if isinstance(search_settings_dict, dict):
-            # Update current search settings
-            current_settings = get_current_search_settings(db_session)
-
-            # Update non-preserved fields
-            if current_settings:
-                current_settings_dict = SavedSearchSettings.from_db_model(
-                    current_settings
-                ).dict()
-
-                new_current_settings = SavedSearchSettings(
-                    **{**current_settings_dict, **search_settings_dict}
-                )
-                update_current_search_settings(db_session, new_current_settings)
-
-            # Update secondary search settings
-            secondary_settings = get_secondary_search_settings(db_session)
-            if secondary_settings:
-                secondary_settings_dict = SavedSearchSettings.from_db_model(
-                    secondary_settings
-                ).dict()
-
-                new_secondary_settings = SavedSearchSettings(
-                    **{**secondary_settings_dict, **search_settings_dict}
-                )
-                update_secondary_search_settings(
-                    db_session,
-                    new_secondary_settings,
-                )
-            # Delete the KV store entry after successful update
-            kv_store.delete(KV_SEARCH_SETTINGS)
-            logger.notice("Search settings updated and KV store entry deleted.")
-        else:
-            logger.notice("KV store search settings is empty.")
-    except KvKeyNotFoundError:
-        logger.notice("No search config found in KV store.")
 
 
 def mark_reindex_flag(db_session: Session) -> None:
