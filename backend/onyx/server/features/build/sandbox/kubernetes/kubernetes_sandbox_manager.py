@@ -361,45 +361,33 @@ class KubernetesSandboxManager(SandboxManager):
             command=["/bin/sh", "-c"],
             args=[
                 f"""
-# Handle SIGTERM for fast container termination
-trap 'echo "Received SIGTERM, exiting"; exit 0' TERM
+# Handle signals for graceful container termination
+trap 'echo "Shutting down"; exit 0' TERM INT
 
-# Initial sync on startup - sync knowledge files for this user/tenant
-echo "Starting initial file sync for tenant: {tenant_id} / user: {user_id}"
-echo "S3 source: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/"
+echo "Starting initial file sync"
+echo "S3: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*"
+echo "Local: /workspace/files/"
 
-# s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-# Capture both stdout and stderr to see all messages including errors
+# s5cmd sync (default 256 workers)
+# Exit codes: 0=success, 1=success with warnings
 sync_exit_code=0
-sync_output=$(mktemp)
-/s5cmd --log debug --stat sync \
+/s5cmd --stat sync \
     "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" \
-    /workspace/files/ 2>&1 | tee "$sync_output" || sync_exit_code=$?
+    /workspace/files/ 2>&1 || sync_exit_code=$?
 
-echo "=== S3 sync finished with exit code: $sync_exit_code ==="
+echo "=== Initial sync finished (exit code: $sync_exit_code) ==="
 
-# Count files synced
-file_count=$(find /workspace/files -type f | wc -l)
-echo "Total files in /workspace/files: $file_count"
-
-# Show summary of any errors from the output
-if [ $sync_exit_code -ne 0 ]; then
-    echo "=== Errors/warnings from sync ==="
-    grep -iE "error|warn|fail" "$sync_output" || echo "No errors found"
-    echo "=========================="
-fi
-rm -f "$sync_output"
-
-# Exit codes 0 and 1 are considered success (1 = success with warnings)
+# Handle result
 if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
-    echo "Sync complete (exit $sync_exit_code), staying alive for incremental syncs"
+    file_count=$(find /workspace/files -type f 2>/dev/null | wc -l)
+    echo "Files synced: $file_count"
+    echo "Sidecar ready for incremental syncs"
 else
-    echo "ERROR: Sync failed with exit code: $sync_exit_code"
+    echo "ERROR: Initial sync failed (exit code: $sync_exit_code)"
     exit $sync_exit_code
 fi
 
-# Stay alive - incremental sync commands will be executed via kubectl exec
-# Use 'wait' so shell can respond to signals while sleeping
+# Stay alive for incremental syncs via kubectl exec
 while true; do
     sleep 30 &
     wait $!
@@ -2011,6 +1999,7 @@ echo "Session config regeneration complete"
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
+        source: str | None = None,
     ) -> bool:
         """Sync files from S3 to the running pod via the file-sync sidecar.
 
@@ -2023,21 +2012,66 @@ echo "Session config regeneration complete"
             sandbox_id: The sandbox UUID
             user_id: The user ID (for S3 path construction)
             tenant_id: The tenant ID (for S3 path construction)
+            source: Optional source type (e.g., "gmail", "google_drive").
+                    If None, syncs all sources. If specified, only syncs
+                    that source's directory.
 
         Returns:
             True if sync was successful, False otherwise.
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
-        # s5cmd sync: high-performance parallel S3 sync (default 256 workers)
-        # --stat shows transfer statistics for monitoring
-        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
-        sync_command = [
-            "/bin/sh",
-            "-c",
-            f'/s5cmd --log debug --stat sync "{s3_path}" /workspace/files/; '
-            f'echo "Files in workspace: $(find /workspace/files -type f | wc -l)"',
-        ]
+        # Build S3 path based on whether source is specified
+        if source:
+            # Sync only the specific source directory
+            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/{source}/*"
+            local_path = f"/workspace/files/{source}/"
+        else:
+            # Sync all sources (original behavior)
+            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
+            local_path = "/workspace/files/"
+
+        # s5cmd sync: high-performance parallel S3 sync
+        # --delete: mirror S3 to local (remove files that no longer exist in source)
+        # timeout: prevent zombie processes from kubectl exec disconnections
+        # trap: kill child processes on exit/disconnect
+        source_info = f" (source={source})" if source else ""
+        sync_script = f"""
+# Kill child processes on exit/disconnect to prevent zombie s5cmd workers
+cleanup() {{ pkill -P $$ 2>/dev/null || true; }}
+trap cleanup EXIT INT TERM
+
+echo "Starting incremental file sync{source_info}"
+echo "S3: {s3_path}"
+echo "Local: {local_path}"
+
+# Ensure destination exists (needed for source-specific syncs)
+mkdir -p "{local_path}"
+
+# Run s5cmd with 5-minute timeout (SIGKILL after 10s if SIGTERM ignored)
+# Exit codes: 0=success, 1=success with warnings, 124=timeout
+sync_exit_code=0
+timeout --signal=TERM --kill-after=10s 5m \
+    /s5cmd --stat sync --delete "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
+
+echo "=== Sync finished (exit code: $sync_exit_code) ==="
+
+# Handle result
+if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
+    file_count=$(find "{local_path}" -type f 2>/dev/null | wc -l)
+    echo "Files in {local_path}: $file_count"
+    echo "SYNC_SUCCESS"
+elif [ $sync_exit_code -eq 124 ]; then
+    echo "ERROR: Sync timed out after 5 minutes"
+    echo "SYNC_FAILED"
+    exit 1
+else
+    echo "ERROR: Sync failed (exit code: $sync_exit_code)"
+    echo "SYNC_FAILED"
+    exit $sync_exit_code
+fi
+"""
+        sync_command = ["/bin/sh", "-c", sync_script]
         resp = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
             pod_name,
@@ -2050,6 +2084,11 @@ echo "Session config regeneration complete"
             tty=False,
         )
         logger.debug(f"File sync response: {resp}")
+
+        # Check if sync succeeded based on output markers
+        if "SYNC_FAILED" in resp:
+            logger.warning(f"File sync failed for sandbox {sandbox_id}")
+            return False
         return True
 
     def _ensure_agents_md_attachments_section(

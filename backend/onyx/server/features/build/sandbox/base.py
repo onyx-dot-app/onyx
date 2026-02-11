@@ -416,6 +416,7 @@ class SandboxManager(ABC):
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
+        source: str | None = None,
     ) -> bool:
         """Sync files from S3 to the sandbox's /workspace/files directory.
 
@@ -428,6 +429,9 @@ class SandboxManager(ABC):
             sandbox_id: The sandbox UUID
             user_id: The user ID (for S3 path construction)
             tenant_id: The tenant ID (for S3 path construction)
+            source: Optional source type (e.g., "gmail", "google_drive").
+                    If None, syncs all sources. If specified, only syncs
+                    that source's directory.
 
         Returns:
             True if sync was successful, False otherwise.
