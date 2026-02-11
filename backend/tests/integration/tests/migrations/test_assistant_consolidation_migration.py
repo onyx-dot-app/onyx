@@ -84,8 +84,8 @@ def test_cold_startup_default_assistant() -> None:
             "Web Search" in tool_display_names
         ), "Default assistant should have Web Search tool"
         assert (
-            "Read File" in tool_display_names
-        ), "Default assistant should have Read File tool"
+            "File Reader" in tool_display_names
+        ), "Default assistant should have File Reader tool"
 
         # Should have exactly 5 tools
         assert (

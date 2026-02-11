@@ -474,7 +474,7 @@ def run_migrations_online() -> None:
 
     if connectable is not None:
         # pytest-alembic is providing an engine - use it directly
-        logger.info("run_migrations_online starting (pytest-alembic mode).")
+        logger.debug("run_migrations_online starting (pytest-alembic mode).")
 
         # For pytest-alembic, we use the default schema (public)
         schema_name = context.config.attributes.get(
