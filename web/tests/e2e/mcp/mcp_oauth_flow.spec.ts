@@ -55,22 +55,22 @@ type FlowArtifacts = {
 };
 
 const DEFAULT_USERNAME_SELECTORS = [
+  'input[name="identifier"]',
+  "#identifier-input",
   'input[name="username"]',
   "#okta-signin-username",
   "#idp-discovery-username",
   'input[id="idp-discovery-username"]',
   'input[name="email"]',
   'input[type="email"]',
-  'input[name="identifier"]',
-  "#identifier-input",
   "#username",
   'input[name="user"]',
 ];
 
 const DEFAULT_PASSWORD_SELECTORS = [
+  'input[name="credentials.passcode"]',
   'input[name="password"]',
   "#okta-signin-password",
-  'input[name="credentials.passcode"]',
   'input[type="password"]',
   "#password",
 ];
@@ -272,7 +272,7 @@ async function waitForAnySelector(
         continue;
       }
     }
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(50);
   }
   return false;
 }
@@ -344,7 +344,7 @@ async function performIdpLogin(page: Page): Promise<void> {
   if (usernameFilled) {
     logOauthEvent(page, "Filled username");
     await clickFirstVisible(page, nextSelectors, { optional: true });
-    await page.waitForTimeout(500);
+    await waitForAnySelector(page, passwordSelectors, { timeout: 2000 });
   }
 
   const submitPasswordAttempt = async (attemptLabel: string) => {
@@ -387,7 +387,7 @@ async function performIdpLogin(page: Page): Promise<void> {
     await page
       .waitForLoadState("domcontentloaded", { timeout: 15000 })
       .catch(() => {});
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(300);
     return true;
   };
 
@@ -410,7 +410,7 @@ async function performIdpLogin(page: Page): Promise<void> {
 
   const MAX_PASSWORD_RETRIES = 3;
   for (let retry = 1; retry <= MAX_PASSWORD_RETRIES; retry++) {
-    await page.waitForTimeout(750);
+    await page.waitForTimeout(250);
     if (!isOnIdpHost(page.url())) {
       break;
     }
@@ -427,7 +427,7 @@ async function performIdpLogin(page: Page): Promise<void> {
   await clickFirstVisible(page, consentSelectors, { optional: true });
   logOauthEvent(page, "Handled consent prompt if present");
   await page
-    .waitForLoadState("networkidle", { timeout: 15000 })
+    .waitForLoadState("networkidle", { timeout: 10000 })
     .catch(() => {});
 }
 
@@ -815,7 +815,7 @@ async function waitForServerRow(
     .catch(() => {});
 
   const locator = getServerRowLocator(page, serverName);
-  const pollInterval = 250;
+  const pollInterval = 100;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -1192,7 +1192,7 @@ test.describe("MCP OAuth flows", () => {
 
     // Click "Add MCP Server" button to open modal
     await page.getByRole("button", { name: /Add MCP Server/i }).click();
-    await page.waitForTimeout(500); // Wait for modal to appear
+    await expect(page.locator("input#name")).toBeVisible({ timeout: 10000 });
     logStep("Opened Add MCP Server modal");
 
     // Fill basic server info in AddMCPServerModal
@@ -1205,11 +1205,10 @@ test.describe("MCP OAuth flows", () => {
 
     // Submit the modal to create server
     await page.getByRole("button", { name: "Add Server" }).click();
-    await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
-    logStep("Created MCP server, auth modal should open");
-
-    // MCPAuthenticationModal should now be open - configure OAuth
-    await page.waitForTimeout(500); // Ensure modal is fully rendered
+    await expect(page.getByTestId("mcp-auth-method-select")).toBeVisible({
+      timeout: 10000,
+    });
+    logStep("Created MCP server, auth modal opened");
 
     // Select OAuth as authentication method
     const authMethodSelect = page.getByTestId("mcp-auth-method-select");
@@ -1264,19 +1263,13 @@ test.describe("MCP OAuth flows", () => {
       }
     }
 
-    // Wait for tools to be fetched automatically
-    await page.waitForTimeout(3000);
-    logStep("Waited for tools to auto-fetch");
-
-    // Verify server card is visible with tools
+    // Verify server card is visible with tools and wait for tool toggle
     await expect(
       page.getByText(serverName, { exact: false }).first()
     ).toBeVisible({ timeout: 20000 });
-    logStep("Verified server card is visible");
-
-    // Tools list automatically expands after fetch - wait for tool toggle to appear
     const adminToolToggles = page.getByLabel(`tool-toggle-${TOOL_NAMES.admin}`);
-    await expect(adminToolToggles.first()).toBeVisible({ timeout: 10000 });
+    await expect(adminToolToggles.first()).toBeVisible({ timeout: 20000 });
+    logStep("Verified server card and tool toggles are visible");
 
     // Enable all matching tools (in case there are multiple on the page)
     const toggleCount = await adminToolToggles.count();
@@ -1287,7 +1280,9 @@ test.describe("MCP OAuth flows", () => {
       const isEnabled = await toggle.getAttribute("data-state");
       if (isEnabled !== "checked") {
         await toggle.click();
-        await page.waitForTimeout(300);
+        await expect(toggle).toHaveAttribute("data-state", "checked", {
+          timeout: 5000,
+        });
         logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.admin}`);
       }
     }
@@ -1472,7 +1467,7 @@ test.describe("MCP OAuth flows", () => {
 
       // Click "Add MCP Server" button to open modal
       await page.getByRole("button", { name: /Add MCP Server/i }).click();
-      await page.waitForTimeout(500); // Wait for modal to appear
+      await expect(page.locator("input#name")).toBeVisible({ timeout: 10000 });
       logStep("Opened Add MCP Server modal");
 
       // Fill basic server info in AddMCPServerModal
@@ -1485,11 +1480,10 @@ test.describe("MCP OAuth flows", () => {
 
       // Submit the modal to create server
       await page.getByRole("button", { name: "Add Server" }).click();
-      await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
-      logStep("Created MCP server, auth modal should open");
-
-      // MCPAuthenticationModal should now be open - configure OAuth
-      await page.waitForTimeout(500); // Ensure modal is fully rendered
+      await expect(page.getByTestId("mcp-auth-method-select")).toBeVisible({
+        timeout: 10000,
+      });
+      logStep("Created MCP server, auth modal opened");
 
       // Select OAuth as authentication method
       const authMethodSelect = page.getByTestId("mcp-auth-method-select");
@@ -1548,21 +1542,15 @@ test.describe("MCP OAuth flows", () => {
         }
       }
 
-      // Wait for tools to be fetched automatically
-      await page.waitForTimeout(3000);
-      logStep("Waited for tools to auto-fetch");
-
-      // Verify server card is visible with tools
+      // Verify server card is visible with tools and wait for tool toggle
       await expect(
         page.getByText(serverName, { exact: false }).first()
       ).toBeVisible({ timeout: 20000 });
-      logStep("Verified server card is visible");
-
-      // Tools list automatically expands after fetch - wait for tool toggle to appear
       const curatorToolToggles = page.getByLabel(
         `tool-toggle-${TOOL_NAMES.curator}`
       );
-      await expect(curatorToolToggles.first()).toBeVisible({ timeout: 10000 });
+      await expect(curatorToolToggles.first()).toBeVisible({ timeout: 20000 });
+      logStep("Verified server card and tool toggles are visible");
 
       // Enable all matching tools (in case there are multiple on the page)
       const toggleCount = await curatorToolToggles.count();
@@ -1573,7 +1561,9 @@ test.describe("MCP OAuth flows", () => {
         const isEnabled = await toggle.getAttribute("data-state");
         if (isEnabled !== "checked") {
           await toggle.click();
-          await page.waitForTimeout(300);
+          await expect(toggle).toHaveAttribute("data-state", "checked", {
+            timeout: 5000,
+          });
           logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.curator}`);
         }
       }
