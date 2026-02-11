@@ -1,4 +1,4 @@
-import { test } from "@chromatic-com/playwright";
+import { test } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
 import {
   sendMessage,

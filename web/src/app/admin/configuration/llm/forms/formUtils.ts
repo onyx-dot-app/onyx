@@ -198,8 +198,14 @@ export const submitLLMProvider = async <T extends BaseLLMFormValues>({
     initialValues.custom_config
   );
 
+  const normalizedApiBase =
+    typeof rest.api_base === "string" && rest.api_base.trim() === ""
+      ? undefined
+      : rest.api_base;
+
   const finalValues = {
     ...rest,
+    api_base: normalizedApiBase,
     default_model_name: finalDefaultModelName,
     api_key,
     api_key_changed: api_key !== (initialValues.api_key as string | undefined),

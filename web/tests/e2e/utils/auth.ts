@@ -136,14 +136,8 @@ export async function loginAsRandomUser(page: Page) {
   // Click the signup button
   await page.click('button[type="submit"]');
   try {
-    // Wait for 2 seconds to ensure the signup process completes
-    await page.waitForTimeout(3000);
-    // Refresh the page to ensure everything is loaded properly
-    // await page.reload();
-
-    await page.waitForURL("/app?new_team=true");
-    // Wait for the page to be fully loaded after refresh
-    await page.waitForLoadState("networkidle");
+    await page.waitForURL(/\/(app|chat)(\?.*)?$/, { timeout: 30000 });
+    await page.waitForLoadState("domcontentloaded");
   } catch {
     console.log(`Timeout occurred. Current URL: ${page.url()}`);
     throw new Error("Failed to sign up and redirect to app page");

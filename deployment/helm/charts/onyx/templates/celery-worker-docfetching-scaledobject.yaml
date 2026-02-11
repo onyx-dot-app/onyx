@@ -14,7 +14,9 @@ spec:
   maxReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.maxReplicas | default 20 }}
   pollingInterval: {{ .Values.celery_worker_docfetching.autoscaling.pollingInterval | default 30 }}
   cooldownPeriod: {{ .Values.celery_worker_docfetching.autoscaling.cooldownPeriod | default 300 }}
-  idleReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.idleReplicaCount | default 1 }}
+  {{- if hasKey .Values.celery_worker_docfetching.autoscaling "idleReplicaCount" }}
+  idleReplicaCount: {{ .Values.celery_worker_docfetching.autoscaling.idleReplicaCount }}
+  {{- end }}
   fallback:
     failureThreshold: {{ .Values.celery_worker_docfetching.autoscaling.failureThreshold | default 3 }}
     replicas: {{ .Values.celery_worker_docfetching.autoscaling.fallbackReplicas | default 1 }}

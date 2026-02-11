@@ -180,6 +180,37 @@ class TestLLMProviderChanges:
         finally:
             _cleanup_provider(db_session, provider_name)
 
+    def test_allows_empty_string_api_base_when_existing_is_none__multi_tenant(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """
+        Treat empty-string api_base from clients as unset when comparing provider
+        changes. This allows model-only updates when provider has no custom base URL.
+        """
+        try:
+            _create_test_provider(db_session, provider_name, api_base=None)
+
+            with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
+                update_request = LLMProviderUpsertRequest(
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_base="",
+                    default_model_name="gpt-4o-mini",
+                )
+
+                result = put_llm_provider(
+                    llm_provider_upsert_request=update_request,
+                    is_creation=False,
+                    _=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+                assert result.api_base is None
+        finally:
+            _cleanup_provider(db_session, provider_name)
+
     def test_blocks_clearing_api_base__multi_tenant(
         self,
         db_session: Session,
