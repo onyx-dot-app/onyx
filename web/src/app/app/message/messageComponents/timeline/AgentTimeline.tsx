@@ -148,7 +148,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   } = useTimelineMetrics(turnGroups, userStopped);
 
   // Extract memory text, operation, and whether this is a memory-only timeline
-  const { memoryText, memoryOperation, isMemoryOnly } =
+  const { memoryText, memoryOperation, memoryId, memoryIndex, isMemoryOnly } =
     useTimelineStepState(turnGroups);
 
   // Check if last step is a search tool for INLINE render type
@@ -307,6 +307,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             isMemoryOnly={isMemoryOnly}
             memoryText={memoryText}
             memoryOperation={memoryOperation}
+            memoryId={memoryId}
+            memoryIndex={memoryIndex}
           />
         );
 
@@ -328,6 +330,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     isMemoryOnly,
     memoryText,
     memoryOperation,
+    memoryId,
+    memoryIndex,
     totalSteps,
     stoppedStepsCount,
     processingDurationSeconds,

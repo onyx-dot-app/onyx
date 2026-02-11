@@ -80,7 +80,8 @@ function MemoryItem({
       className={cn(
         "rounded-08 hover:bg-background-tint-00 w-full p-0.5",
         "transition-colors ",
-        isHighlighting && "bg-background-tint-00 duration-700"
+        isHighlighting &&
+          "bg-action-link-01 border border-action-link-05 duration-700"
       )}
     >
       <Section gap={0.25} alignItems="start">
@@ -122,6 +123,7 @@ interface MemoriesModalProps {
   onSaveMemories?: (memories: MemoryItem[]) => Promise<boolean>;
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
+  initialTargetIndex?: number | null;
   onTargetHandled?: () => void;
 }
 
@@ -130,6 +132,7 @@ export default function MemoriesModal({
   onSaveMemories: onSaveMemoriesProp,
   onClose,
   initialTargetMemoryId,
+  initialTargetIndex,
   onTargetHandled,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
@@ -172,9 +175,21 @@ export default function MemoriesModal({
 
   useEffect(() => {
     if (initialTargetMemoryId != null) {
+      // Direct DB id available — use it
       setHighlightMemoryId(initialTargetMemoryId);
+    } else if (initialTargetIndex != null && effectiveMemories.length > 0) {
+      // Backend index is ASC (oldest-first), but the frontend displays DESC
+      // (newest-first). Convert: descIdx = totalCount - 1 - ascIdx
+      const descIdx = effectiveMemories.length - 1 - initialTargetIndex;
+      const target = effectiveMemories[descIdx];
+      if (target) {
+        setHighlightMemoryId(target.id);
+      }
+    } else if (effectiveMemories.length > 0 && effectiveMemories[0]) {
+      // Fallback: highlight the first displayed item (newest)
+      setHighlightMemoryId(effectiveMemories[0].id);
     }
-  }, [initialTargetMemoryId]);
+  }, [initialTargetMemoryId, initialTargetIndex]);
 
   const {
     searchQuery,

@@ -7,6 +7,8 @@ import { isMemoryToolPackets } from "@/app/app/message/messageComponents/timelin
 interface MemoryStepState {
   memoryText: string | null;
   memoryOperation: "add" | "update" | null;
+  memoryId: number | null;
+  memoryIndex: number | null;
   isMemoryOnly: boolean;
 }
 
@@ -18,6 +20,8 @@ export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
   return useMemo(() => {
     let memoryText: string | null = null;
     let memoryOperation: "add" | "update" | null = null;
+    let memoryId: number | null = null;
+    let memoryIndex: number | null = null;
     let foundMemory = false;
 
     let totalSteps = 0;
@@ -39,6 +43,8 @@ export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
           );
           memoryText = state.memoryText;
           memoryOperation = state.operation;
+          memoryId = state.memoryId;
+          memoryIndex = state.index;
         }
       }
     }
@@ -46,6 +52,8 @@ export function useTimelineStepState(turnGroups: TurnGroup[]): MemoryStepState {
     return {
       memoryText,
       memoryOperation,
+      memoryId,
+      memoryIndex,
       isMemoryOnly: totalSteps > 0 && allMemory,
     };
   }, [turnGroups]);

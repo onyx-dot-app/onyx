@@ -18,11 +18,15 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 interface MemoryTagWithTooltipProps {
   memoryText: string | null;
   memoryOperation: "add" | "update" | null;
+  memoryId: number | null;
+  memoryIndex: number | null;
 }
 
 function MemoryTagWithTooltip({
   memoryText,
   memoryOperation,
+  memoryId,
+  memoryIndex,
 }: MemoryTagWithTooltipProps) {
   const memoriesModal = useCreateModal();
 
@@ -36,7 +40,10 @@ function MemoryTagWithTooltip({
   return (
     <>
       <memoriesModal.Provider>
-        <MemoriesModal />
+        <MemoriesModal
+          initialTargetMemoryId={memoryId}
+          initialTargetIndex={memoryIndex}
+        />
       </memoriesModal.Provider>
       {memoriesModal.isOpen ? (
         <span>{tag}</span>
@@ -90,6 +97,8 @@ export interface CompletedHeaderProps {
   isMemoryOnly?: boolean;
   memoryText?: string | null;
   memoryOperation?: "add" | "update" | null;
+  memoryId?: number | null;
+  memoryIndex?: number | null;
 }
 
 /** Header when completed - handles both collapsed and expanded states */
@@ -103,14 +112,30 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   isMemoryOnly = false,
   memoryText = null,
   memoryOperation = null,
+  memoryId = null,
+  memoryIndex = null,
 }: CompletedHeaderProps) {
   if (isMemoryOnly) {
     return (
-      <div className="flex items-center w-full px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+      <div className="flex items-center justify-between w-full px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
         <MemoryTagWithTooltip
           memoryText={memoryText}
           memoryOperation={memoryOperation}
+          memoryId={memoryId}
+          memoryIndex={memoryIndex}
         />
+        {collapsible && totalSteps > 0 && isExpanded && (
+          <Button
+            size="md"
+            tertiary
+            onClick={noProp(onToggle)}
+            rightIcon={isExpanded ? SvgFold : SvgExpand}
+            aria-label="Expand timeline"
+            aria-expanded={isExpanded}
+          >
+            {totalSteps} {totalSteps === 1 ? "step" : "steps"}
+          </Button>
+        )}
       </div>
     );
   }
@@ -140,6 +165,8 @@ export const CompletedHeader = React.memo(function CompletedHeader({
           <MemoryTagWithTooltip
             memoryText={memoryText}
             memoryOperation={memoryOperation}
+            memoryId={memoryId}
+            memoryIndex={memoryIndex}
           />
         )}
       </div>
