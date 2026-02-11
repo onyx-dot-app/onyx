@@ -1027,6 +1027,25 @@ class OpenSearchTenantMigrationRecord(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    # Opaque continuation token from Vespa's Visit API.
+    # NULL means "not started" or "visit completed".
+    vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    total_chunks_migrated: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    migration_completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    enable_opensearch_retrieval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
 
 class KGEntityType(Base):
