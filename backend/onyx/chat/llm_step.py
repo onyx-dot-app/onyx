@@ -332,26 +332,36 @@ def extract_tool_calls_from_response_text(
     # Find all JSON objects in the response text
     json_objects = find_all_json_objects(response_text)
 
-    tool_calls: list[ToolCallKickoff] = []
-    tab_index = 0
+    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
 
     for json_obj in json_objects:
         matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
         if matched_tool_call:
-            tool_name, tool_args = matched_tool_call
-            tool_calls.append(
-                ToolCallKickoff(
-                    tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
-                    tool_name=tool_name,
-                    tool_args=tool_args,
-                    placement=Placement(
-                        turn_index=placement.turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=placement.sub_turn_index,
-                    ),
-                )
+            matched_tool_calls.append(matched_tool_call)
+
+    # `find_all_json_objects` can return both an outer tool-call object and its
+    # nested `arguments` object, which map to the same tool invocation.
+    # Collapse immediately repeated matches: [A, A, B, B] -> [A, B].
+    deduped_tool_calls: list[tuple[str, dict[str, Any]]] = []
+    for tool_call in matched_tool_calls:
+        if not deduped_tool_calls or deduped_tool_calls[-1] != tool_call:
+            deduped_tool_calls.append(tool_call)
+    matched_tool_calls = deduped_tool_calls
+
+    tool_calls: list[ToolCallKickoff] = []
+    for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
+        tool_calls.append(
+            ToolCallKickoff(
+                tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
+                tool_name=tool_name,
+                tool_args=tool_args,
+                placement=Placement(
+                    turn_index=placement.turn_index,
+                    tab_index=tab_index,
+                    sub_turn_index=placement.sub_turn_index,
+                ),
             )
-            tab_index += 1
+        )
 
     logger.info(
         f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
