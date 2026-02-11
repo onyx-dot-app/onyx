@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page, Browser, Locator } from "@playwright/test";
-import { loginAs, loginWithCredentials } from "../utils/auth";
+import { loginAs, apiLogin } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpOauthServer, McpServerProcess } from "../utils/mcpServer";
 import { TEST_ADMIN_CREDENTIALS } from "../constants";
@@ -1432,7 +1432,7 @@ test.describe("MCP OAuth flows", () => {
 
     await page.context().clearCookies();
     logStep("Cleared cookies");
-    await loginWithCredentials(
+    await apiLogin(
       page,
       curatorCredentials!.email,
       curatorCredentials!.password
@@ -1654,7 +1654,7 @@ test.describe("MCP OAuth flows", () => {
         curatorTwoPage,
         "CuratorFlow secondary pre-login logout"
       );
-      await loginWithCredentials(
+      await apiLogin(
         curatorTwoPage,
         curatorTwoCredentials!.email,
         curatorTwoCredentials!.password

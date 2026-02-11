@@ -9,7 +9,7 @@ import {
  * Log in via the API and set cookies on the page's browser context.
  * Much faster than navigating through the login UI.
  */
-async function apiLogin(
+export async function apiLogin(
   page: Page,
   email: string,
   password: string
@@ -80,17 +80,4 @@ export async function loginAsRandomUser(page: Page): Promise<{
   await page.waitForLoadState("networkidle");
 
   return { email, password };
-}
-
-// Log in with explicit credentials via the API.
-export async function loginWithCredentials(
-  page: Page,
-  email: string,
-  password: string
-): Promise<void> {
-  if (process.env.SKIP_AUTH === "true") {
-    return;
-  }
-
-  await apiLogin(page, email, password);
 }

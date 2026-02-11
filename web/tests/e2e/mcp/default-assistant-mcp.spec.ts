@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAs, loginWithCredentials } from "../utils/auth";
+import { loginAs, apiLogin } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
 
@@ -361,7 +361,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
     // Navigate to chat (which uses default assistant for new users)
@@ -470,7 +470,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
 
     await page.goto("/app");
     await ensureOnboardingComplete(page);
@@ -665,7 +665,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user to verify tool visibility`);
 
     // Navigate to chat
