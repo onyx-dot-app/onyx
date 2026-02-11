@@ -6,7 +6,8 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { SvgWallet } from "@opal/icons";
+import { SvgArrowUpCircle, SvgWallet } from "@opal/icons";
+import type { IconProps } from "@opal/types";
 import {
   useBillingInformation,
   useLicense,
@@ -30,8 +31,8 @@ import "./billing.css";
 type BillingView = "plans" | "details" | "checkout" | null;
 
 interface ViewConfig {
+  icon: React.FunctionComponent<IconProps>;
   title: string;
-  description: string;
   showBackButton: boolean;
 }
 
@@ -226,30 +227,28 @@ export default function BillingPage() {
   const getViewConfig = (): ViewConfig => {
     if (isLoading || view === null) {
       return {
+        icon: SvgWallet,
         title: "Plans & Billing",
-        description: "Loading billing information...",
         showBackButton: false,
       };
     }
     switch (view) {
       case "checkout":
         return {
+          icon: SvgArrowUpCircle,
           title: "Upgrade Plan",
-          description: "Configure your Business Plan subscription",
           showBackButton: false,
         };
       case "plans":
         return {
+          icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
           title: hasSubscription ? "View Plans" : "Upgrade Plan",
-          description: hasSubscription
-            ? "Compare and manage your subscription plan"
-            : "Choose a plan to unlock premium features",
           showBackButton: !!hasSubscription,
         };
       case "details":
         return {
+          icon: SvgWallet,
           title: "Plans & Billing",
-          description: "Manage your subscription and billing settings",
           showBackButton: false,
         };
     }
@@ -353,9 +352,8 @@ export default function BillingPage() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgWallet}
+        icon={viewConfig.icon}
         title={viewConfig.title}
-        description={viewConfig.description}
         backButton={viewConfig.showBackButton}
         onBack={handleBack}
         separator
