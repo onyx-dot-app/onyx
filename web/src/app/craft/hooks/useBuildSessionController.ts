@@ -165,9 +165,10 @@ export function useBuildSessionController({
     const currentSessionData = currentState.currentSessionId
       ? currentState.sessions.get(currentState.currentSessionId)
       : null;
-    const isCurrentlyStreaming =
-      currentSessionData?.status === "running" ||
-      currentSessionData?.status === "creating";
+    // Only block loading during active LLM streaming ("running").
+    // "creating" means sandbox restore, which should not prevent
+    // navigating to and loading a different session.
+    const isCurrentlyStreaming = currentSessionData?.status === "running";
 
     if (
       controllerState.loadedSessionId !== existingSessionId &&
