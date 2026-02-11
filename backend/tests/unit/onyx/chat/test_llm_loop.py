@@ -2,6 +2,7 @@
 
 import pytest
 
+from onyx.chat.llm_loop import _should_keep_bedrock_tool_definitions
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
@@ -10,6 +11,17 @@ from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
+from onyx.llm.constants import LlmProviderNames
+
+
+class _StubConfig:
+    def __init__(self, model_provider: str) -> None:
+        self.model_provider = model_provider
+
+
+class _StubLLM:
+    def __init__(self, model_provider: str) -> None:
+        self.config = _StubConfig(model_provider=model_provider)
 
 
 def create_message(
@@ -568,3 +580,34 @@ class TestConstructMessageHistory:
         assert '"contents"' in project_message.message
         assert "Project file 0 content" in project_message.message
         assert "Project file 1 content" in project_message.message
+
+
+class TestBedrockToolConfigGuard:
+    def test_bedrock_with_tool_history_keeps_tool_definitions(self) -> None:
+        llm = _StubLLM(LlmProviderNames.BEDROCK)
+        history = [
+            create_message("Question", MessageType.USER, 5),
+            create_assistant_with_tool_call("tc_1", "search", 5),
+            create_tool_response("tc_1", "Tool output", 5),
+        ]
+
+        assert _should_keep_bedrock_tool_definitions(llm, history) is True
+
+    def test_bedrock_without_tool_history_does_not_keep_tool_definitions(self) -> None:
+        llm = _StubLLM(LlmProviderNames.BEDROCK)
+        history = [
+            create_message("Question", MessageType.USER, 5),
+            create_message("Answer", MessageType.ASSISTANT, 5),
+        ]
+
+        assert _should_keep_bedrock_tool_definitions(llm, history) is False
+
+    def test_non_bedrock_with_tool_history_does_not_keep_tool_definitions(self) -> None:
+        llm = _StubLLM(LlmProviderNames.OPENAI)
+        history = [
+            create_message("Question", MessageType.USER, 5),
+            create_assistant_with_tool_call("tc_1", "search", 5),
+            create_tool_response("tc_1", "Tool output", 5),
+        ]
+
+        assert _should_keep_bedrock_tool_definitions(llm, history) is False
