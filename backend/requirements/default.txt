@@ -495,27 +495,14 @@ kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-langchain==0.3.23
-    # via onyx
-langchain-core==0.3.81
-    # via
-    #   langchain
-    #   langchain-text-splitters
-    #   onyx
-langchain-text-splitters==0.3.9
-    # via
-    #   langchain
-    #   onyx
-langchainhub==0.1.21
+langchain-core==1.2.11
     # via onyx
 langdetect==1.0.9
     # via unstructured
 langfuse==3.10.0
     # via onyx
 langsmith==0.3.45
-    # via
-    #   langchain
-    #   langchain-core
+    # via langchain-core
 lazy-imports==1.0.1
     # via onyx
 legacy-cgi==2.6.4 ; python_full_version >= '3.13'
@@ -698,7 +685,6 @@ packaging==24.2
     #   jira
     #   kombu
     #   langchain-core
-    #   langchainhub
     #   langfuse
     #   langsmith
     #   marshmallow
@@ -805,7 +791,6 @@ pydantic==2.11.7
     #   fastmcp
     #   google-cloud-aiplatform
     #   google-genai
-    #   langchain
     #   langchain-core
     #   langfuse
     #   langsmith
@@ -936,7 +921,6 @@ pyyaml==6.0.3
     #   huggingface-hub
     #   jsonschema-path
     #   kubernetes
-    #   langchain
     #   langchain-core
 rapidfuzz==3.13.0
     # via
@@ -975,8 +959,6 @@ requests==2.32.5
     #   jira
     #   jsonschema-path
     #   kubernetes
-    #   langchain
-    #   langchainhub
     #   langfuse
     #   langsmith
     #   markitdown
@@ -1083,7 +1065,6 @@ sqlalchemy==2.0.15
     # via
     #   alembic
     #   fastapi-users-db-sqlalchemy
-    #   langchain
     #   onyx
 sse-starlette==3.0.3
     # via mcp
@@ -1151,9 +1132,7 @@ types-awscrt==0.28.4
 types-openpyxl==3.0.4.7
     # via onyx
 types-requests==2.32.0.20250328
-    # via
-    #   cohere
-    #   langchainhub
+    # via cohere
 types-s3transfer==0.14.0
     # via boto3-stubs
 typing-extensions==4.15.0
@@ -1241,6 +1220,8 @@ urllib3==2.6.3
     #   sentry-sdk
     #   trafilatura
     #   types-requests
+uuid-utils==0.14.0
+    # via langchain-core
 uvicorn==0.35.0
     # via
     #   fastmcp
