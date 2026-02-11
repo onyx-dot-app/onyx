@@ -212,7 +212,7 @@ async function globalSetup(config: FullConfig) {
     storageState: "admin_auth.json",
   });
   try {
-    const client = new OnyxApiClient(adminCtx);
+    const client = new OnyxApiClient(adminCtx, baseURL);
     await client.ensurePublicProvider();
   } finally {
     await adminCtx.dispose();

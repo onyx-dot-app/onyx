@@ -47,18 +47,30 @@ import { APIRequestContext, expect, APIResponse } from "@playwright/test";
  * // From a test with a Page:
  * const client = new OnyxApiClient(page.request);
  *
- * // From global-setup with a standalone context:
+ * // From global-setup with a standalone context (pass baseURL explicitly):
  * const ctx = await request.newContext({ baseURL, storageState: "admin_auth.json" });
- * const client = new OnyxApiClient(ctx);
+ * const client = new OnyxApiClient(ctx, baseURL);
  * ```
  *
  * @param request - Playwright APIRequestContext with authenticated session
  *                  (e.g. `page.request`, `context.request`, or `request.newContext()`)
+ * @param baseUrl - Optional base URL override (e.g. `http://localhost:3000`).
+ *                  Defaults to `process.env.BASE_URL` or `http://localhost:3000`.
+ *                  Pass this when the Playwright-configured baseURL differs from
+ *                  the env var (e.g. in `global-setup.ts` where the config value
+ *                  is authoritative).
  */
 export class OnyxApiClient {
-  private baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api`;
+  private baseUrl: string;
 
-  constructor(private request: APIRequestContext) {}
+  constructor(
+    private request: APIRequestContext,
+    baseUrl?: string
+  ) {
+    this.baseUrl = `${
+      baseUrl ?? process.env.BASE_URL ?? "http://localhost:3000"
+    }/api`;
+  }
 
   /**
    * Generic GET request to the API.
