@@ -99,7 +99,7 @@ comm==0.2.3
     # via ipykernel
 contourpy==1.3.3
     # via matplotlib
-cryptography==46.0.3
+cryptography==46.0.5
     # via pyjwt
 cycler==0.12.1
     # via matplotlib

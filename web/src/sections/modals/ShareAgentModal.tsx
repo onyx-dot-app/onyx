@@ -19,8 +19,8 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgUser } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import useUsers from "@/hooks/useUsers";
-import useGroups from "@/hooks/useGroups";
+import useShareableUsers from "@/hooks/useShareableUsers";
+import useShareableGroups from "@/hooks/useShareableGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
@@ -51,21 +51,23 @@ interface ShareAgentFormContentProps {
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty } =
     useFormikContext<ShareAgentFormValues>();
-  const { data: usersData } = useUsers({ includeApiKeys: false });
-  const { data: groupsData } = useGroups();
+  const { data: usersData } = useShareableUsers({ includeApiKeys: false });
+  const { data: groupsData } = useShareableGroups();
   const { user: currentUser } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
 
-  const acceptedUsers = usersData?.accepted ?? [];
+  const acceptedUsers = usersData ?? [];
   const groups = groupsData ?? [];
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {
-    const userOptions = acceptedUsers.map((user) => ({
-      value: `user-${user.id}`,
-      label: user.email,
-    }));
+    const userOptions = acceptedUsers
+      .filter((user) => user.id !== currentUser?.id)
+      .map((user) => ({
+        value: `user-${user.id}`,
+        label: user.email,
+      }));
 
     const groupOptions = groups.map((group) => ({
       value: `group-${group.id}`,
@@ -73,7 +75,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     }));
 
     return [...userOptions, ...groupOptions];
-  }, [acceptedUsers, groups]);
+  }, [acceptedUsers, groups, currentUser?.id]);
 
   // Compute owner and displayed users
   const ownerId = fullAgent?.owner?.id;
