@@ -1,5 +1,5 @@
 import { Page } from "@playwright/test";
-import { expect } from "@chromatic-com/playwright";
+import { expect } from "@playwright/test";
 
 export async function verifyDefaultAssistantIsChosen(page: Page) {
   await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
@@ -53,9 +53,6 @@ export async function sendMessage(page: Page, message: string) {
     null,
     { timeout: 10000 }
   );
-
-  // wait for stream to complete
-  await page.waitForLoadState("networkidle");
 }
 
 export async function verifyCurrentModel(page: Page, modelName: string) {

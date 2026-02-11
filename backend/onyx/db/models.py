@@ -75,6 +75,7 @@ from onyx.db.enums import (
     MCPServerStatus,
     LLMModelFlowType,
     ThemePreference,
+    DefaultAppMode,
     SwitchoverType,
 )
 from onyx.configs.constants import NotificationType
@@ -247,6 +248,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         default=None,
     )
     chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_app_mode: Mapped[DefaultAppMode] = mapped_column(
+        Enum(DefaultAppMode, native_enum=False),
+        nullable=False,
+        default=DefaultAppMode.CHAT,
+    )
     # personalization fields are exposed via the chat user settings "Personalization" tab
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)

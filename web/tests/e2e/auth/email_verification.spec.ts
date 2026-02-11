@@ -2,7 +2,7 @@
  * E2E Test: Email Verification Success Flow
  * Tests that the login page displays verification success message when redirected from email verification
  */
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 
 test("Login page shows verification success message after email verification", async ({
   page,

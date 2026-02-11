@@ -197,6 +197,12 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class DefaultAppMode(str, PyEnum):
+    AUTO = "AUTO"
+    CHAT = "CHAT"
+    SEARCH = "SEARCH"
+
+
 class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"

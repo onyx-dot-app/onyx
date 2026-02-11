@@ -14,6 +14,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import ThemePreference
 from onyx.db.models import AllowedAnswerFilters
 from onyx.db.models import ChannelConfig
@@ -69,6 +70,7 @@ class UserPreferences(BaseModel):
     temperature_override_enabled: bool | None = None
     theme_preference: ThemePreference | None = None
     chat_background: str | None = None
+    default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
     # controls which tools are enabled for the user for a specific assistant
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
@@ -147,6 +149,7 @@ class UserInfo(BaseModel):
                     temperature_override_enabled=user.temperature_override_enabled,
                     theme_preference=user.theme_preference,
                     chat_background=user.chat_background,
+                    default_app_mode=user.default_app_mode,
                     assistant_specific_configs=assistant_specific_configs,
                 )
             ),
@@ -212,6 +215,10 @@ class AutoScrollRequest(BaseModel):
 
 class ThemePreferenceRequest(BaseModel):
     theme_preference: ThemePreference
+
+
+class DefaultAppModeRequest(BaseModel):
+    default_app_mode: DefaultAppMode
 
 
 class ChatBackgroundRequest(BaseModel):
