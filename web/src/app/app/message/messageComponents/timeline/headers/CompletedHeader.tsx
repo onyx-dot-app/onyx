@@ -8,6 +8,8 @@ import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import { formatDurationSeconds } from "@/lib/time";
 import { noProp } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 // =============================================================================
 // MemoryTagWithTooltip
@@ -22,6 +24,8 @@ function MemoryTagWithTooltip({
   memoryText,
   memoryOperation,
 }: MemoryTagWithTooltipProps) {
+  const memoriesModal = useCreateModal();
+
   const operationLabel =
     memoryOperation === "add" ? "Added to memories" : "Updated memory";
 
@@ -30,27 +34,45 @@ function MemoryTagWithTooltip({
   if (!memoryText) return tag;
 
   return (
-    <SimpleTooltip
-      side="bottom"
-      className="bg-background-neutral-00 text-text-01 shadow-md max-w-[17.5rem] p-1"
-      tooltip={
-        <Section flexDirection="column" gap={0.25} height="auto">
-          <div className="p-1">
-            <Text as="p" secondaryBody text03>
-              {memoryText}
-            </Text>
-          </div>
-          <LineItemLayout
-            variant="mini"
-            icon={SvgAddLines}
-            title={operationLabel}
-            rightChildren={<IconButton small icon={SvgMaximize2} />}
-          />
-        </Section>
-      }
-    >
-      <span>{tag}</span>
-    </SimpleTooltip>
+    <>
+      <memoriesModal.Provider>
+        <MemoriesModal />
+      </memoriesModal.Provider>
+      {memoriesModal.isOpen ? (
+        <span>{tag}</span>
+      ) : (
+        <SimpleTooltip
+          side="bottom"
+          className="bg-background-neutral-00 text-text-01 shadow-md max-w-[17.5rem] p-1"
+          tooltip={
+            <Section flexDirection="column" gap={0.25} height="auto">
+              <div className="p-1">
+                <Text as="p" secondaryBody text03>
+                  {memoryText}
+                </Text>
+              </div>
+              <LineItemLayout
+                variant="mini"
+                icon={SvgAddLines}
+                title={operationLabel}
+                rightChildren={
+                  <IconButton
+                    small
+                    icon={SvgMaximize2}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      memoriesModal.toggle(true);
+                    }}
+                  />
+                }
+              />
+            </Section>
+          }
+        >
+          <span>{tag}</span>
+        </SimpleTooltip>
+      )}
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -21,6 +21,8 @@ import {
   LocalMemory,
 } from "@/hooks/useMemoryManager";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/providers/UserProvider";
+import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
 
 interface MemoryItemProps {
@@ -116,16 +118,16 @@ function MemoryItem({
 }
 
 interface MemoriesModalProps {
-  memories: MemoryItem[];
-  onSaveMemories: (memories: MemoryItem[]) => Promise<boolean>;
+  memories?: MemoryItem[];
+  onSaveMemories?: (memories: MemoryItem[]) => Promise<boolean>;
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
   onTargetHandled?: () => void;
 }
 
 export default function MemoriesModal({
-  memories,
-  onSaveMemories,
+  memories: memoriesProp,
+  onSaveMemories: onSaveMemoriesProp,
   onClose,
   initialTargetMemoryId,
   onTargetHandled,
@@ -133,6 +135,35 @@ export default function MemoriesModal({
   const close = useModalClose(onClose);
   const { popup, setPopup } = usePopup();
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
+
+  // Self-fetching: when no props provided, fetch from UserProvider
+  const { user, refreshUser, updateUserPersonalization } = useUser();
+  const { handleSavePersonalization } = useUserPersonalization(
+    user,
+    updateUserPersonalization
+  );
+
+  useEffect(() => {
+    if (memoriesProp === undefined) {
+      void refreshUser();
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const internalSaveMemories = useCallback(
+    async (newMemories: MemoryItem[]): Promise<boolean> => {
+      const result = await handleSavePersonalization({
+        memories: newMemories,
+      });
+      return !!result;
+    },
+    [handleSavePersonalization]
+  );
+
+  const effectiveMemories =
+    memoriesProp ?? user?.personalization?.memories ?? [];
+  const effectiveSave = onSaveMemoriesProp ?? internalSaveMemories;
 
   // Drives scroll-into-view + highlight when opening from a FileTile click
   const [highlightMemoryId, setHighlightMemoryId] = useState<number | null>(
@@ -156,8 +187,8 @@ export default function MemoriesModal({
     handleRemoveMemory,
     handleBlurMemory,
   } = useMemoryManager({
-    memories,
-    onSaveMemories,
+    memories: effectiveMemories,
+    onSaveMemories: effectiveSave,
     onNotify: (message, type) => setPopup({ message, type }),
   });
 
