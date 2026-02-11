@@ -15,7 +15,7 @@ import { Section, SectionProps } from "@/layouts/general-layouts";
 import { IconProps } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import Text from "./texts/Text";
-import IconButton from "./buttons/IconButton";
+import { Button } from "@opal/components";
 
 /* =============================================================================
    CONTEXT
@@ -503,17 +503,17 @@ const TabsList = React.forwardRef<
               ref={scrollArrowsRef}
               className="flex items-center gap-1 pl-2 flex-shrink-0"
             >
-              <IconButton
-                main
-                internal
+              <Button
+                subvariant="ghost"
+                size="compact"
                 icon={SvgChevronLeft}
                 onClick={handleScrollLeft}
                 disabled={!canScrollLeft}
                 tooltip="Scroll tabs left"
               />
-              <IconButton
-                main
-                internal
+              <Button
+                subvariant="ghost"
+                size="compact"
                 icon={SvgChevronRight}
                 onClick={handleScrollRight}
                 disabled={!canScrollRight}

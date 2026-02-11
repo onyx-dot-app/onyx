@@ -3,7 +3,7 @@
 import React from "react";
 import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
 import { cn } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { SvgChevronDown, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
 
@@ -140,12 +140,22 @@ export default function Calendar({
             />
           );
         },
-        Chevron: ({ className, orientation, ...props }) => {
+        Chevron: ({ className, orientation, size: _size, ...props }) => {
           if (orientation === "left")
-            return <IconButton icon={SvgChevronLeft} tertiary {...props} />;
+            return (
+              <OpalButton icon={SvgChevronLeft} subvariant="ghost" {...props} />
+            );
           if (orientation === "right")
-            return <IconButton icon={SvgChevronRight} tertiary {...props} />;
-          return <IconButton icon={SvgChevronDown} tertiary {...props} />;
+            return (
+              <OpalButton
+                icon={SvgChevronRight}
+                subvariant="ghost"
+                {...props}
+              />
+            );
+          return (
+            <OpalButton icon={SvgChevronDown} subvariant="ghost" {...props} />
+          );
         },
         DayButton: CalendarDayButton,
         WeekNumber: ({ children, ...props }) => {

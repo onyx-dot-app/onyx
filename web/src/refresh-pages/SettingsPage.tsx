@@ -39,7 +39,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
@@ -719,10 +719,10 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <IconButton
+                  <OpalButton
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
-                    tertiary
+                    subvariant="ghost"
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
                     aria-label="Remove shortcut"
                     tooltip={
@@ -919,10 +919,10 @@ function Memories({ memories, onSaveMemories }: MemoriesProps) {
                   onBlur={() => void handleBlurMemory(index)}
                   rows={2}
                 />
-                <IconButton
+                <OpalButton
                   icon={SvgMinusCircle}
                   onClick={() => void handleRemoveMemory(index)}
-                  tertiary
+                  subvariant="ghost"
                   disabled={isEmpty && !isExisting}
                   aria-label="Remove memory"
                 />
@@ -1490,10 +1490,11 @@ function AccountsAccessSettings() {
                             description={pat.token_display}
                             middleText={middleText}
                             rightChildren={
-                              <IconButton
+                              <OpalButton
                                 icon={SvgTrash}
                                 onClick={() => setTokenToDelete(pat)}
-                                internal
+                                subvariant="ghost"
+                                size="compact"
                                 aria-label={`Delete token ${pat.name}`}
                               />
                             }
@@ -1616,9 +1617,10 @@ function FederatedConnectorCard({
           }
           rightChildren={
             connector.has_oauth_token ? (
-              <IconButton
+              <OpalButton
                 icon={SvgUnplug}
-                internal
+                subvariant="ghost"
+                size="compact"
                 onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}
               />

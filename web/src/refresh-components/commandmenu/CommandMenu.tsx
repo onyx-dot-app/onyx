@@ -15,7 +15,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import EditableTag from "@/refresh-components/buttons/EditableTag";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Divider from "@/refresh-components/Divider";
 import { Section } from "@/layouts/general-layouts";
@@ -466,9 +466,10 @@ function CommandMenuHeader({
         </Section>
         {onClose && (
           <DialogPrimitive.Close asChild>
-            <IconButton
+            <Button
               icon={SvgX}
-              internal
+              subvariant="ghost"
+              size="compact"
               onClick={onClose}
               aria-label="Close menu"
             />

@@ -11,7 +11,7 @@ import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
   SvgArrowExchange,
@@ -985,11 +985,10 @@ export default function Page() {
                       </div>
                       <div className="flex items-center justify-end gap-2">
                         {isConfigured && (
-                          <IconButton
+                          <OpalButton
                             icon={SvgEdit}
                             tooltip="Edit"
-                            internal
-                            tertiary
+                            subvariant="ghost"
                             onClick={() => {
                               if (!canOpenModal) return;
                               openSearchModal(
@@ -1185,11 +1184,10 @@ export default function Page() {
                     <div className="flex items-center justify-end gap-2">
                       {provider.provider_type !== "onyx_web_crawler" &&
                         isConfigured && (
-                          <IconButton
+                          <OpalButton
                             icon={SvgEdit}
                             tooltip="Edit"
-                            internal
-                            tertiary
+                            subvariant="ghost"
                             onClick={() => {
                               openContentModal(
                                 provider.provider_type,

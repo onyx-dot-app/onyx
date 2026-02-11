@@ -3,10 +3,10 @@
 import { useState, useMemo, useRef, useLayoutEffect, useEffect } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import Modal from "@/refresh-components/Modal";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import Text from "@/refresh-components/texts/Text";
 import { SvgDownload, SvgMaximize2, SvgX } from "@opal/icons";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 
 export interface ExpandableTextDisplayProps {
@@ -236,8 +236,9 @@ export default function ExpandableTextDisplay({
 
         <div className="flex justify-end items-end mt-1 w-8">
           {isTruncated && (
-            <IconButton
-              internal
+            <Button
+              subvariant="ghost"
+              size="compact"
               icon={SvgMaximize2}
               tooltip="View Full Text"
               onClick={() => setIsModalOpen(true)}
@@ -264,9 +265,10 @@ export default function ExpandableTextDisplay({
               </DialogPrimitive.Description>
             </div>
             <DialogPrimitive.Close asChild>
-              <IconButton
+              <Button
                 icon={SvgX}
-                internal
+                subvariant="ghost"
+                size="compact"
                 onClick={() => setIsModalOpen(false)}
               />
             </DialogPrimitive.Close>
@@ -297,8 +299,9 @@ export default function ExpandableTextDisplay({
                 getCopyText={() => content}
                 tooltip="Copy"
               />
-              <IconButton
-                internal
+              <Button
+                subvariant="ghost"
+                size="compact"
                 icon={SvgDownload}
                 tooltip="Download"
                 onClick={handleDownload}

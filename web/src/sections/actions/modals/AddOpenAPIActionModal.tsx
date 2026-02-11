@@ -10,7 +10,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -271,8 +271,9 @@ function FormContent({
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
-                <IconButton
-                  internal
+                <OpalButton
+                  subvariant="ghost"
+                  size="compact"
                   icon={SvgBracketCurly}
                   tooltip="Format definition"
                   onClick={handleFormat}
@@ -363,9 +364,9 @@ function FormContent({
               alignItems="center"
               width="fit"
             >
-              <IconButton
+              <OpalButton
                 icon={SvgUnplug}
-                tertiary
+                subvariant="ghost"
                 type="button"
                 tooltip="Disable action"
                 onClick={() => {
