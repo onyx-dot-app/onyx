@@ -41,7 +41,8 @@ const LLM_PROVIDER_PAYLOAD = {
 export async function ensureLlmProviderExists(
   ctx: APIRequestContext
 ): Promise<number | null> {
-  const listRes = await ctx.get("/api/llm/provider");
+  // Use the admin endpoint which returns LLMProviderView (includes is_public)
+  const listRes = await ctx.get("/api/admin/llm/provider");
   if (!listRes.ok()) {
     throw new Error(
       `[llmProvider] Failed to list LLM providers: ${listRes.status()}`
@@ -96,7 +97,8 @@ export async function ensureLlmProviderForPage(
   page: Page
 ): Promise<number | null> {
   const baseUrl = process.env.BASE_URL || "http://localhost:3000";
-  const listRes = await page.request.get(`${baseUrl}/api/llm/provider`);
+  // Use the admin endpoint which returns LLMProviderView (includes is_public)
+  const listRes = await page.request.get(`${baseUrl}/api/admin/llm/provider`);
   if (!listRes.ok()) {
     throw new Error(
       `[llmProvider] Failed to list LLM providers: ${listRes.status()}`
