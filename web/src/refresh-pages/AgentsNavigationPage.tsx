@@ -426,7 +426,7 @@ export default function AgentsNavigationPage() {
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title="Agents & Assistants"
-        description="Customize AI behavior and knowledge for you and your team’s use cases."
+        description="Customize AI behavior and knowledge for you and your team's use cases."
         rightChildren={
           <div data-testid="AgentsPage/new-agent-button">
             <Button href="/app/agents/create" leftIcon={SvgPlus}>

@@ -14,7 +14,9 @@ spec:
   maxReplicaCount: {{ .Values.celery_worker_monitoring.autoscaling.maxReplicas | default 10 }}
   pollingInterval: {{ .Values.celery_worker_monitoring.autoscaling.pollingInterval | default 30 }}
   cooldownPeriod: {{ .Values.celery_worker_monitoring.autoscaling.cooldownPeriod | default 300 }}
-  idleReplicaCount: {{ .Values.celery_worker_monitoring.autoscaling.idleReplicaCount | default 1 }}
+  {{- if hasKey .Values.celery_worker_monitoring.autoscaling "idleReplicaCount" }}
+  idleReplicaCount: {{ .Values.celery_worker_monitoring.autoscaling.idleReplicaCount }}
+  {{- end }}
   fallback:
     failureThreshold: {{ .Values.celery_worker_monitoring.autoscaling.failureThreshold | default 3 }}
     replicas: {{ .Values.celery_worker_monitoring.autoscaling.fallbackReplicas | default 1 }}

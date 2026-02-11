@@ -1308,10 +1308,7 @@ function AccountsAccessSettings() {
                         subvariant="secondary"
                         static
                       >
-                        <Interactive.Container
-                          paddingVariant="none"
-                          heightVariant="fit"
-                        >
+                        <Interactive.Container heightVariant="fit">
                           <AttachmentItemLayout
                             icon={SvgKey}
                             title={pat.name}

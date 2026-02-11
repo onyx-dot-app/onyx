@@ -16,6 +16,21 @@ test.describe("Appearance Theme Settings", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
+    // Navigate first so localStorage is accessible (API-based login
+    // doesn't navigate, leaving the page on about:blank).
+    await page.goto("/admin/theme");
+    await page.waitForLoadState("networkidle");
+
+    // Skip the entire test when Enterprise features are not licensed.
+    // The /admin/theme page is gated behind ee_features_enabled and
+    // renders a license-required message instead of the settings form.
+    const eeLocked = page.getByText(
+      "This functionality requires an active Enterprise license."
+    );
+    if (await eeLocked.isVisible({ timeout: 1000 }).catch(() => false)) {
+      test.skip(true, "Enterprise license not active — skipping theme tests");
+    }
+
     // Clear localStorage to ensure consent modal shows
     await page.evaluate(() => {
       localStorage.removeItem("allUsersInitialPopupFlowCompleted");
@@ -24,11 +39,17 @@ test.describe("Appearance Theme Settings", () => {
 
   test.afterEach(async ({ page }) => {
     // Reset settings to defaults
-    await page.goto("http://localhost:3000/admin/theme");
+    await page.goto("/admin/theme");
     await page.waitForLoadState("networkidle");
 
-    // Clear form fields
+    // If the form isn't visible (e.g. EE license not active, or test failed
+    // before navigating here), skip cleanup — there's nothing to reset.
     const appNameInput = page.locator('[data-label="application-name-input"]');
+    if (!(await appNameInput.isVisible({ timeout: 3000 }).catch(() => false))) {
+      return;
+    }
+
+    // Clear form fields
     await appNameInput.clear();
 
     const greetingInput = page.locator('[data-label="greeting-message-input"]');
@@ -70,11 +91,7 @@ test.describe("Appearance Theme Settings", () => {
   test("admin configures branding and verifies across pages", async ({
     page,
   }) => {
-    // 1. Navigate to theme page
-    await page.goto("http://localhost:3000/admin/theme");
-    await page.waitForLoadState("networkidle");
-
-    // 2. Fill in Application Name
+    // 1. Fill in Application Name (page already navigated in beforeEach)
     const appNameInput = page.locator('[data-label="application-name-input"]');
     await appNameInput.fill(TEST_VALUES.applicationName);
 
@@ -154,7 +171,7 @@ test.describe("Appearance Theme Settings", () => {
     await page.evaluate(() => {
       localStorage.removeItem("allUsersInitialPopupFlowCompleted");
     });
-    await page.goto("http://localhost:3000/app");
+    await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
     // 16. Handle consent modal

@@ -1,10 +1,10 @@
-import { chromium, FullConfig, request } from "@playwright/test";
-import { loginAs } from "./utils/auth";
+import { FullConfig, request } from "@playwright/test";
 import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
   TEST_USER_CREDENTIALS,
 } from "./constants";
+import { OnyxApiClient } from "./utils/onyxApiClient";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
@@ -79,6 +79,34 @@ async function ensureUserExists(
 }
 
 /**
+ * Log in via the API and save the resulting cookies as a Playwright storage
+ * state file.  No browser is needed — this uses Playwright's lightweight
+ * request context, which is much faster and produces no console noise.
+ */
+async function apiLoginAndSaveState(
+  baseURL: string,
+  email: string,
+  password: string,
+  storageStatePath: string
+): Promise<void> {
+  const ctx = await request.newContext({ baseURL });
+  try {
+    const res = await ctx.post("/api/auth/login", {
+      form: { username: email, password },
+    });
+    if (!res.ok()) {
+      const body = await res.text();
+      throw new Error(
+        `[global-setup] Login failed for ${email}: ${res.status()} ${body}`
+      );
+    }
+    await ctx.storageState({ path: storageStatePath });
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/**
  * Promote a user to admin via the manage API.
  * Requires an authenticated context (admin storage state).
  */
@@ -147,14 +175,13 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.password
   );
 
-  // ── Login and save storage state ─────────────────────────────────────
-  const browser = await chromium.launch();
-
-  const adminContext = await browser.newContext({ baseURL });
-  const adminPage = await adminContext.newPage();
-  await loginAs(adminPage, "admin");
-  await adminContext.storageState({ path: "admin_auth.json" });
-  await adminContext.close();
+  // ── Login via API and save storage state ───────────────────────────
+  await apiLoginAndSaveState(
+    baseURL,
+    TEST_ADMIN_CREDENTIALS.email,
+    TEST_ADMIN_CREDENTIALS.password,
+    "admin_auth.json"
+  );
 
   // Promote admin2 now that we have an admin session
   await promoteToAdmin(
@@ -163,19 +190,33 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.email
   );
 
-  const userContext = await browser.newContext({ baseURL });
-  const userPage = await userContext.newPage();
-  await loginAs(userPage, "user");
-  await userContext.storageState({ path: "user_auth.json" });
-  await userContext.close();
+  await apiLoginAndSaveState(
+    baseURL,
+    TEST_USER_CREDENTIALS.email,
+    TEST_USER_CREDENTIALS.password,
+    "user_auth.json"
+  );
 
-  const admin2Context = await browser.newContext({ baseURL });
-  const admin2Page = await admin2Context.newPage();
-  await loginAs(admin2Page, "admin2");
-  await admin2Context.storageState({ path: "admin2_auth.json" });
-  await admin2Context.close();
+  await apiLoginAndSaveState(
+    baseURL,
+    TEST_ADMIN2_CREDENTIALS.email,
+    TEST_ADMIN2_CREDENTIALS.password,
+    "admin2_auth.json"
+  );
 
-  await browser.close();
+  // ── Ensure a public LLM provider exists ───────────────────────────
+  // Many tests depend on a default LLM being configured (file uploads,
+  // assistant creation, etc.).  Re-use the admin session we just saved.
+  const adminCtx = await request.newContext({
+    baseURL,
+    storageState: "admin_auth.json",
+  });
+  try {
+    const client = new OnyxApiClient(adminCtx, baseURL);
+    await client.ensurePublicProvider();
+  } finally {
+    await adminCtx.dispose();
+  }
 }
 
 export default globalSetup;
