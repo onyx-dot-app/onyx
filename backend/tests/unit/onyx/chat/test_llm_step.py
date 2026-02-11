@@ -165,11 +165,8 @@ class TestExtractToolCallsFromResponseText:
     def _placement(self) -> Placement:
         return Placement(turn_index=0, tab_index=0, sub_turn_index=None)
 
-    def test_collapses_exact_duplicated_sequence(self) -> None:
-        response_text = (
-            '{"name":"internal_search","arguments":{"queries":["alpha"]}}'
-            '{"name":"internal_search","arguments":{"queries":["alpha"]}}'
-        )
+    def test_collapses_nested_arguments_duplicate(self) -> None:
+        response_text = '{"name":"internal_search","arguments":{"queries":["alpha"]}}'
         tool_calls = extract_tool_calls_from_response_text(
             response_text=response_text,
             tool_definitions=self._tool_defs(),
@@ -195,4 +192,22 @@ class TestExtractToolCallsFromResponseText:
         assert [call.tool_args for call in tool_calls] == [
             {"queries": ["alpha"]},
             {"queries": ["beta"]},
+        ]
+
+    def test_keeps_intentional_duplicate_tool_calls(self) -> None:
+        response_text = "\n".join(
+            [
+                '{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+                '{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+            ]
+        )
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 2
+        assert [call.tool_args for call in tool_calls] == [
+            {"queries": ["alpha"]},
+            {"queries": ["alpha"]},
         ]
