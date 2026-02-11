@@ -1,4 +1,4 @@
-import { Page, expect, APIResponse } from "@playwright/test";
+import { APIRequestContext, expect, APIResponse } from "@playwright/test";
 
 /**
  * API Client for Onyx backend operations in E2E tests.
@@ -44,19 +44,21 @@ import { Page, expect, APIResponse } from "@playwright/test";
  *
  * **Usage Example:**
  * ```typescript
- * const client = new OnyxApiClient(page);
- * const { ccPairId } = await client.createFileConnector("Test Connector");
- * const docSetId = await client.createDocumentSet("Test Set", [ccPairId]);
- * await client.deleteDocumentSet(docSetId);
- * await client.deleteCCPair(ccPairId);
+ * // From a test with a Page:
+ * const client = new OnyxApiClient(page.request);
+ *
+ * // From global-setup with a standalone context:
+ * const ctx = await request.newContext({ baseURL, storageState: "admin_auth.json" });
+ * const client = new OnyxApiClient(ctx);
  * ```
  *
- * @param page - Playwright Page instance with authenticated session
+ * @param request - Playwright APIRequestContext with authenticated session
+ *                  (e.g. `page.request`, `context.request`, or `request.newContext()`)
  */
 export class OnyxApiClient {
   private baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api`;
 
-  constructor(private page: Page) {}
+  constructor(private request: APIRequestContext) {}
 
   /**
    * Generic GET request to the API.
@@ -65,7 +67,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async get(endpoint: string): Promise<APIResponse> {
-    return await this.page.request.get(`${this.baseUrl}${endpoint}`);
+    return await this.request.get(`${this.baseUrl}${endpoint}`);
   }
 
   /**
@@ -76,7 +78,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async post(endpoint: string, data?: any): Promise<APIResponse> {
-    return await this.page.request.post(`${this.baseUrl}${endpoint}`, {
+    return await this.request.post(`${this.baseUrl}${endpoint}`, {
       data,
     });
   }
@@ -88,7 +90,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async delete(endpoint: string): Promise<APIResponse> {
-    return await this.page.request.delete(`${this.baseUrl}${endpoint}`);
+    return await this.request.delete(`${this.baseUrl}${endpoint}`);
   }
 
   /**
@@ -99,7 +101,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async put(endpoint: string, data?: any): Promise<APIResponse> {
-    return await this.page.request.put(`${this.baseUrl}${endpoint}`, {
+    return await this.request.put(`${this.baseUrl}${endpoint}`, {
       data,
     });
   }
@@ -374,7 +376,7 @@ export class OnyxApiClient {
     providerName: string,
     groupId: number
   ): Promise<number> {
-    const response = await this.page.request.put(
+    const response = await this.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
         data: {
@@ -434,7 +436,7 @@ export class OnyxApiClient {
       return null;
     }
 
-    const response = await this.page.request.put(
+    const response = await this.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
         data: {
@@ -544,7 +546,7 @@ export class OnyxApiClient {
     role: "admin" | "curator" | "global_curator" | "basic",
     explicitOverride = false
   ): Promise<void> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/set-user-role`,
       {
         data: {
@@ -559,7 +561,7 @@ export class OnyxApiClient {
   }
 
   async deleteMcpServer(serverId: number): Promise<boolean> {
-    const response = await this.page.request.delete(
+    const response = await this.request.delete(
       `${this.baseUrl}/admin/mcp/server/${serverId}`
     );
     const success = await this.handleResponseSoft(
@@ -573,7 +575,7 @@ export class OnyxApiClient {
   }
 
   async deleteAssistant(assistantId: number): Promise<boolean> {
-    const response = await this.page.request.delete(
+    const response = await this.request.delete(
       `${this.baseUrl}/persona/${assistantId}`
     );
     const success = await this.handleResponseSoft(
@@ -636,16 +638,13 @@ export class OnyxApiClient {
   }
 
   async registerUser(email: string, password: string): Promise<{ id: string }> {
-    const response = await this.page.request.post(
-      `${this.baseUrl}/auth/register`,
-      {
-        data: {
-          email,
-          username: email,
-          password,
-        },
-      }
-    );
+    const response = await this.request.post(`${this.baseUrl}/auth/register`, {
+      data: {
+        email,
+        username: email,
+        password,
+      },
+    });
     const data = await this.handleResponse<{ id: string }>(
       response,
       `Failed to register user ${email}`
@@ -658,7 +657,7 @@ export class OnyxApiClient {
     email: string;
     role: string;
   } | null> {
-    const response = await this.page.request.get(
+    const response = await this.request.get(
       `${this.baseUrl}/manage/users/accepted`,
       {
         params: {
@@ -686,7 +685,7 @@ export class OnyxApiClient {
     userId: string,
     isCurator: boolean = true
   ): Promise<void> {
-    const response = await this.page.request.post(
+    const response = await this.request.post(
       `${this.baseUrl}/manage/admin/user-group/${userGroupId}/set-curator`,
       {
         data: {
@@ -898,7 +897,7 @@ export class OnyxApiClient {
     guild_name: string | null;
     enabled: boolean;
   }> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildId}`,
       { data: updates }
     );
@@ -973,7 +972,7 @@ export class OnyxApiClient {
     channel_name: string;
     enabled: boolean;
   }> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildConfigId}/channels/${channelConfigId}`,
       { data: updates }
     );

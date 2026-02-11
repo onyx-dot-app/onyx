@@ -90,7 +90,7 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
     // Ensure a public LLM provider exists
     createdProviderId = await adminClient.ensurePublicProvider();
@@ -120,7 +120,7 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
     if (createdProviderId !== null) {
       await adminClient.deleteProvider(createdProviderId);
@@ -512,7 +512,7 @@ test.describe("Default Assistant MCP Integration", () => {
     const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
     expect(assistantId).not.toBeNull();
 
-    const client = new OnyxApiClient(page);
+    const client = new OnyxApiClient(page.request);
     const assistant = await client.getAssistant(Number(assistantId));
     const hasMcpTool = assistant.tools.some(
       (tool) => tool.mcp_server_id === serverId

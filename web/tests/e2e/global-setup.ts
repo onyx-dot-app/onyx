@@ -4,7 +4,7 @@ import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_USER_CREDENTIALS,
 } from "./constants";
-import { ensureLlmProviderExists } from "./utils/llmProvider";
+import { OnyxApiClient } from "./utils/onyxApiClient";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
@@ -212,7 +212,8 @@ async function globalSetup(config: FullConfig) {
     storageState: "admin_auth.json",
   });
   try {
-    await ensureLlmProviderExists(adminCtx);
+    const client = new OnyxApiClient(adminCtx);
+    await client.ensurePublicProvider();
   } finally {
     await adminCtx.dispose();
   }

@@ -35,7 +35,7 @@ export const test = base.extend<{
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const client = new OnyxApiClient(page);
+    const client = new OnyxApiClient(page.request);
     const createdId = await client.ensurePublicProvider();
     await use(createdId);
 

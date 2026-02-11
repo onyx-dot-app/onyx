@@ -1056,7 +1056,7 @@ test.describe("MCP OAuth flows", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
     try {
       const existingServers = await adminClient.listMcpServers();
       for (const server of existingServers) {
@@ -1128,7 +1128,7 @@ test.describe("MCP OAuth flows", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
     if (adminArtifacts?.assistantId) {
       await adminClient.deleteAssistant(adminArtifacts.assistantId);
@@ -1180,7 +1180,7 @@ test.describe("MCP OAuth flows", () => {
       { email: TEST_ADMIN_CREDENTIALS.email, role: "admin" },
       "AdminFlow primary login"
     );
-    const adminApiClient = new OnyxApiClient(page);
+    const adminApiClient = new OnyxApiClient(page.request);
     logStep("Logged in as admin");
 
     const serverName = `PW MCP Admin ${Date.now()}`;
@@ -1443,7 +1443,7 @@ test.describe("MCP OAuth flows", () => {
       "CuratorFlow primary login"
     );
     logStep("Logged in as curator");
-    const curatorApiClient = new OnyxApiClient(page);
+    const curatorApiClient = new OnyxApiClient(page.request);
 
     const serverName = `PW MCP Curator ${Date.now()}`;
     const assistantName = `PW Curator Assistant ${Date.now()}`;
