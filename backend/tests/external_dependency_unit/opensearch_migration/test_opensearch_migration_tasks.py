@@ -837,3 +837,40 @@ class TestSanitizedDocIdResolution:
 
         finally:
             _delete_test_documents_with_commit(db_session, [document])
+
+    def test_raises_when_sanitized_id_matches_another_document(
+        self,
+        db_session: Session,
+    ) -> None:
+        """
+        Tests that the function raises when a sanitized ID matches another
+        document's original ID.
+        """
+        # Precondition.
+        # Create a document with a single quote in its ID, and another document
+        # with that string as its ID.
+        original_id = "test_doc_with'quote"
+        sanitized_id = "test_doc_with_quote"
+        document_bad = Document(
+            id=original_id,
+            semantic_id=original_id,
+            chunk_count=1,
+        )
+        document_fine = Document(
+            id=sanitized_id,
+            semantic_id=sanitized_id,
+            chunk_count=1,
+        )
+        try:
+            db_session.add(document_bad)
+            db_session.add(document_fine)
+            db_session.commit()
+
+            # Under test.
+            with pytest.raises(RuntimeError):
+                build_sanitized_to_original_doc_id_mapping(db_session)
+
+        finally:
+            _delete_test_documents_with_commit(
+                db_session, [document_bad, document_fine]
+            )
