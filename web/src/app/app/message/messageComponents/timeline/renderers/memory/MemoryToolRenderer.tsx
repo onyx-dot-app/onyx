@@ -10,6 +10,8 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 /**
  * MemoryToolRenderer - Renders memory tool execution steps
@@ -27,8 +29,16 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   children,
 }) => {
   const memoryState = constructCurrentMemoryState(packets);
-  const { hasStarted, noAccess, memoryText, operation, isComplete } =
-    memoryState;
+  const {
+    hasStarted,
+    noAccess,
+    memoryText,
+    operation,
+    isComplete,
+    memoryId,
+    index,
+  } = memoryState;
+  const memoriesModal = useCreateModal();
   const isHighlight = renderType === RenderType.HIGHLIGHT;
 
   if (!hasStarted) {
@@ -86,6 +96,12 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
 
   const memoryContent = (
     <div className="flex flex-col">
+      <memoriesModal.Provider>
+        <MemoriesModal
+          initialTargetMemoryId={memoryId}
+          initialTargetIndex={index}
+        />
+      </memoriesModal.Provider>
       {memoryText ? (
         <div className={cn("w-full flex")}>
           <div className="flex-1 min-w-0">
@@ -93,9 +109,17 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
               {memoryText}
             </Text>
           </div>
-          {/* Expand button - only show when content is truncated */}
+          {/* Expand button */}
           <div className="flex justify-end items-end mt-1 w-8">
-            <IconButton internal icon={SvgMaximize2} tooltip="View Memories" />
+            <IconButton
+              internal
+              icon={SvgMaximize2}
+              tooltip="View Memories"
+              onClick={(e) => {
+                e.stopPropagation();
+                memoriesModal.toggle(true);
+              }}
+            />
           </div>
         </div>
       ) : (

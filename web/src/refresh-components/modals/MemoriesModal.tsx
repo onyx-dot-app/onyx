@@ -124,7 +124,6 @@ interface MemoriesModalProps {
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
   initialTargetIndex?: number | null;
-  onTargetHandled?: () => void;
 }
 
 export default function MemoriesModal({
@@ -133,7 +132,6 @@ export default function MemoriesModal({
   onClose,
   initialTargetMemoryId,
   initialTargetIndex,
-  onTargetHandled,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const { popup, setPopup } = usePopup();
@@ -143,7 +141,13 @@ export default function MemoriesModal({
   const { user, refreshUser, updateUserPersonalization } = useUser();
   const { handleSavePersonalization } = useUserPersonalization(
     user,
-    updateUserPersonalization
+    updateUserPersonalization,
+    {
+      onSuccess: () =>
+        setPopup({ message: "Preferences saved", type: "success" }),
+      onError: () =>
+        setPopup({ message: "Failed to save preferences", type: "error" }),
+    }
   );
 
   useEffect(() => {
@@ -273,7 +277,6 @@ export default function MemoriesModal({
                     shouldHighlight={memory.id === highlightMemoryId}
                     onHighlighted={() => {
                       setHighlightMemoryId(null);
-                      onTargetHandled?.();
                     }}
                   />
                   {memory.isNew && <Separator noPadding />}
