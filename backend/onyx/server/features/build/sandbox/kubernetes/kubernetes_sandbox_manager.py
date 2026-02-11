@@ -1207,7 +1207,6 @@ ln -sf {symlink_target} {session_path}/files
             )
             files_symlink_setup = f"""
 # Create filtered files directory with exclusions
-echo "Creating filtered files structure with exclusions"
 mkdir -p {session_path}/files
 
 # Symlink all top-level directories except user_library
@@ -1219,11 +1218,10 @@ for item in /workspace/files/*; do
     fi
 done
 
-# Excluded paths
+# Excluded paths (space-separated)
 EXCLUDED_PATHS="{excluded_paths_str}"
 
 # Recursively create symlinks for non-excluded files
-# Using a simple approach: iterate and check each path against exclusions
 create_filtered_symlinks() {{
     src_dir="$1"
     dst_dir="$2"
@@ -1245,21 +1243,18 @@ create_filtered_symlinks() {{
                 excluded=1
                 break
             fi
-            # Check if rel_path starts with excl/ (is a child of excluded dir)
             case "$rel_path" in
                 "$excl"/*) excluded=1; break ;;
             esac
         done
 
         if [ $excluded -eq 1 ]; then
-            echo "Excluding: $rel_path"
             continue
         fi
 
         if [ -d "$item" ]; then
             mkdir -p "$dst_dir/$name"
             create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
-            # Remove empty directories
             rmdir "$dst_dir/$name" 2>/dev/null || true
         else
             ln -sf "$item" "$dst_dir/$name"
@@ -1270,7 +1265,6 @@ create_filtered_symlinks() {{
 if [ -d "/workspace/files/user_library" ]; then
     mkdir -p {session_path}/files/user_library
     create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
-    # Remove user_library if empty
     rmdir {session_path}/files/user_library 2>/dev/null || true
 fi
 """
@@ -2087,8 +2081,8 @@ echo "Session config regeneration complete"
 
         This is safe to call multiple times - s5cmd sync is idempotent.
 
-        IMPORTANT: All files are synced to /workspace/files/ regardless of
-        exclude_paths. Session visibility is controlled via filtered symlinks
+        Note: For user_library source, --delete is NOT used to preserve all
+        user files. Session visibility is controlled via filtered symlinks
         in setup_session_workspace(), not during sync.
 
         Args:
@@ -2097,9 +2091,8 @@ echo "Session config regeneration complete"
             tenant_id: The tenant ID (for S3 path construction)
             source: Optional source type (e.g., "gmail", "google_drive").
                     If None, syncs all sources. If specified, only syncs
-                    that source's directory.
-            exclude_paths: DEPRECATED - ignored. Kept for API compatibility.
-                          Session visibility is controlled via symlinks.
+                    that source's directory. For user_library, --delete
+                    is disabled to preserve toggled-off files.
 
         Returns:
             True if sync was successful, False otherwise.

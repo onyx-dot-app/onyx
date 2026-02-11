@@ -299,12 +299,10 @@ def _get_disabled_user_library_paths(db_session: "Session", user_id: str) -> lis
         if not doc_metadata.get("sync_disabled"):
             continue
 
-        # Skip directories - we only need to exclude actual files
-        if doc_metadata.get("is_directory"):
-            continue
-
         # Extract file path from semantic_id
         # semantic_id format: "user_library/path/to/file.xlsx"
+        # Include both files AND directories - the shell script handles
+        # directory exclusion by checking if paths start with "excl/"
         semantic_id = doc.semantic_id or ""
         if semantic_id.startswith("user_library"):
             file_path = semantic_id[len("user_library") :]
