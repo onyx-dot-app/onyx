@@ -1911,7 +1911,7 @@ export interface LoopioConfig {
 export interface FileConfig {
   file_locations: string[];
   file_names: string[];
-  zip_metadata: Record<string, any>;
+  zip_metadata_file_id: string | null;
 }
 
 export interface ZulipConfig {
