@@ -402,6 +402,7 @@ httpx==0.28.1
     #   google-genai
     #   httpx-oauth
     #   langfuse
+    #   langgraph-sdk
     #   langsmith
     #   litellm
     #   mcp
@@ -495,27 +496,36 @@ kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-langchain==0.3.23
+langchain==1.2.10
     # via onyx
 langchain-core==1.2.11
     # via
     #   langchain
     #   langchain-text-splitters
+    #   langgraph
+    #   langgraph-checkpoint
+    #   langgraph-prebuilt
     #   onyx
-langchain-text-splitters==0.3.9
-    # via
-    #   langchain
-    #   onyx
+langchain-text-splitters==1.1.0
+    # via onyx
 langchainhub==0.1.21
     # via onyx
 langdetect==1.0.9
     # via unstructured
 langfuse==3.10.0
     # via onyx
-langsmith==0.3.45
+langgraph==1.0.8
+    # via langchain
+langgraph-checkpoint==4.0.0
     # via
-    #   langchain
-    #   langchain-core
+    #   langgraph
+    #   langgraph-prebuilt
+langgraph-prebuilt==1.0.7
+    # via langgraph
+langgraph-sdk==0.3.5
+    # via langgraph
+langsmith==0.3.45
+    # via langchain-core
 lazy-imports==1.0.1
     # via onyx
 legacy-cgi==2.6.4 ; python_full_version >= '3.13'
@@ -686,8 +696,12 @@ opentelemetry-semantic-conventions==0.60b1
     # via
     #   opentelemetry-instrumentation
     #   opentelemetry-sdk
-orjson==3.11.4 ; platform_python_implementation != 'PyPy'
-    # via langsmith
+orjson==3.11.4
+    # via
+    #   langgraph-sdk
+    #   langsmith
+ormsgpack==1.12.2
+    # via langgraph-checkpoint
 packaging==24.2
     # via
     #   dask
@@ -808,6 +822,7 @@ pydantic==2.11.7
     #   langchain
     #   langchain-core
     #   langfuse
+    #   langgraph
     #   langsmith
     #   litellm
     #   mcp
@@ -936,7 +951,6 @@ pyyaml==6.0.3
     #   huggingface-hub
     #   jsonschema-path
     #   kubernetes
-    #   langchain
     #   langchain-core
 rapidfuzz==3.13.0
     # via
@@ -975,7 +989,6 @@ requests==2.32.5
     #   jira
     #   jsonschema-path
     #   kubernetes
-    #   langchain
     #   langchainhub
     #   langfuse
     #   langsmith
@@ -1083,7 +1096,6 @@ sqlalchemy==2.0.15
     # via
     #   alembic
     #   fastapi-users-db-sqlalchemy
-    #   langchain
     #   onyx
 sse-starlette==3.0.3
     # via mcp
@@ -1241,6 +1253,8 @@ urllib3==2.6.3
     #   sentry-sdk
     #   trafilatura
     #   types-requests
+uuid-utils==0.14.0
+    # via langchain-core
 uvicorn==0.35.0
     # via
     #   fastmcp
@@ -1285,6 +1299,8 @@ xmlsec==1.3.14
     #   python3-saml
 xmltodict==1.0.2
     # via ddtrace
+xxhash==3.6.0
+    # via langgraph
 yarl==1.22.0
     # via aiohttp
 zeep==4.3.2
