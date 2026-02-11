@@ -985,12 +985,16 @@ def test_temporary_env_cleanup_on_exception(monkeypatch: pytest.MonkeyPatch) -> 
         assert "THIS_IS_RANDOM" not in os.environ
 
 
-def test_multithreaded_custom_config_isolation(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("use_stream", [False, True], ids=["invoke", "stream"])
+def test_multithreaded_custom_config_isolation(
+    monkeypatch: pytest.MonkeyPatch,
+    use_stream: bool,
+) -> None:
     """Verify the env lock prevents concurrent LLM calls from seeing each other's custom_config.
 
-    Two LitellmLLM instances with different custom_config dicts invoke concurrently.
-    The _env_lock in temporary_env_and_lock serializes their access so each call only
-    ever sees its own env vars—never the other's.
+    Two LitellmLLM instances with different custom_config dicts call invoke/stream
+    concurrently. The _env_lock in temporary_env_and_lock serializes their access so
+    each call only ever sees its own env vars—never the other's.
     """
     # Ensure these keys start unset
     monkeypatch.delenv("SHARED_KEY", raising=False)
@@ -1034,8 +1038,8 @@ def test_multithreaded_custom_config_isolation(monkeypatch: pytest.MonkeyPatch) 
         custom_config=CONFIG_B,
     )
 
-    # invoke() uses stream=True internally when custom_config is set,
-    # so the mock must return stream chunks.
+    # Both invoke (with custom_config) and stream use stream=True at the
+    # litellm level, so the mock must return stream chunks.
     mock_stream_chunks = [
         litellm.ModelResponse(
             id="chatcmpl-123",
@@ -1071,7 +1075,10 @@ def test_multithreaded_custom_config_isolation(monkeypatch: pytest.MonkeyPatch) 
     def run_llm(llm: LitellmLLM) -> None:
         try:
             messages: LanguageModelInput = [UserMessage(content="Hi")]
-            llm.invoke(messages)
+            if use_stream:
+                list(llm.stream(messages))
+            else:
+                llm.invoke(messages)
         except Exception as e:
             errors.append(e)
 
