@@ -6,6 +6,7 @@ import onyx.tracing.framework._error_tracing as _error_tracing
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -220,7 +221,7 @@ def run_tool_calls(
     tools: list[Tool],
     # The stuff below is needed for the different individual built-in tools
     message_history: list[ChatMessageSimple],
-    memories: list[str] | None,
+    user_memory_context: UserMemoryContext | None,
     user_info: str | None,
     citation_mapping: dict[int, str],
     next_citation_num: int,
@@ -252,7 +253,7 @@ def run_tool_calls(
         tools: List of available tool instances.
         message_history: Chat message history (used to find the most recent user query
             for `SearchTool` override kwargs).
-        memories: User memories, if available (passed through to `SearchTool`).
+        user_memory_context: User memory context, if available (passed through to `SearchTool`).
         user_info: User information string, if available (passed through to `SearchTool`).
         citation_mapping: Current citation number to URL mapping. May be updated with
             new citations produced by search tools.
@@ -342,7 +343,7 @@ def run_tool_calls(
                 starting_citation_num=starting_citation_num,
                 original_query=last_user_message,
                 message_history=minimal_history,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 user_info=user_info,
                 skip_query_expansion=skip_search_query_expansion,
             )

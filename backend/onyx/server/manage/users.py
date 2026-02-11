@@ -78,6 +78,7 @@ from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import DefaultAppModeRequest
+from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
@@ -595,11 +596,16 @@ def get_valid_domains(
 
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
+    include_api_keys: bool = False,
     _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     users = get_all_users(db_session)
-    return [MinimalUserSnapshot(id=user.id, email=user.email) for user in users]
+    return [
+        MinimalUserSnapshot(id=user.id, email=user.email)
+        for user in users
+        if include_api_keys or not is_api_key_email_address(user.email)
+    ]
 
 
 @router.get("/get-user-role", tags=PUBLIC_API_TAGS)
@@ -851,9 +857,16 @@ def update_user_personalization_api(
         if request.use_memories is not None
         else current_use_memories
     )
-    existing_memories = [memory.memory_text for memory in user.memories]
+    existing_memories = [
+        MemoryItem(id=memory.id, content=memory.memory_text) for memory in user.memories
+    ]
     new_memories = (
         request.memories if request.memories is not None else existing_memories
+    )
+    new_user_preferences = (
+        request.user_preferences
+        if request.user_preferences is not None
+        else user.user_preferences
     )
 
     update_user_personalization(
@@ -862,6 +875,7 @@ def update_user_personalization_api(
         personal_role=new_role,
         use_memories=new_use_memories,
         memories=new_memories,
+        user_preferences=new_user_preferences,
         db_session=db_session,
     )
 

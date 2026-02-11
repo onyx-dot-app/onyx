@@ -44,6 +44,15 @@ const buttonClasses = (transient: boolean | undefined) =>
         ],
         disabled: ["bg-transparent"],
       },
+      small: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
+      },
     },
     action: {
       primary: {
@@ -74,6 +83,15 @@ const buttonClasses = (transient: boolean | undefined) =>
         disabled: ["bg-background-neutral-02"],
       },
       internal: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
+      },
+      small: {
         enabled: [
           "bg-transparent",
           "hover:bg-background-tint-00",
@@ -120,6 +138,15 @@ const buttonClasses = (transient: boolean | undefined) =>
         ],
         disabled: ["bg-transparent"],
       },
+      small: {
+        enabled: [
+          "bg-transparent",
+          "hover:bg-background-tint-00",
+          transient && "bg-background-tint-00",
+          "active:bg-background-tint-00",
+        ],
+        disabled: ["bg-transparent"],
+      },
     },
   }) as const;
 
@@ -149,6 +176,15 @@ const iconClasses = (transient: boolean | undefined) =>
         disabled: ["stroke-text-01"],
       },
       internal: {
+        enabled: [
+          "stroke-text-02",
+          "group-hover/IconButton:stroke-text-04",
+          transient && "stroke-text-04",
+          "group-active/IconButton:stroke-text-05",
+        ],
+        disabled: ["stroke-text-01"],
+      },
+      small: {
         enabled: [
           "stroke-text-02",
           "group-hover/IconButton:stroke-text-04",
@@ -190,6 +226,15 @@ const iconClasses = (transient: boolean | undefined) =>
         ],
         disabled: ["stroke-action-link-02"],
       },
+      small: {
+        enabled: [
+          "stroke-action-link-05",
+          "group-hover/IconButton:stroke-action-link-05",
+          transient && "stroke-action-link-05",
+          "group-active/IconButton:stroke-action-link-06",
+        ],
+        disabled: ["stroke-action-link-02"],
+      },
     },
     danger: {
       primary: {
@@ -223,6 +268,15 @@ const iconClasses = (transient: boolean | undefined) =>
         ],
         disabled: ["stroke-action-danger-02"],
       },
+      small: {
+        enabled: [
+          "stroke-action-danger-05",
+          "group-hover/IconButton:stroke-action-danger-05",
+          transient && "stroke-action-danger-05",
+          "group-active/IconButton:stroke-action-danger-06",
+        ],
+        disabled: ["stroke-action-danger-02"],
+      },
     },
   }) as const;
 
@@ -238,6 +292,7 @@ export interface IconButtonProps
   secondary?: boolean;
   tertiary?: boolean;
   internal?: boolean;
+  small?: boolean;
 
   // Button size
   large?: boolean;
@@ -266,6 +321,7 @@ export default function IconButton({
   secondary,
   tertiary,
   internal,
+  small,
 
   transient,
   disabled,
@@ -295,7 +351,9 @@ export default function IconButton({
         ? "tertiary"
         : internal
           ? "internal"
-          : "primary";
+          : small
+            ? "small"
+            : "primary";
   const abled = disabled ? "disabled" : "enabled";
 
   const buttonClass = useMemo(
@@ -312,9 +370,9 @@ export default function IconButton({
       type="button"
       className={cn(
         "flex items-center justify-center h-fit w-fit group/IconButton",
-        internal ? "p-1" : "p-2",
+        small || internal ? "p-1" : "p-2",
         disabled && "cursor-not-allowed",
-        internal ? "rounded-08" : "rounded-12",
+        small || internal ? "rounded-08" : "rounded-12",
         buttonClass,
         className
       )}
@@ -330,7 +388,13 @@ export default function IconButton({
       disabled={disabled}
       {...props}
     >
-      <Icon className={cn("h-[1rem] w-[1rem]", iconClass, iconClassName)} />
+      <Icon
+        className={cn(
+          small ? "h-[0.75rem] w-[0.75rem]" : "h-[1rem] w-[1rem]",
+          iconClass,
+          iconClassName
+        )}
+      />
     </button>
   );
 

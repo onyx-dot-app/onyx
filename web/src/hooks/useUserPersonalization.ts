@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { User, UserPersonalization } from "@/lib/types";
+import { MemoryItem, User, UserPersonalization } from "@/lib/types";
 
 const DEFAULT_PERSONALIZATION: UserPersonalization = {
   name: "",
   role: "",
   memories: [],
   use_memories: true,
+  user_preferences: "",
 };
 
 function derivePersonalizationFromUser(user: User | null): UserPersonalization {
@@ -21,6 +22,7 @@ function derivePersonalizationFromUser(user: User | null): UserPersonalization {
     memories: [...(user.personalization.memories ?? [])],
     use_memories:
       user.personalization.use_memories ?? DEFAULT_PERSONALIZATION.use_memories,
+    user_preferences: user.personalization.user_preferences ?? "",
   };
 }
 
@@ -126,10 +128,20 @@ export default function useUserPersonalization(
     }));
   }, []);
 
+  const updateUserPreferences = useCallback((value: string) => {
+    setPersonalizationValues((prev) => ({
+      ...prev,
+      user_preferences: value,
+    }));
+  }, []);
+
   const updateMemoryAtIndex = useCallback((index: number, value: string) => {
     setPersonalizationValues((prev) => {
       const updatedMemories = [...prev.memories];
-      updatedMemories[index] = value;
+      const existing = updatedMemories[index];
+      if (existing) {
+        updatedMemories[index] = { ...existing, content: value };
+      }
       return {
         ...prev,
         memories: updatedMemories,
@@ -140,11 +152,11 @@ export default function useUserPersonalization(
   const addMemory = useCallback(() => {
     setPersonalizationValues((prev) => ({
       ...prev,
-      memories: [...prev.memories, ""],
+      memories: [...prev.memories, { id: null, content: "" }],
     }));
   }, []);
 
-  const setMemories = useCallback((memories: string[]) => {
+  const setMemories = useCallback((memories: MemoryItem[]) => {
     setPersonalizationValues((prev) => ({
       ...prev,
       memories,
@@ -157,8 +169,8 @@ export default function useUserPersonalization(
 
       const valuesToSave = { ...personalizationValues, ...overrides };
       const trimmedMemories = valuesToSave.memories
-        .map((memory) => memory.trim())
-        .filter((memory) => memory.length > 0);
+        .map((memory) => ({ ...memory, content: memory.content.trim() }))
+        .filter((memory) => memory.content.length > 0);
 
       const updatedPersonalization: UserPersonalization = {
         ...valuesToSave,
@@ -191,6 +203,7 @@ export default function useUserPersonalization(
     personalizationValues,
     updatePersonalizationField,
     toggleUseMemories,
+    updateUserPreferences,
     updateMemoryAtIndex,
     addMemory,
     setMemories,

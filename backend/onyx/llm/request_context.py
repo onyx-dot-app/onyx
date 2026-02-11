@@ -15,4 +15,9 @@ def set_llm_mock_response(mock_response: str | None) -> contextvars.Token[str | 
 
 
 def reset_llm_mock_response(token: contextvars.Token[str | None]) -> None:
-    _LLM_MOCK_RESPONSE_CONTEXTVAR.reset(token)
+    try:
+        _LLM_MOCK_RESPONSE_CONTEXTVAR.reset(token)
+    except ValueError:
+        # Streaming requests can cross execution contexts.
+        # Best effort clear to avoid crashing request teardown in integration mode.
+        _LLM_MOCK_RESPONSE_CONTEXTVAR.set(None)

@@ -15,6 +15,7 @@ from onyx.db.models import AccessToken
 from onyx.db.models import Assistant__UserSpecificConfig
 from onyx.db.models import Memory
 from onyx.db.models import User
+from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
 
@@ -174,7 +175,8 @@ def update_user_personalization(
     personal_name: str | None,
     personal_role: str | None,
     use_memories: bool,
-    memories: list[str],
+    memories: list[MemoryItem],
+    user_preferences: str | None,
     db_session: Session,
 ) -> None:
     db_session.execute(
@@ -184,14 +186,38 @@ def update_user_personalization(
             personal_name=personal_name,
             personal_role=personal_role,
             use_memories=use_memories,
+            user_preferences=user_preferences,
         )
     )
 
-    db_session.execute(delete(Memory).where(Memory.user_id == user_id))
+    # ID-based upsert: use real DB IDs from the frontend to match memories.
+    incoming_ids = {m.id for m in memories if m.id is not None}
 
-    if memories:
+    # Delete existing rows not in the incoming set (scoped to user_id)
+    existing_memories = list(
+        db_session.scalars(select(Memory).where(Memory.user_id == user_id)).all()
+    )
+    existing_ids = {mem.id for mem in existing_memories}
+    ids_to_delete = existing_ids - incoming_ids
+    if ids_to_delete:
+        db_session.execute(
+            delete(Memory).where(
+                Memory.id.in_(ids_to_delete),
+                Memory.user_id == user_id,
+            )
+        )
+
+    # Update existing rows whose IDs match
+    existing_by_id = {mem.id: mem for mem in existing_memories}
+    for item in memories:
+        if item.id is not None and item.id in existing_by_id:
+            existing_by_id[item.id].memory_text = item.content
+
+    # Create new rows for items without an ID
+    new_items = [m for m in memories if m.id is None]
+    if new_items:
         db_session.add_all(
-            [Memory(user_id=user_id, memory_text=memory) for memory in memories]
+            [Memory(user_id=user_id, memory_text=item.content) for item in new_items]
         )
 
     db_session.commit()

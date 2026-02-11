@@ -330,12 +330,10 @@ def handle_stream_message_objects(
     else:
         llm_user_identifier = user.email or str(user_id)
 
-    if new_msg_req.mock_llm_response is not None:
-        if not INTEGRATION_TESTS_MODE:
-            raise ValueError(
-                "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
-            )
-        mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
+    if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
+        raise ValueError(
+            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
+        )
 
     try:
         if not new_msg_req.chat_session_id:
@@ -471,7 +469,7 @@ def handle_stream_message_objects(
             # Filter chat_history to only messages after the cutoff
             chat_history = [m for m in chat_history if m.id > cutoff_id]
 
-        memories = get_memories(user, db_session)
+        user_memory_context = get_memories(user, db_session)
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
@@ -480,7 +478,7 @@ def handle_stream_message_objects(
             persona_system_prompt=custom_agent_prompt or "",
             token_counter=token_counter,
             files=new_msg_req.file_descriptors,
-            memories=memories,
+            user_memory_context=user_memory_context,
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
@@ -626,6 +624,11 @@ def handle_stream_message_objects(
                 processing_start_time=processing_start_time,
             )
 
+        # The stream generator can resume on a different worker thread after early yields.
+        # Set this right before launching the LLM loop so run_in_background copies the right context.
+        if new_msg_req.mock_llm_response is not None:
+            mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
+
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
         # for stop signals. run_llm_loop itself doesn't know about stopping.
@@ -667,7 +670,7 @@ def handle_stream_message_objects(
                 custom_agent_prompt=custom_agent_prompt,
                 project_files=extracted_project_files,
                 persona=persona,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,

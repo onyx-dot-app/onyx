@@ -26,7 +26,7 @@ router = APIRouter()
 
 
 @router.get("/health", tags=PUBLIC_API_TAGS)
-def healthcheck() -> StatusResponse:
+async def healthcheck() -> StatusResponse:
     return StatusResponse(success=True, message="ok")
 
 

@@ -28,6 +28,10 @@ const buttonClassNames = {
     normal: "line-item-button-muted",
     emphasized: "line-item-button-muted-emphasized",
   },
+  skeleton: {
+    normal: "line-item-button-skeleton",
+    emphasized: "line-item-button-skeleton-emphasized",
+  },
 } as const;
 
 const textClassNames = {
@@ -36,6 +40,7 @@ const textClassNames = {
   danger: "line-item-text-danger",
   action: "line-item-text-action",
   muted: "line-item-text-muted",
+  skeleton: "line-item-text-skeleton",
 } as const;
 
 const iconClassNames = {
@@ -44,6 +49,7 @@ const iconClassNames = {
   danger: "line-item-icon-danger",
   action: "line-item-icon-action",
   muted: "line-item-icon-muted",
+  skeleton: "line-item-icon-skeleton",
 } as const;
 
 export interface LineItemProps
@@ -56,6 +62,7 @@ export interface LineItemProps
   danger?: boolean;
   action?: boolean;
   muted?: boolean;
+  skeleton?: boolean;
 
   // modifier (makes the background more pronounced when selected).
   emphasized?: boolean;
@@ -66,7 +73,7 @@ export interface LineItemProps
   rightChildren?: React.ReactNode;
   href?: string;
   ref?: React.Ref<HTMLButtonElement>;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 /**
@@ -116,7 +123,7 @@ export interface LineItemProps
  * ```
  *
  * @remarks
- * - Variants are mutually exclusive: only one of `strikethrough`, `danger`, `action`, or `muted` should be used
+ * - Variants are mutually exclusive: only one of `strikethrough`, `danger`, `action`, `muted`, or `skeleton` should be used
  * - The `selected` prop modifies text/icon colors for `main` and `danger` variants
  * - The `emphasized` prop adds background colors when combined with `selected`
  * - The component automatically adds a `data-selected="true"` attribute for custom styling
@@ -127,6 +134,7 @@ export default function LineItem({
   danger,
   action,
   muted,
+  skeleton,
   emphasized,
   icon: Icon,
   description,
@@ -145,7 +153,9 @@ export default function LineItem({
         ? "action"
         : muted
           ? "muted"
-          : "main";
+          : skeleton
+            ? "skeleton"
+            : "main";
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
@@ -154,7 +164,7 @@ export default function LineItem({
       ref={ref}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
-        !!description ? "items-start" : "items-center",
+        !!(children && description) ? "items-start" : "items-center",
         buttonClassNames[variant][emphasisKey]
       )}
       type="button"
@@ -165,31 +175,46 @@ export default function LineItem({
         <div
           className={cn(
             "flex flex-col justify-center items-center h-[1rem] min-w-[1rem]",
-            !!description && "mt-0.5"
+            !!(children && description) && "mt-0.5"
           )}
         >
           <Icon className={cn("h-[1rem] w-[1rem]", iconClassNames[variant])} />
         </div>
       )}
       <Section alignItems="start" gap={0}>
-        <Section flexDirection="row" gap={0.5}>
-          <Truncated
-            mainUiMuted
-            className={cn("text-left w-full", textClassNames[variant])}
-          >
-            {children}
-          </Truncated>
-          {rightChildren && (
-            <Section alignItems="end" width="fit">
-              {rightChildren}
+        {children ? (
+          <>
+            <Section flexDirection="row" gap={0.5}>
+              <Truncated
+                mainUiMuted
+                className={cn("text-left w-full", textClassNames[variant])}
+              >
+                {children}
+              </Truncated>
+              {rightChildren && (
+                <Section alignItems="end" width="fit">
+                  {rightChildren}
+                </Section>
+              )}
             </Section>
-          )}
-        </Section>
-        {description && (
-          <Truncated secondaryBody text03 className="text-left w-full">
-            {description}
-          </Truncated>
-        )}
+            {description && (
+              <Truncated secondaryBody text03 className="text-left w-full">
+                {description}
+              </Truncated>
+            )}
+          </>
+        ) : description ? (
+          <Section flexDirection="row" gap={0.5}>
+            <Truncated secondaryBody text03 className="text-left w-full">
+              {description}
+            </Truncated>
+            {rightChildren && (
+              <Section alignItems="end" width="fit">
+                {rightChildren}
+              </Section>
+            )}
+          </Section>
+        ) : null}
       </Section>
     </button>
   );

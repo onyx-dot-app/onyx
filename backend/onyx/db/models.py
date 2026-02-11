@@ -257,6 +257,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
     use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    user_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
@@ -317,6 +318,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
+        order_by="desc(Memory.id)",
     )
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
         "OAuthUserToken",
@@ -1031,6 +1033,25 @@ class OpenSearchTenantMigrationRecord(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+    # Opaque continuation token from Vespa's Visit API.
+    # NULL means "not started" or "visit completed".
+    vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    total_chunks_migrated: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    migration_completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    enable_opensearch_retrieval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )
 
 

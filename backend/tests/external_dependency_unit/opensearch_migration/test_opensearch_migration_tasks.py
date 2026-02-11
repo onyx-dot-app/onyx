@@ -7,33 +7,29 @@ database with data you care about. Your data will be destroyed.
 """
 
 from collections.abc import Generator
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
+from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.opensearch_migration.constants import (
-    TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
-)
 from onyx.background.celery.tasks.opensearch_migration.tasks import (
-    check_for_documents_for_opensearch_migration_task,
+    migrate_chunks_from_vespa_to_opensearch_task,
 )
-from onyx.background.celery.tasks.opensearch_migration.tasks import (
-    migrate_documents_from_vespa_to_opensearch_task,
+from onyx.background.celery.tasks.opensearch_migration.transformer import (
+    transform_vespa_chunks_to_opensearch_chunks,
 )
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.configs.constants import SOURCE_TYPE
 from onyx.context.search.models import IndexFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import OpenSearchDocumentMigrationStatus
-from onyx.db.enums import OpenSearchTenantMigrationStatus
 from onyx.db.models import Document
 from onyx.db.models import OpenSearchDocumentMigrationRecord
 from onyx.db.models import OpenSearchTenantMigrationRecord
-from onyx.db.opensearch_migration import create_opensearch_migration_records_with_commit
-from onyx.db.opensearch_migration import get_last_opensearch_migration_document_id
+from onyx.db.opensearch_migration import build_sanitized_to_original_doc_id_mapping
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
@@ -317,14 +313,55 @@ def test_embedding_dimension(db_session: Session) -> Generator[int, None, None]:
 
 
 @pytest.fixture(scope="function")
-def test_documents(db_session: Session) -> Generator[list[Document], None, None]:
-    """Creates and cleans test Document records in Postgres."""
-    doc_ids = [f"test_doc_{i}" for i in range(3)]
+def patch_get_vespa_chunks_page_size() -> Generator[int, None, None]:
+    test_page_size = 5
+    with patch(
+        "onyx.background.celery.tasks.opensearch_migration.tasks.GET_VESPA_CHUNKS_PAGE_SIZE",
+        test_page_size,
+    ):
+        yield test_page_size  # Test runs here.
+
+
+@pytest.fixture(scope="function")
+def test_documents(
+    db_session: Session,
+    vespa_document_index: VespaDocumentIndex,
+    opensearch_client: OpenSearchClient,
+    patch_get_vespa_chunks_page_size: int,
+) -> Generator[list[Document], None, None]:
+    """
+    Creates and cleans test Document records in Postgres and the document
+    indices.
+    """
+    # We use a large number of documents >
+    # get_all_raw_document_chunks_paginated's page_size argument in the task.
+    documents_to_create = patch_get_vespa_chunks_page_size * 2
+    doc_ids = [f"test_doc_{i}" for i in range(documents_to_create)]
     documents = _insert_test_documents_with_commit(db_session, doc_ids)
+
+    # NOTE: chunk_count must be passed because index_raw_chunks uses the "new"
+    # chunk ID system (get_uuid_from_chunk_info). Without chunk_count, delete()
+    # falls back to the "old" system (get_uuid_from_chunk_info_old) and won't
+    # find/delete the chunks.
+    for document in documents:
+        vespa_document_index.delete(document.id, chunk_count=CHUNK_COUNT)
+
+    for document in documents:
+        _delete_document_chunks_from_opensearch(
+            opensearch_client, document.id, get_current_tenant_id()
+        )
 
     yield documents  # Test runs here.
 
     # Cleanup.
+    for document in documents:
+        _delete_document_chunks_from_opensearch(
+            opensearch_client, document.id, get_current_tenant_id()
+        )
+
+    for document in documents:
+        vespa_document_index.delete(document.id, chunk_count=CHUNK_COUNT)
+
     _delete_test_documents_with_commit(db_session, documents)
 
 
@@ -362,209 +399,10 @@ def disable_opensearch_indexing_for_onyx() -> Generator[None, None, None]:
         yield  # Test runs here.
 
 
-@pytest.fixture(scope="function")
-def clean_vespa(
-    vespa_document_index: VespaDocumentIndex, test_documents: list[Document]
-) -> Generator[None, None, None]:
-    # NOTE: chunk_count must be passed because index_raw_chunks uses the "new"
-    # chunk ID system (get_uuid_from_chunk_info). Without chunk_count, delete()
-    # falls back to the "old" system (get_uuid_from_chunk_info_old) and won't
-    # find/delete the chunks.
-    for document in test_documents:
-        vespa_document_index.delete(document.id, chunk_count=CHUNK_COUNT)
-    yield  # Test runs here.
-    for document in test_documents:
-        vespa_document_index.delete(document.id, chunk_count=CHUNK_COUNT)
+class TestMigrateChunksFromVespaToOpenSearchTask:
+    """Tests migrate_chunks_from_vespa_to_opensearch_task."""
 
-
-@pytest.fixture(scope="function")
-def clean_opensearch(
-    opensearch_client: OpenSearchClient, test_documents: list[Document]
-) -> Generator[None, None, None]:
-    for document in test_documents:
-        _delete_document_chunks_from_opensearch(
-            opensearch_client, document.id, get_current_tenant_id()
-        )
-    yield  # Test runs here.
-    for document in test_documents:
-        _delete_document_chunks_from_opensearch(
-            opensearch_client, document.id, get_current_tenant_id()
-        )
-
-
-class TestCheckForDocumentsForOpenSearchMigrationTask:
-    """Tests check_for_documents_for_opensearch_migration_task."""
-
-    def test_creates_migration_records_for_documents(
-        self,
-        db_session: Session,
-        test_documents: list[Document],
-        clean_migration_tables: None,  # noqa: ARG002
-        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """Tests that migration records are created for documents in the DB."""
-        # Under test.
-        result = check_for_documents_for_opensearch_migration_task(
-            tenant_id=get_current_tenant_id()
-        )
-
-        # Postcondition.
-        assert result is True
-        # Expire the session cache to see the committed changes from the task.
-        db_session.expire_all()
-        # Verify migration records were created.
-        for document in test_documents:
-            record = (
-                db_session.query(OpenSearchDocumentMigrationRecord)
-                .filter(OpenSearchDocumentMigrationRecord.document_id == document.id)
-                .first()
-            )
-            assert record is not None
-            assert record.status == OpenSearchDocumentMigrationStatus.PENDING
-
-    def test_pagination_continues_from_last_document(
-        self,
-        db_session: Session,
-        test_documents: list[Document],
-        clean_migration_tables: None,  # noqa: ARG002
-        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """Tests that pagination picks up from the last migrated document ID."""
-        # Precondition.
-        # Pre-create migration records for first n - 1 docs.
-        n = len(test_documents)
-        create_opensearch_migration_records_with_commit(
-            db_session, [doc.id for doc in test_documents[: n - 1]]
-        )
-        # Verify last document ID - should be the last one with a migration record.
-        last_id = get_last_opensearch_migration_document_id(db_session)
-        assert last_id == test_documents[n - 2].id
-
-        # Under test.
-        result = check_for_documents_for_opensearch_migration_task(
-            tenant_id=get_current_tenant_id()
-        )
-
-        # Postcondition.
-        assert result is True
-        # Expire the session cache to see the committed changes from the task.
-        db_session.expire_all()
-        # Verify all documents now have migration records.
-        for document in test_documents:
-            record = (
-                db_session.query(OpenSearchDocumentMigrationRecord)
-                .filter(OpenSearchDocumentMigrationRecord.document_id == document.id)
-                .first()
-            )
-            assert record is not None
-
-    def test_runs_successfully_when_documents_already_have_migration_records(
-        self,
-        db_session: Session,
-        test_documents: list[Document],
-        clean_migration_tables: None,  # noqa: ARG002
-        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """
-        Tests that task runs successfully when all documents already have
-        migration records.
-        """
-        # Precondition.
-        create_opensearch_migration_records_with_commit(
-            db_session, [doc.id for doc in test_documents]
-        )
-
-        # Under test.
-        result = check_for_documents_for_opensearch_migration_task(
-            tenant_id=get_current_tenant_id()
-        )
-
-        # Postcondition.
-        assert result is True
-
-    def test_returns_none_when_feature_disabled(
-        self,
-        disable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """Tests that task returns None when feature is disabled."""
-        # Under test.
-        result = check_for_documents_for_opensearch_migration_task(
-            tenant_id=get_current_tenant_id()
-        )
-
-        # Postcondition.
-        assert result is None
-
-    def test_increments_counter_when_no_records_to_populate(
-        self,
-        db_session: Session,
-        test_documents: list[Document],
-        clean_migration_tables: None,  # noqa: ARG002
-        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """Tests that counter increments when no records to populate."""
-        # Precondition.
-        # Create migration records for all documents so there are none left.
-        create_opensearch_migration_records_with_commit(
-            db_session, [doc.id for doc in test_documents]
-        )
-
-        # Under test.
-        result = check_for_documents_for_opensearch_migration_task(
-            tenant_id=get_current_tenant_id()
-        )
-
-        # Postcondition.
-        assert result is True
-        # Expire the session cache to see the committed changes from the task.
-        db_session.expire_all()
-        # Verify counter was incremented.
-        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
-        assert tenant_record is not None
-        assert (
-            tenant_record.num_times_observed_no_additional_docs_to_populate_migration_table
-            >= 1
-        )
-
-    def test_creates_singleton_migration_record(
-        self,
-        db_session: Session,
-        clean_migration_tables: None,  # noqa: ARG002
-        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """Tests that singleton migration record is created."""
-        # Under test.
-        result = check_for_documents_for_opensearch_migration_task(
-            tenant_id=get_current_tenant_id()
-        )
-
-        # Postcondition.
-        assert result is True
-        # Expire the session cache to see the committed changes from the task.
-        db_session.expire_all()
-        # Verify the singleton migration record was created.
-        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
-        assert tenant_record is not None
-        assert (
-            tenant_record.document_migration_record_table_population_status
-            == OpenSearchTenantMigrationStatus.PENDING
-        )
-        assert (
-            tenant_record.num_times_observed_no_additional_docs_to_populate_migration_table
-            == 1
-        )
-        assert (
-            tenant_record.overall_document_migration_status
-            == OpenSearchTenantMigrationStatus.PENDING
-        )
-        assert tenant_record.num_times_observed_no_additional_docs_to_migrate == 0
-        assert tenant_record.last_updated_at is not None
-
-
-class TestMigrateDocumentsFromVespaToOpenSearchTask:
-    """Tests migrate_documents_from_vespa_to_opensearch_task."""
-
-    def test_migrates_document_successfully(
+    def test_chunk_migration_completes_successfully(
         self,
         db_session: Session,
         test_documents: list[Document],
@@ -572,21 +410,19 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         opensearch_client: OpenSearchClient,
         test_embedding_dimension: int,
         clean_migration_tables: None,  # noqa: ARG002
-        clean_vespa: None,  # noqa: ARG002
-        clean_opensearch: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
-        """Tests successful migration of a document from Vespa to OpenSearch."""
+        """
+        Tests that all chunks are migrated from Vespa to OpenSearch.
+        """
         # Precondition.
-        create_opensearch_migration_records_with_commit(
-            db_session, [doc.id for doc in test_documents]
-        )
-        document_chunks = {
+        # Index chunks into Vespa.
+        document_chunks: dict[str, list[dict[str, Any]]] = {
             document.id: [
                 _create_raw_document_chunk(
                     document_id=document.id,
                     chunk_index=i,
-                    content=f"Test content {i}",
+                    content=f"Test content {i} for {document.id}",
                     embedding=_generate_test_vector(test_embedding_dimension),
                     now=datetime.now(),
                     title=f"Test title {document.id}",
@@ -596,13 +432,13 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
             ]
             for document in test_documents
         }
-        document_chunks_list = []
-        for document in test_documents:
-            document_chunks_list.extend(document_chunks[document.id])
-        vespa_document_index.index_raw_chunks(document_chunks_list)
+        all_chunks: list[dict[str, Any]] = []
+        for chunks in document_chunks.values():
+            all_chunks.extend(chunks)
+        vespa_document_index.index_raw_chunks(all_chunks)
 
         # Under test.
-        result = migrate_documents_from_vespa_to_opensearch_task(
+        result = migrate_chunks_from_vespa_to_opensearch_task(
             tenant_id=get_current_tenant_id()
         )
 
@@ -610,30 +446,28 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         assert result is True
         # Expire the session cache to see the committed changes from the task.
         db_session.expire_all()
-        # Verify migration records were updated.
-        for document in test_documents:
-            record = (
-                db_session.query(OpenSearchDocumentMigrationRecord)
-                .filter(OpenSearchDocumentMigrationRecord.document_id == document.id)
-                .first()
-            )
-            assert record is not None
-            assert record.status == OpenSearchDocumentMigrationStatus.COMPLETED
-            assert record.attempts_count == 1
+        # Verify tenant migration record was updated.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        assert tenant_record.total_chunks_migrated == len(all_chunks)
+        # Visit is complete so continuation token should be None.
+        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.migration_completed_at is not None
+
         # Verify chunks were indexed in OpenSearch.
         for document in test_documents:
-            chunks = _get_document_chunks_from_opensearch(
+            opensearch_chunks = _get_document_chunks_from_opensearch(
                 opensearch_client, document.id, get_current_tenant_id()
             )
-            assert len(chunks) == CHUNK_COUNT
-            # Chunks are not guaranteed to be in order.
-            chunks.sort(key=lambda x: x.chunk_index)
-            for i, chunk in enumerate(chunks):
+            assert len(opensearch_chunks) == CHUNK_COUNT
+            opensearch_chunks.sort(key=lambda x: x.chunk_index)
+            for opensearch_chunk in opensearch_chunks:
                 _assert_chunk_matches_vespa_chunk(
-                    chunk, document_chunks[document.id][i]
+                    opensearch_chunk,
+                    document_chunks[document.id][opensearch_chunk.chunk_index],
                 )
 
-    def test_marks_document_as_failed_on_error(
+    def test_chunk_migration_resumes_from_continuation_token(
         self,
         db_session: Session,
         test_documents: list[Document],
@@ -641,201 +475,183 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         opensearch_client: OpenSearchClient,
         test_embedding_dimension: int,
         clean_migration_tables: None,  # noqa: ARG002
-        clean_vespa: None,  # noqa: ARG002
-        clean_opensearch: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
-        """Tests that documents are marked as FAILED when migration fails."""
+        """Tests that chunk migration resumes from a saved continuation token.
+
+        Simulates task time running out my mocking the locking behavior.
+        """
         # Precondition.
-        create_opensearch_migration_records_with_commit(
-            db_session, [doc.id for doc in test_documents]
-        )
-        # Don't create chunks in Vespa so migration fails for the target doc.
-        doc_ids_that_have_chunks = [doc.id for doc in test_documents[:-1]]
-        document_chunks = {
-            document_id: [
+        # Index chunks into Vespa.
+        document_chunks: dict[str, list[dict[str, Any]]] = {
+            document.id: [
                 _create_raw_document_chunk(
-                    document_id=document_id,
+                    document_id=document.id,
                     chunk_index=i,
-                    content=f"Test content {i}",
+                    content=f"Test content {i} for {document.id}",
                     embedding=_generate_test_vector(test_embedding_dimension),
                     now=datetime.now(),
-                    title=f"Test title {document_id}",
+                    title=f"Test title {document.id}",
                     title_embedding=_generate_test_vector(test_embedding_dimension),
                 )
                 for i in range(CHUNK_COUNT)
             ]
-            for document_id in doc_ids_that_have_chunks
+            for document in test_documents
         }
-        document_chunks_list = []
-        for document_id in doc_ids_that_have_chunks:
-            document_chunks_list.extend(document_chunks[document_id])
-        vespa_document_index.index_raw_chunks(document_chunks_list)
+        all_chunks: list[dict[str, Any]] = []
+        for chunks in document_chunks.values():
+            all_chunks.extend(chunks)
+        vespa_document_index.index_raw_chunks(all_chunks)
+
+        # Run the initial batch. To simulate partial progress we will mock the
+        # redis lock to return True for the first invocation of .owned() and
+        # False subsequently.
+        mock_redis_client = Mock()
+        mock_lock = Mock()
+        mock_lock.owned.side_effect = [True, False, False]
+        mock_lock.acquire.return_value = True
+        mock_redis_client.lock.return_value = mock_lock
+        with patch(
+            "onyx.background.celery.tasks.opensearch_migration.tasks.get_redis_client",
+            return_value=mock_redis_client,
+        ):
+            result_1 = migrate_chunks_from_vespa_to_opensearch_task(
+                tenant_id=get_current_tenant_id()
+            )
+
+        assert result_1 is True
+        # Expire the session cache to see the committed changes from the task.
+        db_session.expire_all()
+
+        # Verify partial progress was saved.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        partial_chunks_migrated = tenant_record.total_chunks_migrated
+        assert partial_chunks_migrated > 0
+        assert tenant_record.vespa_visit_continuation_token is not None
+        assert tenant_record.migration_completed_at is None
 
         # Under test.
-        result = migrate_documents_from_vespa_to_opensearch_task(
+        # Run the remainder of the migration.
+        result_2 = migrate_chunks_from_vespa_to_opensearch_task(
             tenant_id=get_current_tenant_id()
         )
 
         # Postcondition.
-        assert result is True
+        assert result_2 is True
         # Expire the session cache to see the committed changes from the task.
         db_session.expire_all()
-        # Verify migration records were updated.
-        for document_id in doc_ids_that_have_chunks:
-            record = (
-                db_session.query(OpenSearchDocumentMigrationRecord)
-                .filter(OpenSearchDocumentMigrationRecord.document_id == document_id)
-                .first()
-            )
-            assert record is not None
-            assert record.status == OpenSearchDocumentMigrationStatus.COMPLETED
-            assert record.attempts_count == 1
-        # Verify the target doc was marked as FAILED.
-        record = (
-            db_session.query(OpenSearchDocumentMigrationRecord)
-            .filter(
-                OpenSearchDocumentMigrationRecord.document_id == test_documents[-1].id
-            )
-            .first()
-        )
-        assert record is not None
-        # In practice the task keeps trying docs until it either runs out of
-        # time or the lock is lost, which will not happen during this test.
-        # Because of this the migration record will just shift to permanently
-        # failed. Let's just test for that here.
-        assert record.status == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
+
+        # Verify completion.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        assert tenant_record.total_chunks_migrated > partial_chunks_migrated
+        assert tenant_record.total_chunks_migrated == len(all_chunks)
+        # Visit is complete so continuation token should be None.
+        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.migration_completed_at is not None
+
         # Verify chunks were indexed in OpenSearch.
-        for document_id in doc_ids_that_have_chunks:
-            chunks = _get_document_chunks_from_opensearch(
-                opensearch_client, document_id, get_current_tenant_id()
+        for document in test_documents:
+            opensearch_chunks = _get_document_chunks_from_opensearch(
+                opensearch_client, document.id, get_current_tenant_id()
             )
-            assert len(chunks) == CHUNK_COUNT
-            # Chunks are not guaranteed to be in order.
-            chunks.sort(key=lambda x: x.chunk_index)
-            for j, chunk in enumerate(chunks):
+            assert len(opensearch_chunks) == CHUNK_COUNT
+            opensearch_chunks.sort(key=lambda x: x.chunk_index)
+            for opensearch_chunk in opensearch_chunks:
                 _assert_chunk_matches_vespa_chunk(
-                    chunk, document_chunks[document_id][j]
+                    opensearch_chunk,
+                    document_chunks[document.id][opensearch_chunk.chunk_index],
                 )
-        # Verify the target doc was not indexed in OpenSearch.
-        chunks = _get_document_chunks_from_opensearch(
-            opensearch_client, test_documents[-1].id, get_current_tenant_id()
-        )
-        assert len(chunks) == 0
 
-    def test_marks_document_as_permanently_failed_after_max_attempts(
+    def test_chunk_migration_empty_vespa(
         self,
         db_session: Session,
-        test_documents: list[Document],
+        # Get this just to ensure Vespa is clean from previous test runs.
+        test_documents: list[Document],  # noqa: ARG002
         clean_migration_tables: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
         """
-        Tests that documents are marked as PERMANENTLY_FAILED after max
-        attempts.
+        Tests that chunk migration completes without error when Vespa is empty.
         """
-        # Precondition.
-        # Let's only just make one record.
-        migration_record = OpenSearchDocumentMigrationRecord(
-            document_id=test_documents[0].id,
-            status=OpenSearchDocumentMigrationStatus.FAILED,
-            attempts_count=TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE
-            - 1,
-        )
-        _insert_test_migration_records_with_commit(db_session, [migration_record])
-        # Don't create chunks in Vespa so migration fails.
-
         # Under test.
-        result = migrate_documents_from_vespa_to_opensearch_task(
+        # No chunks in Vespa.
+        result = migrate_chunks_from_vespa_to_opensearch_task(
             tenant_id=get_current_tenant_id()
         )
 
         # Postcondition.
         assert result is True
-        # Expire the session cache to see the committed changes from the task.
         db_session.expire_all()
-        record = (
-            db_session.query(OpenSearchDocumentMigrationRecord)
-            .filter(
-                OpenSearchDocumentMigrationRecord.document_id
-                == migration_record.document_id
-            )
-            .first()
-        )
-        assert record is not None
-        assert record.status == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
-        assert (
-            record.attempts_count
-            == TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE
-        )
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        assert tenant_record.total_chunks_migrated == 0
+        assert tenant_record.vespa_visit_continuation_token is None
+        # We do not mark the migration as completed for empty Vespa.
+        assert tenant_record.migration_completed_at is None
 
-    def test_fails_if_chunk_count_is_none(
+    def test_chunk_migration_updates_existing_chunks(
         self,
         db_session: Session,
         test_documents: list[Document],
+        vespa_document_index: VespaDocumentIndex,
+        opensearch_client: OpenSearchClient,
+        test_embedding_dimension: int,
         clean_migration_tables: None,  # noqa: ARG002
         enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
     ) -> None:
-        """Tests that migration fails if document has no chunk_count."""
+        """
+        Tests that the migration task updates existing chunks in OpenSearch if
+        they already exist.
+
+        Chunks existing in the index is not a failure mode as the document may
+        have been dual indexed. Since dual indexing indexes into Vespa first, we
+        can assume that the state of the chunk we want to migrate is the most
+        up-to-date.
+        """
         # Precondition.
-        # Let's just use one doc only.
-        test_documents[0].chunk_count = None
-        db_session.commit()
-        migration_record = OpenSearchDocumentMigrationRecord(
-            document_id=test_documents[0].id
-        )
-        _insert_test_migration_records_with_commit(db_session, [migration_record])
-
-        # Under test.
-        result = migrate_documents_from_vespa_to_opensearch_task(
-            tenant_id=get_current_tenant_id()
-        )
-
-        # Postcondition.
-        assert result is True
-        # Expire the session cache to see the committed changes from the task.
-        db_session.expire_all()
-        record = (
-            db_session.query(OpenSearchDocumentMigrationRecord)
-            .filter(
-                OpenSearchDocumentMigrationRecord.document_id == test_documents[0].id
+        # Index chunks into Vespa.
+        document_chunks: dict[str, list[dict[str, Any]]] = {
+            document.id: [
+                _create_raw_document_chunk(
+                    document_id=document.id,
+                    chunk_index=i,
+                    content=f"Test content {i} for {document.id}",
+                    embedding=_generate_test_vector(test_embedding_dimension),
+                    now=datetime.now(),
+                    title=f"Test title {document.id}",
+                    title_embedding=_generate_test_vector(test_embedding_dimension),
+                )
+                for i in range(CHUNK_COUNT)
+            ]
+            for document in test_documents
+        }
+        all_chunks: list[dict[str, Any]] = []
+        for chunks in document_chunks.values():
+            all_chunks.extend(chunks)
+        vespa_document_index.index_raw_chunks(all_chunks)
+        # Index the first document into OpenSearch with some different content.
+        document_in_opensearch = deepcopy(document_chunks[test_documents[0].id])
+        for chunk in document_in_opensearch:
+            chunk["content"] = (
+                f"Different content {chunk[CHUNK_ID]} for {test_documents[0].id}"
             )
-            .first()
+        chunks_for_document_in_opensearch = transform_vespa_chunks_to_opensearch_chunks(
+            document_in_opensearch,
+            TenantState(tenant_id=get_current_tenant_id(), multitenant=False),
+            {},
         )
-        assert record is not None
-        # In practice the task keeps trying docs until it either runs out of
-        # time or the lock is lost, which will not happen during this test.
-        # Because of this the migration record will just shift to permanently
-        # failed. Let's just test for that here.
-        assert record.status == OpenSearchDocumentMigrationStatus.PERMANENTLY_FAILED
-        assert record.error_message is not None
-        assert "no chunk count" in record.error_message.lower()
-
-    def test_returns_none_when_feature_disabled(
-        self,
-        disable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """Tests that task returns None when feature is disabled."""
-        # Under test.
-        result = migrate_documents_from_vespa_to_opensearch_task(
-            tenant_id=get_current_tenant_id()
+        opensearch_client.bulk_index_documents(
+            documents=chunks_for_document_in_opensearch,
+            tenant_state=TenantState(
+                tenant_id=get_current_tenant_id(), multitenant=False
+            ),
+            update_if_exists=True,
         )
 
-        # Postcondition.
-        assert result is None
-
-    def test_increments_counter_when_no_documents_to_migrate(
-        self,
-        db_session: Session,
-        clean_migration_tables: None,  # noqa: ARG002
-        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
-    ) -> None:
-        """Tests that counter increments when no documents need migration."""
-        # Precondition.
-        # No migration records exist so there are no documents to migrate.
-
         # Under test.
-        result = migrate_documents_from_vespa_to_opensearch_task(
+        result = migrate_chunks_from_vespa_to_opensearch_task(
             tenant_id=get_current_tenant_id()
         )
 
@@ -845,4 +661,216 @@ class TestMigrateDocumentsFromVespaToOpenSearchTask:
         db_session.expire_all()
         tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
         assert tenant_record is not None
-        assert tenant_record.num_times_observed_no_additional_docs_to_migrate >= 1
+        assert tenant_record.total_chunks_migrated == len(all_chunks)
+        # Visit is complete so continuation token should be None.
+        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.migration_completed_at is not None
+
+        # Verify chunks were indexed in OpenSearch.
+        for document in test_documents:
+            opensearch_chunks = _get_document_chunks_from_opensearch(
+                opensearch_client, document.id, get_current_tenant_id()
+            )
+            assert len(opensearch_chunks) == CHUNK_COUNT
+            opensearch_chunks.sort(key=lambda x: x.chunk_index)
+            for opensearch_chunk in opensearch_chunks:
+                _assert_chunk_matches_vespa_chunk(
+                    opensearch_chunk,
+                    document_chunks[document.id][opensearch_chunk.chunk_index],
+                )
+
+    def test_chunk_migration_noops_when_migration_is_complete(
+        self,
+        db_session: Session,
+        test_documents: list[Document],
+        vespa_document_index: VespaDocumentIndex,
+        opensearch_client: OpenSearchClient,
+        test_embedding_dimension: int,
+        clean_migration_tables: None,  # noqa: ARG002
+        enable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that the migration task no-ops when the migration is complete.
+        """
+        # Precondition.
+        # Index chunks into Vespa.
+        document_chunks: dict[str, list[dict[str, Any]]] = {
+            document.id: [
+                _create_raw_document_chunk(
+                    document_id=document.id,
+                    chunk_index=i,
+                    content=f"Test content {i} for {document.id}",
+                    embedding=_generate_test_vector(test_embedding_dimension),
+                    now=datetime.now(),
+                    title=f"Test title {document.id}",
+                    title_embedding=_generate_test_vector(test_embedding_dimension),
+                )
+                for i in range(CHUNK_COUNT)
+            ]
+            for document in test_documents
+        }
+        all_chunks: list[dict[str, Any]] = []
+        for chunks in document_chunks.values():
+            all_chunks.extend(chunks)
+        vespa_document_index.index_raw_chunks(all_chunks)
+
+        # Under test.
+        # First run.
+        result_1 = migrate_chunks_from_vespa_to_opensearch_task(
+            tenant_id=get_current_tenant_id()
+        )
+
+        # Postcondition.
+        assert result_1 is True
+        # Expire the session cache to see the committed changes from the task.
+        db_session.expire_all()
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        assert tenant_record.total_chunks_migrated == len(all_chunks)
+        # Visit is complete so continuation token should be None.
+        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.migration_completed_at is not None
+
+        # Verify chunks were indexed in OpenSearch.
+        for document in test_documents:
+            opensearch_chunks = _get_document_chunks_from_opensearch(
+                opensearch_client, document.id, get_current_tenant_id()
+            )
+            assert len(opensearch_chunks) == CHUNK_COUNT
+            opensearch_chunks.sort(key=lambda x: x.chunk_index)
+            for opensearch_chunk in opensearch_chunks:
+                _assert_chunk_matches_vespa_chunk(
+                    opensearch_chunk,
+                    document_chunks[document.id][opensearch_chunk.chunk_index],
+                )
+
+        # Under test.
+        # Second run.
+        result_2 = migrate_chunks_from_vespa_to_opensearch_task(
+            tenant_id=get_current_tenant_id()
+        )
+
+        # Postcondition.
+        assert result_2 is True
+        # Expire the session cache to see the committed changes from the task.
+        db_session.expire_all()
+        # This all should be unchanged.
+        tenant_record = db_session.query(OpenSearchTenantMigrationRecord).first()
+        assert tenant_record is not None
+        assert tenant_record.total_chunks_migrated == len(all_chunks)
+        # Visit is complete so continuation token should be None.
+        assert tenant_record.vespa_visit_continuation_token is None
+        assert tenant_record.migration_completed_at is not None
+
+        # Verify chunks were indexed in OpenSearch.
+        for document in test_documents:
+            opensearch_chunks = _get_document_chunks_from_opensearch(
+                opensearch_client, document.id, get_current_tenant_id()
+            )
+            assert len(opensearch_chunks) == CHUNK_COUNT
+            opensearch_chunks.sort(key=lambda x: x.chunk_index)
+            for opensearch_chunk in opensearch_chunks:
+                _assert_chunk_matches_vespa_chunk(
+                    opensearch_chunk,
+                    document_chunks[document.id][opensearch_chunk.chunk_index],
+                )
+
+    def test_returns_none_when_feature_disabled(
+        self,
+        disable_opensearch_indexing_for_onyx: None,  # noqa: ARG002
+    ) -> None:
+        """Tests that task returns None when feature is disabled."""
+        # Under test.
+        result = migrate_chunks_from_vespa_to_opensearch_task(
+            tenant_id=get_current_tenant_id()
+        )
+
+        # Postcondition.
+        assert result is None
+
+
+class TestSanitizedDocIdResolution:
+    """Tests document ID resolution functions."""
+
+    def test_resolve_sanitized_document_ids_batch_normal(
+        self,
+        db_session: Session,
+        test_documents: list[Document],  # noqa: ARG002
+    ) -> None:
+        """
+        Tests batch resolution for normal document IDs (no sanitization needed).
+        """
+        # Under test.
+        result = build_sanitized_to_original_doc_id_mapping(db_session)
+
+        # Postcondition.
+        # Since we expect no IDs in test_documents to need sanitization, the
+        # result should be empty.
+        assert not result
+
+    def test_resolve_sanitized_document_ids_batch_with_quotes(
+        self,
+        db_session: Session,
+    ) -> None:
+        """Tests batch resolution for a document ID containing single quotes."""
+        # Precondition.
+        # Create a document with a single quote in its ID.
+        original_id = "test_doc_with'quote"
+        sanitized_id = "test_doc_with_quote"
+        document = Document(
+            id=original_id,
+            semantic_id=original_id,
+            chunk_count=1,
+        )
+        try:
+            db_session.add(document)
+            db_session.commit()
+
+            # Under test.
+            result = build_sanitized_to_original_doc_id_mapping(db_session)
+
+            # Postcondition.
+            assert len(result) == 1
+            # The sanitized version should map to the original.
+            assert sanitized_id in result
+            assert result[sanitized_id] == original_id
+
+        finally:
+            _delete_test_documents_with_commit(db_session, [document])
+
+    def test_raises_when_sanitized_id_matches_another_document(
+        self,
+        db_session: Session,
+    ) -> None:
+        """
+        Tests that the function raises when a sanitized ID matches another
+        document's original ID.
+        """
+        # Precondition.
+        # Create a document with a single quote in its ID, and another document
+        # with that string as its ID.
+        original_id = "test_doc_with'quote"
+        sanitized_id = "test_doc_with_quote"
+        document_bad = Document(
+            id=original_id,
+            semantic_id=original_id,
+            chunk_count=1,
+        )
+        document_fine = Document(
+            id=sanitized_id,
+            semantic_id=sanitized_id,
+            chunk_count=1,
+        )
+        try:
+            db_session.add(document_bad)
+            db_session.add(document_fine)
+            db_session.commit()
+
+            # Under test.
+            with pytest.raises(RuntimeError):
+                build_sanitized_to_original_doc_id_mapping(db_session)
+
+        finally:
+            _delete_test_documents_with_commit(
+                db_session, [document_bad, document_fine]
+            )
