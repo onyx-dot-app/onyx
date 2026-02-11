@@ -1,5 +1,5 @@
 import { Page } from "@playwright/test";
-import { expect } from "@chromatic-com/playwright";
+import { expect } from "@playwright/test";
 import { verifyAssistantIsChosen } from "./chatActions";
 
 export type AssistantParams = {
