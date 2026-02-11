@@ -180,7 +180,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
           storageState: "admin_auth.json",
         });
         const page = await context.newPage();
-        const cleanupClient = new OnyxApiClient(page);
+        const cleanupClient = new OnyxApiClient(page.request);
         await cleanupClient.deleteDocumentSet(documentSetId);
         await cleanupClient.deleteCCPair(ccPairId);
         await context.close();
@@ -200,7 +200,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await loginAs(page, "admin");
 
       // Create a connector and document set to enable the Knowledge toggle
-      const onyxApiClient = new OnyxApiClient(page);
+      const onyxApiClient = new OnyxApiClient(page.request);
       ccPairId = await onyxApiClient.createFileConnector("Test Connector");
       documentSetId = await onyxApiClient.createDocumentSet(
         "Test Document Set",

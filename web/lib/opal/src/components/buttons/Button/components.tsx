@@ -105,9 +105,8 @@ function Button({
       <Interactive.Container
         type={interactiveBaseProps.href ? undefined : type}
         border={interactiveBaseProps.prominence === "secondary"}
-        heightVariant={isCompact ? "compact" : "default"}
+        heightVariant={isCompact ? "md" : "lg"}
         roundingVariant={isCompact ? "compact" : "default"}
-        paddingVariant={isCompact ? "thin" : "default"}
       >
         <div
           className={cn(

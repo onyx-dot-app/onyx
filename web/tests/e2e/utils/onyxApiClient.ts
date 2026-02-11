@@ -1,4 +1,4 @@
-import { Page, expect, APIResponse } from "@playwright/test";
+import { APIRequestContext, expect, APIResponse } from "@playwright/test";
 
 /**
  * API Client for Onyx backend operations in E2E tests.
@@ -18,7 +18,10 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `deleteDocumentSet(id)` - Deletes a document set (with polling until complete)
  *
  * **LLM Providers:**
+ * - `listLlmProviders()` - Lists LLM providers (admin endpoint, includes is_public)
+ * - `ensurePublicProvider(name?)` - Idempotently creates a public default LLM provider
  * - `createRestrictedProvider(name, groupId)` - Creates a restricted LLM provider assigned to a group
+ * - `setProviderAsDefault(id)` - Sets an LLM provider as the default for chat
  * - `deleteProvider(id)` - Deletes an LLM provider
  *
  * **User Groups:**
@@ -41,19 +44,33 @@ import { Page, expect, APIResponse } from "@playwright/test";
  *
  * **Usage Example:**
  * ```typescript
- * const client = new OnyxApiClient(page);
- * const { ccPairId } = await client.createFileConnector("Test Connector");
- * const docSetId = await client.createDocumentSet("Test Set", [ccPairId]);
- * await client.deleteDocumentSet(docSetId);
- * await client.deleteCCPair(ccPairId);
+ * // From a test with a Page:
+ * const client = new OnyxApiClient(page.request);
+ *
+ * // From global-setup with a standalone context (pass baseURL explicitly):
+ * const ctx = await request.newContext({ baseURL, storageState: "admin_auth.json" });
+ * const client = new OnyxApiClient(ctx, baseURL);
  * ```
  *
- * @param page - Playwright Page instance with authenticated session
+ * @param request - Playwright APIRequestContext with authenticated session
+ *                  (e.g. `page.request`, `context.request`, or `request.newContext()`)
+ * @param baseUrl - Optional base URL override (e.g. `http://localhost:3000`).
+ *                  Defaults to `process.env.BASE_URL` or `http://localhost:3000`.
+ *                  Pass this when the Playwright-configured baseURL differs from
+ *                  the env var (e.g. in `global-setup.ts` where the config value
+ *                  is authoritative).
  */
 export class OnyxApiClient {
-  private baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api`;
+  private baseUrl: string;
 
-  constructor(private page: Page) {}
+  constructor(
+    private request: APIRequestContext,
+    baseUrl?: string
+  ) {
+    this.baseUrl = `${
+      baseUrl ?? process.env.BASE_URL ?? "http://localhost:3000"
+    }/api`;
+  }
 
   /**
    * Generic GET request to the API.
@@ -62,7 +79,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async get(endpoint: string): Promise<APIResponse> {
-    return await this.page.request.get(`${this.baseUrl}${endpoint}`);
+    return await this.request.get(`${this.baseUrl}${endpoint}`);
   }
 
   /**
@@ -73,7 +90,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async post(endpoint: string, data?: any): Promise<APIResponse> {
-    return await this.page.request.post(`${this.baseUrl}${endpoint}`, {
+    return await this.request.post(`${this.baseUrl}${endpoint}`, {
       data,
     });
   }
@@ -85,7 +102,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async delete(endpoint: string): Promise<APIResponse> {
-    return await this.page.request.delete(`${this.baseUrl}${endpoint}`);
+    return await this.request.delete(`${this.baseUrl}${endpoint}`);
   }
 
   /**
@@ -96,7 +113,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async put(endpoint: string, data?: any): Promise<APIResponse> {
-    return await this.page.request.put(`${this.baseUrl}${endpoint}`, {
+    return await this.request.put(`${this.baseUrl}${endpoint}`, {
       data,
     });
   }
@@ -371,7 +388,7 @@ export class OnyxApiClient {
     providerName: string,
     groupId: number
   ): Promise<number> {
-    const response = await this.page.request.put(
+    const response = await this.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
         data: {
@@ -397,18 +414,41 @@ export class OnyxApiClient {
     return responseData.id;
   }
 
+  /**
+   * Lists LLM providers visible to the admin (includes `is_public`).
+   *
+   * @returns Array of LLM providers with id and is_public fields
+   */
   async listLlmProviders(): Promise<
     Array<{
       id: number;
       is_public?: boolean;
     }>
   > {
-    const response = await this.get("/llm/provider");
+    const response = await this.get("/admin/llm/provider");
     return await this.handleResponse(response, "Failed to list LLM providers");
   }
 
-  async createPublicProvider(providerName: string): Promise<number> {
-    const response = await this.page.request.put(
+  /**
+   * Ensure at least one public LLM provider exists and is set as default.
+   *
+   * Idempotent — returns `null` if a public provider already exists,
+   * or the new provider ID if one was created.
+   *
+   * @param providerName - Name for the provider (default: "PW Default Provider")
+   * @returns The provider ID if one was created, or `null` if already present
+   */
+  async ensurePublicProvider(
+    providerName: string = "PW Default Provider"
+  ): Promise<number | null> {
+    const providers = await this.listLlmProviders();
+    const hasPublic = providers.some((p) => p.is_public);
+
+    if (hasPublic) {
+      return null;
+    }
+
+    const response = await this.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
         data: {
@@ -428,10 +468,31 @@ export class OnyxApiClient {
       "Failed to create public provider"
     );
 
+    // Set as default so get_default_llm() works (needed for tokenization, etc.)
+    await this.setProviderAsDefault(responseData.id);
+
     this.log(
       `Created public LLM provider: ${providerName} (ID: ${responseData.id})`
     );
     return responseData.id;
+  }
+
+  /**
+   * Sets an LLM provider as the default for chat.
+   *
+   * @param providerId - The provider ID to set as default
+   */
+  async setProviderAsDefault(providerId: number): Promise<void> {
+    const response = await this.post(
+      `/admin/llm/provider/${providerId}/default`
+    );
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to set provider ${providerId} as default`
+    );
+
+    this.log(`Set LLM provider ${providerId} as default`);
   }
 
   /**
@@ -497,7 +558,7 @@ export class OnyxApiClient {
     role: "admin" | "curator" | "global_curator" | "basic",
     explicitOverride = false
   ): Promise<void> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/set-user-role`,
       {
         data: {
@@ -512,7 +573,7 @@ export class OnyxApiClient {
   }
 
   async deleteMcpServer(serverId: number): Promise<boolean> {
-    const response = await this.page.request.delete(
+    const response = await this.request.delete(
       `${this.baseUrl}/admin/mcp/server/${serverId}`
     );
     const success = await this.handleResponseSoft(
@@ -526,7 +587,7 @@ export class OnyxApiClient {
   }
 
   async deleteAssistant(assistantId: number): Promise<boolean> {
-    const response = await this.page.request.delete(
+    const response = await this.request.delete(
       `${this.baseUrl}/persona/${assistantId}`
     );
     const success = await this.handleResponseSoft(
@@ -589,16 +650,13 @@ export class OnyxApiClient {
   }
 
   async registerUser(email: string, password: string): Promise<{ id: string }> {
-    const response = await this.page.request.post(
-      `${this.baseUrl}/auth/register`,
-      {
-        data: {
-          email,
-          username: email,
-          password,
-        },
-      }
-    );
+    const response = await this.request.post(`${this.baseUrl}/auth/register`, {
+      data: {
+        email,
+        username: email,
+        password,
+      },
+    });
     const data = await this.handleResponse<{ id: string }>(
       response,
       `Failed to register user ${email}`
@@ -611,7 +669,7 @@ export class OnyxApiClient {
     email: string;
     role: string;
   } | null> {
-    const response = await this.page.request.get(
+    const response = await this.request.get(
       `${this.baseUrl}/manage/users/accepted`,
       {
         params: {
@@ -639,7 +697,7 @@ export class OnyxApiClient {
     userId: string,
     isCurator: boolean = true
   ): Promise<void> {
-    const response = await this.page.request.post(
+    const response = await this.request.post(
       `${this.baseUrl}/manage/admin/user-group/${userGroupId}/set-curator`,
       {
         data: {
@@ -851,7 +909,7 @@ export class OnyxApiClient {
     guild_name: string | null;
     enabled: boolean;
   }> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildId}`,
       { data: updates }
     );
@@ -926,7 +984,7 @@ export class OnyxApiClient {
     channel_name: string;
     enabled: boolean;
   }> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildConfigId}/channels/${channelConfigId}`,
       { data: updates }
     );
