@@ -426,9 +426,13 @@ const MemoizedAppSidebarInner = memo(
       ]
     );
 
-    const { isAdmin, isCurator } = useUser();
+    const { isAdmin, isCurator, user } = useUser();
     const activeSidebarTab = useAppFocus();
     const createProjectModal = useCreateModal();
+    const defaultAppMode =
+      (user?.preferences?.default_app_mode?.toLowerCase() as
+        | "chat"
+        | "search") ?? "chat";
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
@@ -443,7 +447,7 @@ const MemoizedAppSidebarInner = memo(
             transient={activeSidebarTab.isNewSession()}
             onClick={() => {
               if (!activeSidebarTab.isNewSession()) return;
-              setAppMode("auto");
+              setAppMode(defaultAppMode);
               reset();
             }}
           >
@@ -451,7 +455,13 @@ const MemoizedAppSidebarInner = memo(
           </SidebarTab>
         </div>
       );
-    }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+    }, [
+      folded,
+      activeSidebarTab,
+      combinedSettings,
+      currentAgent,
+      defaultAppMode,
+    ]);
 
     const buildButton = useMemo(
       () => (

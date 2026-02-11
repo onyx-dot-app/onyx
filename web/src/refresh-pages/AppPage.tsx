@@ -490,10 +490,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   );
   const { submit: submitQuery, classification } = useQueryController();
 
-  // 1. Reset the app-mode back to "auto" when navigating back to the "New Sessions" tag.
+  const defaultAppMode =
+    (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
+    "chat";
+
+  // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
   useEffect(() => {
-    if (appFocus.isNewSession()) setAppMode("auto");
+    if (appFocus.isNewSession()) setAppMode(defaultAppMode);
     if (!appFocus.isNewSession() && classification === "search")
       resetInputBar();
   }, [appFocus.isNewSession()]);

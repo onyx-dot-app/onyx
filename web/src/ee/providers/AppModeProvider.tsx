@@ -3,29 +3,32 @@
 import React, { useState, useCallback } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { AppModeContext, AppMode } from "@/providers/AppModeProvider";
+import { useUser } from "@/providers/UserProvider";
 
 export interface AppModeProviderProps {
   children: React.ReactNode;
-  /** Initial mode (defaults to "auto") */
-  defaultMode?: AppMode;
 }
 
 /**
- * Provider for application mode (Auto/Search/Chat).
+ * Provider for application mode (Search/Chat).
  *
  * This controls how user queries are handled:
- * - **auto**: Uses LLM classification to determine if query is search or chat
  * - **search**: Forces search mode - quick document lookup
  * - **chat**: Forces chat mode - conversation with follow-up questions
+ *
+ * The initial mode is read from the user's persisted `default_app_mode` preference.
  */
-export function AppModeProvider({
-  children,
-  defaultMode = "auto",
-}: AppModeProviderProps) {
+export function AppModeProvider({ children }: AppModeProviderProps) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const [appMode, setAppModeState] = useState<AppMode>(
-    isPaidEnterpriseFeaturesEnabled ? defaultMode : "chat"
-  );
+  const { user } = useUser();
+
+  const persistedMode = user?.preferences?.default_app_mode;
+  const initialMode: AppMode =
+    isPaidEnterpriseFeaturesEnabled && persistedMode
+      ? (persistedMode.toLowerCase() as AppMode)
+      : "chat";
+
+  const [appMode, setAppModeState] = useState<AppMode>(initialMode);
 
   const setAppMode = useCallback(
     (mode: AppMode) => {

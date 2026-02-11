@@ -45,6 +45,7 @@ interface UserContextType {
   ) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
+  updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -432,6 +433,39 @@ export function UserProvider({
     }
   };
 
+  const updateUserDefaultAppMode = async (mode: "CHAT" | "SEARCH") => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              default_app_mode: mode,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch("/api/user/default-app-mode", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ default_app_mode: mode }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update default app mode");
+      }
+    } catch (error) {
+      console.error("Error updating default app mode:", error);
+      throw error;
+    }
+  };
+
   const refreshUser = async () => {
     await fetchUser();
   };
@@ -449,6 +483,7 @@ export function UserProvider({
         updateUserThemePreference,
         updateUserChatBackground,
         updateUserDefaultModel,
+        updateUserDefaultAppMode,
         toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator

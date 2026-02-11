@@ -59,7 +59,6 @@ import {
   SvgSearchMenu,
   SvgShare,
   SvgSidebar,
-  SvgSparkle,
   SvgTrash,
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
@@ -334,33 +333,14 @@ function Header() {
                 <Popover.Trigger asChild>
                   <OpenButton
                     icon={
-                      effectiveMode === "auto"
-                        ? SvgSparkle
-                        : effectiveMode === "search"
-                          ? SvgSearchMenu
-                          : SvgBubbleText
+                      effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                     }
                   >
-                    {effectiveMode === "auto"
-                      ? "Auto"
-                      : effectiveMode === "search"
-                        ? "Search"
-                        : "Chat"}
+                    {effectiveMode === "search" ? "Search" : "Chat"}
                   </OpenButton>
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">
                   <Popover.Menu>
-                    <LineItem
-                      icon={SvgSparkle}
-                      selected={effectiveMode === "auto"}
-                      description="Automatic Search/Chat mode"
-                      onClick={noProp(() => {
-                        setAppMode("auto");
-                        setModePopoverOpen(false);
-                      })}
-                    >
-                      Auto
-                    </LineItem>
                     <LineItem
                       icon={SvgSearchMenu}
                       selected={effectiveMode === "search"}
