@@ -53,7 +53,6 @@ def _create_test_provider(
             provider=LlmProviderNames.OPENAI,
             api_key=api_key,
             api_key_changed=True,
-            default_model_name="gpt-4o-mini",
             model_configurations=[
                 ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
             ],
@@ -289,7 +288,6 @@ class TestLLMConfigurationEndpoint:
                     api_key_changed=True,
                     custom_config=original_custom_config,
                     custom_config_changed=True,
-                    model="gpt-4o-mini",
                 ),
                 db_session=db_session,
             )

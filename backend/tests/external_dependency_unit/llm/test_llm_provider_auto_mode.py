@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.models import UserRole
@@ -315,8 +316,8 @@ class TestAutoModeSyncFeature:
             )
 
             # Verify initial state: all models are visible
-            provider = fetch_existing_llm_provider(
-                name=provider_name, db_session=db_session
+            provider = fetch_llm_provider_view(
+                provider_name=provider_name, db_session=db_session
             )
             assert provider is not None
             assert provider.is_auto_mode is False
@@ -349,8 +350,8 @@ class TestAutoModeSyncFeature:
             # Step 3: Verify model visibility after auto mode transition
             # Expire session cache to force fresh fetch after sync_auto_mode_models committed
             db_session.expire_all()
-            provider = fetch_existing_llm_provider(
-                name=provider_name, db_session=db_session
+            provider = fetch_llm_provider_view(
+                provider_name=provider_name, db_session=db_session
             )
             assert provider is not None
             assert provider.is_auto_mode is True

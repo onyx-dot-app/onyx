@@ -48,7 +48,6 @@ def _create_test_provider(
             api_key_changed=True,
             api_base=api_base,
             custom_config=custom_config,
-            default_model_name="gpt-4o-mini",
             model_configurations=[
                 ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
             ],
@@ -98,7 +97,6 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="https://attacker.example.com",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -135,7 +133,6 @@ class TestLLMProviderChanges:
                     api_key="sk-new-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     api_base="https://custom-endpoint.example.com/v1",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -170,7 +167,6 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base=original_api_base,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -206,7 +202,6 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base=None,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -243,7 +238,6 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="https://custom.example.com/v1",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -274,7 +268,6 @@ class TestLLMProviderChanges:
                     api_key="sk-new-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     api_base="https://custom.example.com/v1",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -312,7 +305,6 @@ class TestLLMProviderChanges:
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
                     custom_config_changed=True,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -349,7 +341,6 @@ class TestLLMProviderChanges:
                     provider=LlmProviderNames.OPENAI,
                     custom_config={"OPENAI_API_BASE": "https://attacker.example.com"},
                     custom_config_changed=True,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 with pytest.raises(HTTPException) as exc_info:
@@ -393,7 +384,6 @@ class TestLLMProviderChanges:
                     api_key_changed=True,
                     custom_config_changed=True,
                     custom_config=new_config,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -429,7 +419,6 @@ class TestLLMProviderChanges:
                     provider=LlmProviderNames.OPENAI,
                     custom_config=original_config,
                     custom_config_changed=True,
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -467,7 +456,6 @@ class TestLLMProviderChanges:
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     custom_config=new_config,
-                    default_model_name="gpt-4o-mini",
                     custom_config_changed=True,
                 )
 
@@ -532,7 +520,6 @@ def test_upload_with_custom_config_then_change(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
                     custom_config=custom_config,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
@@ -572,7 +559,6 @@ def test_upload_with_custom_config_then_change(
                     id=provider.id,
                     name=name,
                     provider=provider_name,
-                    default_model_name=default_model_name,
                     model_configurations=[
                         ModelConfigurationUpsertRequest(
                             name=default_model_name, is_visible=True
