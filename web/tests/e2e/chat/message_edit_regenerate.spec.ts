@@ -146,8 +146,6 @@ test.describe("Message Edit and Regenerate Tests", () => {
 
     // Send initial message
     await sendMessage(page, "hi! Respond with no more than a sentence");
-    await page.waitForSelector('[data-testid="onyx-ai-message"]');
-    await page.waitForTimeout(3000);
 
     // Capture the original AI response text (just the message content, not buttons/switcher)
     const aiMessage = page.locator('[data-testid="onyx-ai-message"]').first();
@@ -163,7 +161,7 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await regenerateButton.click();
 
     // Wait for dropdown to appear and select GPT-4o Mini
-    await page.waitForTimeout(500);
+    await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
     // Look for the GPT-4o Mini option in the dropdown
     const gpt4oMiniOption = page
@@ -193,7 +191,6 @@ test.describe("Message Edit and Regenerate Tests", () => {
       .first()
       .locator("..")
       .click();
-    await page.waitForTimeout(1000);
 
     // Verify we're at "1 / 2"
     let switcherSpan = page.getByTestId("MessageSwitcher/container").first();
@@ -211,7 +208,6 @@ test.describe("Message Edit and Regenerate Tests", () => {
       .last()
       .locator("..")
       .click();
-    await page.waitForTimeout(1000);
 
     // Verify we're back at "2 / 2"
     switcherSpan = page.getByTestId("MessageSwitcher/container").first();

@@ -352,7 +352,7 @@ test.describe("Default Assistant Tests", () => {
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await page.goto("/app");
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
 
       const apiClient = new OnyxApiClient(page);
       let webSearchProviderId: number | null = null;
@@ -410,15 +410,17 @@ test.describe("Default Assistant Tests", () => {
 
       // Go back to chat
       await page.goto("/app");
-      await page.waitForLoadState("networkidle");
-      // Wait for tools to be picked up
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState("domcontentloaded");
 
       // Will NOT show the `internal-search` option since that will be excluded when there are no connectors connected.
       // (Since we removed pre-seeded docs, we will have NO connectors connected on a fresh install; therefore, `internal-search` will not be available.)
       await openActionManagement(page);
-      expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
-      expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+      await expect(page.locator(TOOL_IDS.webSearchOption)).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(page.locator(TOOL_IDS.imageGenerationOption)).toBeVisible({
+        timeout: 10000,
+      });
 
       // Clean up web search provider only (image gen config is managed by beforeAll/afterAll)
       if (webSearchProviderId !== null) {
