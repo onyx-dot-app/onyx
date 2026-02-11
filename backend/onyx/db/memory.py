@@ -91,9 +91,6 @@ class UserMemoryContext(BaseModel):
 
 
 def get_memories(user: User, db_session: Session) -> UserMemoryContext:
-    if not user.use_memories:
-        return UserMemoryContext(user_info=UserInfo())
-
     user_info = UserInfo(
         name=user.personal_name,
         role=user.personal_role,

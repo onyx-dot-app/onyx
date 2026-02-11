@@ -193,9 +193,52 @@ class TestGetMemoriesWithUserId:
         context = get_memories(test_user, db_session)
         assert context.user_id == test_user.id
 
-    def test_get_memories_disabled_has_no_user_id(
+    def test_get_memories_disabled_still_populates_user_id(
         self, db_session: Session, test_user_no_memories: User
     ) -> None:
-        """Verify that get_memories with use_memories=False returns no user_id."""
+        """Verify that get_memories with use_memories=False still returns a
+        fully populated context (user_id, user_info, memories). The
+        use_memories flag only controls whether memories are injected into
+        the system prompt, not whether the context is fetched."""
+        # Add a memory for this user so we can verify it's fetched
+        add_memory(
+            user_id=test_user_no_memories.id,
+            memory_text="Should still be fetched",
+            db_session=db_session,
+        )
+
         context = get_memories(test_user_no_memories, db_session)
-        assert context.user_id is None
+        assert context.user_id == test_user_no_memories.id
+        assert context.user_info.email == test_user_no_memories.email
+        assert len(context.memories) == 1
+        assert context.memories[0] == "Should still be fetched"
+
+    def test_get_memories_disabled_persistence_works(
+        self, db_session: Session, test_user_no_memories: User
+    ) -> None:
+        """Verify that add_memory and update_memory_at_index work correctly
+        when use_memories=False, since the memory tool should still persist."""
+        user_id = test_user_no_memories.id
+
+        # Add a memory
+        memory = add_memory(
+            user_id=user_id,
+            memory_text="Memory with use_memories off",
+            db_session=db_session,
+        )
+        assert memory.memory_text == "Memory with use_memories off"
+
+        # Update that memory
+        updated = update_memory_at_index(
+            user_id=user_id,
+            index=0,
+            new_text="Updated memory with use_memories off",
+            db_session=db_session,
+        )
+        assert updated is not None
+        assert updated.memory_text == "Updated memory with use_memories off"
+
+        # Verify get_memories returns the updated memory
+        context = get_memories(test_user_no_memories, db_session)
+        assert len(context.memories) == 1
+        assert context.memories[0] == "Updated memory with use_memories off"

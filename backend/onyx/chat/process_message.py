@@ -473,12 +473,17 @@ def handle_stream_message_objects(
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
+        # When use_memories is disabled, don't inject memories into the prompt
+        # or count them in token reservation, but still pass the full context
+        # to the LLM loop for memory tool persistence.
+        prompt_memory_context = user_memory_context if user.use_memories else None
+
         reserved_token_count = calculate_reserved_tokens(
             db_session=db_session,
             persona_system_prompt=custom_agent_prompt or "",
             token_counter=token_counter,
             files=new_msg_req.file_descriptors,
-            user_memory_context=user_memory_context,
+            user_memory_context=prompt_memory_context,
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
@@ -678,6 +683,7 @@ def handle_stream_message_objects(
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
                 include_citations=new_msg_req.include_citations,
+                inject_memories_in_prompt=user.use_memories,
             )
 
     except ValueError as e:
