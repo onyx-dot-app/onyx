@@ -311,6 +311,10 @@ def build_sanitized_to_original_doc_id_mapping(
 
     Scans over all documents.
 
+    Checks if the sanitized ID already exists as a genuine separate document in
+    the Document table. If so, raises as there is no way of resolving the
+    conflict in the migration. The user will need to reindex.
+
     Args:
         db_session: SQLAlchemy session.
 
@@ -328,5 +332,15 @@ def build_sanitized_to_original_doc_id_mapping(
         sanitized_id = replace_invalid_doc_id_characters(original_id)
         if sanitized_id != original_id:
             result[sanitized_id] = original_id
+
+    # See if there are any documents whose ID is a sanitized ID of another
+    # document. If there is even one match, we cannot proceed.
+    stmt = select(Document.id).where(Document.id.in_(result.keys()))
+    ids_with_matches = list(db_session.scalars(stmt).all())
+    if ids_with_matches:
+        raise RuntimeError(
+            f"Documents with IDs {ids_with_matches} have sanitized IDs that match other documents. "
+            "This is not supported and the user will need to reindex."
+        )
 
     return result
