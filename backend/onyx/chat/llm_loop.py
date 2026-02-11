@@ -722,20 +722,23 @@ def run_llm_loop(
                 # Persist memory if this is a memory tool response
                 memory_snapshot: MemoryToolResponseSnapshot | None = None
                 if isinstance(tool_response.rich_response, MemoryToolResponse):
+                    persisted_memory_id: int | None = None
                     if user_memory_context and user_memory_context.user_id:
                         if tool_response.rich_response.index_to_replace is not None:
-                            update_memory_at_index(
+                            memory = update_memory_at_index(
                                 user_id=user_memory_context.user_id,
                                 index=tool_response.rich_response.index_to_replace,
                                 new_text=tool_response.rich_response.memory_text,
                                 db_session=db_session,
                             )
+                            persisted_memory_id = memory.id if memory else None
                         else:
-                            add_memory(
+                            memory = add_memory(
                                 user_id=user_memory_context.user_id,
                                 memory_text=tool_response.rich_response.memory_text,
                                 db_session=db_session,
                             )
+                            persisted_memory_id = memory.id
                     operation = (
                         "update"
                         if tool_response.rich_response.index_to_replace is not None
@@ -744,7 +747,8 @@ def run_llm_loop(
                     memory_snapshot = MemoryToolResponseSnapshot(
                         memory_text=tool_response.rich_response.memory_text,
                         operation=operation,
-                        index_to_replace=tool_response.rich_response.index_to_replace,
+                        memory_id=persisted_memory_id,
+                        index=tool_response.rich_response.index_to_replace,
                     )
 
                 if memory_snapshot:

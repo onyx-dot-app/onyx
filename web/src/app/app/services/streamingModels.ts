@@ -183,7 +183,8 @@ export interface MemoryToolDelta extends BaseObj {
   type: "memory_tool_delta";
   memory_text: string;
   operation: "add" | "update";
-  index_to_replace: number | null;
+  memory_id: number | null;
+  index: number | null;
 }
 
 export interface MemoryToolNoAccess extends BaseObj {

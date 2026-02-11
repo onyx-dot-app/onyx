@@ -298,9 +298,10 @@ def create_fetch_packets(
 def create_memory_packets(
     memory_text: str,
     operation: str,
-    index_to_replace: int | None,
+    memory_id: int | None,
     turn_index: int,
     tab_index: int = 0,
+    index: int | None = None,
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -317,7 +318,8 @@ def create_memory_packets(
             obj=MemoryToolDelta(
                 memory_text=memory_text,
                 operation=operation,
-                index_to_replace=index_to_replace,
+                memory_id=memory_id,
+                index=index,
             ),
         ),
     )
@@ -522,11 +524,10 @@ def translate_assistant_message_to_packets(
                                 create_memory_packets(
                                     memory_text=memory_data["memory_text"],
                                     operation=memory_data["operation"],
-                                    index_to_replace=memory_data.get(
-                                        "index_to_replace"
-                                    ),
+                                    memory_id=memory_data.get("memory_id"),
                                     turn_index=turn_num,
                                     tab_index=tool_call.tab_index,
+                                    index=memory_data.get("index"),
                                 )
                             )
 

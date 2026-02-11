@@ -98,7 +98,8 @@ class TestMemoryToolRun:
         assert isinstance(packet.obj, MemoryToolDelta)
         assert packet.obj.memory_text == "User prefers Python"
         assert packet.obj.operation == "add"
-        assert packet.obj.index_to_replace is None
+        assert packet.obj.memory_id is None
+        assert packet.obj.index is None
         assert packet.placement == placement
 
     @patch("onyx.tools.tool_implementations.memory.memory_tool.process_memory_update")
@@ -122,7 +123,8 @@ class TestMemoryToolRun:
         assert isinstance(packet.obj, MemoryToolDelta)
         assert packet.obj.memory_text == "User prefers light mode"
         assert packet.obj.operation == "update"
-        assert packet.obj.index_to_replace == 0
+        assert packet.obj.memory_id is None
+        assert packet.obj.index == 0
 
     @patch("onyx.tools.tool_implementations.memory.memory_tool.process_memory_update")
     def test_run_returns_tool_response_with_rich_response(
@@ -151,7 +153,7 @@ class TestCreateMemoryPackets:
         packets = create_memory_packets(
             memory_text="User likes Python",
             operation="add",
-            index_to_replace=None,
+            memory_id=None,
             turn_index=1,
             tab_index=0,
         )
@@ -165,15 +167,17 @@ class TestCreateMemoryPackets:
         assert isinstance(delta, MemoryToolDelta)
         assert delta.memory_text == "User likes Python"
         assert delta.operation == "add"
-        assert delta.index_to_replace is None
+        assert delta.memory_id is None
+        assert delta.index is None
 
     def test_produces_start_delta_end_for_update(self) -> None:
         packets = create_memory_packets(
             memory_text="User prefers light mode",
             operation="update",
-            index_to_replace=2,
+            memory_id=42,
             turn_index=3,
             tab_index=1,
+            index=5,
         )
 
         assert len(packets) == 3
@@ -185,13 +189,14 @@ class TestCreateMemoryPackets:
         assert isinstance(delta, MemoryToolDelta)
         assert delta.memory_text == "User prefers light mode"
         assert delta.operation == "update"
-        assert delta.index_to_replace == 2
+        assert delta.memory_id == 42
+        assert delta.index == 5
 
     def test_placement_is_set_correctly(self) -> None:
         packets = create_memory_packets(
             memory_text="test",
             operation="add",
-            index_to_replace=None,
+            memory_id=None,
             turn_index=5,
             tab_index=2,
         )

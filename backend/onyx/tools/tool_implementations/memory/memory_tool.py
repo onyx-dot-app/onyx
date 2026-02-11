@@ -145,7 +145,8 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
                 obj=MemoryToolDelta(
                     memory_text=memory_text,
                     operation=operation,
-                    index_to_replace=index_to_replace,
+                    memory_id=None,
+                    index=index_to_replace,
                 ),
             )
         )

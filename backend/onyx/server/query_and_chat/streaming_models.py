@@ -269,7 +269,8 @@ class MemoryToolDelta(BaseObj):
 
     memory_text: str
     operation: Literal["add", "update"]
-    index_to_replace: int | None = None
+    memory_id: int | None = None
+    index: int | None = None
 
 
 class MemoryToolNoAccess(BaseObj):

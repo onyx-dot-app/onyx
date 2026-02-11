@@ -9,7 +9,8 @@ export interface MemoryState {
   noAccess: boolean;
   memoryText: string | null;
   operation: "add" | "update" | null;
-  indexToReplace: number | null;
+  memoryId: number | null;
+  index: number | null;
   isComplete: boolean;
 }
 
@@ -36,7 +37,8 @@ export function constructCurrentMemoryState(
   const noAccess = Boolean(noAccessPacket);
   const memoryText = deltaPacket?.memory_text ?? null;
   const operation = deltaPacket?.operation ?? null;
-  const indexToReplace = deltaPacket?.index_to_replace ?? null;
+  const memoryId = deltaPacket?.memory_id ?? null;
+  const index = deltaPacket?.index ?? null;
   const isComplete = Boolean(sectionEnd);
 
   return {
@@ -44,7 +46,8 @@ export function constructCurrentMemoryState(
     noAccess,
     memoryText,
     operation,
-    indexToReplace,
+    memoryId,
+    index,
     isComplete,
   };
 }

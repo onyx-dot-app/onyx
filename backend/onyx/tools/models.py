@@ -220,7 +220,8 @@ class CustomToolRunContext(BaseModel):
 class MemoryToolResponseSnapshot(BaseModel):
     memory_text: str
     operation: Literal["add", "update"]
-    index_to_replace: int | None = None
+    memory_id: int | None = None
+    index: int | None = None
 
 
 class ToolCallInfo(BaseModel):
