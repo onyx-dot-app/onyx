@@ -7,3 +7,64 @@
 .opal-button-label {
   @apply whitespace-nowrap;
 }
+
+/* ---------------------------------------------------------------------------
+   Foldable content — collapses label + right-icon via CSS grid animation.
+
+   Structure (two divs are required):
+     .opal-button-foldable        — grid container, animates column 0fr ↔ 1fr
+       .opal-button-foldable-inner — single grid item, flex layout + overflow clip
+
+   The parent gap also transitions so the spacing between the icon and the
+   foldable wrapper collapses/expands in sync.
+
+   Expand triggers piggy-back on Interactive.Base's existing `:hover` and
+   `[data-transient]` data-attributes — no JS hover state required.
+   --------------------------------------------------------------------------- */
+
+/* Parent gap: 0 when foldable, transitions to gap-1 on expand */
+.opal-button--foldable {
+  gap: 0;
+  transition: gap 200ms ease-in-out;
+}
+
+.interactive:hover:not([data-static]):not([data-disabled])
+  .opal-button--foldable,
+.interactive[data-transient="true"]:not([data-static]):not([data-disabled])
+  .opal-button--foldable {
+  gap: 0.25rem;
+}
+
+/* Grid container — collapse animation */
+.opal-button-foldable {
+  display: grid;
+  grid-template-columns: 1fr;
+  transition:
+    grid-template-columns 200ms ease-in-out,
+    opacity 200ms ease-in-out;
+  opacity: 1;
+}
+
+/* Single grid item — content layout + overflow clipping */
+.opal-button-foldable-inner {
+  @apply flex items-center gap-1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Collapsed: foldable and not hovered / transient */
+.opal-button--foldable .opal-button-foldable {
+  grid-template-columns: 0fr;
+  opacity: 0;
+}
+
+/* Expanded: hovered or transient (mirrors Interactive.Base's hover selectors) */
+.interactive:hover:not([data-static]):not([data-disabled])
+  .opal-button--foldable
+  .opal-button-foldable,
+.interactive[data-transient="true"]:not([data-static]):not([data-disabled])
+  .opal-button--foldable
+  .opal-button-foldable {
+  grid-template-columns: 1fr;
+  opacity: 1;
+}

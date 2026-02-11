@@ -173,6 +173,11 @@ interface InteractiveBasePropsBase
    * ```
    */
   href?: string;
+
+  /**
+   * Link target (e.g. `"_blank"`). Only used when `href` is provided.
+   */
+  target?: string;
 }
 
 /**
@@ -252,6 +257,7 @@ function InteractiveBase({
   transient,
   disabled,
   href,
+  target,
   ...props
 }: InteractiveBaseProps) {
   const effectiveSubvariant =
@@ -279,6 +285,8 @@ function InteractiveBase({
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
         href={disabled ? undefined : href}
+        target={target}
+        rel={target === "_blank" ? "noopener noreferrer" : undefined}
         className={classes}
         {...dataAttrs}
         {...rest}
@@ -315,9 +323,27 @@ function InteractiveBase({
 interface InteractiveContainerProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   /**
-   * Ref forwarded to the underlying `<div>` element.
+   * Ref forwarded to the underlying element.
    */
-  ref?: React.Ref<HTMLDivElement>;
+  ref?: React.Ref<HTMLElement>;
+
+  /**
+   * HTML button type (e.g. `"submit"`, `"button"`, `"reset"`).
+   *
+   * When provided, renders a `<button>` element instead of a `<div>`.
+   * This keeps all styling (background, rounding, height) on a single
+   * element — unlike a wrapper approach which would split them.
+   *
+   * @example
+   * ```tsx
+   * <Interactive.Base>
+   *   <Interactive.Container type="submit">
+   *     <span>Submit</span>
+   *   </Interactive.Container>
+   * </Interactive.Base>
+   * ```
+   */
+  type?: "submit" | "button" | "reset";
 
   /**
    * When `true`, applies a 1px border using the theme's border color.
@@ -398,6 +424,7 @@ interface InteractiveContainerProps
  */
 function InteractiveContainer({
   ref,
+  type,
   border,
   roundingVariant = "default",
   paddingVariant = "default",
@@ -414,22 +441,37 @@ function InteractiveContainer({
     className?: string;
     style?: React.CSSProperties;
   };
-  return (
-    <div
-      ref={ref}
-      {...rest}
-      className={cn(
-        "interactive-container",
-        interactiveContainerRoundingVariants[roundingVariant],
-        interactiveContainerPaddingVariants[paddingVariant],
-        interactiveContainerHeightVariants[heightVariant],
-        interactiveContainerMinWidthVariants[heightVariant],
-        slotClassName
-      )}
-      data-border={border ? "true" : undefined}
-      style={slotStyle}
-    />
-  );
+  const sharedProps = {
+    ...rest,
+    className: cn(
+      "interactive-container",
+      interactiveContainerRoundingVariants[roundingVariant],
+      interactiveContainerPaddingVariants[paddingVariant],
+      interactiveContainerHeightVariants[heightVariant],
+      interactiveContainerMinWidthVariants[heightVariant],
+      slotClassName
+    ),
+    "data-border": border ? ("true" as const) : undefined,
+    style: slotStyle,
+  };
+
+  if (type) {
+    // When Interactive.Base is disabled it injects aria-disabled via Slot.
+    // Map that to the native disabled attribute so a <button type="submit">
+    // cannot trigger form submission in the disabled state.
+    const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
+    const nativeDisabled =
+      ariaDisabled === true || ariaDisabled === "true" || undefined;
+    return (
+      <button
+        ref={ref as React.Ref<HTMLButtonElement>}
+        type={type}
+        disabled={nativeDisabled}
+        {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
+      />
+    );
+  }
+  return <div ref={ref as React.Ref<HTMLDivElement>} {...sharedProps} />;
 }
 
 // ---------------------------------------------------------------------------
