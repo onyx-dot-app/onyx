@@ -330,12 +330,10 @@ def handle_stream_message_objects(
     else:
         llm_user_identifier = user.email or str(user_id)
 
-    if new_msg_req.mock_llm_response is not None:
-        if not INTEGRATION_TESTS_MODE:
-            raise ValueError(
-                "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
-            )
-        mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
+    if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
+        raise ValueError(
+            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
+        )
 
     try:
         if not new_msg_req.chat_session_id:
@@ -389,12 +387,6 @@ def handle_stream_message_objects(
             llm_override=new_msg_req.llm_override or chat_session.llm_override,
             additional_headers=litellm_additional_headers,
         )
-
-        # Attach mock response directly to the LLM instance so it survives
-        # cross-thread context boundaries in the streaming pipeline.
-        if new_msg_req.mock_llm_response is not None and INTEGRATION_TESTS_MODE:
-            llm._mock_response = new_msg_req.mock_llm_response  # type: ignore[attr-defined]
-
         token_counter = get_llm_token_counter(llm)
 
         # Check LLM cost limits before using the LLM (only for Onyx-managed keys)
@@ -631,6 +623,11 @@ def handle_stream_message_objects(
                 reserved_tokens=reserved_token_count,
                 processing_start_time=processing_start_time,
             )
+
+        # The stream generator can resume on a different worker thread after early yields.
+        # Set this right before launching the LLM loop so run_in_background copies the right context.
+        if new_msg_req.mock_llm_response is not None:
+            mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
 
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
