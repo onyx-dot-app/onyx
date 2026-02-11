@@ -540,7 +540,7 @@ class WebConnector(LoadConnector):
                 ),
             )
             if get_image_extraction_and_analysis_enabled():
-                result.doc = add_images_to_pdf_document(result.doc, page_text, initial_url)
+                result.doc = add_images_to_pdf_document(result.doc, response.content, initial_url)
 
             return result
 

@@ -16,10 +16,10 @@ from bs4 import BeautifulSoup
 
 from onyx.configs.constants import FileOrigin
 from onyx.configs.llm_configs import get_image_analysis_max_size_mb
-from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.connectors.web.connector import protected_url_check
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.b64 import get_image_type_from_bytes
@@ -58,6 +58,12 @@ def _decode_data_url(data_url: str) -> tuple[bytes, str] | None:
 
 
 def _fetch_image_bytes(url: str, max_size_bytes: int) -> tuple[bytes, str] | None:
+    try:
+        # SSRF protection: validate URL against internal/private IPs before fetching
+        protected_url_check(url)
+    except (ValueError, ConnectionError) as e:
+        logger.warning("Skipping image from %s due to SSRF protection: %s", url, e)
+        return None
     try:
         resp = requests.get(
             url,
@@ -153,7 +159,7 @@ def add_images_to_web_document(doc: Document, html_content: str, page_url: str) 
         len(html_content),
         max_size_mb,
     )
-    max_size_bytes = get_image_analysis_max_size_mb() * 1024 * 1024
+    max_size_bytes = max_size_mb * 1024 * 1024
     parent_slug = _slug_from_url(page_url)
     soup = BeautifulSoup(html_content, "html.parser")
     image_sources = _extract_image_sources(soup)
