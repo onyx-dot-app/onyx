@@ -402,7 +402,6 @@ httpx==0.28.1
     #   google-genai
     #   httpx-oauth
     #   langfuse
-    #   langgraph-sdk
     #   langsmith
     #   litellm
     #   mcp
@@ -496,34 +495,12 @@ kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-langchain==1.2.10
-    # via onyx
 langchain-core==1.2.11
-    # via
-    #   langchain
-    #   langchain-text-splitters
-    #   langgraph
-    #   langgraph-checkpoint
-    #   langgraph-prebuilt
-    #   onyx
-langchain-text-splitters==1.1.0
-    # via onyx
-langchainhub==0.1.21
     # via onyx
 langdetect==1.0.9
     # via unstructured
 langfuse==3.10.0
     # via onyx
-langgraph==1.0.8
-    # via langchain
-langgraph-checkpoint==4.0.0
-    # via
-    #   langgraph
-    #   langgraph-prebuilt
-langgraph-prebuilt==1.0.7
-    # via langgraph
-langgraph-sdk==0.3.5
-    # via langgraph
 langsmith==0.3.45
     # via langchain-core
 lazy-imports==1.0.1
@@ -696,12 +673,8 @@ opentelemetry-semantic-conventions==0.60b1
     # via
     #   opentelemetry-instrumentation
     #   opentelemetry-sdk
-orjson==3.11.4
-    # via
-    #   langgraph-sdk
-    #   langsmith
-ormsgpack==1.12.2
-    # via langgraph-checkpoint
+orjson==3.11.4 ; platform_python_implementation != 'PyPy'
+    # via langsmith
 packaging==24.2
     # via
     #   dask
@@ -712,7 +685,6 @@ packaging==24.2
     #   jira
     #   kombu
     #   langchain-core
-    #   langchainhub
     #   langfuse
     #   langsmith
     #   marshmallow
@@ -819,10 +791,8 @@ pydantic==2.11.7
     #   fastmcp
     #   google-cloud-aiplatform
     #   google-genai
-    #   langchain
     #   langchain-core
     #   langfuse
-    #   langgraph
     #   langsmith
     #   litellm
     #   mcp
@@ -989,7 +959,6 @@ requests==2.32.5
     #   jira
     #   jsonschema-path
     #   kubernetes
-    #   langchainhub
     #   langfuse
     #   langsmith
     #   markitdown
@@ -1163,9 +1132,7 @@ types-awscrt==0.28.4
 types-openpyxl==3.0.4.7
     # via onyx
 types-requests==2.32.0.20250328
-    # via
-    #   cohere
-    #   langchainhub
+    # via cohere
 types-s3transfer==0.14.0
     # via boto3-stubs
 typing-extensions==4.15.0
@@ -1299,8 +1266,6 @@ xmlsec==1.3.14
     #   python3-saml
 xmltodict==1.0.2
     # via ddtrace
-xxhash==3.6.0
-    # via langgraph
 yarl==1.22.0
     # via aiohttp
 zeep==4.3.2
