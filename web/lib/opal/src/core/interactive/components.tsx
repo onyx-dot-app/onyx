@@ -456,10 +456,16 @@ function InteractiveContainer({
   };
 
   if (type) {
+    // When Interactive.Base is disabled it injects aria-disabled via Slot.
+    // Map that to the native disabled attribute so a <button type="submit">
+    // cannot trigger form submission in the disabled state.
+    const nativeDisabled =
+      (rest as Record<string, unknown>)["aria-disabled"] === true || undefined;
     return (
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type={type}
+        disabled={nativeDisabled}
         {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
       />
     );
