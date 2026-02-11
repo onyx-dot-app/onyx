@@ -1304,6 +1304,7 @@ function AccountsAccessSettings() {
 
                     return (
                       <Interactive.Container
+                        key={pat.id}
                         paddingVariant="none"
                         heightVariant="fit"
                       >
