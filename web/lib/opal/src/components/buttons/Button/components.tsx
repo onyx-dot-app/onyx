@@ -107,7 +107,6 @@ function Button({
         border={interactiveBaseProps.subvariant === "secondary"}
         heightVariant={isCompact ? "md" : "lg"}
         roundingVariant={isCompact ? "compact" : "default"}
-        paddingVariant={isCompact ? "thin" : "default"}
       >
         <div
           className={cn(

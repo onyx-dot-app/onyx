@@ -58,21 +58,6 @@ const interactiveContainerMinWidthVariants = {
 } as const;
 
 /**
- * Padding presets for `Interactive.Container`.
- *
- * - `"default"` — Default padding of 0.5rem (8px) on all sides
- * - `"thin"` — Reduced padding of 0.25rem (4px), for tighter layouts
- * - `"none"` — No padding, when the child handles its own spacing
- */
-type InteractiveContainerPaddingVariant =
-  keyof typeof interactiveContainerPaddingVariants;
-const interactiveContainerPaddingVariants = {
-  default: "p-2",
-  thin: "p-1",
-  none: "p-0",
-} as const;
-
-/**
  * Border-radius presets for `Interactive.Container`.
  *
  * - `"default"` — Default radius of 0.75rem (12px), matching card rounding
@@ -372,17 +357,6 @@ interface InteractiveContainerProps
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /**
-   * Padding preset controlling inner spacing.
-   *
-   * - `"default"` — 0.5rem (8px) padding on all sides
-   * - `"thin"` — 0.25rem (4px) padding for tighter layouts
-   * - `"none"` — No padding; child content controls its own spacing
-   *
-   * @default "default"
-   */
-  paddingVariant?: InteractiveContainerPaddingVariant;
-
-  /**
    * Height preset controlling the container's vertical size.
    *
    * - `"lg"` — 2.25rem (36px), typical button/item height
@@ -416,13 +390,9 @@ interface InteractiveContainerProps
  *   </Interactive.Container>
  * </Interactive.Base>
  *
- * // Compact, borderless container with no padding
+ * // Compact, borderless container
  * <Interactive.Base variant="default" subvariant="ghost">
- *   <Interactive.Container
- *     heightVariant="md"
- *     roundingVariant="compact"
- *     paddingVariant="none"
- *   >
+ *   <Interactive.Container heightVariant="md" roundingVariant="compact">
  *     <span>Inline item</span>
  *   </Interactive.Container>
  * </Interactive.Base>
@@ -435,7 +405,6 @@ function InteractiveContainer({
   type,
   border,
   roundingVariant = "default",
-  paddingVariant = "default",
   heightVariant = "lg",
   ...props
 }: InteractiveContainerProps) {
@@ -454,7 +423,6 @@ function InteractiveContainer({
     className: cn(
       "interactive-container",
       interactiveContainerRoundingVariants[roundingVariant],
-      interactiveContainerPaddingVariants[paddingVariant],
       interactiveContainerHeightVariants[heightVariant],
       interactiveContainerMinWidthVariants[heightVariant],
       slotClassName
@@ -520,6 +488,5 @@ export {
   type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
   type InteractiveContainerHeightVariant,
-  type InteractiveContainerPaddingVariant,
   type InteractiveContainerRoundingVariant,
 };
