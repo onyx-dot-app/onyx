@@ -111,8 +111,9 @@ class TestMakeBillingRequest:
     ) -> None:
         """AsyncClient must be created with follow_redirects=True.
 
-        The control plane may sit behind a reverse proxy that returns
-        308 (HTTP→HTTPS). httpx does not follow redirects by default,
+        The target server (cloud data plane for self-hosted, control
+        plane for cloud) may sit behind nginx that returns 308
+        (HTTP→HTTPS). httpx does not follow redirects by default,
         so we must explicitly opt in.
         """
         from ee.onyx.server.billing.service import _make_billing_request
