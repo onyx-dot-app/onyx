@@ -32,10 +32,15 @@ interface UserPreferences {
   chat_background: string | null;
 }
 
+export interface MemoryItem {
+  id: number | null;
+  content: string;
+}
+
 export interface UserPersonalization {
   name: string;
   role: string;
-  memories: string[];
+  memories: MemoryItem[];
   use_memories: boolean;
   user_preferences: string;
 }

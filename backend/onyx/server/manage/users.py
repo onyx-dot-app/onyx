@@ -76,6 +76,7 @@ from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import ChatBackgroundRequest
+from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
@@ -845,7 +846,9 @@ def update_user_personalization_api(
         if request.use_memories is not None
         else current_use_memories
     )
-    existing_memories = [memory.memory_text for memory in user.memories]
+    existing_memories = [
+        MemoryItem(id=memory.id, content=memory.memory_text) for memory in user.memories
+    ]
     new_memories = (
         request.memories if request.memories is not None else existing_memories
     )
