@@ -184,7 +184,7 @@ coloredlogs==15.0.1
     # via onnxruntime
 courlan==1.3.2
     # via trafilatura
-cryptography==46.0.3
+cryptography==46.0.5
     # via
     #   authlib
     #   msal

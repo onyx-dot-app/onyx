@@ -1,5 +1,7 @@
 """Celery tasks for sandbox operations (cleanup, file sync, etc.)."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 from celery import shared_task
@@ -7,6 +9,7 @@ from celery import Task
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.configs.constants import CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -247,6 +250,19 @@ def _list_session_directories(
         return []
 
 
+@contextmanager
+def _acquire_sandbox_file_sync_lock(lock: RedisLock) -> Iterator[bool]:
+    """Acquire the sandbox file-sync lock with blocking timeout; release on exit."""
+    acquired = lock.acquire(
+        blocking_timeout=CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT,
+    )
+    try:
+        yield acquired
+    finally:
+        if lock.owned():
+            lock.release()
+
+
 @shared_task(
     name=OnyxCeleryTask.SANDBOX_FILE_SYNC,
     soft_time_limit=TIMEOUT_SECONDS,
@@ -254,7 +270,11 @@ def _list_session_directories(
     ignore_result=True,
 )
 def sync_sandbox_files(
-    self: Task, *, user_id: str, tenant_id: str  # noqa: ARG001
+    self: Task,  # noqa: ARG001
+    *,
+    user_id: str,
+    tenant_id: str,
+    source: str | None = None,
 ) -> bool:
     """Sync files from S3 to a user's running sandbox.
 
@@ -262,46 +282,63 @@ def sync_sandbox_files(
     It executes `s5cmd sync` in the file-sync sidecar container to download
     any new or changed files.
 
-    This is safe to call multiple times - s5cmd sync is idempotent.
+    Per-user locking ensures only one sync runs at a time for a given user.
+    If a sync is already in progress, this task will wait until it completes.
 
     Args:
         user_id: The user ID whose sandbox should be synced
         tenant_id: The tenant ID for S3 path construction
+        source: Optional source type (e.g., "gmail", "google_drive").
+                If None, syncs all sources.
 
     Returns:
         True if sync was successful, False if skipped or failed
     """
+    source_info = f" source={source}" if source else " (all sources)"
     task_logger.info(
         f"sync_sandbox_files starting for user {user_id} in tenant {tenant_id}"
+        f"{source_info}"
     )
 
-    with get_session_with_current_tenant() as db_session:
-        sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
+    lock_timeout = CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    lock = redis_client.lock(
+        f"{OnyxRedisLocks.SANDBOX_FILE_SYNC_LOCK_PREFIX}:{user_id}",
+        timeout=lock_timeout,
+    )
 
-        if sandbox is None:
-            task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
-            return False
-
-        if sandbox.status != SandboxStatus.RUNNING:
-            task_logger.debug(
-                f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
-                f"skipping sync"
+    with _acquire_sandbox_file_sync_lock(lock) as acquired:
+        if not acquired:
+            task_logger.warning(
+                f"sync_sandbox_files - failed to acquire lock for user {user_id} "
+                f"after {lock_timeout}s, skipping"
             )
             return False
 
-        sandbox_manager = get_sandbox_manager()
-        result = sandbox_manager.sync_files(
-            sandbox_id=sandbox.id,
-            user_id=UUID(user_id),
-            tenant_id=tenant_id,
-        )
+        with get_session_with_current_tenant() as db_session:
+            sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
+            if sandbox is None:
+                task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
+                return False
+            if sandbox.status != SandboxStatus.RUNNING:
+                task_logger.debug(
+                    f"Sandbox {sandbox.id} not running (status={sandbox.status}), "
+                    f"skipping sync"
+                )
+                return False
 
-        if result:
-            task_logger.info(f"File sync completed for user {user_id}")
-        else:
-            task_logger.warning(f"File sync failed for user {user_id}")
-
-        return result
+            sandbox_manager = get_sandbox_manager()
+            result = sandbox_manager.sync_files(
+                sandbox_id=sandbox.id,
+                user_id=UUID(user_id),
+                tenant_id=tenant_id,
+                source=source,
+            )
+            if result:
+                task_logger.info(f"File sync completed for user {user_id}{source_info}")
+            else:
+                task_logger.warning(f"File sync failed for user {user_id}{source_info}")
+            return result
 
 
 # NOTE: in the future, may need to add this. For now, will do manual cleanup.

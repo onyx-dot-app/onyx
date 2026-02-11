@@ -78,7 +78,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   tqdm
-cryptography==46.0.3
+cryptography==46.0.5
     # via pyjwt
 decorator==5.2.1
     # via retry

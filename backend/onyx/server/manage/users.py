@@ -593,11 +593,16 @@ def get_valid_domains(
 
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
+    include_api_keys: bool = False,
     _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     users = get_all_users(db_session)
-    return [MinimalUserSnapshot(id=user.id, email=user.email) for user in users]
+    return [
+        MinimalUserSnapshot(id=user.id, email=user.email)
+        for user in users
+        if include_api_keys or not is_api_key_email_address(user.email)
+    ]
 
 
 @router.get("/get-user-role", tags=PUBLIC_API_TAGS)
