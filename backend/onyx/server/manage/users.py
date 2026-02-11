@@ -56,6 +56,7 @@ from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
+from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
@@ -76,6 +77,7 @@ from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import ChatBackgroundRequest
+from onyx.server.manage.models import DefaultAppModeRequest
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
@@ -821,6 +823,15 @@ def update_user_chat_background_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_chat_background(user.id, request.chat_background, db_session)
+
+
+@router.patch("/user/default-app-mode")
+def update_user_default_app_mode_api(
+    request: DefaultAppModeRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_default_app_mode(user.id, request.default_app_mode, db_session)
 
 
 @router.patch("/user/default-model")
