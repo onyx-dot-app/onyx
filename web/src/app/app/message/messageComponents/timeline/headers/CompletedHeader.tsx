@@ -117,13 +117,15 @@ export const CompletedHeader = React.memo(function CompletedHeader({
 }: CompletedHeaderProps) {
   if (isMemoryOnly) {
     return (
-      <div className="flex items-center justify-between w-full px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
-        <MemoryTagWithTooltip
-          memoryText={memoryText}
-          memoryOperation={memoryOperation}
-          memoryId={memoryId}
-          memoryIndex={memoryIndex}
-        />
+      <div className="flex w-full justify-between">
+        <div className="flex items-center px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+          <MemoryTagWithTooltip
+            memoryText={memoryText}
+            memoryOperation={memoryOperation}
+            memoryId={memoryId}
+            memoryIndex={memoryIndex}
+          />
+        </div>
         {collapsible && totalSteps > 0 && isExpanded && (
           <Button
             size="md"

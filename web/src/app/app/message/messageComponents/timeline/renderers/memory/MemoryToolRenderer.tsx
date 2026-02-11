@@ -7,7 +7,9 @@ import {
 import { BlinkingDot } from "@/app/app/message/BlinkingDot";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
 import Text from "@/refresh-components/texts/Text";
-import { SvgEditBig } from "@opal/icons";
+import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
+import { cn } from "@/lib/utils";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 /**
  * MemoryToolRenderer - Renders memory tool execution steps
@@ -85,9 +87,17 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   const memoryContent = (
     <div className="flex flex-col">
       {memoryText ? (
-        <Text as="p" text03 className="text-sm">
-          {memoryText}
-        </Text>
+        <div className={cn("w-full flex")}>
+          <div className="flex-1 min-w-0">
+            <Text as="p" text02 className="text-sm break-words">
+              {memoryText}
+            </Text>
+          </div>
+          {/* Expand button - only show when content is truncated */}
+          <div className="flex justify-end items-end mt-1 w-8">
+            <IconButton internal icon={SvgMaximize2} tooltip="View Memories" />
+          </div>
+        </div>
       ) : (
         !stopPacketSeen && <BlinkingDot />
       )}
