@@ -126,16 +126,10 @@ func profileLabel(profile string) string {
 // execDockerCompose runs a docker compose command in the correct directory with
 // optional extra environment variables.
 func execDockerCompose(args []string, extraEnv []string) {
-	gitRoot, err := paths.GitRoot()
-	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
-	}
-	composeDir := filepath.Join(gitRoot, "deployment", "docker_compose")
-
 	log.Debugf("Running: docker %v", args)
 
 	dockerCmd := exec.Command("docker", args...)
-	dockerCmd.Dir = composeDir
+	dockerCmd.Dir = composeDir()
 	dockerCmd.Stdout = os.Stdout
 	dockerCmd.Stderr = os.Stderr
 	dockerCmd.Stdin = os.Stdin
@@ -152,16 +146,10 @@ func execDockerCompose(args []string, extraEnv []string) {
 // compose project by running "docker compose -p onyx ps --services".
 // On any error it returns nil (completions will just be empty).
 func runningServiceNames() []string {
-	gitRoot, err := paths.GitRoot()
-	if err != nil {
-		return nil
-	}
-	composeDir := filepath.Join(gitRoot, "deployment", "docker_compose")
-
 	args := []string{"compose", "-p", composeProjectName, "ps", "--services"}
 
 	cmd := exec.Command("docker", args...)
-	cmd.Dir = composeDir
+	cmd.Dir = composeDir()
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
