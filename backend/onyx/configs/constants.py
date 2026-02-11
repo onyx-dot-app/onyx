@@ -333,6 +333,7 @@ class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
     CONNECTOR = "connector"
+    CONNECTOR_METADATA = "connector_metadata"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
     PLAINTEXT_CACHE = "plaintext_cache"

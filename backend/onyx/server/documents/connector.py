@@ -115,6 +115,7 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
 from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
+from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
@@ -419,29 +420,39 @@ def check_drive_tokens(
     return AuthStatus(authenticated=True)
 
 
-def extract_zip_metadata(zf: zipfile.ZipFile) -> dict[str, Any]:
-    zip_metadata = {}
+def save_zip_metadata_to_file_store(
+    zf: zipfile.ZipFile, file_store: FileStore
+) -> str | None:
+    """
+    Extract .onyx_metadata.json from zip and save to file store.
+    Returns the file_id or None if no metadata file exists.
+    """
     try:
         metadata_file_info = zf.getinfo(ONYX_METADATA_FILENAME)
         with zf.open(metadata_file_info, "r") as metadata_file:
+            metadata_bytes = metadata_file.read()
+
+            # Validate that it's valid JSON before saving
             try:
-                zip_metadata = json.load(metadata_file)
-                if isinstance(zip_metadata, list):
-                    # convert list of dicts to dict of dicts
-                    # Use just the basename for matching since metadata may not include
-                    # the full path within the ZIP file
-                    zip_metadata = {d["filename"]: d for d in zip_metadata}
+                json.loads(metadata_bytes)
             except json.JSONDecodeError as e:
                 logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
-                # should fail loudly here to let users know that their metadata
-                # file is not valid JSON
                 raise HTTPException(
                     status_code=400,
                     detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
                 )
+
+            # Save to file store
+            file_id = file_store.save_file(
+                content=BytesIO(metadata_bytes),
+                display_name=ONYX_METADATA_FILENAME,
+                file_origin=FileOrigin.CONNECTOR_METADATA,
+                file_type="application/json",
+            )
+            return file_id
     except KeyError:
         logger.info(f"No {ONYX_METADATA_FILENAME} file")
-    return zip_metadata
+        return None
 
 
 def is_zip_file(file: UploadFile) -> bool:
@@ -475,7 +486,7 @@ def upload_files(
 
     deduped_file_paths = []
     deduped_file_names = []
-    zip_metadata = {}
+    zip_metadata_file_id: str | None = None
     try:
         file_store = get_default_file_store()
         seen_zip = False
@@ -489,7 +500,9 @@ def upload_files(
                     raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
                 seen_zip = True
                 with zipfile.ZipFile(file.file, "r") as zf:
-                    zip_metadata = extract_zip_metadata(zf)
+                    zip_metadata_file_id = save_zip_metadata_to_file_store(
+                        zf, file_store
+                    )
                     for file_info in zf.namelist():
                         if zf.getinfo(file_info).is_dir():
                             continue
@@ -542,7 +555,7 @@ def upload_files(
     return FileUploadResponse(
         file_paths=deduped_file_paths,
         file_names=deduped_file_names,
-        zip_metadata=zip_metadata,
+        zip_metadata_file_id=zip_metadata_file_id,
     )
 
 
@@ -671,18 +684,55 @@ def update_connector_files(
     current_config = connector.connector_specific_config
     current_file_locations = current_config.get("file_locations", [])
     current_file_names = current_config.get("file_names", [])
-    current_zip_metadata = current_config.get("zip_metadata", {})
+    current_zip_metadata_file_id = current_config.get("zip_metadata_file_id")
+
+    # Load existing metadata from file store if available
+    file_store = get_default_file_store()
+    current_zip_metadata: dict[str, Any] = {}
+    if current_zip_metadata_file_id:
+        try:
+            metadata_io = file_store.read_file(
+                file_id=current_zip_metadata_file_id, mode="b"
+            )
+            metadata_bytes = metadata_io.read()
+            loaded_metadata = json.loads(metadata_bytes)
+            if isinstance(loaded_metadata, list):
+                current_zip_metadata = {d["filename"]: d for d in loaded_metadata}
+            else:
+                current_zip_metadata = loaded_metadata
+        except Exception as e:
+            logger.warning(f"Failed to load existing metadata file: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to load existing connector metadata file",
+            )
 
     # Upload new files if any
     new_file_paths = []
     new_file_names_list = []
-    new_zip_metadata = {}
+    new_zip_metadata_file_id: str | None = None
+    new_zip_metadata: dict[str, Any] = {}
 
     if files and len(files) > 0:
         upload_response = upload_files(files, FileOrigin.CONNECTOR)
         new_file_paths = upload_response.file_paths
         new_file_names_list = upload_response.file_names
-        new_zip_metadata = upload_response.zip_metadata
+        new_zip_metadata_file_id = upload_response.zip_metadata_file_id
+
+        # Load new metadata from file store if available
+        if new_zip_metadata_file_id:
+            try:
+                metadata_io = file_store.read_file(
+                    file_id=new_zip_metadata_file_id, mode="b"
+                )
+                metadata_bytes = metadata_io.read()
+                loaded_metadata = json.loads(metadata_bytes)
+                if isinstance(loaded_metadata, list):
+                    new_zip_metadata = {d["filename"]: d for d in loaded_metadata}
+                else:
+                    new_zip_metadata = loaded_metadata
+            except Exception as e:
+                logger.warning(f"Failed to load new metadata file: {e}")
 
     # Remove specified files
     files_to_remove_set = set(file_ids_list)
@@ -694,11 +744,14 @@ def update_connector_files(
 
     remaining_file_locations = []
     remaining_file_names = []
+    removed_file_names = set()
 
     for file_id, file_name in zip(current_file_locations, current_file_names):
         if file_id not in files_to_remove_set:
             remaining_file_locations.append(file_id)
             remaining_file_names.append(file_name)
+        else:
+            removed_file_names.add(file_name)
 
     # Combine remaining files with new files
     final_file_locations = remaining_file_locations + new_file_paths
@@ -711,21 +764,33 @@ def update_connector_files(
             detail="Cannot remove all files from connector. At least one file must remain.",
         )
 
-    # Update zip metadata
+    # Merge and filter metadata (remove metadata for deleted files)
     final_zip_metadata = {
         key: value
         for key, value in current_zip_metadata.items()
-        if key not in files_to_remove_set
+        if key not in removed_file_names
     }
     final_zip_metadata.update(new_zip_metadata)
+
+    # Save merged metadata to file store if we have any metadata
+    final_zip_metadata_file_id: str | None = None
+    if final_zip_metadata:
+        final_zip_metadata_file_id = file_store.save_file(
+            content=BytesIO(json.dumps(final_zip_metadata).encode("utf-8")),
+            display_name=ONYX_METADATA_FILENAME,
+            file_origin=FileOrigin.CONNECTOR_METADATA,
+            file_type="application/json",
+        )
 
     # Update connector config
     updated_config = {
         **current_config,
         "file_locations": final_file_locations,
         "file_names": final_file_names,
-        "zip_metadata": final_zip_metadata,
+        "zip_metadata_file_id": final_zip_metadata_file_id,
     }
+    # Remove old zip_metadata dict if present (backwards compatibility cleanup)
+    updated_config.pop("zip_metadata", None)
 
     connector_base = ConnectorBase(
         name=connector.name,
@@ -784,7 +849,7 @@ def update_connector_files(
     return FileUploadResponse(
         file_paths=final_file_locations,
         file_names=final_file_names,
-        zip_metadata=final_zip_metadata,
+        zip_metadata_file_id=final_zip_metadata_file_id,
     )
 
 

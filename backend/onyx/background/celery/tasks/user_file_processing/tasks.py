@@ -205,7 +205,6 @@ def process_single_user_file(
             connector = LocalFileConnector(
                 file_locations=[uf.file_id],
                 file_names=[uf.name] if uf.name else None,
-                zip_metadata={},
             )
             connector.load_credentials({})
 

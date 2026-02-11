@@ -580,7 +580,7 @@ class GoogleServiceAccountCredentialRequest(BaseModel):
 class FileUploadResponse(BaseModel):
     file_paths: list[str]
     file_names: list[str]
-    zip_metadata: dict[str, Any]
+    zip_metadata_file_id: str | None  # File ID pointing to metadata in file store
 
 
 class ConnectorFileInfo(BaseModel):

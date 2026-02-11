@@ -22,7 +22,7 @@ def test_ingestion_api_crud(
         connector_specific_config={
             "file_locations": [],
             "file_names": [],
-            "zip_metadata": {},
+            "zip_metadata_file_id": None,
         },
         user_performing_action=admin_user,
     )
