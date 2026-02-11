@@ -217,4 +217,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.mock_connector.connector",
         class_name="MockConnector",
     ),
+    # Craft files - raw binary uploads (xlsx, pptx, docx, etc.)
+    # Uses RAW_BINARY processing mode - no text extraction
+    DocumentSource.CRAFT_FILE: ConnectorMapping(
+        module_path="onyx.connectors.craft_file.connector",
+        class_name="CraftFileConnector",
+    ),
 }
