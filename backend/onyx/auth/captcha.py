@@ -7,7 +7,9 @@ from pydantic import Field
 from onyx.configs.app_configs import CAPTCHA_ENABLED
 from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
 from onyx.configs.app_configs import RECAPTCHA_SECRET_KEY
+from onyx.configs.app_configs import RECAPTCHA_V2_SECRET_KEY
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -104,4 +106,54 @@ async def verify_captcha_token(
         logger.error(f"Captcha API request failed: {e}")
         # In case of API errors, we might want to allow registration
         # to prevent blocking legitimate users. This is a policy decision.
+        raise CaptchaVerificationError("Captcha verification service unavailable")
+
+
+def is_captcha_v2_enabled() -> bool:
+    """Check if captcha v2 verification is enabled (cloud only)."""
+    return MULTI_TENANT and bool(RECAPTCHA_V2_SECRET_KEY)
+
+
+def verify_captcha_v2_token(token: str) -> None:
+    """
+    Verify a reCAPTCHA v2 token with Google's API (sync version).
+
+    Args:
+        token: The reCAPTCHA response token from the client
+
+    Raises:
+        CaptchaVerificationError: If verification fails
+    """
+    if not RECAPTCHA_V2_SECRET_KEY:
+        raise CaptchaVerificationError("reCAPTCHA v2 secret key not configured")
+
+    if not token:
+        raise CaptchaVerificationError("Captcha token is required")
+
+    try:
+        with httpx.Client() as client:
+            response = client.post(
+                RECAPTCHA_VERIFY_URL,
+                data={
+                    "secret": RECAPTCHA_V2_SECRET_KEY,
+                    "response": token,
+                },
+                timeout=10.0,
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            result = RecaptchaResponse(**data)
+
+            if not result.success:
+                error_codes = result.error_codes or ["unknown-error"]
+                logger.warning(f"Captcha v2 verification failed: {error_codes}")
+                raise CaptchaVerificationError(
+                    f"Captcha verification failed: {', '.join(error_codes)}"
+                )
+
+            logger.debug("Captcha v2 verification passed")
+
+    except httpx.HTTPError as e:
+        logger.error(f"Captcha v2 API request failed: {e}")
         raise CaptchaVerificationError("Captcha verification service unavailable")

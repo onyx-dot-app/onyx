@@ -1010,6 +1010,9 @@ RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "")
 # 0.5 is the recommended default
 RECAPTCHA_SCORE_THRESHOLD = float(os.environ.get("RECAPTCHA_SCORE_THRESHOLD", "0.5"))
 
+# Google reCAPTCHA v2 secret key (for bulk invite protection in cloud)
+RECAPTCHA_V2_SECRET_KEY = os.environ.get("RECAPTCHA_V2_SECRET_KEY", "")
+
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
