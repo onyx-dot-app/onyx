@@ -279,7 +279,7 @@ async function waitForAnySelector(
 
 async function scrollToBottom(page: Page): Promise<void> {
   try {
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const section = document.querySelector(
         '[data-testid="available-tools-section"]'
       );
@@ -288,8 +288,11 @@ async function scrollToBottom(page: Page): Promise<void> {
       } else {
         window.scrollTo(0, document.body.scrollHeight);
       }
+      // Let layout settle across two animation frames before continuing.
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
     });
-    await page.waitForTimeout(200);
   } catch {
     // ignore scrolling failures in test environment
   }
@@ -387,7 +390,6 @@ async function performIdpLogin(page: Page): Promise<void> {
     await page
       .waitForLoadState("domcontentloaded", { timeout: 15000 })
       .catch(() => {});
-    await page.waitForTimeout(300);
     return true;
   };
 
@@ -685,7 +687,10 @@ async function ensureActionPopoverInPrimaryView(page: Page) {
     return;
   }
   await backButton.click().catch(() => {});
-  await page.waitForTimeout(200);
+  await Promise.race([
+    serverRows.first().waitFor({ state: "visible", timeout: 2000 }),
+    backButton.waitFor({ state: "hidden", timeout: 2000 }),
+  ]).catch(() => {});
 }
 
 async function waitForMcpSecondaryView(page: Page) {
@@ -763,7 +768,9 @@ async function closeActionsPopover(page: Page) {
   const backButton = popover.getByRole("button", { name: /Back/i }).first();
   if ((await backButton.count()) > 0) {
     await backButton.click().catch(() => {});
-    await page.waitForTimeout(200);
+    await backButton
+      .waitFor({ state: "hidden", timeout: 2000 })
+      .catch(() => {});
   }
 
   await page.keyboard.press("Escape").catch(() => {});
@@ -815,17 +822,12 @@ async function waitForServerRow(
     .catch(() => {});
 
   const locator = getServerRowLocator(page, serverName);
-  const pollInterval = 100;
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    if ((await locator.count()) > 0) {
-      return locator;
-    }
-    await page.waitForTimeout(pollInterval);
+  try {
+    await locator.waitFor({ state: "visible", timeout: timeoutMs });
+    return locator;
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 async function ensureToolOptionVisible(

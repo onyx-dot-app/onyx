@@ -136,7 +136,7 @@ export async function loginAsRandomUser(page: Page) {
   // Click the signup button
   await page.click('button[type="submit"]');
   try {
-    await page.waitForURL(/\/app(\?.*)?$/, { timeout: 30000 });
+    await page.waitForURL(/\/(app|chat)(\?.*)?$/, { timeout: 30000 });
     await page.waitForLoadState("domcontentloaded");
   } catch {
     console.log(`Timeout occurred. Current URL: ${page.url()}`);

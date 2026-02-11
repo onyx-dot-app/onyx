@@ -108,7 +108,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant to test non-default behavior
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page.locator('input[name="name"]').fill("Custom Test Assistant");
       await page
         .locator('textarea[name="description"]')
@@ -149,7 +151,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page.locator('input[name="name"]').fill("Custom Assistant");
       await page
         .locator('textarea[name="description"]')
@@ -197,7 +201,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant with starter messages
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page
         .locator('input[name="name"]')
         .fill("Test Assistant with Starters");
@@ -245,8 +251,10 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
 
       // Wait for modal or assistant list to appear
-      // The selector might be in a modal or dropdown
-      await page.waitForTimeout(1000); // Give modal time to open
+      // The selector might be in a modal or dropdown.
+      await page
+        .getByTestId("AgentsPage/new-agent-button")
+        .waitFor({ state: "visible", timeout: 5000 });
 
       // Look for default assistant by name - it should NOT be there
       const assistantElements = await page.$$('[data-testid^="assistant-"]');
@@ -273,7 +281,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page.locator('input[name="name"]').fill("Switch Test Assistant");
       await page
         .locator('textarea[name="description"]')
