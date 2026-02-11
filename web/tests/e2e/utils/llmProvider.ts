@@ -67,6 +67,17 @@ export async function ensureLlmProviderExists(
   }
 
   const { id } = (await createRes.json()) as { id: number };
+
+  // Set the provider as the default so that get_default_llm() works
+  // (e.g. for file upload tokenization).
+  const defaultRes = await ctx.post(`/api/admin/llm/provider/${id}/default`);
+  if (!defaultRes.ok()) {
+    const body = await defaultRes.text();
+    console.warn(
+      `[llmProvider] Failed to set provider ${id} as default: ${defaultRes.status()} ${body}`
+    );
+  }
+
   console.log(`[global-setup] Created public LLM provider (ID: ${id})`);
   return id;
 }
@@ -112,6 +123,18 @@ export async function ensureLlmProviderForPage(
   }
 
   const { id } = (await createRes.json()) as { id: number };
+
+  // Set the provider as the default so that get_default_llm() works
+  const defaultRes = await page.request.post(
+    `${baseUrl}/api/admin/llm/provider/${id}/default`
+  );
+  if (!defaultRes.ok()) {
+    const body = await defaultRes.text();
+    console.warn(
+      `[llmProvider] Failed to set provider ${id} as default: ${defaultRes.status()} ${body}`
+    );
+  }
+
   console.log(`[llmProvider] Created public LLM provider (ID: ${id})`);
   return id;
 }
