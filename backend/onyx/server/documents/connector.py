@@ -702,6 +702,10 @@ def update_connector_files(
                 current_zip_metadata = loaded_metadata
         except Exception as e:
             logger.warning(f"Failed to load existing metadata file: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to load existing connector metadata file",
+            )
 
     # Upload new files if any
     new_file_paths = []
