@@ -1,7 +1,7 @@
 """LLMProvider deprecated fields are nullable
 
 Revision ID: 001984c88745
-Revises: d56ffa94ca32
+Revises: 175ea04c7087
 Create Date: 2026-02-01 22:24:34.171100
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "001984c88745"
-down_revision = "d56ffa94ca32"
+down_revision = "175ea04c7087"
 branch_labels = None
 depends_on = None
 
