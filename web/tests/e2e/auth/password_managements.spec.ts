@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { loginAsRandomUser, loginAs } from "../utils/auth";
 import { TEST_ADMIN2_CREDENTIALS, TEST_ADMIN_CREDENTIALS } from "../constants";
 

@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { loginAs } from "../utils/auth";
 import { verifyCurrentModel } from "../utils/chatActions";
 import { ensureImageGenerationEnabled } from "../utils/assistantUtils";
