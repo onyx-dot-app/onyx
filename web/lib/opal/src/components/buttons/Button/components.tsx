@@ -42,6 +42,9 @@ type ButtonProps = InteractiveBaseProps &
     /** Size preset — controls gap, text size, and Container height/rounding. */
     size?: SizeVariant;
 
+    /** HTML button type. When provided, Container renders a `<button>` element. */
+    type?: "submit" | "button" | "reset";
+
     /** Tooltip text shown on hover. */
     tooltip?: string;
 
@@ -79,6 +82,7 @@ function Button({
   rightIcon: RightIcon,
   size = "default",
   foldable,
+  type,
   tooltip,
   tooltipSide = "top",
   ...interactiveBaseProps
@@ -99,6 +103,7 @@ function Button({
   const button = (
     <Interactive.Base {...interactiveBaseProps}>
       <Interactive.Container
+        type={type}
         border={interactiveBaseProps.subvariant === "secondary"}
         heightVariant={isCompact ? "compact" : "default"}
         roundingVariant={isCompact ? "compact" : "default"}
