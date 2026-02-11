@@ -6,7 +6,7 @@ import {
 } from "../constants";
 import { logPageState } from "./pageStateLogger";
 
-// Logs in a user (admin, user, or admin2) to the application.
+// Logs in a user (admin, user, or admin2) via the browser UI.
 // Users must already be provisioned (see global-setup.ts).
 export async function loginAs(
   page: Page,
@@ -32,45 +32,25 @@ export async function loginAs(
     }
   };
 
-  const fillCredentials = async (contextLabel: string) => {
-    const emailInput = page.getByTestId("email");
-    const passwordInput = page.getByTestId("password");
-    await waitForVisible(emailInput, `${contextLabel}: email input`);
-    await waitForVisible(passwordInput, `${contextLabel}: password input`);
-    await emailInput.fill(email);
-    await passwordInput.fill(password);
-  };
-
-  console.log(`[loginAs] Navigating to /auth/login as ${userType}`);
   await page.goto("/auth/login");
-
-  // Wait for navigation to settle (login page may redirect to signup if no users exist)
   await page.waitForLoadState("networkidle");
 
-  const currentUrl = page.url();
-  const isOnSignup = currentUrl.includes("/auth/signup");
-  console.log(
-    `[loginAs] After navigation, landed on: ${currentUrl} (isOnSignup: ${isOnSignup})`
-  );
+  const isOnSignup = page.url().includes("/auth/signup");
+  const contextLabel = isOnSignup
+    ? "loginAs signup form"
+    : "loginAs login form";
 
-  await fillCredentials(
-    isOnSignup ? "loginAs signup form" : "loginAs login form"
-  );
+  const emailInput = page.getByTestId("email");
+  const passwordInput = page.getByTestId("password");
+  await waitForVisible(emailInput, `${contextLabel}: email input`);
+  await waitForVisible(passwordInput, `${contextLabel}: password input`);
+  await emailInput.fill(email);
+  await passwordInput.fill(password);
 
-  // Click the submit button
   await page.click('button[type="submit"]');
-  // Log any console errors during login
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      console.log(`[page:console:error] ${msg.text()}`);
-    }
-  });
 
   try {
     await page.waitForURL(/\/app.*/, { timeout: 10000 });
-    console.log(
-      `[loginAs] Redirected to /app for ${userType}. URL: ${page.url()}`
-    );
   } catch {
     await logPageState(
       page,
@@ -80,28 +60,6 @@ export async function loginAs(
     throw new Error(
       `[loginAs] Failed to login as ${userType}. Current URL: ${page.url()}`
     );
-  }
-
-  try {
-    // Try to fetch current user info from the page context
-    const me = await page.evaluate(async () => {
-      try {
-        const res = await fetch("/api/me", { credentials: "include" });
-        return {
-          ok: res.ok,
-          status: res.status,
-          url: res.url,
-          body: await res.text(),
-        };
-      } catch (e) {
-        return { ok: false, status: 0, url: "", body: `error: ${String(e)}` };
-      }
-    });
-    console.log(
-      `[loginAs] /api/me => ok=${me.ok} status=${me.status} url=${me.url}`
-    );
-  } catch (e) {
-    console.log(`[loginAs] Failed to query /api/me: ${String(e)}`);
   }
 }
 // Function to generate a random email and password
@@ -152,20 +110,11 @@ export async function loginWithCredentials(
   password: string
 ) {
   if (process.env.SKIP_AUTH === "true") {
-    console.log("[loginWithCredentials] Skipping authentication");
     return;
   }
 
   await page.goto("/auth/login");
-
-  // Wait for navigation to settle (login page may redirect to signup if no users exist)
   await page.waitForLoadState("networkidle");
-
-  const currentUrl = page.url();
-  const isOnSignup = currentUrl.includes("/auth/signup");
-  console.log(
-    `[loginWithCredentials] After navigation, landed on: ${currentUrl} (isOnSignup: ${isOnSignup})`
-  );
 
   const emailInput = page.getByTestId("email");
   const passwordInput = page.getByTestId("password");
