@@ -69,6 +69,8 @@ Status checked against LiteLLM v1.81.6-nightly (2026-02-02):
            ResponseAPIUsage. Our patch creates a deep copy before modification.
 """
 
+import copy
+import json
 import time
 import uuid
 from typing import Any
@@ -139,7 +141,8 @@ def _patch_ollama_chunk_parser() -> None:
                         is_function_call_complete = self._is_function_call_complete(
                             function_args
                         )
-                        if is_function_call_complete:
+                        # Preserve provider-supplied IDs; generate fallback only when absent.
+                        if is_function_call_complete and not tool_call.get("id"):
                             tool_call["id"] = str(uuid.uuid4())
 
             # PROCESS REASONING CONTENT
@@ -180,6 +183,8 @@ def _patch_ollama_chunk_parser() -> None:
             )
             if chunk["done"] is True:
                 finish_reason = chunk.get("done_reason", "stop")
+                if tool_calls is not None:
+                    finish_reason = "tool_calls"
                 choices = [
                     StreamingChoices(
                         delta=delta,
@@ -218,6 +223,160 @@ def _patch_ollama_chunk_parser() -> None:
             raise e
 
     OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser  # type: ignore[method-assign]
+
+
+def _patch_ollama_transform_request_tool_ids() -> None:
+    """Patch Ollama chat request transformation to preserve tool call linkage.
+
+    LiteLLM currently drops `assistant.tool_calls[].id` and `tool.tool_call_id`
+    when converting OpenAI-style messages to Ollama `/api/chat` format, which can
+    cause Ollama to reject tool results as unmatched.
+    """
+    from pydantic import BaseModel
+
+    from litellm.llms.ollama.chat.transformation import OllamaChatConfig
+
+    original_transform_request = OllamaChatConfig.transform_request
+
+    if (
+        getattr(original_transform_request, "__name__", "")
+        == "_patched_ollama_transform_request"
+    ):
+        return
+
+    def _patched_ollama_transform_request(
+        self: Any,
+        model: str,
+        messages: list[Any],
+        optional_params: dict,
+        litellm_params: dict,
+        headers: dict,
+    ) -> dict:
+        # LiteLLM mutates `messages` in-place while transforming assistant tool calls,
+        # so snapshot first to preserve original IDs.
+        original_messages: list[Any] = []
+        for msg in messages:
+            if isinstance(msg, BaseModel):
+                original_messages.append(msg.model_dump(exclude_none=True))
+            elif isinstance(msg, dict):
+                original_messages.append(copy.deepcopy(msg))
+            else:
+                original_messages.append(msg)
+
+        data = original_transform_request(
+            self,
+            model=model,
+            messages=messages,
+            optional_params=optional_params,
+            litellm_params=litellm_params,
+            headers=headers,
+        )
+
+        transformed_messages = data.get("messages")
+        if not isinstance(transformed_messages, list):
+            return data
+
+        for original_msg, transformed_msg in zip(
+            original_messages, transformed_messages
+        ):
+            if isinstance(original_msg, BaseModel):
+                original_msg = original_msg.model_dump(exclude_none=True)
+            if not isinstance(original_msg, dict) or not isinstance(
+                transformed_msg, dict
+            ):
+                continue
+
+            role = original_msg.get("role")
+
+            if role == "assistant":
+                tool_calls = original_msg.get("tool_calls")
+                if isinstance(tool_calls, list):
+                    patched_tool_calls: list[dict[str, Any]] = []
+                    original_tool_ids: list[str] = []
+                    for tool in tool_calls:
+                        if isinstance(tool, BaseModel):
+                            tool = tool.model_dump(exclude_none=True)
+                        if not isinstance(tool, dict):
+                            continue
+
+                        function = tool.get("function")
+                        if isinstance(function, BaseModel):
+                            function = function.model_dump(exclude_none=True)
+                        if not isinstance(function, dict):
+                            continue
+
+                        function_name = function.get("name")
+                        if not isinstance(function_name, str) or not function_name:
+                            continue
+
+                        function_arguments = function.get("arguments")
+                        if isinstance(function_arguments, str):
+                            try:
+                                parsed_arguments = (
+                                    json.loads(function_arguments)
+                                    if function_arguments
+                                    else {}
+                                )
+                            except Exception:
+                                parsed_arguments = {}
+                        elif isinstance(function_arguments, dict):
+                            parsed_arguments = function_arguments
+                        else:
+                            parsed_arguments = {}
+
+                        ollama_tool_call: dict[str, Any] = {
+                            "function": {
+                                "name": function_name,
+                                "arguments": parsed_arguments,
+                            }
+                        }
+
+                        tool_id = tool.get("id")
+                        if isinstance(tool_id, str) and tool_id:
+                            original_tool_ids.append(tool_id)
+                            ollama_tool_call["id"] = tool_id
+
+                        patched_tool_calls.append(ollama_tool_call)
+
+                    if patched_tool_calls:
+                        transformed_tool_calls = transformed_msg.get("tool_calls")
+                        transformed_has_tool_calls = (
+                            isinstance(transformed_tool_calls, list)
+                            and len(transformed_tool_calls) > 0
+                        )
+                        transformed_has_any_id = isinstance(
+                            transformed_tool_calls, list
+                        ) and any(
+                            isinstance(tc, dict) and isinstance(tc.get("id"), str)
+                            for tc in transformed_tool_calls
+                        )
+                        needs_patch = not transformed_has_tool_calls or (
+                            len(original_tool_ids) > 0 and not transformed_has_any_id
+                        )
+                        if needs_patch:
+                            transformed_msg["tool_calls"] = patched_tool_calls
+
+            elif role == "tool":
+                tool_call_id = original_msg.get("tool_call_id")
+                if (
+                    isinstance(tool_call_id, str)
+                    and tool_call_id
+                    and not transformed_msg.get("tool_call_id")
+                ):
+                    transformed_msg["tool_call_id"] = tool_call_id
+
+                tool_name = original_msg.get("tool_name") or original_msg.get("name")
+                if (
+                    isinstance(tool_name, str)
+                    and tool_name
+                    and not transformed_msg.get("tool_name")
+                ):
+                    transformed_msg["tool_name"] = tool_name
+
+        return data
+
+    _patched_ollama_transform_request.__name__ = "_patched_ollama_transform_request"
+    OllamaChatConfig.transform_request = _patched_ollama_transform_request  # type: ignore[method-assign]
 
 
 def _patch_openai_responses_parallel_tool_calls() -> None:
@@ -723,6 +882,7 @@ def apply_monkey_patches() -> None:
     - Patching LiteLLMLoggingObj._get_assembled_streaming_response to avoid mutating original response
     """
     _patch_ollama_chunk_parser()
+    _patch_ollama_transform_request_tool_ids()
     _patch_openai_responses_parallel_tool_calls()
     _patch_openai_responses_transform_response()
     _patch_azure_responses_should_fake_stream()
