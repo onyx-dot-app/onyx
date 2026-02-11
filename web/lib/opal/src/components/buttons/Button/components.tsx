@@ -103,7 +103,7 @@ function Button({
   const button = (
     <Interactive.Base {...interactiveBaseProps}>
       <Interactive.Container
-        type={type}
+        type={interactiveBaseProps.href ? undefined : type}
         border={interactiveBaseProps.subvariant === "secondary"}
         heightVariant={isCompact ? "compact" : "default"}
         roundingVariant={isCompact ? "compact" : "default"}
