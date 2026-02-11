@@ -497,7 +497,7 @@ kubernetes==31.0.0
     # via onyx
 langchain==0.3.23
     # via onyx
-langchain-core==0.3.81
+langchain-core==1.2.11
     # via
     #   langchain
     #   langchain-text-splitters
