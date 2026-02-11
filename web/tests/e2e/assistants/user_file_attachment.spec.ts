@@ -48,110 +48,45 @@ const navigateToFilesView = async (page: Page) => {
   await page.waitForTimeout(500);
 };
 
-// Helper to upload a file through the knowledge panel
+// Helper to upload a file through the knowledge panel using the hidden file input directly
 async function uploadTestFile(
   page: Page,
   fileName: string,
-  content: string,
-  maxRetries: number = 3
+  content: string
 ): Promise<string> {
   const buffer = Buffer.from(content, "utf-8");
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`[test] Upload attempt ${attempt} for ${fileName}`);
+  // Use the hidden file input directly — more reliable than the file chooser dialog.
+  // Target the knowledge panel's file input (has `multiple` attr), not the avatar one.
+  const fileInput = page.locator('input[type="file"][multiple]');
 
-      // Find the Add File button
-      const addFileButton = page.getByRole("button", { name: /add file/i });
-      await expect(addFileButton).toBeVisible({ timeout: 5000 });
-      await expect(addFileButton).toBeEnabled({ timeout: 5000 });
-
-      // Set up file chooser listener before clicking
-      const fileChooserPromise = page.waitForEvent("filechooser", {
-        timeout: 5000,
-      });
-      await addFileButton.click();
-      const fileChooser = await fileChooserPromise;
-
-      // Upload the file
-      await fileChooser.setFiles({
-        name: fileName,
-        mimeType: "text/plain",
-        buffer: buffer,
-      });
-
-      // Wait for network to settle after upload
-      await page.waitForLoadState("networkidle", { timeout: 10000 });
-
-      // Wait a moment for the UI to update
-      await page.waitForTimeout(500);
-
-      // Wait for the file to appear in the table (look for partial match)
-      const fileNameWithoutExt = fileName.replace(".txt", "");
-      const fileElement = page.locator(`text=${fileNameWithoutExt}`).first();
-      await expect(fileElement).toBeVisible({ timeout: 10000 });
-
-      console.log(`[test] Successfully uploaded ${fileName}`);
-
-      // Return the file name for verification later
-      return fileName;
-    } catch (error) {
-      console.log(
-        `[test] Upload attempt ${attempt} failed: ${
-          error instanceof Error ? error.message : "unknown error"
-        }`
-      );
-      if (attempt === maxRetries) {
-        throw error;
-      }
-      await page.waitForTimeout(1000);
-    }
-  }
-
-  throw new Error(
-    `Failed to upload file ${fileName} after ${maxRetries} attempts`
+  // Monitor the upload API call
+  const uploadPromise = page.waitForResponse(
+    (res) =>
+      res.url().includes("/api/user/projects/file/upload") &&
+      res.request().method() === "POST",
+    { timeout: 15000 }
   );
-}
 
-// Helper to select a file by clicking its row
-async function selectFileByName(page: Page, fileName: string): Promise<void> {
-  const fileNameWithoutExt = fileName.replace(".txt", "");
-
-  // Try to find and click the row containing the file name
-  // First try by aria-label
-  let fileRow = page.locator(`[aria-label^="user-file-row-"]`, {
-    has: page.locator(`text=${fileNameWithoutExt}`),
+  await fileInput.setInputFiles({
+    name: fileName,
+    mimeType: "text/plain",
+    buffer: buffer,
   });
 
-  if ((await fileRow.count()) === 0) {
-    // Fall back to finding by table-row-layout class
-    fileRow = page.locator("[data-selected]", {
-      has: page.locator(`text=${fileNameWithoutExt}`),
-    });
+  // Wait for the upload API call to complete
+  const uploadResponse = await uploadPromise;
+  if (!uploadResponse.ok()) {
+    const body = await uploadResponse.text();
+    throw new Error(`Upload API failed: ${uploadResponse.status()} ${body}`);
   }
 
-  if ((await fileRow.count()) === 0) {
-    // Last resort: find any clickable row with the file name
-    fileRow = page
-      .locator("div", {
-        has: page.locator(`text=${fileNameWithoutExt}`),
-      })
-      .filter({
-        has: page.locator('[role="checkbox"], input[type="checkbox"]'),
-      })
-      .first();
-  }
+  // Wait for the file to appear in the table
+  const fileNameWithoutExt = fileName.replace(".txt", "");
+  const fileElement = page.locator(`text=${fileNameWithoutExt}`).first();
+  await expect(fileElement).toBeVisible({ timeout: 15000 });
 
-  if ((await fileRow.count()) > 0) {
-    await fileRow.click();
-  } else {
-    // Just click on the file name text itself
-    await page.locator(`text=${fileNameWithoutExt}`).first().click();
-  }
-
-  // Wait for the selection to register
-  await page.waitForTimeout(300);
-  console.log(`[test] Selected file: ${fileName}`);
+  return fileName;
 }
 
 test.describe("User File Attachment to Assistant", () => {

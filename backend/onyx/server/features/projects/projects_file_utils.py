@@ -128,11 +128,17 @@ def categorize_uploaded_files(files: list[UploadFile]) -> CategorizedFiles:
     """
 
     results = CategorizedFiles()
-    llm = get_default_llm()
 
-    tokenizer = get_tokenizer(
-        model_name=llm.config.model_name, provider_type=llm.config.model_provider
-    )
+    try:
+        llm = get_default_llm()
+        tokenizer = get_tokenizer(
+            model_name=llm.config.model_name, provider_type=llm.config.model_provider
+        )
+    except ValueError:
+        logger.warning(
+            "No default LLM model configured; using default tokenizer for file categorization"
+        )
+        tokenizer = get_tokenizer(model_name=None, provider_type=None)
 
     # Check if threshold checks should be skipped
     skip_threshold = False
