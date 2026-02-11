@@ -80,8 +80,9 @@ def test_chat_with_small_project_file(
     )
 
     # Link the chat session to the project
-    resp = requests.put(
-        f"{API_SERVER_URL}/chat/chat-session/{chat_session.id}/project/{project.id}",
+    resp = requests.post(
+        f"{API_SERVER_URL}/user/projects/{project.id}/move_chat_session",
+        json={"chat_session_id": str(chat_session.id)},
         headers=admin_user.headers,
     )
     resp.raise_for_status()
