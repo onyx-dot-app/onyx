@@ -36,7 +36,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def llm_provider(admin_user: DATestUser) -> None:
-    """Ensure an LLM provider exists for the test module."""
+    """Ensure an LLM provider exists for the test session."""
     LLMProviderManager.create(user_performing_action=admin_user)

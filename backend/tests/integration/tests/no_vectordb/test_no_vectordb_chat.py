@@ -178,22 +178,40 @@ def test_persona_with_user_files_chat(
 # ------------------------------------------------------------------
 
 
+def _base_persona_body(**overrides: object) -> dict:
+    """Build a valid PersonaUpsertRequest body with sensible defaults.
+
+    Callers override only the fields under test so that Pydantic validation
+    passes and the vector-DB guard (``_validate_vector_db_knowledge``) is
+    the one that rejects the request.
+    """
+    body: dict = {
+        "name": "should-fail",
+        "description": "test",
+        "system_prompt": "test",
+        "task_prompt": "",
+        "num_chunks": 5,
+        "is_public": True,
+        "recency_bias": "auto",
+        "llm_filter_extraction": False,
+        "llm_relevance_filter": False,
+        "datetime_aware": False,
+        "document_set_ids": [],
+        "tool_ids": [],
+        "users": [],
+        "groups": [],
+    }
+    body.update(overrides)
+    return body
+
+
 def test_persona_rejects_document_sets_without_vector_db(
     admin_user: DATestUser,
 ) -> None:
     """Creating a persona with document_set_ids should fail with 400."""
     resp = requests.post(
         f"{API_SERVER_URL}/persona",
-        json={
-            "name": "should-fail",
-            "description": "test",
-            "system_prompt": "test",
-            "task_prompt": "",
-            "document_set_ids": [1],
-            "tool_ids": [],
-            "users": [],
-            "groups": [],
-        },
+        json=_base_persona_body(document_set_ids=[1]),
         headers=admin_user.headers,
     )
     assert (
@@ -207,17 +225,7 @@ def test_persona_rejects_document_ids_without_vector_db(
     """Creating a persona with document_ids should fail with 400."""
     resp = requests.post(
         f"{API_SERVER_URL}/persona",
-        json={
-            "name": "should-fail-docs",
-            "description": "test",
-            "system_prompt": "test",
-            "task_prompt": "",
-            "document_set_ids": [],
-            "document_ids": ["fake-doc-id"],
-            "tool_ids": [],
-            "users": [],
-            "groups": [],
-        },
+        json=_base_persona_body(document_ids=["fake-doc-id"]),
         headers=admin_user.headers,
     )
     assert (
