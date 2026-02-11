@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { expectScreenshot } from "./utils/visualRegression";
 
 test.use({ storageState: "admin_auth.json" });
+test.describe.configure({ mode: "parallel" });
 
 interface AdminPageSnapshot {
   name: string;
@@ -169,6 +170,9 @@ for (const snapshot of ADMIN_PAGES) {
       snapshot.pageTitle,
       snapshot.options
     );
+
+    // Wait for all network requests to settle before capturing the screenshot.
+    await page.waitForLoadState("networkidle");
 
     // Capture a screenshot for visual regression review.
     // The screenshot name is derived from the admin page path to ensure uniqueness.
