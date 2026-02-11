@@ -8,8 +8,10 @@ from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import is_user_admin
+from onyx.chat.models import ChatHistoryResult
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -502,15 +504,22 @@ def convert_chat_history(
     additional_context: str | None,
     token_counter: Callable[[str], int],
     tool_id_to_name_map: dict[int, str],
-) -> list[ChatMessageSimple]:
+) -> ChatHistoryResult:
     """Convert ChatMessage history to ChatMessageSimple format.
 
     For user messages: includes attached files (images attached to message, text files as separate messages)
     For assistant messages with tool calls: creates ONE ASSISTANT message with tool_calls array,
         followed by N TOOL_CALL_RESPONSE messages (OpenAI parallel tool calling format)
     For assistant messages without tool calls: creates a simple ASSISTANT message
+
+    Every injected text-file message is tagged with ``file_id`` and its
+    metadata is collected in ``ChatHistoryResult.all_injected_file_metadata``.
+    After context-window truncation, callers compare surviving ``file_id`` tags
+    against this map to discover "forgotten" files and provide their metadata
+    to the FileReaderTool.
     """
     simple_messages: list[ChatMessageSimple] = []
+    all_injected_file_metadata: dict[str, FileToolMetadata] = {}
 
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
@@ -539,7 +548,9 @@ def convert_chat_history(
                             # Text files (DOC, PLAIN_TEXT, CSV) are added as separate messages
                             text_files.append(loaded_file)
 
-            # Add text files as separate messages before the user message
+            # Add text files as separate messages before the user message.
+            # Each message is tagged with ``file_id`` so that forgotten files
+            # can be detected after context-window truncation.
             for text_file in text_files:
                 file_text = text_file.content_text or ""
                 filename = text_file.filename
@@ -554,7 +565,13 @@ def convert_chat_history(
                         token_count=text_file.token_count,
                         message_type=MessageType.USER,
                         image_files=None,
+                        file_id=text_file.file_id,
                     )
+                )
+                all_injected_file_metadata[text_file.file_id] = FileToolMetadata(
+                    file_id=text_file.file_id,
+                    filename=filename or "unknown",
+                    approx_char_count=len(file_text),
                 )
 
             # Sum token counts from image files (excluding project image files)
@@ -664,7 +681,10 @@ def convert_chat_history(
                 f"Invalid message type when constructing simple history: {chat_message.message_type}"
             )
 
-    return simple_messages
+    return ChatHistoryResult(
+        simple_messages=simple_messages,
+        all_injected_file_metadata=all_injected_file_metadata,
+    )
 
 
 def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:

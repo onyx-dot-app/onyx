@@ -244,6 +244,9 @@ class ChatMessageSimple(BaseModel):
     # represents the end of the cacheable prefix
     # used for prompt caching
     should_cache: bool = False
+    # When this message represents an injected text file, this is the file's ID.
+    # Used to detect which file messages survive context-window truncation.
+    file_id: str | None = None
 
 
 class ProjectFileMetadata(BaseModel):
@@ -265,6 +268,20 @@ class FileToolMetadata(BaseModel):
     file_id: str
     filename: str
     approx_char_count: int
+
+
+class ChatHistoryResult(BaseModel):
+    """Result of converting chat history to simple format.
+
+    Bundles the simple messages with metadata for every text file that was
+    injected into the history. After context-window truncation drops older
+    messages, callers compare surviving ``file_id`` tags against this map
+    to discover "forgotten" files whose metadata should be provided to the
+    FileReaderTool.
+    """
+
+    simple_messages: list[ChatMessageSimple]
+    all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
 class ExtractedProjectFiles(BaseModel):

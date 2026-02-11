@@ -616,6 +616,13 @@ export default function AgentEditorPage({
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
       ) ??
         false),
+    file_reader:
+      !!fileReaderTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === FILE_READER_TOOL_ID
+      ) ??
+        // Default to enabled for new assistants when the tool is available
+        !!fileReaderTool),
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
@@ -747,13 +754,12 @@ export default function AgentEditorPage({
 
       const toolIds = [];
       if (values.enable_knowledge) {
-        // With vector DB: use SearchTool for RAG search
-        // Without vector DB: use FileReaderTool for direct file access
         if (vectorDbEnabled && searchTool) {
           toolIds.push(searchTool.id);
-        } else if (!vectorDbEnabled && fileReaderTool) {
-          toolIds.push(fileReaderTool.id);
         }
+      }
+      if (values.file_reader && fileReaderTool) {
+        toolIds.push(fileReaderTool.id);
       }
       if (values.image_generation && imageGenTool) {
         toolIds.push(imageGenTool.id);
@@ -1330,6 +1336,24 @@ export default function AgentEditorPage({
                                 <SwitchField
                                   name="code_interpreter"
                                   disabled={!codeInterpreterTool}
+                                />
+                              </InputLayouts.Horizontal>
+                            </Card>
+
+                            <Card
+                              variant={
+                                !!fileReaderTool ? undefined : "disabled"
+                              }
+                            >
+                              <InputLayouts.Horizontal
+                                name="file_reader"
+                                title="File Reader"
+                                description="Read sections of uploaded files. Required for files that exceed the context window."
+                                disabled={!fileReaderTool}
+                              >
+                                <SwitchField
+                                  name="file_reader"
+                                  disabled={!fileReaderTool}
                                 />
                               </InputLayouts.Horizontal>
                             </Card>

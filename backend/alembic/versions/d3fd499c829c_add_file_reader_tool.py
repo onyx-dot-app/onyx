@@ -51,17 +51,32 @@ def upgrade() -> None:
             ),
             FILE_READER_TOOL,
         )
+        tool_id = existing[0]
     else:
         # Insert new tool
-        conn.execute(
+        result = conn.execute(
             sa.text(
                 """
                 INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
                 VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
+                RETURNING id
                 """
             ),
             FILE_READER_TOOL,
         )
+        tool_id = result.scalar_one()
+
+    # Attach to the default persona (id=0) if not already attached
+    conn.execute(
+        sa.text(
+            """
+            INSERT INTO persona__tool (persona_id, tool_id)
+            VALUES (0, :tool_id)
+            ON CONFLICT DO NOTHING
+            """
+        ),
+        {"tool_id": tool_id},
+    )
 
 
 def downgrade() -> None:

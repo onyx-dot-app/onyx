@@ -9,6 +9,7 @@ import traceback
 from collections.abc import Callable
 from uuid import UUID
 
+from pydantic import BaseModel
 from redis.client import Redis
 from sqlalchemy.orm import Session
 
@@ -91,6 +92,9 @@ from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import FileReaderToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+    FileReaderTool,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
@@ -104,24 +108,35 @@ logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
 
+class _AvailableFiles(BaseModel):
+    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
+
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
+
+
 def _collect_available_file_ids(
     chat_history: list[ChatMessage],
     project_id: int | None,
     user_id: UUID | None,
     db_session: Session,
-) -> list[UUID]:
+) -> _AvailableFiles:
     """Collect all file IDs the FileReaderTool should be allowed to access.
 
-    Includes files attached to chat messages and files belonging to
-    the project (if any)."""
-    file_ids: set[UUID] = set()
+    Returns *separate* lists for chat-attached files (``file_record`` IDs) and
+    project/user files (``user_file`` IDs) so the tool can pick the right
+    loader without a try/except fallback."""
+    chat_file_ids: set[UUID] = set()
+    user_file_ids: set[UUID] = set()
 
     for msg in chat_history:
         if not msg.files:
             continue
         for fd in msg.files:
             try:
-                file_ids.add(UUID(fd["id"]))
+                chat_file_ids.add(UUID(fd["id"]))
             except (ValueError, KeyError):
                 pass
 
@@ -132,9 +147,12 @@ def _collect_available_file_ids(
             db_session=db_session,
         )
         for uf in project_files:
-            file_ids.add(uf.id)
+            user_file_ids.add(uf.id)
 
-    return list(file_ids)
+    return _AvailableFiles(
+        user_file_ids=list(user_file_ids),
+        chat_file_ids=list(chat_file_ids),
+    )
 
 
 def _should_enable_slack_search(
@@ -623,7 +641,7 @@ def handle_stream_message_objects(
         emitter = get_default_emitter()
 
         # Collect file IDs for the file reader tool to restrict access
-        available_file_ids = _collect_available_file_ids(
+        available_files = _collect_available_file_ids(
             chat_history=chat_history,
             project_id=chat_session.project_id,
             user_id=user_id,
@@ -631,9 +649,10 @@ def handle_stream_message_objects(
         )
         # Also grant access to persona-attached user files
         if persona.user_files:
+            existing = set(available_files.user_file_ids)
             for uf in persona.user_files:
-                if uf.id not in available_file_ids:
-                    available_file_ids.append(uf.id)
+                if uf.id not in existing:
+                    available_files.user_file_ids.append(uf.id)
 
         # Construct tools based on the persona configurations
         tool_dict = construct_tools(
@@ -662,7 +681,8 @@ def handle_stream_message_objects(
                 mcp_headers=mcp_headers,
             ),
             file_reader_tool_config=FileReaderToolConfig(
-                available_file_ids=available_file_ids,
+                user_file_ids=available_files.user_file_ids,
+                chat_file_ids=available_files.chat_file_ids,
             ),
             allowed_tool_ids=new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=project_search_config.search_usage,
@@ -693,15 +713,29 @@ def handle_stream_message_objects(
             reserved_assistant_message_id=assistant_response.id,
         )
 
+        # Check whether the FileReaderTool is among the constructed tools.
+        has_file_reader_tool = any(isinstance(t, FileReaderTool) for t in tools)
+
         # Convert the chat history into a simple format that is free of any DB objects
         # and is easy to parse for the agent loop
-        simple_chat_history = convert_chat_history(
+        chat_history_result = convert_chat_history(
             chat_history=chat_history,
             files=files,
             project_image_files=extracted_project_files.project_image_files,
             additional_context=additional_context,
             token_counter=token_counter,
             tool_id_to_name_map=tool_id_to_name_map,
+        )
+        simple_chat_history = chat_history_result.simple_messages
+
+        # Metadata for every text file injected into the history.  After
+        # context-window truncation drops older messages, the LLM loop
+        # compares surviving file_id tags against this map to discover
+        # "forgotten" files and provide their metadata to FileReaderTool.
+        all_injected_file_metadata = (
+            chat_history_result.all_injected_file_metadata
+            if has_file_reader_tool
+            else {}
         )
 
         # Prepend summary message if compression exists
@@ -774,6 +808,7 @@ def handle_stream_message_objects(
                 skip_clarification=skip_clarification,
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
+                all_injected_file_metadata=all_injected_file_metadata,
             )
         else:
             yield from run_chat_loop_with_state_containers(
@@ -795,6 +830,7 @@ def handle_stream_message_objects(
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
                 include_citations=new_msg_req.include_citations,
+                all_injected_file_metadata=all_injected_file_metadata,
             )
 
     except ValueError as e:

@@ -60,7 +60,10 @@ class SearchToolConfig(BaseModel):
 
 
 class FileReaderToolConfig(BaseModel):
-    available_file_ids: list[UUID] | None = None
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
 
 
 class CustomToolConfig(BaseModel):
@@ -243,16 +246,13 @@ def construct_tools(
 
             # Handle File Reader Tool
             elif tool_cls.__name__ == FileReaderTool.__name__:
+                cfg = file_reader_tool_config or FileReaderToolConfig()
                 tool_dict[db_tool_model.id] = [
                     FileReaderTool(
                         tool_id=db_tool_model.id,
                         emitter=emitter,
-                        available_file_ids=(
-                            file_reader_tool_config.available_file_ids
-                            if file_reader_tool_config
-                            and file_reader_tool_config.available_file_ids
-                            else []
-                        ),
+                        user_file_ids=cfg.user_file_ids,
+                        chat_file_ids=cfg.chat_file_ids,
                     )
                 ]
 

@@ -53,7 +53,8 @@ class DisabledDocumentIndex(DocumentIndex):
         secondary_index_embedding_dim: int | None,  # noqa: ARG002
         secondary_index_embedding_precision: EmbeddingPrecision | None,  # noqa: ARG002
     ) -> None:
-        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+        # No-op: there are no indices to create when the vector DB is disabled.
+        pass
 
     @staticmethod
     def register_multitenant_indices(

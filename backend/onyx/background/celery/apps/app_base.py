@@ -583,7 +583,6 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.docfetching",
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
-    "onyx.background.celery.tasks.shared",
     "onyx.background.celery.tasks.opensearch_migration",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
@@ -591,6 +590,10 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "ee.onyx.background.celery.tasks.doc_permission_syncing",
     "ee.onyx.background.celery.tasks.external_group_syncing",
 }
+# NOTE: "onyx.background.celery.tasks.shared" is intentionally NOT in the set
+# above. It contains celery_beat_heartbeat (which only writes to Redis) alongside
+# document cleanup tasks. The cleanup tasks won't be invoked in minimal mode
+# because the periodic tasks that trigger them are in other filtered modules.
 
 
 def filter_task_modules(modules: list[str]) -> list[str]:

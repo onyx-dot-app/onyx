@@ -8,6 +8,8 @@ from typing_extensions import override
 from onyx.chat.emitter import Emitter
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.utils import load_chat_file_by_id
 from onyx.file_store.utils import load_user_file
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -43,11 +45,13 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         self,
         tool_id: int,
         emitter: Emitter,
-        available_file_ids: list[UUID],
+        user_file_ids: list[UUID],
+        chat_file_ids: list[UUID],
     ) -> None:
         super().__init__(emitter=emitter)
         self._id = tool_id
-        self._available_file_ids = available_file_ids
+        self._user_file_ids = set(user_file_ids)
+        self._chat_file_ids = set(chat_file_ids)
 
     @property
     def id(self) -> int:
@@ -119,7 +123,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
                 llm_facing_message=f"'{raw_file_id}' is not a valid file UUID.",
             )
 
-        if file_id not in self._available_file_ids:
+        if file_id not in self._user_file_ids and file_id not in self._chat_file_ids:
             raise ToolCallException(
                 message=f"File {file_id} not in available files",
                 llm_facing_message=(
@@ -129,6 +133,12 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             )
 
         return file_id
+
+    def _load_file(self, file_id: UUID) -> InMemoryChatFile:
+        if file_id in self._user_file_ids:
+            with get_session_with_current_tenant() as db_session:
+                return load_user_file(file_id, db_session)
+        return load_chat_file_by_id(str(file_id))
 
     def run(
         self,
@@ -153,8 +163,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
             max(1, int(llm_kwargs.get(NUM_CHARS_FIELD, DEFAULT_NUM_CHARS))),
         )
 
-        with get_session_with_current_tenant() as db_session:
-            chat_file = load_user_file(file_id, db_session)
+        chat_file = self._load_file(file_id)
 
         # Only PLAIN_TEXT and CSV are guaranteed to contain actual text bytes.
         # DOC type in a loaded file means plaintext extraction failed and the

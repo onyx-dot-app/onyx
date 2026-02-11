@@ -177,17 +177,19 @@ def _process_user_file_without_vector_db(
     the file store, and marks the file as COMPLETED.  Skips embedding and
     the indexing pipeline entirely.
     """
-    from onyx.llm.utils import get_default_llm_tokenizer
+    from onyx.llm.factory import get_default_llm
+    from onyx.llm.factory import get_llm_tokenizer_encode_func
 
     # Combine section text from all document sections
     combined_text = " ".join(
         section.text for doc in documents for section in doc.sections if section.text
     )
 
-    # Compute token count
+    # Compute token count using the user's default LLM tokenizer
     try:
-        tokenizer = get_default_llm_tokenizer()
-        token_count: int | None = len(tokenizer.encode(combined_text))
+        llm = get_default_llm()
+        encode = get_llm_tokenizer_encode_func(llm)
+        token_count: int | None = len(encode(combined_text))
     except Exception:
         task_logger.warning(
             f"_process_user_file_without_vector_db - "
