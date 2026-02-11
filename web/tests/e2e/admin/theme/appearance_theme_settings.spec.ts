@@ -16,6 +16,11 @@ test.describe("Appearance Theme Settings", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
+    // Navigate first so localStorage is accessible (API-based login
+    // doesn't navigate, leaving the page on about:blank).
+    await page.goto("/admin/theme");
+    await page.waitForLoadState("networkidle");
+
     // Clear localStorage to ensure consent modal shows
     await page.evaluate(() => {
       localStorage.removeItem("allUsersInitialPopupFlowCompleted");
@@ -24,7 +29,7 @@ test.describe("Appearance Theme Settings", () => {
 
   test.afterEach(async ({ page }) => {
     // Reset settings to defaults
-    await page.goto("http://localhost:3000/admin/theme");
+    await page.goto("/admin/theme");
     await page.waitForLoadState("networkidle");
 
     // Clear form fields
@@ -70,11 +75,7 @@ test.describe("Appearance Theme Settings", () => {
   test("admin configures branding and verifies across pages", async ({
     page,
   }) => {
-    // 1. Navigate to theme page
-    await page.goto("http://localhost:3000/admin/theme");
-    await page.waitForLoadState("networkidle");
-
-    // 2. Fill in Application Name
+    // 1. Fill in Application Name (page already navigated in beforeEach)
     const appNameInput = page.locator('[data-label="application-name-input"]');
     await appNameInput.fill(TEST_VALUES.applicationName);
 
@@ -154,7 +155,7 @@ test.describe("Appearance Theme Settings", () => {
     await page.evaluate(() => {
       localStorage.removeItem("allUsersInitialPopupFlowCompleted");
     });
-    await page.goto("http://localhost:3000/app");
+    await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
     // 16. Handle consent modal
