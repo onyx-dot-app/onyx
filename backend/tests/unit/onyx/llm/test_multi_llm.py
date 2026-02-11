@@ -1110,3 +1110,92 @@ def test_multithreaded_custom_config_isolation(
     assert os.environ.get("SHARED_KEY") is None
     assert os.environ.get("LLM_A_ONLY") is None
     assert os.environ.get("LLM_B_ONLY") is None
+
+
+def test_multithreaded_invoke_without_custom_config_skips_env_lock() -> None:
+    """Verify that invoke() without custom_config does not acquire the env lock.
+
+    Two LitellmLLM instances without custom_config call invoke concurrently.
+    Both should run with stream=False, never touch the env lock, and complete
+    without blocking each other.
+    """
+    from onyx.llm import multi_llm as multi_llm_module
+
+    model_provider = LlmProviderNames.OPENAI
+    model_name = "gpt-3.5-turbo"
+
+    llm_a = LitellmLLM(
+        api_key="key_a",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+    )
+    llm_b = LitellmLLM(
+        api_key="key_b",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
+    )
+
+    mock_response = litellm.ModelResponse(
+        id="chatcmpl-123",
+        choices=[
+            litellm.Choices(
+                finish_reason="stop",
+                index=0,
+                message=litellm.Message(content="Hi", role="assistant"),
+            )
+        ],
+        model=model_name,
+    )
+
+    call_kwargs: dict[str, dict[str, Any]] = {}
+
+    def fake_completion(**kwargs: Any) -> litellm.ModelResponse:
+        api_key = kwargs.get("api_key", "")
+        label = "A" if api_key == "key_a" else "B"
+        call_kwargs[label] = kwargs
+        return mock_response
+
+    errors: list[Exception] = []
+
+    def run_llm(llm: LitellmLLM) -> None:
+        try:
+            messages: LanguageModelInput = [UserMessage(content="Hi")]
+            llm.invoke(messages)
+        except Exception as e:
+            errors.append(e)
+
+    with (
+        patch("litellm.completion", side_effect=fake_completion),
+        patch.object(
+            multi_llm_module,
+            "temporary_env_and_lock",
+            wraps=multi_llm_module.temporary_env_and_lock,
+        ) as mock_env_lock,
+    ):
+        t_a = threading.Thread(target=run_llm, args=(llm_a,))
+        t_b = threading.Thread(target=run_llm, args=(llm_b,))
+
+        t_a.start()
+        t_b.start()
+        t_a.join(timeout=10)
+        t_b.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert "A" in call_kwargs and "B" in call_kwargs
+
+    # Both calls should use stream=False (no internal stream+reassemble)
+    assert call_kwargs["A"]["stream"] is False
+    assert call_kwargs["B"]["stream"] is False
+
+    # The env lock context manager should never have been called
+    mock_env_lock.assert_not_called()
