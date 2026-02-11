@@ -242,6 +242,9 @@ func runCompose(profile string, opts *ComposeOptions) {
 			eeValue = "false"
 		}
 		setEnvValue("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", eeValue)
+		if !opts.NoEE {
+			setEnvValue("LICENSE_ENFORCEMENT_ENABLED", "false")
+		}
 	}
 
 	args := baseArgs(profile)
