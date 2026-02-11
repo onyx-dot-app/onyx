@@ -201,7 +201,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     chunks_processed=len(opensearch_document_chunks),
                 )
 
-                if continuation_token is None and len(raw_vespa_chunks) == 0:
+                if next_continuation_token is None and len(raw_vespa_chunks) == 0:
                     task_logger.info("Vespa reported no more chunks to migrate.")
                     break
     except Exception:
