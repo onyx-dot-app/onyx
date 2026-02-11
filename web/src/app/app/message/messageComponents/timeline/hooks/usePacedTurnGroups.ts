@@ -100,6 +100,10 @@ export function usePacedTurnGroups(
   // Track previous finalAnswerComing to detect tool-after-message transitions
   const prevFinalAnswerComingRef = useRef(finalAnswerComing);
 
+  // Cache previous pacedTurnGroups to preserve referential equality
+  // for completed turn groups that haven't changed
+  const prevPacedRef = useRef<TurnGroup[]>([]);
+
   // Trigger re-render when content should update
   // Used in useMemo dependencies since state.revealedStepKeys is stored in a ref
   const [revealTrigger, setRevealTrigger] = useState(0);
@@ -114,6 +118,7 @@ export function usePacedTurnGroups(
     }
     stateRef.current = createInitialPacingState();
     stateRef.current.nodeId = nodeIdStr;
+    prevPacedRef.current = [];
   }
 
   const state = stateRef.current;
@@ -293,6 +298,38 @@ export function usePacedTurnGroups(
         });
       }
     }
+
+    // Stabilize: reuse previous TurnGroup objects when their content hasn't changed.
+    // This preserves referential equality for completed groups, preventing
+    // unnecessary re-renders in downstream components (e.g. SearchChipList).
+    const prev = prevPacedRef.current;
+    if (prev.length === result.length) {
+      let allMatch = true;
+      for (let i = 0; i < result.length; i++) {
+        const oldGroup = prev[i]!;
+        const newGroup = result[i]!;
+        if (
+          oldGroup.turnIndex === newGroup.turnIndex &&
+          oldGroup.steps.length === newGroup.steps.length &&
+          oldGroup.steps.every(
+            (s, j) =>
+              s.key === newGroup.steps[j]!.key &&
+              s.packets.length === newGroup.steps[j]!.packets.length
+          )
+        ) {
+          // Reuse old object reference for this group
+          result[i] = oldGroup;
+        } else {
+          allMatch = false;
+        }
+      }
+      if (allMatch) {
+        // Every group matched — return the exact same array reference
+        return prev;
+      }
+    }
+
+    prevPacedRef.current = result;
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toolTurnGroups, revealTrigger, shouldBypassPacing]);

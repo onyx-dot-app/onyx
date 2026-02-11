@@ -27,6 +27,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
@@ -370,7 +371,7 @@ def run_llm_loop(
     custom_agent_prompt: str | None,
     project_files: ExtractedProjectFiles,
     persona: Persona | None,
-    memories: list[str] | None,
+    user_memory_context: UserMemoryContext | None,
     llm: LLM,
     token_counter: Callable[[str], int],
     db_session: Session,
@@ -483,7 +484,7 @@ def run_llm_loop(
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
                         datetime_aware=persona.datetime_aware if persona else True,
-                        memories=memories,
+                        user_memory_context=user_memory_context,
                         tools=tools,
                         should_cite_documents=should_cite_documents
                         or always_cite_documents,
@@ -637,7 +638,7 @@ def run_llm_loop(
                 tool_calls=tool_calls,
                 tools=final_tools,
                 message_history=truncated_message_history,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
                 next_citation_num=citation_processor.get_next_citation_number(),

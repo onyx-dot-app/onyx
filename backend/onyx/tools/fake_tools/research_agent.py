@@ -446,7 +446,7 @@ def run_research_agent_call(
                         tool_calls=tool_calls,
                         tools=current_tools,
                         message_history=msg_history,
-                        memories=None,
+                        user_memory_context=None,
                         user_info=None,
                         citation_mapping=citation_mapping,
                         next_citation_num=citation_processor.get_next_citation_number(),

@@ -88,7 +88,7 @@ SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 # Container image for sandbox pods
 # Should include Next.js template, opencode CLI, and demo_data zip
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.2"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.3"
 )
 
 # S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)

@@ -91,8 +91,8 @@ jobs:
             BUILD_WEB_CLOUD=true
           else
             BUILD_WEB=true
-            # Skip desktop builds on beta tags and nightly runs
-            if [[ "$IS_BETA" != "true" ]] && [[ "$IS_NIGHTLY" != "true" ]]; then
+            # Only build desktop for semver tags (excluding beta)
+            if [[ "$IS_VERSION_TAG" == "true" ]] && [[ "$IS_BETA" != "true" ]]; then
               BUILD_DESKTOP=true
             fi
           fi

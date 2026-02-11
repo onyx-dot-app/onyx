@@ -471,7 +471,7 @@ def handle_stream_message_objects(
             # Filter chat_history to only messages after the cutoff
             chat_history = [m for m in chat_history if m.id > cutoff_id]
 
-        memories = get_memories(user, db_session)
+        user_memory_context = get_memories(user, db_session)
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
@@ -480,7 +480,7 @@ def handle_stream_message_objects(
             persona_system_prompt=custom_agent_prompt or "",
             token_counter=token_counter,
             files=new_msg_req.file_descriptors,
-            memories=memories,
+            user_memory_context=user_memory_context,
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
@@ -667,7 +667,7 @@ def handle_stream_message_objects(
                 custom_agent_prompt=custom_agent_prompt,
                 project_files=extracted_project_files,
                 persona=persona,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,

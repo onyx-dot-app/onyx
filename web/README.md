@@ -65,22 +65,7 @@ Bring up the entire application.
 npx playwright install
 ```
 
-1. Reset the instance
-
-```cd backend
-export PYTEST_IGNORE_SKIP=true
-pytest -s tests/integration/tests/playwright/test_playwright.py
-```
-
-If you don't want to reset your local instance, you can still run playwright tests
-with SKIP_AUTH=true. This is convenient but slightly different from what happens
-in CI so tests might pass locally and fail in CI.
-
-```cd web
-SKIP_AUTH=true npx playwright test create_and_edit_assistant.spec.ts --project=admin
-```
-
-2. Run playwright
+1. Run playwright
 
 ```
 cd web
@@ -101,7 +86,7 @@ npx playwright test --ui
 npx playwright test --headed
 ```
 
-3. Inspect results
+2. Inspect results
 
 By default, playwright.config.ts is configured to output the results to:
 
@@ -109,7 +94,7 @@ By default, playwright.config.ts is configured to output the results to:
 web/test-results
 ```
 
-4. Upload results to Chromatic (Optional)
+3. Upload results to Chromatic (Optional)
 
 This step would normally not be run by third party developers, but first party devs
 may use this for local troubleshooting and testing.

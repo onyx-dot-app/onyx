@@ -160,6 +160,7 @@ def update_user_personalization(
     personal_role: str | None,
     use_memories: bool,
     memories: list[str],
+    user_preferences: str | None,
     db_session: Session,
 ) -> None:
     db_session.execute(
@@ -169,6 +170,7 @@ def update_user_personalization(
             personal_name=personal_name,
             personal_role=personal_role,
             use_memories=use_memories,
+            user_preferences=user_preferences,
         )
     )
 
