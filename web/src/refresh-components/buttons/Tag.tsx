@@ -26,6 +26,7 @@ export interface TagProps {
   onRemove?: () => void;
   onClick?: () => void;
   className?: string;
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Tag({
@@ -35,18 +36,20 @@ export default function Tag({
   onRemove,
   onClick,
   className,
+  ref,
 }: TagProps) {
   const styles = variantStyles[variant];
 
   return (
     <div
+      ref={ref}
       className={cn(
         styles.container,
         "rounded-08",
         "bg-background-tint-02 hover:bg-background-tint-03",
         "focus-visible:shadow-[0_0_0_2px_var(--background-tint-04)]",
         "outline-none transition-colors",
-        onClick && "cursor-pointer",
+        onClick || variant === "display" ? "cursor-pointer" : undefined,
         className
       )}
       onClick={onClick}

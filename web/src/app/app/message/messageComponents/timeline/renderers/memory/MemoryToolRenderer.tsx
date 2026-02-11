@@ -7,7 +7,7 @@ import {
 import { BlinkingDot } from "@/app/app/message/BlinkingDot";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
 import Text from "@/refresh-components/texts/Text";
-import { SvgBookOpen } from "@opal/icons";
+import { SvgEditBig } from "@opal/icons";
 
 /**
  * MemoryToolRenderer - Renders memory tool execution steps
@@ -32,7 +32,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   if (!hasStarted) {
     return children([
       {
-        icon: SvgBookOpen,
+        icon: SvgEditBig,
         status: null,
         content: <div />,
         supportsCollapsible: false,
@@ -70,7 +70,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
 
     return children([
       {
-        icon: SvgBookOpen,
+        icon: SvgEditBig,
         status: "Memory",
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -80,14 +80,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   }
 
   // Determine status text
-  let statusLabel: string;
-  if (isComplete || stopPacketSeen) {
-    statusLabel = operation === "update" ? "Memory updated" : "Memory saved";
-  } else if (memoryText) {
-    statusLabel = operation === "update" ? "Updating memory" : "Saving memory";
-  } else {
-    statusLabel = "Saving memory";
-  }
+  let statusLabel = "Updating memory";
 
   const memoryContent = (
     <div className="flex flex-col">
@@ -122,7 +115,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
 
   return children([
     {
-      icon: SvgBookOpen,
+      icon: SvgEditBig,
       status: statusLabel,
       supportsCollapsible: false,
       timelineLayout: "timeline",

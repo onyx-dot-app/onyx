@@ -20,6 +20,7 @@ const TOOL_START_PACKET_TYPES = new Set<PacketType>([
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
   PacketType.MEMORY_TOOL_START,
+  PacketType.MEMORY_TOOL_NO_ACCESS,
 ]);
 
 /**
