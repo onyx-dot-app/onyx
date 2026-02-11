@@ -2,6 +2,8 @@
 
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _sanitize_llm_output
+from onyx.chat.llm_step import extract_tool_calls_from_response_text
+from onyx.server.query_and_chat.placement import Placement
 
 
 class TestSanitizeLlmOutput:
@@ -137,3 +139,60 @@ class TestParseToolArgsToDict:
         json_str = '{"query": "hello 👋 世界"}'
         result = _parse_tool_args_to_dict(json_str)
         assert result == {"query": "hello 👋 世界"}
+
+
+class TestExtractToolCallsFromResponseText:
+    def _tool_defs(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "internal_search",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "queries": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            }
+                        },
+                        "required": ["queries"],
+                    },
+                },
+            }
+        ]
+
+    def _placement(self) -> Placement:
+        return Placement(turn_index=0, tab_index=0, sub_turn_index=None)
+
+    def test_collapses_exact_duplicated_sequence(self) -> None:
+        response_text = (
+            '{"name":"internal_search","arguments":{"queries":["alpha"]}}'
+            '{"name":"internal_search","arguments":{"queries":["alpha"]}}'
+        )
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 1
+        assert tool_calls[0].tool_name == "internal_search"
+        assert tool_calls[0].tool_args == {"queries": ["alpha"]}
+
+    def test_keeps_non_duplicated_sequence(self) -> None:
+        response_text = "\n".join(
+            [
+                '{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+                '{"name":"internal_search","arguments":{"queries":["beta"]}}',
+            ]
+        )
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 2
+        assert [call.tool_args for call in tool_calls] == [
+            {"queries": ["alpha"]},
+            {"queries": ["beta"]},
+        ]
