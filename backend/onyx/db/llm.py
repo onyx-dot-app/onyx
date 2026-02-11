@@ -231,10 +231,7 @@ def upsert_llm_provider(
         # Set to None if the dict is empty after filtering
         custom_config = custom_config or None
 
-    api_base = llm_provider_upsert_request.api_base
-    if api_base == "":
-        api_base = None
-
+    api_base = llm_provider_upsert_request.api_base or None
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     # EncryptedString accepts str for writes, returns SensitiveValue for reads
     existing_llm_provider.api_key = llm_provider_upsert_request.api_key  # type: ignore[assignment]
