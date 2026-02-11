@@ -15,6 +15,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import add_model_to_flow
+from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_contextual_rag_provider
 from onyx.db.llm import update_no_default_contextual_rag_provider
@@ -198,7 +199,10 @@ def get_current_search_settings_endpoint(
     db_session: Session = Depends(get_session),
 ) -> SavedSearchSettings:
     current_search_settings = get_current_search_settings(db_session)
-    return SavedSearchSettings.from_db_model(current_search_settings)
+    default_contextual_model = fetch_default_contextual_rag_model(db_session)
+    return SavedSearchSettings.from_db_model(
+        current_search_settings, contextual_model=default_contextual_model
+    )
 
 
 @router.get("/get-secondary-search-settings")
@@ -210,7 +214,10 @@ def get_secondary_search_settings_endpoint(
     if not secondary_search_settings:
         return None
 
-    return SavedSearchSettings.from_db_model(secondary_search_settings)
+    default_contextual_model = fetch_default_contextual_rag_model(db_session)
+    return SavedSearchSettings.from_db_model(
+        secondary_search_settings, contextual_model=default_contextual_model
+    )
 
 
 @router.get("/get-all-search-settings")
@@ -297,12 +304,12 @@ def create_new_search_settings(
 
     if enable_contextual_rag:
         if (
-            search_settings.contextual_rag_llm_name
-            and search_settings.contextual_rag_llm_provider
+            search_settings_request.contextual_rag_llm_name
+            and search_settings_request.contextual_rag_llm_provider
         ):
             add_model_to_flow_and_update_default(
-                provider_name=search_settings.contextual_rag_llm_provider,
-                model_name=search_settings.contextual_rag_llm_name,
+                provider_name=search_settings_request.contextual_rag_llm_provider,
+                model_name=search_settings_request.contextual_rag_llm_name,
                 db_session=db_session,
             )
     else:

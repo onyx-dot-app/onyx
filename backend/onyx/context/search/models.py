@@ -9,6 +9,7 @@ from pydantic import Field
 from pydantic import field_validator
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk
 from onyx.indexing.models import IndexingSetting
@@ -38,7 +39,12 @@ class SavedSearchSettings(IndexingSetting):
     # Previously this contained also Inference time settings. Keeping this wrapper class around
     # as there may again be inference time settings that may get added.
     @classmethod
-    def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
+    def from_db_model(
+        cls,
+        search_settings: SearchSettings,
+        *,
+        contextual_model: ModelConfiguration | None = None,
+    ) -> "SavedSearchSettings":
         return cls(
             # Indexing Setting
             model_name=search_settings.model_name,
@@ -53,8 +59,10 @@ class SavedSearchSettings(IndexingSetting):
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
             enable_contextual_rag=search_settings.enable_contextual_rag,
-            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
-            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
+            contextual_rag_llm_name=contextual_model.name if contextual_model else None,
+            contextual_rag_llm_provider=(
+                contextual_model.llm_provider.name if contextual_model else None
+            ),
         )
 
 
