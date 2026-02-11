@@ -36,7 +36,6 @@ export default function DocumentSetCard({
               : () => onSelectToggle?.(!isSelected)
           }
           variant="none"
-          static={disabled || isSelected === undefined}
         >
           <Interactive.Container
             border

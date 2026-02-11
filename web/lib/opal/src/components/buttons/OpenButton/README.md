@@ -17,7 +17,7 @@ OpenButton
                       └─ div.p-0.5 > ChevronIcon   .opal-open-button-chevron
 ```
 
-- **Always uses `variant="select"`.** OpenButton omits `variant` and `subvariant` from its own props; it hardcodes `variant="select"` and only exposes `InteractiveBaseSelectVariantProps` (`subvariant?: "light" | "heavy"`, `selected?: boolean`).
+- **Always uses `variant="select"`.** OpenButton omits `variant` and `prominence` from its own props; it hardcodes `variant="select"` and only exposes `InteractiveBaseSelectVariantProps` (`prominence?: "light" | "heavy"`, `selected?: boolean`).
 - **`transient` controls both the chevron and the hover visual state.** When `transient` is true (explicitly or via Radix `data-state="open"`), the chevron rotates 180° and the `Interactive.Base` hover background activates. There is no separate `open` prop.
 - **Open-state detection** is dual-resolution: the explicit `transient` prop takes priority; otherwise the component reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`).
 - **Chevron rotation** is CSS-driven via `.interactive[data-transient="true"] .opal-open-button-chevron { rotate: -180deg }`. The `ChevronIcon` is a stable named component (not an inline function) to preserve React element identity across renders, ensuring CSS transitions fire correctly.
@@ -26,7 +26,7 @@ OpenButton
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `subvariant` | `"light" \| "heavy"` | `"light"` | Select subvariant. `"heavy"` shows a tinted background when selected. |
+| `prominence` | `"light" \| "heavy"` | `"light"` | Select prominence. `"heavy"` shows a tinted background when selected. |
 | `selected` | `boolean` | `false` | Switches foreground to action-link colours |
 | `transient` | `boolean` | -- | Forces transient (hover) visual state and chevron rotation. Falls back to Radix `data-state="open"` when omitted. |
 | `icon` | `IconFunctionComponent` | -- | Left icon component |
@@ -37,7 +37,7 @@ OpenButton
 | `disabled` | `boolean` | `false` | Disables the button |
 | `href` | `string` | -- | URL; renders an `<a>` wrapper |
 | `onClick` | `MouseEventHandler<HTMLElement>` | -- | Click handler |
-| _...and all other `ButtonProps` (minus variant props) / `InteractiveBaseProps`_ | | | `group`, `static`, `ref`, etc. |
+| _...and all other `ButtonProps` (minus variant props) / `InteractiveBaseProps`_ | | | `group`, `ref`, etc. |
 
 ## Usage examples
 
@@ -62,8 +62,8 @@ import { SvgFilter } from "@opal/icons";
   Active filter
 </OpenButton>
 
-// With left icon and heavy subvariant (tinted background when selected)
-<OpenButton icon={SvgFilter} subvariant="heavy" selected={isActive}>
+// With left icon and heavy prominence (tinted background when selected)
+<OpenButton icon={SvgFilter} prominence="heavy" selected={isActive}>
   Filters
 </OpenButton>
 

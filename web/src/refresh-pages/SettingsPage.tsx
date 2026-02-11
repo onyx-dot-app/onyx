@@ -1303,12 +1303,8 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Interactive.Base
-                        key={pat.id}
-                        subvariant="secondary"
-                        static
-                      >
-                        <Interactive.Container heightVariant="fit">
+                      <Interactive.Container key={pat.id} heightVariant="fit">
+                        <div className="w-full bg-background-tint-01">
                           <AttachmentItemLayout
                             icon={SvgKey}
                             title={pat.name}
@@ -1323,8 +1319,8 @@ function AccountsAccessSettings() {
                               />
                             }
                           />
-                        </Interactive.Container>
-                      </Interactive.Base>
+                        </div>
+                      </Interactive.Container>
                     );
                   })}
                 </Section>

@@ -174,22 +174,20 @@ export function FileCard({
       }
     >
       <div className="max-w-[12rem]">
-        <Interactive.Base variant="none" static>
-          <Interactive.Container border heightVariant="fit">
-            <AttachmentItemLayout
-              icon={isProcessing ? SimpleLoader : SvgFileText}
-              title={file.name}
-              description={
-                isProcessing
-                  ? file.status === UserFileStatus.UPLOADING
-                    ? "Uploading..."
-                    : "Processing..."
-                  : typeLabel
-              }
-            />
-            <Spacer horizontal rem={0.5} />
-          </Interactive.Container>
-        </Interactive.Base>
+        <Interactive.Container border heightVariant="fit">
+          <AttachmentItemLayout
+            icon={isProcessing ? SimpleLoader : SvgFileText}
+            title={file.name}
+            description={
+              isProcessing
+                ? file.status === UserFileStatus.UPLOADING
+                  ? "Uploading..."
+                  : "Processing..."
+                : typeLabel
+            }
+          />
+          <Spacer horizontal rem={0.5} />
+        </Interactive.Container>
       </div>
     </Removable>
   );
