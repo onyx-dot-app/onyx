@@ -50,6 +50,12 @@ EXPECTED_TOOLS = {
         in_code_tool_id="ResearchAgent",
         user_id=None,
     ),
+    "FileReaderTool": ToolSeedingExpectedResult(
+        name="read_file",
+        display_name="File Reader",
+        in_code_tool_id="FileReaderTool",
+        user_id=None,
+    ),
 }
 
 
@@ -92,10 +98,10 @@ def test_tool_seeding_migration() -> None:
         )
         tools = result.fetchall()
 
-        # Should have all 8 builtin tools
+        # Should have all 9 builtin tools
         assert (
-            len(tools) == 8
-        ), f"Should have created exactly 8 builtin tools, got {len(tools)}"
+            len(tools) == 9
+        ), f"Should have created exactly 9 builtin tools, got {len(tools)}"
 
         def validate_tool(expected: ToolSeedingExpectedResult) -> None:
             tool = next((t for t in tools if t[1] == expected.name), None)
@@ -127,3 +133,6 @@ def test_tool_seeding_migration() -> None:
 
         # Check ResearchAgent (Deep Research as a tool)
         validate_tool(EXPECTED_TOOLS["ResearchAgent"])
+
+        # Check FileReaderTool
+        validate_tool(EXPECTED_TOOLS["FileReaderTool"])

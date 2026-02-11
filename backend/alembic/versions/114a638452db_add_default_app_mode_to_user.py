@@ -1,7 +1,7 @@
 """add default_app_mode to user
 
 Revision ID: 114a638452db
-Revises: d56ffa94ca32
+Revises: feead2911109
 Create Date: 2026-02-09 18:57:08.274640
 
 """

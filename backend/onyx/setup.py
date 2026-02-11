@@ -3,6 +3,7 @@ import time
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
@@ -113,44 +114,50 @@ def setup_onyx(
     if not MULTI_TENANT:
         mark_reindex_flag(db_session)
 
-    # Ensure Vespa is setup correctly, this step is relatively near the end because Vespa
-    # takes a bit of time to start up
-    logger.notice("Verifying Document Index(s) is/are available.")
-    # This flow is for setting up the document index so we get all indices here.
-    document_indices = get_all_document_indices(
-        search_settings,
-        secondary_search_settings,
-        None,
-    )
-
-    success = setup_document_indices(
-        document_indices,
-        IndexingSetting.from_db_model(search_settings),
-        (
-            IndexingSetting.from_db_model(secondary_search_settings)
-            if secondary_search_settings
-            else None
-        ),
-    )
-    if not success:
-        raise RuntimeError(
-            "Could not connect to a document index within the specified timeout."
+    if DISABLE_VECTOR_DB:
+        logger.notice(
+            "DISABLE_VECTOR_DB is set — skipping document index setup and "
+            "embedding model warm-up."
+        )
+    else:
+        # Ensure Vespa is setup correctly, this step is relatively near the end
+        # because Vespa takes a bit of time to start up
+        logger.notice("Verifying Document Index(s) is/are available.")
+        # This flow is for setting up the document index so we get all indices here.
+        document_indices = get_all_document_indices(
+            search_settings,
+            secondary_search_settings,
+            None,
         )
 
-    logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
-    if search_settings.provider_type is None:
-        # In integration tests, do not block API startup on warm-up
-        warm_up_bi_encoder(
-            embedding_model=EmbeddingModel.from_db_model(
-                search_settings=search_settings,
-                server_host=MODEL_SERVER_HOST,
-                server_port=MODEL_SERVER_PORT,
+        success = setup_document_indices(
+            document_indices,
+            IndexingSetting.from_db_model(search_settings),
+            (
+                IndexingSetting.from_db_model(secondary_search_settings)
+                if secondary_search_settings
+                else None
             ),
-            non_blocking=INTEGRATION_TESTS_MODE,
         )
+        if not success:
+            raise RuntimeError(
+                "Could not connect to a document index within the specified timeout."
+            )
 
-    # update multipass indexing setting based on GPU availability
-    update_default_multipass_indexing(db_session)
+        logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
+        if search_settings.provider_type is None:
+            # In integration tests, do not block API startup on warm-up
+            warm_up_bi_encoder(
+                embedding_model=EmbeddingModel.from_db_model(
+                    search_settings=search_settings,
+                    server_host=MODEL_SERVER_HOST,
+                    server_port=MODEL_SERVER_PORT,
+                ),
+                non_blocking=INTEGRATION_TESTS_MODE,
+            )
+
+        # update multipass indexing setting based on GPU availability
+        update_default_multipass_indexing(db_session)
 
 
 def mark_reindex_flag(db_session: Session) -> None:
@@ -300,6 +307,10 @@ def update_default_multipass_indexing(db_session: Session) -> None:
 
 
 def setup_multitenant_onyx() -> None:
+    if DISABLE_VECTOR_DB:
+        logger.notice("DISABLE_VECTOR_DB is set — skipping multitenant Vespa setup.")
+        return
+
     # For Managed Vespa, the schema is sent over via the Vespa Console manually.
     if not MANAGED_VESPA:
         setup_vespa_multitenant(SUPPORTED_EMBEDDING_MODELS)

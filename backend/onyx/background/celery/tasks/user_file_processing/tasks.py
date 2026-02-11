@@ -10,10 +10,12 @@ from celery import Task
 from redis.lock import Lock as RedisLock
 from retry import retry
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
@@ -37,6 +39,7 @@ from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.utils import store_user_file_plaintext
 from onyx.file_store.utils import user_file_id_to_plaintext_file_name
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
@@ -163,6 +166,132 @@ def check_user_file_processing(self: Task, *, tenant_id: str) -> None:
     return None
 
 
+def _process_user_file_without_vector_db(
+    uf: UserFile,
+    documents: list[Document],
+    db_session: Session,
+) -> None:
+    """Process a user file when the vector DB is disabled.
+
+    Extracts raw text and computes a token count, stores the plaintext in
+    the file store, and marks the file as COMPLETED.  Skips embedding and
+    the indexing pipeline entirely.
+    """
+    from onyx.llm.factory import get_default_llm
+    from onyx.llm.factory import get_llm_tokenizer_encode_func
+
+    # Combine section text from all document sections
+    combined_text = " ".join(
+        section.text for doc in documents for section in doc.sections if section.text
+    )
+
+    # Compute token count using the user's default LLM tokenizer
+    try:
+        llm = get_default_llm()
+        encode = get_llm_tokenizer_encode_func(llm)
+        token_count: int | None = len(encode(combined_text))
+    except Exception:
+        task_logger.warning(
+            f"_process_user_file_without_vector_db - "
+            f"Failed to compute token count for {uf.id}, falling back to None"
+        )
+        token_count = None
+
+    # Persist plaintext for fast FileReaderTool loads
+    store_user_file_plaintext(
+        user_file_id=uf.id,
+        plaintext_content=combined_text,
+    )
+
+    # Update the DB record
+    if uf.status != UserFileStatus.DELETING:
+        uf.status = UserFileStatus.COMPLETED
+    uf.token_count = token_count
+    uf.chunk_count = 0  # no chunks without vector DB
+    uf.last_project_sync_at = datetime.datetime.now(datetime.timezone.utc)
+    db_session.add(uf)
+    db_session.commit()
+
+    task_logger.info(
+        f"_process_user_file_without_vector_db - "
+        f"Completed id={uf.id} tokens={token_count}"
+    )
+
+
+def _process_user_file_with_indexing(
+    uf: UserFile,
+    user_file_id: str,
+    documents: list[Document],
+    tenant_id: str,
+    db_session: Session,
+) -> None:
+    """Process a user file through the full indexing pipeline (vector DB path)."""
+    # 20 is the documented default for httpx max_keepalive_connections
+    if MANAGED_VESPA:
+        httpx_init_vespa_pool(
+            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+        )
+    else:
+        httpx_init_vespa_pool(20)
+
+    search_settings_list = get_active_search_settings_list(db_session)
+    current_search_settings = next(
+        (ss for ss in search_settings_list if ss.status.is_current()),
+        None,
+    )
+    if current_search_settings is None:
+        raise RuntimeError(
+            f"_process_user_file_with_indexing - "
+            f"No current search settings found for tenant={tenant_id}"
+        )
+
+    adapter = UserFileIndexingAdapter(
+        tenant_id=tenant_id,
+        db_session=db_session,
+    )
+
+    embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+        search_settings=current_search_settings,
+    )
+
+    document_indices = get_all_document_indices(
+        current_search_settings,
+        None,
+        httpx_client=HttpxPool.get("vespa"),
+    )
+
+    index_pipeline_result = run_indexing_pipeline(
+        embedder=embedding_model,
+        document_indices=document_indices,
+        ignore_time_skip=True,
+        db_session=db_session,
+        tenant_id=tenant_id,
+        document_batch=documents,
+        request_id=None,
+        adapter=adapter,
+    )
+
+    task_logger.info(
+        f"_process_user_file_with_indexing - "
+        f"Indexing pipeline completed ={index_pipeline_result}"
+    )
+
+    if (
+        index_pipeline_result.failures
+        or index_pipeline_result.total_docs != len(documents)
+        or index_pipeline_result.total_chunks == 0
+    ):
+        task_logger.error(
+            f"_process_user_file_with_indexing - "
+            f"Indexing pipeline failed id={user_file_id}"
+        )
+        if uf.status != UserFileStatus.DELETING:
+            uf.status = UserFileStatus.FAILED
+            db_session.add(uf)
+            db_session.commit()
+        raise RuntimeError(f"Indexing pipeline failed for user file {user_file_id}")
+
+
 @shared_task(
     name=OnyxCeleryTask.PROCESS_SINGLE_USER_FILE,
     bind=True,
@@ -208,93 +337,31 @@ def process_single_user_file(
             )
             connector.load_credentials({})
 
-            # 20 is the documented default for httpx max_keepalive_connections
-            if MANAGED_VESPA:
-                httpx_init_vespa_pool(
-                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-                )
-            else:
-                httpx_init_vespa_pool(20)
-
-            search_settings_list = get_active_search_settings_list(db_session)
-
-            current_search_settings = next(
-                (
-                    search_settings_instance
-                    for search_settings_instance in search_settings_list
-                    if search_settings_instance.status.is_current()
-                ),
-                None,
-            )
-
-            if current_search_settings is None:
-                raise RuntimeError(
-                    f"process_single_user_file - No current search settings found for tenant={tenant_id}"
-                )
-
             try:
                 for batch in connector.load_from_state():
                     documents.extend(
                         [doc for doc in batch if not isinstance(doc, HierarchyNode)]
                     )
 
-                adapter = UserFileIndexingAdapter(
-                    tenant_id=tenant_id,
-                    db_session=db_session,
-                )
-
-                # Set up indexing pipeline components
-                embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
-                    search_settings=current_search_settings,
-                )
-
-                # This flow is for indexing so we get all indices.
-                document_indices = get_all_document_indices(
-                    current_search_settings,
-                    None,
-                    httpx_client=HttpxPool.get("vespa"),
-                )
-
-                # update the doument id to userfile id in the documents
+                # update the document id to userfile id in the documents
                 for document in documents:
                     document.id = str(user_file_id)
                     document.source = DocumentSource.USER_FILE
 
-                # real work happens here!
-                index_pipeline_result = run_indexing_pipeline(
-                    embedder=embedding_model,
-                    document_indices=document_indices,
-                    ignore_time_skip=True,
-                    db_session=db_session,
-                    tenant_id=tenant_id,
-                    document_batch=documents,
-                    request_id=None,
-                    adapter=adapter,
-                )
-
-                task_logger.info(
-                    f"process_single_user_file - Indexing pipeline completed ={index_pipeline_result}"
-                )
-
-                if (
-                    index_pipeline_result.failures
-                    or index_pipeline_result.total_docs != len(documents)
-                    or index_pipeline_result.total_chunks == 0
-                ):
-                    task_logger.error(
-                        f"process_single_user_file - Indexing pipeline failed id={user_file_id}"
+                if DISABLE_VECTOR_DB:
+                    _process_user_file_without_vector_db(
+                        uf=uf,
+                        documents=documents,
+                        db_session=db_session,
                     )
-                    # don't update the status if the user file is being deleted
-                    # Re-fetch to avoid mypy error
-                    current_user_file = db_session.get(UserFile, _as_uuid(user_file_id))
-                    if (
-                        current_user_file
-                        and current_user_file.status != UserFileStatus.DELETING
-                    ):
-                        uf.status = UserFileStatus.FAILED
-                        db_session.add(uf)
-                        db_session.commit()
-                    return None
+                else:
+                    _process_user_file_with_indexing(
+                        uf=uf,
+                        user_file_id=user_file_id,
+                        documents=documents,
+                        tenant_id=tenant_id,
+                        db_session=db_session,
+                    )
 
             except Exception as e:
                 task_logger.exception(
@@ -408,28 +475,6 @@ def process_single_user_file_delete(
         return None
     try:
         with get_session_with_current_tenant() as db_session:
-            # 20 is the documented default for httpx max_keepalive_connections
-            if MANAGED_VESPA:
-                httpx_init_vespa_pool(
-                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-                )
-            else:
-                httpx_init_vespa_pool(20)
-
-            active_search_settings = get_active_search_settings(db_session)
-            # This flow is for deletion so we get all indices.
-            document_indices = get_all_document_indices(
-                search_settings=active_search_settings.primary,
-                secondary_search_settings=active_search_settings.secondary,
-                httpx_client=HttpxPool.get("vespa"),
-            )
-            retry_document_indices: list[RetryDocumentIndex] = [
-                RetryDocumentIndex(document_index)
-                for document_index in document_indices
-            ]
-            index_name = active_search_settings.primary.index_name
-            selection = f"{index_name}.document_id=='{user_file_id}'"
-
             user_file = db_session.get(UserFile, _as_uuid(user_file_id))
             if not user_file:
                 task_logger.info(
@@ -437,22 +482,43 @@ def process_single_user_file_delete(
                 )
                 return None
 
-            # 1) Delete Vespa chunks for the document
-            chunk_count = 0
-            if user_file.chunk_count is None or user_file.chunk_count == 0:
-                chunk_count = _get_document_chunk_count(
-                    index_name=index_name,
-                    selection=selection,
-                )
-            else:
-                chunk_count = user_file.chunk_count
+            # 1) Delete vector DB chunks (skip when disabled)
+            if not DISABLE_VECTOR_DB:
+                if MANAGED_VESPA:
+                    httpx_init_vespa_pool(
+                        20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+                    )
+                else:
+                    httpx_init_vespa_pool(20)
 
-            for retry_document_index in retry_document_indices:
-                retry_document_index.delete_single(
-                    doc_id=user_file_id,
-                    tenant_id=tenant_id,
-                    chunk_count=chunk_count,
+                active_search_settings = get_active_search_settings(db_session)
+                document_indices = get_all_document_indices(
+                    search_settings=active_search_settings.primary,
+                    secondary_search_settings=active_search_settings.secondary,
+                    httpx_client=HttpxPool.get("vespa"),
                 )
+                retry_document_indices: list[RetryDocumentIndex] = [
+                    RetryDocumentIndex(document_index)
+                    for document_index in document_indices
+                ]
+                index_name = active_search_settings.primary.index_name
+                selection = f"{index_name}.document_id=='{user_file_id}'"
+
+                chunk_count = 0
+                if user_file.chunk_count is None or user_file.chunk_count == 0:
+                    chunk_count = _get_document_chunk_count(
+                        index_name=index_name,
+                        selection=selection,
+                    )
+                else:
+                    chunk_count = user_file.chunk_count
+
+                for retry_document_index in retry_document_indices:
+                    retry_document_index.delete_single(
+                        doc_id=user_file_id,
+                        tenant_id=tenant_id,
+                        chunk_count=chunk_count,
+                    )
 
             # 2) Delete the user-uploaded file content from filestore (blob + metadata)
             file_store = get_default_file_store()
@@ -564,27 +630,6 @@ def process_single_user_file_project_sync(
 
     try:
         with get_session_with_current_tenant() as db_session:
-
-            # 20 is the documented default for httpx max_keepalive_connections
-            if MANAGED_VESPA:
-                httpx_init_vespa_pool(
-                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-                )
-            else:
-                httpx_init_vespa_pool(20)
-
-            active_search_settings = get_active_search_settings(db_session)
-            # This flow is for updates so we get all indices.
-            document_indices = get_all_document_indices(
-                search_settings=active_search_settings.primary,
-                secondary_search_settings=active_search_settings.secondary,
-                httpx_client=HttpxPool.get("vespa"),
-            )
-            retry_document_indices: list[RetryDocumentIndex] = [
-                RetryDocumentIndex(document_index)
-                for document_index in document_indices
-            ]
-
             user_file = db_session.get(UserFile, _as_uuid(user_file_id))
             if not user_file:
                 task_logger.info(
@@ -592,15 +637,35 @@ def process_single_user_file_project_sync(
                 )
                 return None
 
-            project_ids = [project.id for project in user_file.projects]
-            for retry_document_index in retry_document_indices:
-                retry_document_index.update_single(
-                    doc_id=str(user_file.id),
-                    tenant_id=tenant_id,
-                    chunk_count=user_file.chunk_count,
-                    fields=None,
-                    user_fields=VespaDocumentUserFields(user_projects=project_ids),
+            # Sync project metadata to vector DB (skip when disabled)
+            if not DISABLE_VECTOR_DB:
+                if MANAGED_VESPA:
+                    httpx_init_vespa_pool(
+                        20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+                    )
+                else:
+                    httpx_init_vespa_pool(20)
+
+                active_search_settings = get_active_search_settings(db_session)
+                document_indices = get_all_document_indices(
+                    search_settings=active_search_settings.primary,
+                    secondary_search_settings=active_search_settings.secondary,
+                    httpx_client=HttpxPool.get("vespa"),
                 )
+                retry_document_indices: list[RetryDocumentIndex] = [
+                    RetryDocumentIndex(document_index)
+                    for document_index in document_indices
+                ]
+
+                project_ids = [project.id for project in user_file.projects]
+                for retry_document_index in retry_document_indices:
+                    retry_document_index.update_single(
+                        doc_id=str(user_file.id),
+                        tenant_id=tenant_id,
+                        chunk_count=user_file.chunk_count,
+                        fields=None,
+                        user_fields=VespaDocumentUserFields(user_projects=project_ids),
+                    )
 
             task_logger.info(
                 f"process_single_user_file_project_sync - User file id={user_file_id}"

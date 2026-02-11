@@ -7,6 +7,7 @@ from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
@@ -580,6 +581,300 @@ class TestConstructMessageHistory:
         assert '"contents"' in project_message.message
         assert "Project file 0 content" in project_message.message
         assert "Project file 1 content" in project_message.message
+
+
+def _simple_token_counter(text: str) -> int:
+    """Approximate token counter for tests (~4 chars per token)."""
+    return max(1, len(text) // 4)
+
+
+def _make_file_metadata(
+    file_id: str, filename: str, approx_chars: int = 50_000
+) -> FileToolMetadata:
+    return FileToolMetadata(
+        file_id=file_id, filename=filename, approx_char_count=approx_chars
+    )
+
+
+class TestForgottenFileMetadata:
+    """Tests for the forgotten-files mechanism in construct_message_history.
+
+    These cover the scenario where a user attaches a large file to a chat
+    message. On the first turn the file content message is in the context
+    window. On subsequent turns, it may be truncated by either:
+      a) context-window budget limits, or
+      b) summary-based truncation removing the message before
+         convert_chat_history ever runs — leaving an "orphaned" metadata
+         entry with no corresponding file_id-tagged ChatMessageSimple.
+
+    The forgotten-files mechanism must detect both cases and inject a
+    lightweight metadata message so the LLM knows to use read_file.
+    """
+
+    def _build(
+        self,
+        simple_chat_history: list[ChatMessageSimple],
+        available_tokens: int = 10_000,
+        all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    ) -> list[ChatMessageSimple]:
+        """Shorthand wrapper around construct_message_history."""
+        return construct_message_history(
+            system_prompt=create_message("system", MessageType.SYSTEM, 5),
+            custom_agent_prompt=None,
+            simple_chat_history=simple_chat_history,
+            reminder_message=None,
+            project_files=create_project_files(),
+            available_tokens=available_tokens,
+            token_counter=_simple_token_counter,
+            all_injected_file_metadata=all_injected_file_metadata,
+        )
+
+    @staticmethod
+    def _find_forgotten_message(
+        result: list[ChatMessageSimple],
+    ) -> ChatMessageSimple | None:
+        """Find the forgotten-files metadata message in the result, if any."""
+        for msg in result:
+            if "Use the read_file tool" in msg.message:
+                return msg
+        return None
+
+    # ------------------------------------------------------------------
+    # Case 1: file message is still in context — no forgotten-files needed
+    # ------------------------------------------------------------------
+
+    def test_file_message_present_no_forgotten_metadata(self) -> None:
+        """When the file message fits in context, no forgotten-file message
+        should be injected.
+        """
+        file_meta = _make_file_metadata("file-abc", "moby_dick.txt")
+        file_msg = create_message("Contents of moby dick...", MessageType.USER, 50)
+        file_msg.file_id = "file-abc"
+
+        history = [
+            file_msg,
+            create_message("Summarize this", MessageType.ASSISTANT, 20),
+            create_message("What's chapter 1?", MessageType.USER, 10),
+        ]
+        result = self._build(
+            history,
+            available_tokens=10_000,
+            all_injected_file_metadata={"file-abc": file_meta},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert (
+            forgotten is None
+        ), "Should not inject forgotten-files when file is in context"
+        # The file message itself should still be present
+        assert any(m.file_id == "file-abc" for m in result)
+
+    # ------------------------------------------------------------------
+    # Case 2: file message dropped by context-window truncation
+    # ------------------------------------------------------------------
+
+    def test_file_message_dropped_by_truncation_gets_forgotten_metadata(self) -> None:
+        """When the context budget is too tight and the file message gets
+        truncated, a forgotten-files metadata message must appear.
+        """
+        file_meta = _make_file_metadata("file-abc", "moby_dick.txt")
+        file_msg = create_message("x" * 2000, MessageType.USER, 500)
+        file_msg.file_id = "file-abc"
+
+        history = [
+            file_msg,
+            create_message("Got it", MessageType.ASSISTANT, 10),
+            create_message("Tell me about ch1", MessageType.USER, 10),
+        ]
+
+        # Budget is just enough for the system prompt + last messages but
+        # NOT the 500-token file message.
+        result = self._build(
+            history,
+            available_tokens=100,
+            all_injected_file_metadata={"file-abc": file_meta},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert forgotten is not None, "Forgotten-files message should be injected"
+        assert "moby_dick.txt" in forgotten.message
+        assert "file-abc" in forgotten.message
+
+        # The original file message should NOT be in context
+        assert not any(
+            getattr(m, "file_id", None) == "file-abc"
+            and m.message_type == MessageType.USER
+            for m in result
+            if m is not forgotten
+        )
+
+    # ------------------------------------------------------------------
+    # Case 3: file message removed by summary truncation ("orphaned" metadata)
+    # ------------------------------------------------------------------
+
+    def test_orphaned_metadata_triggers_forgotten_files(self) -> None:
+        """Simulates the scenario where summary truncation in process_message
+        removed the file's original message BEFORE convert_chat_history ran,
+        so no ChatMessageSimple has the file_id tag. The metadata is still
+        passed via all_injected_file_metadata and must be treated as dropped.
+        """
+        file_meta = _make_file_metadata("file-abc", "moby_dick.txt")
+
+        # History has no file_id-tagged message — it was already removed by
+        # summary truncation. Only later conversation remains.
+        history = [
+            create_message("Summary of earlier convo", MessageType.ASSISTANT, 20),
+            create_message("Now tell me about chapter 2", MessageType.USER, 10),
+        ]
+
+        result = self._build(
+            history,
+            available_tokens=10_000,
+            all_injected_file_metadata={"file-abc": file_meta},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert (
+            forgotten is not None
+        ), "Orphaned file metadata should trigger forgotten-files message"
+        assert "moby_dick.txt" in forgotten.message
+        assert "file-abc" in forgotten.message
+
+    # ------------------------------------------------------------------
+    # Case 4: multiple files — one survives, one is dropped
+    # ------------------------------------------------------------------
+
+    def test_mixed_files_only_dropped_ones_appear_in_forgotten(self) -> None:
+        """When two files exist but only one's message is truncated, only the
+        truncated file should appear in the forgotten-files metadata.
+        """
+        meta_a = _make_file_metadata("file-a", "big_file.txt")
+        meta_b = _make_file_metadata("file-b", "small_file.txt")
+
+        # file-a has a huge message that will be dropped, file-b fits
+        file_msg_a = create_message("x" * 2000, MessageType.USER, 500)
+        file_msg_a.file_id = "file-a"
+        file_msg_b = create_message("small content", MessageType.USER, 5)
+        file_msg_b.file_id = "file-b"
+
+        history = [
+            file_msg_a,
+            create_message("ok", MessageType.ASSISTANT, 3),
+            file_msg_b,
+            create_message("ok", MessageType.ASSISTANT, 3),
+            create_message("Compare the two files", MessageType.USER, 10),
+        ]
+
+        # Tight budget: system(5) + last-user(10) = 15 min. Give ~50 so
+        # file_msg_b(5)+assistant(3)+assistant(3) fit but file_msg_a(500) won't.
+        result = self._build(
+            history,
+            available_tokens=80,
+            all_injected_file_metadata={"file-a": meta_a, "file-b": meta_b},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert forgotten is not None
+        assert "big_file.txt" in forgotten.message
+        assert "file-a" in forgotten.message
+        # file-b should NOT be in the forgotten message — it's still in context
+        assert "small_file.txt" not in forgotten.message
+
+    # ------------------------------------------------------------------
+    # Case 5: no metadata dict → no forgotten-files message even if dropped
+    # ------------------------------------------------------------------
+
+    def test_no_metadata_dict_means_no_forgotten_message(self) -> None:
+        """If all_injected_file_metadata is None (FileReaderTool not enabled),
+        no forgotten-files message should be emitted even if file messages
+        are dropped by truncation.
+        """
+        file_msg = create_message("x" * 2000, MessageType.USER, 500)
+        file_msg.file_id = "file-abc"
+
+        history = [
+            file_msg,
+            create_message("Got it", MessageType.ASSISTANT, 10),
+            create_message("Tell me more", MessageType.USER, 10),
+        ]
+
+        result = self._build(
+            history,
+            available_tokens=100,
+            all_injected_file_metadata=None,
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert (
+            forgotten is None
+        ), "No forgotten-files message when metadata dict is None"
+
+    # ------------------------------------------------------------------
+    # Case 6: orphaned metadata with multiple files, all summarized away
+    # ------------------------------------------------------------------
+
+    def test_multiple_orphaned_files_all_appear_in_forgotten(self) -> None:
+        """All files from summarized-away messages should be listed in the
+        forgotten-files message.
+        """
+        meta_a = _make_file_metadata("file-a", "report.pdf")
+        meta_b = _make_file_metadata("file-b", "data.csv")
+
+        # Both original messages were removed by summary truncation;
+        # only post-summary messages remain.
+        history = [
+            create_message("Earlier discussion summarized", MessageType.ASSISTANT, 15),
+            create_message("What patterns do you see?", MessageType.USER, 10),
+        ]
+
+        result = self._build(
+            history,
+            available_tokens=10_000,
+            all_injected_file_metadata={"file-a": meta_a, "file-b": meta_b},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert forgotten is not None
+        assert "report.pdf" in forgotten.message
+        assert "data.csv" in forgotten.message
+
+    # ------------------------------------------------------------------
+    # Case 7: file metadata persists across many turns after truncation
+    # ------------------------------------------------------------------
+
+    def test_forgotten_metadata_persists_across_many_turns(self) -> None:
+        """Simulates the real bug: after the file's original message is
+        summarized away, every subsequent turn should still include the
+        forgotten-files metadata — not just the first turn after truncation.
+        """
+        file_meta = _make_file_metadata("file-abc", "moby_dick.txt")
+
+        # Build several turns AFTER the file was already summarized away.
+        # Each turn, construct_message_history is called fresh with the
+        # same all_injected_file_metadata.
+        for turn in range(5):
+            messages = [
+                create_message("Summary", MessageType.ASSISTANT, 15),
+            ]
+            # Add some back-and-forth after the summary
+            for i in range(turn):
+                messages.append(create_message(f"Question {i}", MessageType.USER, 5))
+                messages.append(create_message(f"Answer {i}", MessageType.ASSISTANT, 5))
+            messages.append(
+                create_message(f"Latest question (turn {turn})", MessageType.USER, 5)
+            )
+
+            result = self._build(
+                messages,
+                available_tokens=10_000,
+                all_injected_file_metadata={"file-abc": file_meta},
+            )
+
+            forgotten = self._find_forgotten_message(result)
+            assert (
+                forgotten is not None
+            ), f"Turn {turn}: forgotten-files message must persist every turn"
+            assert "moby_dick.txt" in forgotten.message
 
 
 class TestBedrockToolConfigGuard:

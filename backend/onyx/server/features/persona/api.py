@@ -14,6 +14,7 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
@@ -72,6 +73,44 @@ def _validate_user_knowledge_enabled(
                 status_code=400,
                 detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
             )
+
+
+def _validate_vector_db_knowledge(
+    persona_upsert_request: PersonaUpsertRequest,
+) -> None:
+    """Reject connector-sourced knowledge types when vector DB is disabled.
+
+    document_sets, hierarchy_nodes, and attached_documents all depend on
+    the vector DB for search filtering. user_files are still allowed because
+    they use the FileReaderTool path instead.
+    """
+    if not DISABLE_VECTOR_DB:
+        return
+
+    if persona_upsert_request.document_set_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot attach document sets to an assistant when "
+                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+            ),
+        )
+    if persona_upsert_request.hierarchy_node_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot attach hierarchy nodes to an assistant when "
+                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+            ),
+        )
+    if persona_upsert_request.document_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot attach documents to an assistant when "
+                "the vector database is disabled (DISABLE_VECTOR_DB is set)."
+            ),
+        )
 
 
 admin_router = APIRouter(prefix="/admin/persona")
@@ -268,6 +307,7 @@ def create_persona(
     tenant_id = get_current_tenant_id()
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
+    _validate_vector_db_knowledge(persona_upsert_request)
 
     persona_snapshot = create_update_persona(
         persona_id=None,
@@ -295,6 +335,7 @@ def update_persona(
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
+    _validate_vector_db_knowledge(persona_upsert_request)
 
     persona_snapshot = create_update_persona(
         persona_id=persona_id,

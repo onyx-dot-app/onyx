@@ -144,173 +144,185 @@ const collections = (
   kgExposed: boolean,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean
-) => [
-  {
-    name: "Connectors",
-    items: connectors_items(),
-  },
-  {
-    name: "Document Management",
-    items: document_management_items(),
-  },
-  {
-    name: "Custom Assistants",
-    items: custom_assistants_items(isCurator, enableEnterprise),
-  },
-  ...(isCurator && enableEnterprise
-    ? [
-        {
-          name: "User Management",
-          items: [
-            {
-              name: "Groups",
-              icon: SvgUsers,
-              link: "/admin/groups",
-            },
-          ],
-        },
-      ]
-    : []),
-  ...(!isCurator
-    ? [
-        {
-          name: "Configuration",
-          items: [
-            {
-              name: "Default Assistant",
-              icon: SvgOnyxLogo,
-              link: "/admin/configuration/default-assistant",
-            },
-            {
-              name: "LLM",
-              icon: SvgCpu,
-              link: "/admin/configuration/llm",
-            },
-            {
-              name: "Web Search",
-              icon: SvgGlobe,
-              link: "/admin/configuration/web-search",
-            },
-            {
-              name: "Image Generation",
-              icon: SvgImage,
-              link: "/admin/configuration/image-generation",
-            },
-            ...(!enableCloud
-              ? [
-                  {
-                    error: settings?.settings.needs_reindexing,
-                    name: "Search Settings",
-                    icon: SvgSearch,
-                    link: "/admin/configuration/search",
-                  },
-                ]
-              : []),
-            {
-              name: "Document Processing",
-              icon: SvgFileText,
-              link: "/admin/configuration/document-processing",
-            },
-            ...(kgExposed
-              ? [
-                  {
-                    name: "Knowledge Graph",
-                    icon: BrainIcon,
-                    link: "/admin/kg",
-                  },
-                ]
-              : []),
-          ],
-        },
-        {
-          name: "User Management",
-          items: [
-            {
-              name: "Users",
-              icon: SvgUser,
-              link: "/admin/users",
-            },
-            ...(enableEnterprise
-              ? [
-                  {
-                    name: "Groups",
-                    icon: SvgUsers,
-                    link: "/admin/groups",
-                  },
-                ]
-              : []),
-            {
-              name: "API Keys",
-              icon: SvgKey,
-              link: "/admin/api-key",
-            },
-            {
-              name: "Token Rate Limits",
-              icon: SvgShield,
-              link: "/admin/token-rate-limits",
-            },
-          ],
-        },
-        ...(enableEnterprise
-          ? [
+) => {
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+
+  return [
+    ...(vectorDbEnabled
+      ? [
+          {
+            name: "Connectors",
+            items: connectors_items(),
+          },
+        ]
+      : []),
+    ...(vectorDbEnabled
+      ? [
+          {
+            name: "Document Management",
+            items: document_management_items(),
+          },
+        ]
+      : []),
+    {
+      name: "Custom Assistants",
+      items: custom_assistants_items(isCurator, enableEnterprise),
+    },
+    ...(isCurator && enableEnterprise
+      ? [
+          {
+            name: "User Management",
+            items: [
               {
-                name: "Performance",
-                items: [
-                  {
-                    name: "Usage Statistics",
-                    icon: SvgActivity,
-                    link: "/admin/performance/usage",
-                  },
-                  ...(settings?.settings.query_history_type !== "disabled"
-                    ? [
-                        {
-                          name: "Query History",
-                          icon: SvgServer,
-                          link: "/admin/performance/query-history",
-                        },
-                      ]
-                    : []),
-                  ...(!enableCloud && customAnalyticsEnabled
-                    ? [
-                        {
-                          name: "Custom Analytics",
-                          icon: SvgBarChart,
-                          link: "/admin/performance/custom-analytics",
-                        },
-                      ]
-                    : []),
-                ],
+                name: "Groups",
+                icon: SvgUsers,
+                link: "/admin/groups",
               },
-            ]
-          : []),
-        {
-          name: "Settings",
-          items: [
-            {
-              name: "Workspace Settings",
-              icon: SvgSettings,
-              link: "/admin/settings",
-            },
-            ...(enableEnterprise
-              ? [
-                  {
-                    name: "Appearance & Theming",
-                    icon: SvgPaintBrush,
-                    link: "/admin/theme",
-                  },
-                ]
-              : []),
-            // Always show billing/upgrade - community users need access to upgrade
-            {
-              name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
-              icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
-              link: "/admin/billing",
-            },
-          ],
-        },
-      ]
-    : []),
-];
+            ],
+          },
+        ]
+      : []),
+    ...(!isCurator
+      ? [
+          {
+            name: "Configuration",
+            items: [
+              {
+                name: "Default Assistant",
+                icon: SvgOnyxLogo,
+                link: "/admin/configuration/default-assistant",
+              },
+              {
+                name: "LLM",
+                icon: SvgCpu,
+                link: "/admin/configuration/llm",
+              },
+              {
+                name: "Web Search",
+                icon: SvgGlobe,
+                link: "/admin/configuration/web-search",
+              },
+              {
+                name: "Image Generation",
+                icon: SvgImage,
+                link: "/admin/configuration/image-generation",
+              },
+              ...(!enableCloud && vectorDbEnabled
+                ? [
+                    {
+                      error: settings?.settings.needs_reindexing,
+                      name: "Search Settings",
+                      icon: SvgSearch,
+                      link: "/admin/configuration/search",
+                    },
+                  ]
+                : []),
+              {
+                name: "Document Processing",
+                icon: SvgFileText,
+                link: "/admin/configuration/document-processing",
+              },
+              ...(kgExposed
+                ? [
+                    {
+                      name: "Knowledge Graph",
+                      icon: BrainIcon,
+                      link: "/admin/kg",
+                    },
+                  ]
+                : []),
+            ],
+          },
+          {
+            name: "User Management",
+            items: [
+              {
+                name: "Users",
+                icon: SvgUser,
+                link: "/admin/users",
+              },
+              ...(enableEnterprise
+                ? [
+                    {
+                      name: "Groups",
+                      icon: SvgUsers,
+                      link: "/admin/groups",
+                    },
+                  ]
+                : []),
+              {
+                name: "API Keys",
+                icon: SvgKey,
+                link: "/admin/api-key",
+              },
+              {
+                name: "Token Rate Limits",
+                icon: SvgShield,
+                link: "/admin/token-rate-limits",
+              },
+            ],
+          },
+          ...(enableEnterprise
+            ? [
+                {
+                  name: "Performance",
+                  items: [
+                    {
+                      name: "Usage Statistics",
+                      icon: SvgActivity,
+                      link: "/admin/performance/usage",
+                    },
+                    ...(settings?.settings.query_history_type !== "disabled"
+                      ? [
+                          {
+                            name: "Query History",
+                            icon: SvgServer,
+                            link: "/admin/performance/query-history",
+                          },
+                        ]
+                      : []),
+                    ...(!enableCloud && customAnalyticsEnabled
+                      ? [
+                          {
+                            name: "Custom Analytics",
+                            icon: SvgBarChart,
+                            link: "/admin/performance/custom-analytics",
+                          },
+                        ]
+                      : []),
+                  ],
+                },
+              ]
+            : []),
+          {
+            name: "Settings",
+            items: [
+              {
+                name: "Workspace Settings",
+                icon: SvgSettings,
+                link: "/admin/settings",
+              },
+              ...(enableEnterprise
+                ? [
+                    {
+                      name: "Appearance & Theming",
+                      icon: SvgPaintBrush,
+                      link: "/admin/theme",
+                    },
+                  ]
+                : []),
+              // Always show billing/upgrade - community users need access to upgrade
+              {
+                name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
+                icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
+                link: "/admin/billing",
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
+};
 
 interface AdminSidebarProps {
   // Cloud flag is passed from server component (Layout.tsx) since it's a build-time constant

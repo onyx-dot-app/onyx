@@ -1,4 +1,4 @@
-{{- if gt (int .Values.celery_worker_docfetching.replicaCount) 0 }}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_docfetching.replicaCount) 0) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

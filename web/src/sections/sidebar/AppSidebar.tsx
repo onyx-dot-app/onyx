@@ -510,12 +510,18 @@ const MemoizedAppSidebarInner = memo(
       setShowIntroAnimation(true);
     }, []);
 
+    const vectorDbEnabled =
+      combinedSettings?.settings?.vector_db_enabled !== false;
+    const adminDefaultHref = vectorDbEnabled
+      ? "/admin/indexing/status"
+      : "/admin/assistants";
+
     const settingsButton = useMemo(
       () => (
         <div>
           {(isAdmin || isCurator) && (
             <SidebarTab
-              href="/admin/indexing/status"
+              href={adminDefaultHref}
               leftIcon={SvgSettings}
               folded={folded}
             >
@@ -530,7 +536,14 @@ const MemoizedAppSidebarInner = memo(
           />
         </div>
       ),
-      [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+      [
+        folded,
+        isAdmin,
+        isCurator,
+        handleShowBuildIntro,
+        isOnyxCraftEnabled,
+        adminDefaultHref,
+      ]
     );
 
     return (

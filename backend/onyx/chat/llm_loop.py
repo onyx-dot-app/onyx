@@ -14,6 +14,7 @@ from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
@@ -202,6 +203,35 @@ def _build_project_file_citation_mapping(
     return citation_mapping
 
 
+def _build_project_message(
+    project_files: ExtractedProjectFiles | None,
+    token_counter: Callable[[str], int] | None,
+) -> list[ChatMessageSimple]:
+    """Build messages for project / tool-backed files.
+
+    Returns up to two messages:
+    1. The full-text project files message (if project_file_texts is populated).
+    2. A lightweight metadata message for files the LLM should access via the
+       FileReaderTool (e.g. oversized chat-attached files or project files that
+       don't fit in context).
+    """
+    if not project_files:
+        return []
+
+    messages: list[ChatMessageSimple] = []
+    if project_files.project_file_texts:
+        messages.append(
+            _create_project_files_message(project_files, token_counter=None)
+        )
+    if project_files.file_metadata_for_tool and token_counter:
+        messages.append(
+            _create_file_tool_metadata_message(
+                project_files.file_metadata_for_tool, token_counter
+            )
+        )
+    return messages
+
+
 def construct_message_history(
     system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
@@ -210,6 +240,8 @@ def construct_message_history(
     project_files: ExtractedProjectFiles | None,
     available_tokens: int,
     last_n_user_messages: int | None = None,
+    token_counter: Callable[[str], int] | None = None,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
@@ -217,13 +249,17 @@ def construct_message_history(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
 
+    # Build the project / file-metadata messages up front so we can use their
+    # actual token counts for the budget.
+    project_messages = _build_project_message(project_files, token_counter)
+    project_messages_tokens = sum(m.token_count for m in project_messages)
+
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
-    if project_files:
-        history_token_budget -= project_files.total_token_count
+    history_token_budget -= project_messages_tokens
     history_token_budget -= reminder_message.token_count if reminder_message else 0
 
     if history_token_budget < 0:
@@ -237,11 +273,7 @@ def construct_message_history(
         result = [system_prompt] if system_prompt else []
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
-        if project_files and project_files.project_file_texts:
-            project_message = _create_project_files_message(
-                project_files, token_counter=None
-            )
-            result.append(project_message)
+        result.extend(project_messages)
         if reminder_message:
             result.append(reminder_message)
         return result
@@ -300,8 +332,11 @@ def construct_message_history(
     # Calculate remaining budget for history before the last user message
     remaining_budget = history_token_budget - required_tokens
 
-    # Truncate history_before_last_user from the top to fit in remaining budget
+    # Truncate history_before_last_user from the top to fit in remaining budget.
+    # Track dropped file messages so we can provide their metadata to the
+    # FileReaderTool instead.
     truncated_history_before: list[ChatMessageSimple] = []
+    dropped_file_ids: list[str] = []
     current_token_count = 0
 
     for msg in reversed(history_before_last_user):
@@ -310,8 +345,66 @@ def construct_message_history(
             truncated_history_before.insert(0, msg)
             current_token_count += msg.token_count
         else:
-            # Can't fit this message, stop truncating
+            # Can't fit this message, stop truncating.
+            # This message and everything older is dropped.
             break
+
+    # Collect file_ids from ALL dropped messages (those not in
+    # truncated_history_before). The truncation loop above keeps the most
+    # recent messages, so the dropped ones are at the start of the original
+    # list up to (len(history) - len(kept)).
+    num_kept = len(truncated_history_before)
+    for msg in history_before_last_user[: len(history_before_last_user) - num_kept]:
+        if msg.file_id is not None:
+            dropped_file_ids.append(msg.file_id)
+
+    # Also treat "orphaned" metadata entries as dropped -- these are files
+    # from messages removed by summary truncation (before convert_chat_history
+    # ran), so no ChatMessageSimple was ever tagged with their file_id.
+    if all_injected_file_metadata:
+        surviving_file_ids = {
+            msg.file_id for msg in simple_chat_history if msg.file_id is not None
+        }
+        for fid in all_injected_file_metadata:
+            if fid not in surviving_file_ids and fid not in dropped_file_ids:
+                dropped_file_ids.append(fid)
+
+    # Build a forgotten-files metadata message if any file messages were
+    # dropped AND we have metadata for them (meaning the FileReaderTool is
+    # available). Reserve tokens for this message in the budget.
+    forgotten_files_message: ChatMessageSimple | None = None
+    if dropped_file_ids and all_injected_file_metadata and token_counter:
+        forgotten_meta = [
+            all_injected_file_metadata[fid]
+            for fid in dropped_file_ids
+            if fid in all_injected_file_metadata
+        ]
+        if forgotten_meta:
+            logger.debug(
+                f"FileReader: building forgotten-files message for "
+                f"{[(m.file_id, m.filename) for m in forgotten_meta]}"
+            )
+            forgotten_files_message = _create_file_tool_metadata_message(
+                forgotten_meta, token_counter
+            )
+            # Shrink the remaining budget. If the metadata message doesn't
+            # fit we may need to drop more history messages.
+            remaining_budget -= forgotten_files_message.token_count
+            while truncated_history_before and current_token_count > remaining_budget:
+                evicted = truncated_history_before.pop(0)
+                current_token_count -= evicted.token_count
+                # If the evicted message is itself a file, add it to the
+                # forgotten metadata (it's now dropped too).
+                if (
+                    evicted.file_id is not None
+                    and evicted.file_id in all_injected_file_metadata
+                    and evicted.file_id not in {m.file_id for m in forgotten_meta}
+                ):
+                    forgotten_meta.append(all_injected_file_metadata[evicted.file_id])
+                    # Rebuild the message with the new entry
+                    forgotten_files_message = _create_file_tool_metadata_message(
+                        forgotten_meta, token_counter
+                    )
 
     # Attach project images to the last user message
     if project_files and project_files.project_image_files:
@@ -325,7 +418,7 @@ def construct_message_history(
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [project_files],
-    # [last_user_message], [messages_after_last_user], [reminder]
+    # [forgotten_files], [last_user_message], [messages_after_last_user], [reminder]
     result = [system_prompt] if system_prompt else []
 
     # 1. Add truncated history before last user message
@@ -335,24 +428,50 @@ def construct_message_history(
     if custom_agent_prompt:
         result.append(custom_agent_prompt)
 
-    # 3. Add project files message (inserted before last user message)
-    if project_files and project_files.project_file_texts:
-        project_message = _create_project_files_message(
-            project_files, token_counter=None
-        )
-        result.append(project_message)
+    # 3. Add project files / file-metadata messages (inserted before last user message)
+    result.extend(project_messages)
 
-    # 4. Add last user message (with project images attached)
+    # 4. Add forgotten-files metadata (right before the user's question)
+    if forgotten_files_message:
+        result.append(forgotten_files_message)
+
+    # 5. Add last user message (with project images attached)
     result.append(last_user_message)
 
-    # 5. Add messages after last user message (tool calls, responses, etc.)
+    # 6. Add messages after last user message (tool calls, responses, etc.)
     result.extend(messages_after_last_user)
 
-    # 6. Add reminder message at the very end
+    # 7. Add reminder message at the very end
     if reminder_message:
         result.append(reminder_message)
 
     return result
+
+
+def _create_file_tool_metadata_message(
+    file_metadata: list[FileToolMetadata],
+    token_counter: Callable[[str], int],
+) -> ChatMessageSimple:
+    """Build a lightweight metadata-only message listing files available via FileReaderTool.
+
+    Used when files are too large to fit in context and the vector DB is
+    disabled, so the LLM must use ``read_file`` to inspect them.
+    """
+    lines = [
+        "You have access to the following files. Use the read_file tool to "
+        "read sections of any file:"
+    ]
+    for meta in file_metadata:
+        lines.append(
+            f'- {meta.file_id}: "{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        )
+
+    message_content = "\n".join(lines)
+    return ChatMessageSimple(
+        message=message_content,
+        token_count=token_counter(message_content),
+        message_type=MessageType.USER,
+    )
 
 
 def _create_project_files_message(
@@ -402,6 +521,7 @@ def run_llm_loop(
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
     include_citations: bool = True,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -582,6 +702,8 @@ def run_llm_loop(
                 reminder_message=reminder_msg,
                 project_files=project_files,
                 available_tokens=available_tokens,
+                token_counter=token_counter,
+                all_injected_file_metadata=all_injected_file_metadata,
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result

@@ -148,6 +148,7 @@ from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
@@ -164,7 +165,7 @@ _INDEXING_STATUS_PAGE_SIZE = 10
 SEEN_ZIP_DETAIL = "Only one zip file is allowed per file connector, \
 use the ingestion APIs for multiple files"
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
 """Admin only API endpoints"""

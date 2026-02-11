@@ -62,6 +62,24 @@ def store_user_file_plaintext(user_file_id: UUID, plaintext_content: str) -> boo
         return False
 
 
+def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
+    """Load a file directly from the file store using its file_record ID.
+
+    This is the fallback path for chat-attached files that don't have a
+    corresponding row in the ``user_file`` table."""
+    file_store = get_default_file_store()
+    file_record = file_store.read_file_record(file_id)
+    chat_file_type = mime_type_to_chat_file_type(file_record.file_type)
+
+    file_io = file_store.read_file(file_id, mode="b")
+    return InMemoryChatFile(
+        file_id=file_id,
+        content=file_io.read(),
+        file_type=chat_file_type,
+        filename=file_record.display_name,
+    )
+
+
 def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     status = "not_loaded"
 
