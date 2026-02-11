@@ -187,7 +187,10 @@ def _validate_llm_provider_change(
     if not MULTI_TENANT or api_key_changed:
         return
 
-    api_base_changed = new_api_base != existing_api_base
+    normalized_existing_api_base = existing_api_base or None
+    normalized_new_api_base = new_api_base or None
+
+    api_base_changed = normalized_new_api_base != normalized_existing_api_base
     custom_config_changed = (
         new_custom_config and new_custom_config != existing_custom_config
     )
