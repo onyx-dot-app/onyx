@@ -389,6 +389,12 @@ def handle_stream_message_objects(
             llm_override=new_msg_req.llm_override or chat_session.llm_override,
             additional_headers=litellm_additional_headers,
         )
+
+        # Attach mock response directly to the LLM instance so it survives
+        # cross-thread context boundaries in the streaming pipeline.
+        if new_msg_req.mock_llm_response is not None and INTEGRATION_TESTS_MODE:
+            llm._mock_response = new_msg_req.mock_llm_response  # type: ignore[attr-defined]
+
         token_counter = get_llm_token_counter(llm)
 
         # Check LLM cost limits before using the LLM (only for Onyx-managed keys)

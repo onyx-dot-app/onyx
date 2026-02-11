@@ -172,6 +172,7 @@ class LitellmLLM(LLM):
             model_kwargs.update({"extra_body": extra_body})
 
         self._model_kwargs = model_kwargs
+        self._mock_response: str | None = None
 
     def _safe_model_config(self) -> dict:
         dump = self.config.model_dump()
@@ -379,7 +380,9 @@ class LitellmLLM(LLM):
                 passthrough_kwargs["api_key"] = self._api_key or None
 
             response = litellm.completion(
-                mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                mock_response=self._mock_response
+                or get_llm_mock_response()
+                or MOCK_LLM_RESPONSE,
                 model=model,
                 base_url=self._api_base or None,
                 api_version=self._api_version or None,

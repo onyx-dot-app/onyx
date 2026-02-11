@@ -277,14 +277,14 @@ class ChatSessionManager:
                     error=str(data["error"]),
                     stack_trace=str(data.get("stack_trace") or ""),
                 )
-            elif (data_obj := cast(dict[str, Any], data.get("obj") or {})) and (
-                data_obj.get("error")
-                or data_obj.get("type") == StreamingType.ERROR.value
+            elif (error_obj := cast(dict[str, Any], data.get("obj") or {})) and (
+                error_obj.get("error")
+                or error_obj.get("type") == StreamingType.ERROR.value
             ):
                 error = ErrorResponse(
-                    error=str(data_obj.get("error") or "Streaming error"),
+                    error=str(error_obj.get("error") or "Streaming error"),
                     stack_trace=str(
-                        data_obj.get("stack_trace") or data.get("stack_trace") or ""
+                        error_obj.get("stack_trace") or data.get("stack_trace") or ""
                     ),
                 )
             elif (
