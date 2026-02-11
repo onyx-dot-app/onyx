@@ -72,7 +72,7 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: int) -> dict:
         headers=admin_user.headers,
     )
     response.raise_for_status()
-    for provider in response.json():
+    for provider in response.json()["providers"]:
         if provider["id"] == provider_id:
             return provider
     raise ValueError(f"Provider with id {provider_id} not found")
