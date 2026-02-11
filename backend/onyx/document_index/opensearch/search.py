@@ -268,10 +268,6 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the hybrid search query.
             include_hidden: Whether to include hidden documents.
-            num_candidates: The number of neighbors to consider for vector
-                similarity search. Generally more candidates improves search
-                quality at the cost of performance. Defaults to
-                DEFAULT_NUM_CANDIDATES.
 
         Returns:
             A dictionary representing the final hybrid search query.
