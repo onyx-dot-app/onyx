@@ -30,6 +30,7 @@ from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
+from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
@@ -852,10 +853,22 @@ def run_indexing_pipeline(
     )
     llm = None
     if enable_contextual_rag:
+        default_contextual_rag_model = fetch_default_contextual_rag_model(db_session)
+
+        contextual_rag_llm_name = (
+            default_contextual_rag_model.name
+            if default_contextual_rag_model
+            else DEFAULT_CONTEXTUAL_RAG_LLM_NAME
+        )
+        contextual_rag_llm_provider = (
+            default_contextual_rag_model.llm_provider.provider
+            if default_contextual_rag_model
+            else DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
+        )
+
         llm = get_llm_for_contextual_rag(
-            search_settings.contextual_rag_llm_name or DEFAULT_CONTEXTUAL_RAG_LLM_NAME,
-            search_settings.contextual_rag_llm_provider
-            or DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER,
+            contextual_rag_llm_name,
+            contextual_rag_llm_provider,
         )
 
     chunker = chunker or Chunker(

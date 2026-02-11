@@ -509,6 +509,12 @@ def fetch_default_vision_model(db_session: Session) -> ModelConfiguration | None
     return fetch_default_model(db_session, LLMModelFlowType.VISION)
 
 
+def fetch_default_contextual_rag_model(
+    db_session: Session,
+) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
+
+
 def fetch_default_model(
     db_session: Session,
     flow_type: LLMModelFlowType,
@@ -646,6 +652,31 @@ def update_default_vision_provider(
     )
 
 
+def update_default_contextual_rag_provider(
+    provider_id: int, model_name: str, db_session: Session
+) -> None:
+    _update_default_model(
+        db_session=db_session,
+        provider_id=provider_id,
+        model=model_name,
+        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
+    )
+
+
+def update_no_default_contextual_rag_provider(
+    db_session: Session,
+) -> None:
+    db_session.execute(
+        update(LLMModelFlow)
+        .where(
+            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CONTEXTUAL_RAG,
+            LLMModelFlow.is_default == True,  # noqa: E712
+        )
+        .values(is_default=False)
+    )
+    db_session.commit()
+
+
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     """Fetch all LLM providers that are in Auto mode."""
     query = (
@@ -766,6 +797,30 @@ def create_new_flow_mapping__no_commit(
         )
 
     return flow
+
+
+def add_model_to_flow(
+    db_session: Session,
+    model_configuration_id: int,
+    flow_type: LLMModelFlowType,
+) -> None:
+    # Check if the model configuration already has a flow mapping for the given flow type
+    existing_flow = db_session.scalar(
+        select(LLMModelFlow).where(
+            LLMModelFlow.model_configuration_id == model_configuration_id,
+            LLMModelFlow.llm_model_flow_type == flow_type,
+        )
+    )
+    if existing_flow:
+        return
+
+    create_new_flow_mapping__no_commit(
+        db_session=db_session,
+        model_configuration_id=model_configuration_id,
+        flow_type=flow_type,
+    )
+
+    db_session.commit()
 
 
 def insert_new_model_configuration__no_commit(

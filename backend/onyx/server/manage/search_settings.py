@@ -12,8 +12,14 @@ from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.index_attempt import expire_index_attempts
+from onyx.db.llm import add_model_to_flow
+from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import update_default_contextual_rag_provider
+from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
+from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import delete_search_settings
@@ -109,8 +115,8 @@ def set_new_search_settings(
             db_session=db_session,
         )
 
-    new_search_settings = create_search_settings(
-        search_settings=new_search_settings_request, db_session=db_session
+    new_search_settings = create_new_search_settings(
+        search_settings_request=new_search_settings_request, db_session=db_session
     )
 
     # Ensure Vespa has the new index immediately
@@ -242,6 +248,19 @@ def update_saved_search_settings(
         search_settings=search_settings, db_session=db_session
     )
 
+    if search_settings.enable_contextual_rag:
+        if (
+            search_settings.contextual_rag_llm_name
+            and search_settings.contextual_rag_llm_provider
+        ):
+            add_model_to_flow_and_update_default(
+                provider_name=search_settings.contextual_rag_llm_provider,
+                model_name=search_settings.contextual_rag_llm_name,
+                db_session=db_session,
+            )
+    else:
+        update_no_default_contextual_rag_provider(db_session=db_session)
+
 
 @router.get("/unstructured-api-key-set")
 def unstructured_api_key_set(
@@ -264,3 +283,55 @@ def delete_unstructured_api_key_endpoint(
     _: User = Depends(current_admin_user),
 ) -> None:
     delete_unstructured_api_key()
+
+
+def create_new_search_settings(
+    search_settings_request: SavedSearchSettings,
+    db_session: Session,
+) -> SearchSettings:
+    search_settings = create_search_settings(
+        search_settings=search_settings_request, db_session=db_session
+    )
+
+    enable_contextual_rag = search_settings.enable_contextual_rag
+
+    if enable_contextual_rag:
+        if (
+            search_settings.contextual_rag_llm_name
+            and search_settings.contextual_rag_llm_provider
+        ):
+            add_model_to_flow_and_update_default(
+                provider_name=search_settings.contextual_rag_llm_provider,
+                model_name=search_settings.contextual_rag_llm_name,
+                db_session=db_session,
+            )
+    else:
+        update_no_default_contextual_rag_provider(
+            db_session=db_session,
+        )
+
+    return search_settings
+
+
+def add_model_to_flow_and_update_default(
+    provider_name: str,
+    model_name: str,
+    db_session: Session,
+) -> None:
+    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    if provider:
+        model_config = next(
+            (mc for mc in provider.model_configurations if mc.name == model_name), None
+        )
+        if model_config:
+            add_model_to_flow(
+                db_session=db_session,
+                model_configuration_id=model_config.id,
+                flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
+            )
+
+            update_default_contextual_rag_provider(
+                db_session=db_session,
+                provider_id=provider.id,
+                model_name=model_name,
+            )
