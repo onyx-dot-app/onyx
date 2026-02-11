@@ -13,7 +13,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER
     return_value=None,
 )
 def test_google_drive_sections(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:

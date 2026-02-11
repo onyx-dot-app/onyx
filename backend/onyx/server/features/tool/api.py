@@ -158,7 +158,7 @@ class ToolStatusUpdateResponse(BaseModel):
 def update_tools_status(
     update_data: ToolStatusUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
 ) -> ToolStatusUpdateResponse:
     """Enable or disable one or more tools.
 

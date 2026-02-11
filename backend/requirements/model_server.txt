@@ -94,7 +94,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   tqdm
-cryptography==46.0.3
+cryptography==46.0.5
     # via pyjwt
 decorator==5.2.1
     # via retry
@@ -177,25 +177,14 @@ googleapis-common-protos==1.72.0
     #   grpcio-status
 grpc-google-iam-v1==0.14.3
     # via google-cloud-resource-manager
-grpcio==1.67.1 ; python_full_version < '3.14'
+grpcio==1.76.0
     # via
     #   google-api-core
     #   google-cloud-resource-manager
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
-    #   litellm
-grpcio==1.76.0 ; python_full_version >= '3.14'
-    # via
-    #   google-api-core
-    #   google-cloud-resource-manager
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
-    #   litellm
-grpcio-status==1.67.1 ; python_full_version < '3.14'
-    # via google-api-core
-grpcio-status==1.76.0 ; python_full_version >= '3.14'
+grpcio-status==1.76.0
     # via google-api-core
 h11==0.16.0
     # via
@@ -253,7 +242,7 @@ kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-litellm==1.80.11
+litellm==1.81.6
     # via onyx
 markupsafe==3.0.3
     # via jinja2
@@ -334,7 +323,7 @@ packaging==24.2
     #   transformers
 parameterized==0.9.0
     # via cohere
-pillow==12.0.0
+pillow==12.1.1
     # via sentence-transformers
 prometheus-client==0.23.1
     # via
@@ -353,16 +342,7 @@ proto-plus==1.26.1
     #   google-api-core
     #   google-cloud-aiplatform
     #   google-cloud-resource-manager
-protobuf==5.29.5 ; python_full_version < '3.14'
-    # via
-    #   google-api-core
-    #   google-cloud-aiplatform
-    #   google-cloud-resource-manager
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
-    #   grpcio-status
-    #   proto-plus
-protobuf==6.33.4 ; python_full_version >= '3.14'
+protobuf==6.33.5
     # via
     #   google-api-core
     #   google-cloud-aiplatform
@@ -399,7 +379,7 @@ pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.12.0
     # via mcp
-pyjwt==2.10.1
+pyjwt==2.11.0
     # via mcp
 python-dateutil==2.8.2
     # via
@@ -412,7 +392,7 @@ python-dotenv==1.1.1
     # via
     #   litellm
     #   pydantic-settings
-python-multipart==0.0.21
+python-multipart==0.0.22
     # via mcp
 pywin32==311 ; sys_platform == 'win32'
     # via mcp

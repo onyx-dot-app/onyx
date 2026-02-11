@@ -103,6 +103,7 @@ async def _make_billing_request(
     Raises:
         BillingServiceError: If request fails
     """
+
     base_url = _get_base_url()
     url = f"{base_url}{path}"
     headers = _get_headers(license_data)
@@ -134,6 +135,7 @@ async def _make_billing_request(
 
 async def create_checkout_session(
     billing_period: str = "monthly",
+    seats: int | None = None,
     email: str | None = None,
     license_data: str | None = None,
     redirect_url: str | None = None,
@@ -143,6 +145,7 @@ async def create_checkout_session(
 
     Args:
         billing_period: "monthly" or "annual"
+        seats: Number of seats to purchase (optional, uses default if not provided)
         email: Customer email for new subscriptions
         license_data: Existing license for renewals (self-hosted)
         redirect_url: URL to redirect after successful checkout
@@ -152,6 +155,8 @@ async def create_checkout_session(
         CreateCheckoutSessionResponse with checkout URL
     """
     body: dict = {"billing_period": billing_period}
+    if seats is not None:
+        body["seats"] = seats
     if email:
         body["email"] = email
     if redirect_url:
@@ -264,4 +269,5 @@ async def update_seat_count(
         current_seats=data.get("current_seats", 0),
         used_seats=data.get("used_seats", 0),
         message=data.get("message"),
+        license=data.get("license"),
     )

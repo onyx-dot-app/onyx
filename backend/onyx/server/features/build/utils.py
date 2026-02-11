@@ -268,6 +268,10 @@ def validate_file(
 # Flag logic: True = enabled, False/null/not found = disabled
 ONYX_CRAFT_ENABLED_FLAG = "onyx-craft-enabled"
 
+# PostHog feature flag key for controlling whether a user has usage limits
+# Flag logic: True = user has usage limits (rate limits apply), False/null/not found = no limits (unlimited usage)
+CRAFT_HAS_USAGE_LIMITS = "craft-has-usage-limits"
+
 # Feature identifier in additional_data
 BUILD_MODE_FEATURE_ID = "build_mode"
 

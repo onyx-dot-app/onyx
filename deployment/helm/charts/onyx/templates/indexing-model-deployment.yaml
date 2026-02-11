@@ -76,4 +76,16 @@ spec:
         resources:
           {{- toYaml .Values.indexCapability.resources | nindent 10 }}
         {{- end }}
+        {{- with .Values.indexCapability.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.indexCapability.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.indexCapability.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
 {{- end }}

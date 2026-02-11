@@ -75,7 +75,7 @@ def _get_active_search_provider(
         has_api_key=bool(provider_model.api_key),
     )
 
-    if not provider_model.api_key:
+    if provider_model.api_key is None:
         raise HTTPException(
             status_code=400,
             detail="Web search provider requires an API key.",
@@ -84,7 +84,7 @@ def _get_active_search_provider(
     try:
         provider: WebSearchProvider = build_search_provider_from_config(
             provider_type=provider_view.provider_type,
-            api_key=provider_model.api_key,
+            api_key=provider_model.api_key.get_value(apply_mask=False),
             config=provider_model.config or {},
         )
     except ValueError as exc:
@@ -117,21 +117,12 @@ def _get_active_content_provider(
 
     try:
         provider_type = WebContentProviderType(provider_model.provider_type)
+        config = provider_model.config or WebContentProviderConfig()
 
-        config = provider_model.config or {}
-        timeout_conf = config.get("timeout_seconds")
-        if timeout_conf is not None:
-            timeout_seconds = int(timeout_conf)
-        else:
-            timeout_seconds = None
-        base_url = config.get("base_url")
         provider: WebContentProvider | None = build_content_provider_from_config(
             provider_type=provider_type,
-            api_key=provider_model.api_key,
-            config=WebContentProviderConfig(
-                timeout_seconds=timeout_seconds,
-                base_url=base_url,
-            ),
+            api_key=provider_model.api_key.get_value(apply_mask=False),
+            config=config,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -147,7 +138,7 @@ def _get_active_content_provider(
         name=provider_model.name,
         provider_type=provider_type,
         is_active=provider_model.is_active,
-        config=provider_model.config or {},
+        config=provider_model.config or WebContentProviderConfig(),
         has_api_key=bool(provider_model.api_key),
     )
 

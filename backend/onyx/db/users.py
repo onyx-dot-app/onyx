@@ -17,7 +17,9 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
+from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
+from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
 from onyx.db.models import User
@@ -332,6 +334,15 @@ def delete_user_from_db(
     db_session.query(SamlAccount).filter(
         SamlAccount.user_id == user_to_delete.id
     ).delete()
+    # Null out ownership on document sets and personas so they're
+    # preserved for other users instead of being cascade-deleted
+    db_session.query(DocumentSet).filter(
+        DocumentSet.user_id == user_to_delete.id
+    ).update({DocumentSet.user_id: None})
+    db_session.query(Persona).filter(Persona.user_id == user_to_delete.id).update(
+        {Persona.user_id: None}
+    )
+
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.user_id == user_to_delete.id
     ).delete()

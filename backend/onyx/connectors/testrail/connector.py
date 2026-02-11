@@ -349,7 +349,7 @@ class TestRailConnector(LoadConnector, PollConnector):
             if len(cases) < limit:
                 break
 
-    def _build_case_link(self, project_id: int, case_id: int) -> str:
+    def _build_case_link(self, project_id: int, case_id: int) -> str:  # noqa: ARG002
         # Standard UI link to a case
         return f"{self.base_url}/index.php?/cases/view/{case_id}"
 
@@ -357,7 +357,7 @@ class TestRailConnector(LoadConnector, PollConnector):
         self,
         project: dict[str, Any],
         case: dict[str, Any],
-        suite: dict[str, Any] | None = None,
+        suite: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> Document | None:
         project_id = project.get("id")
         if not isinstance(project_id, int):

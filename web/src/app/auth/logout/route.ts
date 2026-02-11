@@ -1,4 +1,3 @@
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { getAuthTypeMetadataSS, logoutSS } from "@/lib/userSS";
 import { NextRequest } from "next/server";
 
@@ -12,33 +11,32 @@ export const POST = async (request: NextRequest) => {
     return new Response(response.body, { status: response?.status });
   }
 
-  // Delete cookies only if cloud is enabled (jwt auth)
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    const cookiesToDelete = ["fastapiusersauth"];
-    const cookieOptions = {
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      sameSite: "lax" as const,
-    };
+  // Always clear the auth cookie on logout. This is critical for the JWT
+  // auth backend where destroy_token is a no-op (stateless), but is also
+  // the correct thing to do for Redis/Postgres backends — the server-side
+  // Set-Cookie from FastAPI never reaches the browser since logoutSS is a
+  // server-to-server fetch.
+  const cookiesToDelete = ["fastapiusersauth"];
+  const cookieOptions = {
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    sameSite: "lax" as const,
+  };
 
-    // Logout successful, delete cookies
-    const headers = new Headers();
+  const headers = new Headers();
 
-    cookiesToDelete.forEach((cookieName) => {
-      headers.append(
-        "Set-Cookie",
-        `${cookieName}=; Max-Age=0; ${Object.entries(cookieOptions)
-          .map(([key, value]) => `${key}=${value}`)
-          .join("; ")}`
-      );
-    });
+  cookiesToDelete.forEach((cookieName) => {
+    headers.append(
+      "Set-Cookie",
+      `${cookieName}=; Max-Age=0; ${Object.entries(cookieOptions)
+        .map(([key, value]) => `${key}=${value}`)
+        .join("; ")}`
+    );
+  });
 
-    return new Response(null, {
-      status: 204,
-      headers: headers,
-    });
-  } else {
-    return new Response(null, { status: 204 });
-  }
+  return new Response(null, {
+    status: 204,
+    headers: headers,
+  });
 };

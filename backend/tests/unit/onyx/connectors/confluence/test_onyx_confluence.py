@@ -231,8 +231,8 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
 
     def get_side_effect(
         path: str,
-        params: dict[str, Any] | None = None,
-        advanced_mode: bool = False,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
     ) -> requests.Response:
         path = path.strip("/")
         mock_get_call_paths.append(path)
@@ -469,8 +469,8 @@ def test_paginated_cql_retrieval_handles_pagination_error(
 
     def get_side_effect(
         path: str,
-        params: dict[str, Any] | None = None,
-        advanced_mode: bool = False,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
     ) -> requests.Response:
         path = path.strip("/")
         mock_get_call_paths.append(path)
@@ -612,8 +612,8 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
 
     def get_side_effect(
         path: str,
-        params: dict[str, Any] | None = None,
-        advanced_mode: bool = False,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
     ) -> requests.Response:
         path = path.strip("/")
         mock_get_call_paths.append(path)
@@ -727,8 +727,8 @@ def test_paginated_cql_retrieval_cloud_no_retry_on_error(
 
     def get_side_effect(
         path: str,
-        params: dict[str, Any] | None = None,
-        advanced_mode: bool = False,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
     ) -> requests.Response:
         path = path.strip("/")
         mock_get_call_paths.append(path)

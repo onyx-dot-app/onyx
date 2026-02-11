@@ -242,9 +242,9 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
 
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        callback: IndexingHeartbeatInterface | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         for post_id in get_all_post_ids(self.slab_bot_token):

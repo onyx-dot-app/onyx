@@ -8,12 +8,15 @@ import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
+import Message from "@/refresh-components/messages/Message";
 
 interface LoginPageProps {
   authUrl: string | null;
   authTypeMetadata: AuthTypeMetadata | null;
   nextUrl: string | null;
   hidePageRedirect?: boolean;
+  verified?: boolean;
+  isFirstUser?: boolean;
 }
 
 export default function LoginPage({
@@ -21,11 +24,25 @@ export default function LoginPage({
   authTypeMetadata,
   nextUrl,
   hidePageRedirect,
+  verified,
+  isFirstUser,
 }: LoginPageProps) {
   useSendAuthRequiredMessage();
 
+  // Honor any existing nextUrl; only default to new team flow for first users with no nextUrl
+  const effectiveNextUrl =
+    nextUrl ?? (isFirstUser ? "/app?new_team=true" : null);
+
   return (
     <div className="flex flex-col w-full justify-center">
+      {verified && (
+        <Message
+          success
+          close={false}
+          text="Your email has been verified! Please sign in to continue."
+          className="w-full mb-4"
+        />
+      )}
       {authUrl &&
         authTypeMetadata &&
         authTypeMetadata.authType !== AuthType.CLOUD &&
@@ -58,7 +75,7 @@ export default function LoginPage({
               </div>
             </>
           )}
-          <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
+          <EmailPasswordForm shouldVerify={true} nextUrl={effectiveNextUrl} />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
             <Button href="/auth/forgot-password">Reset Password</Button>
           )}
@@ -85,7 +102,7 @@ export default function LoginPage({
             </>
           )}
 
-          <EmailPasswordForm nextUrl={nextUrl} />
+          <EmailPasswordForm nextUrl={effectiveNextUrl} />
         </div>
       )}
 

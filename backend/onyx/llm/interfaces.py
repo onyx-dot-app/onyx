@@ -48,7 +48,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> "ModelResponse":
         raise NotImplementedError
@@ -61,7 +61,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError

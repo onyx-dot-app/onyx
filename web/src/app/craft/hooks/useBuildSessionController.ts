@@ -3,10 +3,12 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */
@@ -102,10 +104,12 @@ export function useBuildSessionController({
         setCurrentSession(null);
       }
 
-      // Reset trigger state when transitioning FROM a session TO new build
-      // This ensures we can re-provision when returning to the new build page
+      // Reset state when transitioning FROM a session TO new build
+      // This ensures we fetch fresh pre-provisioned status from backend
       if (prevExistingSessionId !== null) {
         setControllerTriggered(null);
+        // Clear pre-provisioned state to force a fresh check from backend
+        useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
       }
 
       // Trigger pre-provisioning if conditions are met
@@ -161,9 +165,10 @@ export function useBuildSessionController({
     const currentSessionData = currentState.currentSessionId
       ? currentState.sessions.get(currentState.currentSessionId)
       : null;
-    const isCurrentlyStreaming =
-      currentSessionData?.status === "running" ||
-      currentSessionData?.status === "creating";
+    // Only block loading during active LLM streaming ("running").
+    // "creating" means sandbox restore, which should not prevent
+    // navigating to and loading a different session.
+    const isCurrentlyStreaming = currentSessionData?.status === "running";
 
     if (
       controllerState.loadedSessionId !== existingSessionId &&
@@ -231,8 +236,8 @@ export function useBuildSessionController({
   ]);
 
   // Effect: Re-validate pre-provisioned session on tab focus (multi-tab support)
-  // The backend's createSession does "get or create empty session" - it returns
-  // the same session if still valid, or a new one if consumed by another tab.
+  // Uses checkPreProvisionedSession API to validate without resetting state,
+  // which prevents unnecessary cascading effects when session is still valid.
   useEffect(() => {
     const handleFocus = async () => {
       const { preProvisioning } = useBuildSessionStore.getState();
@@ -241,16 +246,41 @@ export function useBuildSessionController({
       if (preProvisioning.status === "ready") {
         const cachedSessionId = preProvisioning.sessionId;
 
-        // Reset to idle and re-provision - backend will return same session if
-        // still valid, or create new one if it was consumed by another tab
-        useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
-        const newSessionId = await useBuildSessionStore
-          .getState()
-          .ensurePreProvisionedSession();
+        try {
+          // Check if session is still valid WITHOUT resetting state
+          const { valid } = await checkPreProvisionedSession(cachedSessionId);
 
-        if (newSessionId && newSessionId !== cachedSessionId) {
-          console.info(
-            `[PreProvision] Session changed on focus: ${cachedSessionId} -> ${newSessionId}`
+          if (!valid) {
+            // Session was consumed by another tab - now reset and re-provision
+            console.info(
+              `[PreProvision] Session ${cachedSessionId.slice(
+                0,
+                8
+              )} invalidated on focus, re-provisioning...`
+            );
+            useBuildSessionStore.setState({
+              preProvisioning: { status: "idle" },
+            });
+            const newSessionId = await useBuildSessionStore
+              .getState()
+              .ensurePreProvisionedSession();
+
+            if (newSessionId) {
+              console.info(
+                `[PreProvision] Session changed on focus: ${cachedSessionId.slice(
+                  0,
+                  8
+                )} -> ${newSessionId.slice(0, 8)}`
+              );
+            }
+          }
+          // If valid, do nothing - keep the current session
+        } catch (error) {
+          // On error, log but don't reset - better to keep potentially stale session
+          // than to cause UI flicker on network blip
+          console.warn(
+            "[PreProvision] Failed to validate session on focus:",
+            error
           );
         }
       }
@@ -280,6 +310,10 @@ export function useBuildSessionController({
   const navigateToNewBuild = useCallback(() => {
     router.push(CRAFT_PATH);
   }, [router]);
+
+  // Poll to verify pre-provisioned session is still valid (multi-tab support)
+  // Only poll on welcome page (existingSessionId === null) - no point polling on session pages
+  usePreProvisionPolling({ enabled: existingSessionId === null });
 
   return {
     currentSessionId,

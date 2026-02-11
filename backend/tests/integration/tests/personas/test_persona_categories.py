@@ -11,7 +11,7 @@ from tests.integration.common_utils.test_models import DATestPersonaLabel
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_persona_label_management(reset: None) -> None:
+def test_persona_label_management(reset: None) -> None:  # noqa: ARG001
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
     persona_label = DATestPersonaLabel(

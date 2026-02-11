@@ -7,7 +7,7 @@ def send_team_member_message(
     client: WebClient,
     channel: str,
     thread_ts: str,
-    receiver_ids: list[str] | None = None,
+    receiver_ids: list[str] | None = None,  # noqa: ARG001
     send_as_ephemeral: bool = False,
 ) -> None:
     respond_in_thread_or_channel(

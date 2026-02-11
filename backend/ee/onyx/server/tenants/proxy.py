@@ -29,17 +29,13 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
-from ee.onyx.db.license import update_license_cache
-from ee.onyx.db.license import upsert_license
 from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.license.models import LicensePayload
-from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.utils.license import is_license_valid
 from ee.onyx.utils.license import verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
-from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -209,36 +205,6 @@ async def forward_to_control_plane(
         )
 
 
-def fetch_and_store_license(tenant_id: str, license_data: str) -> None:
-    """Store license in database and update Redis cache.
-
-    Args:
-        tenant_id: The tenant ID
-        license_data: Base64-encoded signed license blob
-    """
-    try:
-        # Verify before storing
-        payload = verify_license_signature(license_data)
-
-        # Store in database using the specific tenant's schema
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            upsert_license(db_session, license_data)
-
-        # Update Redis cache
-        update_license_cache(
-            payload,
-            source=LicenseSource.AUTO_FETCH,
-            tenant_id=tenant_id,
-        )
-
-    except ValueError as e:
-        logger.error(f"Failed to verify license: {e}")
-        raise
-    except Exception:
-        logger.exception("Failed to store license")
-        raise
-
-
 # -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
@@ -246,6 +212,7 @@ def fetch_and_store_license(tenant_id: str, license_data: str) -> None:
 
 class CreateCheckoutSessionRequest(BaseModel):
     billing_period: Literal["monthly", "annual"] = "monthly"
+    seats: int | None = None
     email: str | None = None
     # Redirect URL after successful checkout - self-hosted passes their instance URL
     redirect_url: str | None = None
@@ -277,6 +244,8 @@ async def proxy_create_checkout_session(
     }
     if tenant_id:
         body["tenant_id"] = tenant_id
+    if request_body.seats is not None:
+        body["seats"] = request_body.seats
     if request_body.email:
         body["email"] = request_body.email
     if request_body.redirect_url:
@@ -439,7 +408,6 @@ async def proxy_license_fetch(
 
     result = await forward_to_control_plane("GET", f"/license/{tenant_id}")
 
-    # Auto-store the refreshed license
     license_data = result.get("license")
     if not license_data:
         logger.error(f"Control plane returned incomplete license response: {result}")
@@ -448,8 +416,7 @@ async def proxy_license_fetch(
             detail="Control plane returned incomplete license data",
         )
 
-    fetch_and_store_license(tenant_id, license_data)
-
+    # Return license to caller - self-hosted instance stores it via /api/license/claim
     return LicenseFetchResponse(license=license_data, tenant_id=tenant_id)
 
 
@@ -462,6 +429,7 @@ async def proxy_seat_update(
 
     Auth: Valid (non-expired) license required.
     Handles Stripe proration and license regeneration.
+    Returns the regenerated license in the response for the caller to store.
     """
     if not license_payload.tenant_id:
         raise HTTPException(status_code=401, detail="License missing tenant_id")
@@ -477,9 +445,11 @@ async def proxy_seat_update(
         },
     )
 
+    # Return license in response - self-hosted instance stores it via /api/license/claim
     return SeatUpdateResponse(
         success=result.get("success", False),
         current_seats=result.get("current_seats", 0),
         used_seats=result.get("used_seats", 0),
         message=result.get("message"),
+        license=result.get("license"),
     )

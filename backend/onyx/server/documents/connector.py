@@ -403,12 +403,13 @@ def check_drive_tokens(
     db_session: Session = Depends(get_session),
 ) -> AuthStatus:
     db_credentials = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if (
-        not db_credentials
-        or DB_CREDENTIALS_DICT_TOKEN_KEY not in db_credentials.credential_json
-    ):
+    if not db_credentials or not db_credentials.credential_json:
         return AuthStatus(authenticated=False)
-    token_json_str = str(db_credentials.credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
+
+    credential_json = db_credentials.credential_json.get_value(apply_mask=False)
+    if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
+        return AuthStatus(authenticated=False)
+    token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
     google_drive_creds = get_google_oauth_creds(
         token_json_str=token_json_str,
         source=DocumentSource.GOOGLE_DRIVE,
@@ -567,7 +568,7 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -629,7 +630,7 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """

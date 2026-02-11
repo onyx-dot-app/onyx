@@ -58,11 +58,6 @@ export default function WelcomeMessage({
             {agent.name}
           </Text>
         </div>
-        {agent.description && (
-          <Text as="p" secondaryBody text03>
-            {agent.description}
-          </Text>
-        )}
       </>
     );
   }
@@ -74,7 +69,7 @@ export default function WelcomeMessage({
   return (
     <FrostedDiv
       data-testid="chat-intro"
-      className="flex flex-col items-center justify-center gap-3 max-w-[50rem]"
+      className="flex flex-col items-center justify-center gap-3 w-full max-w-[var(--app-page-main-content-width)]"
     >
       {content}
     </FrostedDiv>

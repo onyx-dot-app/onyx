@@ -44,8 +44,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.tools.models import TOOL_CALL_MSG_ARGUMENTS
-from onyx.tools.models import TOOL_CALL_MSG_FUNC_NAME
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
@@ -53,6 +51,15 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
+
+
+def _sanitize_llm_output(value: str) -> str:
+    """Remove characters that PostgreSQL's text/JSONB types cannot store.
+
+    - NULL bytes (\x00): Not allowed in PostgreSQL text types
+    - UTF-16 surrogates (\ud800-\udfff): Invalid in UTF-8 encoding
+    """
+    return "".join(c for c in value if c != "\x00" and not ("\ud800" <= c <= "\udfff"))
 
 
 def _try_parse_json_string(value: Any) -> Any:
@@ -101,10 +108,18 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
 
     if isinstance(raw_args, dict):
         # Parse any string values that look like JSON arrays/objects
-        return {k: _try_parse_json_string(v) for k, v in raw_args.items()}
+        return {
+            k: _try_parse_json_string(
+                _sanitize_llm_output(v) if isinstance(v, str) else v
+            )
+            for k, v in raw_args.items()
+        }
 
     if not isinstance(raw_args, str):
         return {}
+
+    # Sanitize before parsing to remove NULL bytes and surrogates
+    raw_args = _sanitize_llm_output(raw_args)
 
     try:
         parsed1: Any = json.loads(raw_args)
@@ -317,26 +332,48 @@ def extract_tool_calls_from_response_text(
     # Find all JSON objects in the response text
     json_objects = find_all_json_objects(response_text)
 
-    tool_calls: list[ToolCallKickoff] = []
-    tab_index = 0
+    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
+    prev_json_obj: dict[str, Any] | None = None
+    prev_tool_call: tuple[str, dict[str, Any]] | None = None
 
     for json_obj in json_objects:
         matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
-        if matched_tool_call:
-            tool_name, tool_args = matched_tool_call
-            tool_calls.append(
-                ToolCallKickoff(
-                    tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
-                    tool_name=tool_name,
-                    tool_args=tool_args,
-                    placement=Placement(
-                        turn_index=placement.turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=placement.sub_turn_index,
-                    ),
-                )
+        if not matched_tool_call:
+            continue
+
+        # `find_all_json_objects` can return both an outer tool-call object and
+        # its nested arguments object. If both resolve to the same tool call,
+        # drop only this nested duplicate artifact.
+        if (
+            prev_json_obj is not None
+            and prev_tool_call is not None
+            and matched_tool_call == prev_tool_call
+            and _is_nested_arguments_duplicate(
+                previous_json_obj=prev_json_obj,
+                current_json_obj=json_obj,
+                tool_name_to_def=tool_name_to_def,
             )
-            tab_index += 1
+        ):
+            continue
+
+        matched_tool_calls.append(matched_tool_call)
+        prev_json_obj = json_obj
+        prev_tool_call = matched_tool_call
+
+    tool_calls: list[ToolCallKickoff] = []
+    for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
+        tool_calls.append(
+            ToolCallKickoff(
+                tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
+                tool_name=tool_name,
+                tool_args=tool_args,
+                placement=Placement(
+                    turn_index=placement.turn_index,
+                    tab_index=tab_index,
+                    sub_turn_index=placement.sub_turn_index,
+                ),
+            )
+        )
 
     logger.info(
         f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
@@ -414,6 +451,42 @@ def _try_match_json_to_tool(
                 # Filter to only include known properties
                 filtered_args = {k: v for k, v in json_obj.items() if k in properties}
                 return (tool_name, filtered_args)
+
+    return None
+
+
+def _is_nested_arguments_duplicate(
+    previous_json_obj: dict[str, Any],
+    current_json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> bool:
+    """Detect when current object is the nested args object from previous tool call."""
+    extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
+    return extracted_args is not None and current_json_obj == extracted_args
+
+
+def _extract_nested_arguments_obj(
+    json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> dict[str, Any] | None:
+    # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
+    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
+        args_obj = json_obj.get("arguments", json_obj.get("parameters"))
+        if isinstance(args_obj, dict):
+            return args_obj
+
+    # Format 2: {"function": {"name": "...", "arguments": {...}}}
+    if "function" in json_obj and isinstance(json_obj["function"], dict):
+        function_obj = json_obj["function"]
+        if "name" in function_obj and function_obj["name"] in tool_name_to_def:
+            args_obj = function_obj.get("arguments", function_obj.get("parameters"))
+            if isinstance(args_obj, dict):
+                return args_obj
+
+    # Format 3: {"tool_name": {...arguments...}}
+    for tool_name in tool_name_to_def:
+        if tool_name in json_obj and isinstance(json_obj[tool_name], dict):
+            return json_obj[tool_name]
 
     return None
 
@@ -498,65 +571,26 @@ def translate_history_to_llm_format(
                 messages.append(user_msg_text)
 
         elif msg.message_type == MessageType.ASSISTANT:
+            tool_calls_list: list[ToolCall] | None = None
+            if msg.tool_calls:
+                tool_calls_list = [
+                    ToolCall(
+                        id=tc.tool_call_id,
+                        type="function",
+                        function=FunctionCall(
+                            name=tc.tool_name,
+                            arguments=json.dumps(tc.tool_arguments),
+                        ),
+                    )
+                    for tc in msg.tool_calls
+                ]
+
             assistant_msg = AssistantMessage(
                 role="assistant",
                 content=msg.message or None,
-                tool_calls=None,
+                tool_calls=tool_calls_list,
             )
             messages.append(assistant_msg)
-
-        elif msg.message_type == MessageType.TOOL_CALL:
-            # Tool calls are represented as Assistant Messages with tool_calls field
-            # Try to reconstruct tool call structure if we have tool_call_id
-            tool_calls: list[ToolCall] = []
-            if msg.tool_call_id:
-                try:
-                    # Parse the message content (which should contain function_name and arguments)
-                    tool_call_data = json.loads(msg.message) if msg.message else {}
-
-                    if (
-                        isinstance(tool_call_data, dict)
-                        and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
-                    ):
-                        function_name = tool_call_data.get(
-                            TOOL_CALL_MSG_FUNC_NAME, "unknown"
-                        )
-                        raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
-                    else:
-                        function_name = "unknown"
-                        raw_args = (
-                            tool_call_data if isinstance(tool_call_data, dict) else {}
-                        )
-
-                    # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
-                    # If `raw_args` is accidentally a JSON string literal of an object
-                    # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
-                    # would produce a quoted JSON literal and break Anthropic tool parsing.
-                    tool_args = _parse_tool_args_to_dict(raw_args)
-
-                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
-                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
-                    tool_call = ToolCall(
-                        id=msg.tool_call_id,
-                        type="function",
-                        function=FunctionCall(
-                            name=function_name,
-                            arguments=json.dumps(tool_args) if tool_args else "{}",
-                        ),
-                    )
-                    tool_calls.append(tool_call)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to parse tool call data for tool_call_id {msg.tool_call_id}: {e}. "
-                        "Including as content-only message."
-                    )
-
-            assistant_msg_with_tool = AssistantMessage(
-                role="assistant",
-                content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
-                tool_calls=tool_calls or None,
-            )
-            messages.append(assistant_msg_with_tool)
 
         elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
             if not msg.tool_call_id:
@@ -612,7 +646,7 @@ def run_llm_step_pkt_generator(
     placement: Placement,
     state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
-    reasoning_effort: ReasoningEffort | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
@@ -622,6 +656,8 @@ def run_llm_step_pkt_generator(
     # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    pre_answer_processing_time: float | None = None,
+    timeout_override: int | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -677,9 +713,8 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = 0
 
-    # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
-        logger.info(
+        logger.debug(
             f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
         )
 
@@ -711,6 +746,7 @@ def run_llm_step_pkt_generator(
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
+            timeout_override=timeout_override,
         ):
             if packet.usage:
                 usage = packet.usage
@@ -822,6 +858,12 @@ def run_llm_step_pkt_generator(
                         reasoning_start = False
 
                     if not answer_start:
+                        # Store pre-answer processing time in state container for save_chat
+                        if state_container and pre_answer_processing_time is not None:
+                            state_container.set_pre_answer_processing_time(
+                                pre_answer_processing_time
+                            )
+
                         yield Packet(
                             placement=Placement(
                                 turn_index=turn_index,
@@ -830,6 +872,7 @@ def run_llm_step_pkt_generator(
                             ),
                             obj=AgentResponseStart(
                                 final_documents=final_documents,
+                                pre_answer_processing_seconds=pre_answer_processing_time,
                             ),
                         )
                         answer_start = True
@@ -948,6 +991,10 @@ def run_llm_step_pkt_generator(
             )
             span_generation.span_data.output = [assistant_msg_no_tools.model_dump()]
 
+        # Record reasoning content for tracing (extended thinking from reasoning models)
+        if accumulated_reasoning:
+            span_generation.span_data.reasoning = accumulated_reasoning
+
     # This may happen if the custom token processor is used to modify other packets into reasoning
     # Then there won't necessarily be anything else to come after the reasoning tokens
     if reasoning_start:
@@ -1029,7 +1076,7 @@ def run_llm_step(
     placement: Placement,
     state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
-    reasoning_effort: ReasoningEffort | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
@@ -1038,6 +1085,8 @@ def run_llm_step(
     max_tokens: int | None = None,
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    pre_answer_processing_time: float | None = None,
+    timeout_override: int | None = None,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -1059,6 +1108,8 @@ def run_llm_step(
         max_tokens=max_tokens,
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
+        pre_answer_processing_time=pre_answer_processing_time,
+        timeout_override=timeout_override,
     )
 
     while True:

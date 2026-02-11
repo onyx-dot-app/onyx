@@ -8,8 +8,9 @@ import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import AIMessage from "@/app/app/message/messageComponents/AIMessage";
+import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import Spacer from "@/refresh-components/Spacer";
+import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,
   useCurrentMessageTree,
@@ -45,7 +46,7 @@ export interface MessageListProps {
 
   /**
    * Node ID of the message to use as scroll anchor.
-   * This message will get a data-anchor attribute for ChatScrollContainer.
+   * Used by DynamicBottomSpacer to position the push-up effect.
    */
   anchorNodeId?: number;
 }
@@ -114,25 +115,19 @@ const MessageList = React.memo(
     );
 
     return (
-      <div className="w-[min(50rem,100%)] h-full px-6">
+      <div className="w-full max-w-[var(--app-page-main-content-width)] h-full">
         <Spacer />
         {messages.map((message, i) => {
           const messageReactComponentKey = `message-${message.nodeId}`;
           const parentMessage = message.parentNodeId
             ? messageTree?.get(message.parentNodeId)
             : null;
-          const isAnchor = message.nodeId === anchorNodeId;
-
           if (message.type === "user") {
             const nextMessage =
               messages.length > i + 1 ? messages[i + 1] : null;
 
             return (
-              <div
-                id={messageReactComponentKey}
-                key={messageReactComponentKey}
-                data-anchor={isAnchor ? "true" : undefined}
-              >
+              <div id={messageReactComponentKey} key={messageReactComponentKey}>
                 <HumanMessage
                   disableSwitchingForStreaming={
                     (nextMessage && nextMessage.is_generating) || false
@@ -180,11 +175,10 @@ const MessageList = React.memo(
               <div
                 id={`message-${message.nodeId}`}
                 key={messageReactComponentKey}
-                data-anchor={isAnchor ? "true" : undefined}
               >
-                <AIMessage
+                <AgentMessage
                   rawPackets={message.packets}
-                  packetsVersion={message.packetsVersion}
+                  packetCount={message.packetCount}
                   chatState={chatStateData}
                   nodeId={message.nodeId}
                   messageId={message.messageId}
@@ -196,6 +190,7 @@ const MessageList = React.memo(
                   onMessageSelection={onMessageSelection}
                   onRegenerate={createRegenerator}
                   parentMessage={previousMessage}
+                  processingDurationSeconds={message.processingDurationSeconds}
                 />
               </div>
             );
@@ -220,6 +215,9 @@ const MessageList = React.memo(
             />
           </div>
         )}
+
+        {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
+        <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
       </div>
     );
   }

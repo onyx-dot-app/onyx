@@ -58,26 +58,42 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     For self-hosted, looks up license metadata and overrides application_status
     if the license indicates GATED_ACCESS (fully expired).
 
+    Also sets ee_features_enabled based on license status to control
+    visibility of EE features in the UI.
+
     For multi-tenant (cloud), the settings already have the correct status
     from the control plane, so no override is needed.
 
-    If LICENSE_ENFORCEMENT_ENABLED is false, settings are returned unchanged,
-    allowing the product to function normally without license checks.
+    If LICENSE_ENFORCEMENT_ENABLED is false, ee_features_enabled is set to True
+    (since EE code was loaded via ENABLE_PAID_ENTERPRISE_EDITION_FEATURES).
     """
     if not LICENSE_ENFORCEMENT_ENABLED:
+        # License enforcement disabled - EE code is loaded via
+        # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES, so EE features are on
+        settings.ee_features_enabled = True
         return settings
 
     if MULTI_TENANT:
+        # Cloud mode - EE features always available (gating handled by is_tenant_gated)
+        settings.ee_features_enabled = True
         return settings
 
     tenant_id = get_current_tenant_id()
     try:
         metadata = get_cached_license_metadata(tenant_id)
-        if metadata and metadata.status == _BLOCKING_STATUS:
-            settings.application_status = metadata.status
-        # No license = user hasn't purchased yet, allow access for upgrade flow
-        # GRACE_PERIOD/PAYMENT_REMINDER don't block - they're for notifications
+        if metadata:
+            if metadata.status == _BLOCKING_STATUS:
+                settings.application_status = metadata.status
+                settings.ee_features_enabled = False
+            else:
+                # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
+                settings.ee_features_enabled = True
+        else:
+            # No license = community edition, disable EE features
+            settings.ee_features_enabled = False
     except RedisError as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
+        # Fail closed - disable EE features if we can't verify license
+        settings.ee_features_enabled = False
 
     return settings

@@ -67,9 +67,9 @@ class MockPage(pywikibot.Page):
 
     def categories(
         self,
-        with_sort_key: bool = False,
-        total: int | None = None,
-        content: bool = False,
+        with_sort_key: bool = False,  # noqa: ARG002
+        total: int | None = None,  # noqa: ARG002
+        content: bool = False,  # noqa: ARG002
     ) -> Iterable[pywikibot.Page]:
         if not self._has_categories:
             return []

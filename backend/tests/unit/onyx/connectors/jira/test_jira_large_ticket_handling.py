@@ -75,7 +75,7 @@ def mock_jira_api_version() -> Generator[Any, Any, Any]:
 
 @pytest.fixture
 def patched_environment(
-    mock_jira_api_version: MockFixture,
+    mock_jira_api_version: MockFixture,  # noqa: ARG001
 ) -> Generator[Any, Any, Any]:
     yield
 
@@ -83,7 +83,7 @@ def patched_environment(
 def test_fetch_jira_issues_batch_small_ticket(
     mock_jira_client: MagicMock,
     mock_issue_small: MagicMock,
-    patched_environment: MockFixture,
+    patched_environment: MockFixture,  # noqa: ARG001
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_small]
 
@@ -108,7 +108,7 @@ def test_fetch_jira_issues_batch_small_ticket(
 def test_fetch_jira_issues_batch_large_ticket(
     mock_jira_client: MagicMock,
     mock_issue_large: MagicMock,
-    patched_environment: MockFixture,
+    patched_environment: MockFixture,  # noqa: ARG001
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_large]
 
@@ -127,7 +127,7 @@ def test_fetch_jira_issues_batch_mixed_tickets(
     mock_jira_client: MagicMock,
     mock_issue_small: MagicMock,
     mock_issue_large: MagicMock,
-    patched_environment: MockFixture,
+    patched_environment: MockFixture,  # noqa: ARG001
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
 
@@ -150,7 +150,7 @@ def test_fetch_jira_issues_batch_custom_size_limit(
     mock_jira_client: MagicMock,
     mock_issue_small: MagicMock,
     mock_issue_large: MagicMock,
-    patched_environment: MockFixture,
+    patched_environment: MockFixture,  # noqa: ARG001
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
 

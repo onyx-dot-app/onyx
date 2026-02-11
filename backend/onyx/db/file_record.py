@@ -1,5 +1,6 @@
 from sqlalchemy import and_
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
@@ -71,26 +72,28 @@ def upsert_filerecord(
     db_session: Session,
     file_metadata: dict | None = None,
 ) -> FileRecord:
-    """Create or update a file store record for external storage (S3, MinIO, etc.)"""
-    filestore = db_session.query(FileRecord).filter_by(file_id=file_id).first()
+    """Atomic upsert using INSERT ... ON CONFLICT DO UPDATE to avoid
+    race conditions when concurrent calls target the same file_id."""
+    stmt = insert(FileRecord).values(
+        file_id=file_id,
+        display_name=display_name,
+        file_origin=file_origin,
+        file_type=file_type,
+        file_metadata=file_metadata,
+        bucket_name=bucket_name,
+        object_key=object_key,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[FileRecord.file_id],
+        set_={
+            "display_name": stmt.excluded.display_name,
+            "file_origin": stmt.excluded.file_origin,
+            "file_type": stmt.excluded.file_type,
+            "file_metadata": stmt.excluded.file_metadata,
+            "bucket_name": stmt.excluded.bucket_name,
+            "object_key": stmt.excluded.object_key,
+        },
+    )
+    db_session.execute(stmt)
 
-    if filestore:
-        filestore.display_name = display_name
-        filestore.file_origin = file_origin
-        filestore.file_type = file_type
-        filestore.file_metadata = file_metadata
-        filestore.bucket_name = bucket_name
-        filestore.object_key = object_key
-    else:
-        filestore = FileRecord(
-            file_id=file_id,
-            display_name=display_name,
-            file_origin=file_origin,
-            file_type=file_type,
-            file_metadata=file_metadata,
-            bucket_name=bucket_name,
-            object_key=object_key,
-        )
-        db_session.add(filestore)
-
-    return filestore
+    return db_session.get(FileRecord, file_id)  # type: ignore[return-value]

@@ -43,7 +43,7 @@ def _verify_user_pagination(
     assert all_expected_emails == all_retrieved_emails
 
 
-def test_user_pagination(reset: None) -> None:
+def test_user_pagination(reset: None) -> None:  # noqa: ARG001
     # Create an admin user to perform actions
     user_performing_action: DATestUser = UserManager.create(
         name="admin_performing_action"

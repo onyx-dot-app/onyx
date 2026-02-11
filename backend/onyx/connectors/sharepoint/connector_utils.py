@@ -22,7 +22,7 @@ def get_sharepoint_external_access(
         raise ValueError("DriveItem ID is required")
 
     # Get external access using the EE implementation
-    def noop_fallback(*args: Any, **kwargs: Any) -> ExternalAccess:
+    def noop_fallback(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001
         return ExternalAccess.empty()
 
     get_external_access_func = fetch_versioned_implementation_with_fallback(

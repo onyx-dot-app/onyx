@@ -52,6 +52,11 @@ class TenantState(BaseModel):
     tenant_id: str
     multitenant: bool
 
+    def __str__(self) -> str:
+        return (
+            f"TenantState(tenant_id={self.tenant_id}, multitenant={self.multitenant})"
+        )
+
     @model_validator(mode="after")
     def check_tenant_id_is_set_in_multitenant_mode(self) -> Self:
         if self.multitenant and not self.tenant_id:
@@ -318,6 +323,7 @@ class IdRetrievalCapable(abc.ABC):
         # TODO(andrei): This is temporary, we will not expose this in the long
         # run.
         batch_retrieval: bool = False,
+        # TODO(andrei): Add a param for whether to retrieve hidden docs.
     ) -> list[InferenceChunk]:
         """Fetches chunk(s) based on document ID.
 
@@ -347,12 +353,12 @@ class HybridCapable(abc.ABC):
         self,
         query: str,
         query_embedding: Embedding,
+        # TODO(andrei): This param is not great design, get rid of it.
         final_keywords: list[str] | None,
         query_type: QueryType,
         # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
         filters: IndexFilters,
         num_to_retrieve: int,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         """Runs hybrid search and returns a list of inference chunks.
 
@@ -368,8 +374,6 @@ class HybridCapable(abc.ABC):
             filters: Filters for things like permissions, source type, time,
                 etc.
             num_to_retrieve: Number of highest matching chunks to return.
-            offset: Number of highest matching chunks to initially skip (kind of
-                like pagination). Defaults to 0.
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.
@@ -380,8 +384,6 @@ class HybridCapable(abc.ABC):
 class RandomCapable(abc.ABC):
     """
     Class must implement random document retrieval.
-
-    This currently is just used for porting the documents to a secondary index.
     """
 
     @abc.abstractmethod
@@ -389,7 +391,7 @@ class RandomCapable(abc.ABC):
         self,
         # TODO(andrei): Make this more strict w.r.t. acl, temporary for now.
         filters: IndexFilters,
-        num_to_retrieve: int = 100,
+        num_to_retrieve: int = 10,
         dirty: bool | None = None,
     ) -> list[InferenceChunk]:
         """Retrieves random chunks matching the filters.
@@ -397,7 +399,7 @@ class RandomCapable(abc.ABC):
         Args:
             filters: Filters for things like permissions, source type, time,
                 etc.
-            num_to_retrieve: Number of chunks to retrieve. Defaults to 100.
+            num_to_retrieve: Number of chunks to retrieve. Defaults to 10.
             dirty: If set, retrieve chunks whose "dirty" flag matches this
                 argument. If None, there is no restriction on retrieved chunks
                 with respect to that flag. A chunk is considered dirty if there

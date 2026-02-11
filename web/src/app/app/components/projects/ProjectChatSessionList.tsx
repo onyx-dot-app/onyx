@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import Link from "next/link";
 import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
-import { useProjectsContext } from "../../projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/hooks/useAgents";
@@ -38,7 +38,7 @@ export default function ProjectChatSessionList() {
   if (!currentProjectId) return null;
 
   return (
-    <div className="flex flex-col gap-2 px-2 w-full max-w-[800px] mx-auto mt-6">
+    <div className="flex flex-col gap-2 px-2 w-full max-w-[800px] mx-auto mt-4">
       <div className="flex items-center pl-2">
         <Text as="p" text02 secondaryBody>
           Recent Chats

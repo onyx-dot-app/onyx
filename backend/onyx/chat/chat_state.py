@@ -45,6 +45,8 @@ class ChatStateContainer:
         self.citation_to_doc: CitationMapping = {}
         # True if this turn is a clarification question (deep research flow)
         self.is_clarification: bool = False
+        # Pre-answer processing time (time before answer starts) in seconds
+        self.pre_answer_processing_time: float | None = None
         # Note: LLM cost tracking is now handled in multi_llm.py
         # Search doc collection - maps dedup key to SearchDoc for all docs from tool calls
         self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
@@ -100,6 +102,16 @@ class ChatStateContainer:
         """Thread-safe getter for is_clarification."""
         with self._lock:
             return self.is_clarification
+
+    def set_pre_answer_processing_time(self, duration: float | None) -> None:
+        """Set the pre-answer processing time (time before answer starts)."""
+        with self._lock:
+            self.pre_answer_processing_time = duration
+
+    def get_pre_answer_processing_time(self) -> float | None:
+        """Thread-safe getter for pre_answer_processing_time."""
+        with self._lock:
+            return self.pre_answer_processing_time
 
     @staticmethod
     def create_search_doc_key(

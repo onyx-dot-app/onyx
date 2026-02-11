@@ -16,6 +16,7 @@ from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
@@ -96,6 +97,8 @@ class ToolResponse(BaseModel):
     # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
     llm_facing_response: str
     # The original tool call that triggered this response - set by tool_runner
+    # The response is first created by the tool runner, which does not need to be aware of things like the tool_call_id
+    # So this is set after the response is created by the tool runner
     tool_call: ToolCallKickoff | None = None
 
 
@@ -152,6 +155,7 @@ class OpenURLToolOverrideKwargs(BaseModel):
     starting_citation_num: int
     citation_mapping: dict[str, int]
     url_snippet_map: dict[str, str]
+    max_urls: int = 10
 
 
 # None indicates that the default value should be used
@@ -162,7 +166,7 @@ class SearchToolOverrideKwargs(BaseModel):
     # without help and a specific custom prompt for this
     original_query: str | None = None
     message_history: list[ChatMinimalTextMessage] | None = None
-    memories: list[str] | None = None
+    user_memory_context: UserMemoryContext | None = None
     user_info: str | None = None
 
     # Used for tool calls after the first one but in the same chat turn. The reason for this is that if the initial pass through

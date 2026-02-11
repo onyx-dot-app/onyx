@@ -13,7 +13,7 @@ from tests.integration.common_utils.test_models import DATestUser
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="SAML tests are enterprise only",
 )
-def test_saml_user_conversion(reset: None) -> None:
+def test_saml_user_conversion(reset: None) -> None:  # noqa: ARG001
     """
     Test that SAML login correctly converts users with non-authenticated roles
     (SLACK_USER or EXT_PERM_USER) to authenticated roles (BASIC).

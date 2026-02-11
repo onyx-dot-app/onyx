@@ -72,7 +72,7 @@ class TestSetupOpencodeConfig:
     def test_openai_config_with_thinking(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test that OpenAI provider includes reasoning configuration."""
         session_id = "test_openai_session"
@@ -106,7 +106,7 @@ class TestSetupOpencodeConfig:
     def test_anthropic_config_with_thinking(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test that Anthropic provider includes thinking configuration."""
         session_id = "test_anthropic_session"
@@ -144,7 +144,7 @@ class TestSetupOpencodeConfig:
     def test_google_config_with_thinking(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test that Google provider includes thinking configuration."""
         session_id = "test_google_session"
@@ -181,7 +181,7 @@ class TestSetupOpencodeConfig:
     def test_bedrock_config_with_thinking(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test that Bedrock provider includes thinking configuration."""
         session_id = "test_bedrock_session"
@@ -218,7 +218,7 @@ class TestSetupOpencodeConfig:
     def test_azure_config_with_thinking(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test that Azure provider includes thinking configuration."""
         session_id = "test_azure_session"
@@ -252,7 +252,7 @@ class TestSetupOpencodeConfig:
     def test_openai_config_with_api_base(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test OpenAI config with custom API base URL."""
         session_id = "test_openai_api_base"
@@ -280,7 +280,7 @@ class TestSetupOpencodeConfig:
     def test_anthropic_config_with_api_base(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test Anthropic config with custom API base URL."""
         session_id = "test_anthropic_api_base"
@@ -313,7 +313,7 @@ class TestSetupOpencodeConfig:
     def test_config_with_disabled_tools(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test config with disabled tools permissions."""
         session_id = "test_disabled_tools"
@@ -351,7 +351,7 @@ class TestSetupOpencodeConfig:
     def test_config_without_api_key(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test config without API key still includes thinking settings."""
         session_id = "test_no_api_key"
@@ -381,7 +381,7 @@ class TestSetupOpencodeConfig:
     def test_other_provider_no_thinking(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test that other providers (non OpenAI/Anthropic/Google/Bedrock/Azure) don't get thinking configuration."""
         session_id = "test_other_provider"
@@ -409,7 +409,7 @@ class TestSetupOpencodeConfig:
     def test_config_overwritten_if_exists(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test that existing opencode.json is overwritten with new config."""
         session_id = "test_existing_config"
@@ -437,7 +437,7 @@ class TestSetupOpencodeConfig:
     def test_full_config_structure_openai(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test full OpenAI config structure matches expected format."""
         session_id = "test_full_openai"
@@ -468,7 +468,7 @@ class TestSetupOpencodeConfig:
     def test_full_config_structure_anthropic(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test full Anthropic config structure matches expected format."""
         session_id = "test_full_anthropic"
@@ -504,7 +504,7 @@ class TestSetupOpencodeConfig:
     def test_full_config_structure_google(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test full Google config structure matches expected format."""
         session_id = "test_full_google"
@@ -541,7 +541,7 @@ class TestSetupOpencodeConfig:
     def test_full_config_structure_bedrock(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test full Bedrock config structure matches expected format."""
         session_id = "test_full_bedrock"
@@ -572,7 +572,7 @@ class TestSetupOpencodeConfig:
     def test_full_config_structure_azure(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test full Azure config structure matches expected format."""
         session_id = "test_full_azure"
@@ -609,7 +609,7 @@ class TestSandboxDirectoryStructure:
     def test_create_complete_sandbox(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
     ) -> None:
         """Test creating a complete sandbox with all components including opencode.json."""
         session_id = "test_complete_sandbox"
@@ -646,7 +646,7 @@ class TestSandboxDirectoryStructure:
     def test_setup_skills_copies_and_overwrites(
         self,
         directory_manager: DirectoryManager,
-        temp_base_path: Path,
+        temp_base_path: Path,  # noqa: ARG002
         temp_templates: dict[str, Path],
     ) -> None:
         """Test that setup_skills copies skills and overwrites existing ones."""

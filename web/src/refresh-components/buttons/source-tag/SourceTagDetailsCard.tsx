@@ -3,12 +3,18 @@
 import React, { memo } from "react";
 import Text from "@/refresh-components/texts/Text";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgArrowLeft, SvgArrowRight, SvgUser } from "@opal/icons";
+import {
+  SvgArrowLeft,
+  SvgArrowRight,
+  SvgUser,
+  SvgQuestionMarkSmall,
+} from "@opal/icons";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { ValidSources } from "@/lib/types";
 import { timeAgo } from "@/lib/time";
 import { IconProps } from "@/components/icons/icons";
+import { SubQuestionDetail } from "@/app/app/interfaces";
 
 export interface SourceInfo {
   id: string;
@@ -22,6 +28,9 @@ export interface SourceInfo {
     tags?: string[];
   };
   icon?: React.FunctionComponent<IconProps>;
+  // Support for questions
+  isQuestion?: boolean;
+  questionData?: SubQuestionDetail;
 }
 
 interface SourceTagDetailsCardProps {
@@ -68,6 +77,7 @@ const SourceTagDetailsCardInner = ({
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === sources.length - 1;
   const isWebSource = currentSource.sourceType === "web";
+  const isQuestion = currentSource.isQuestion;
   const relativeDate = timeAgo(
     currentSource.metadata?.date instanceof Date
       ? currentSource.metadata.date.toISOString()
@@ -107,7 +117,9 @@ const SourceTagDetailsCardInner = ({
         {/* Header with icon and title */}
         <div className="flex items-start gap-1 p-0.5 min-h-[1.75rem] w-full text-left hover:bg-background-tint-01 rounded-08 transition-colors">
           <div className="flex items-center justify-center p-0.5 shrink-0 w-5 h-5">
-            {currentSource.icon ? (
+            {isQuestion ? (
+              <SvgQuestionMarkSmall size={16} className="text-text-03" />
+            ) : currentSource.icon ? (
               <currentSource.icon size={16} />
             ) : isWebSource && currentSource.sourceUrl ? (
               <WebResultIcon url={currentSource.sourceUrl} size={16} />

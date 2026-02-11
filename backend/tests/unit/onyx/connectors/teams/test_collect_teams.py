@@ -18,7 +18,7 @@ def test_special_characters_in_team_names() -> None:
     # Mock successful responses for client-side filtering
     mock_team_collection = MagicMock()
     mock_team_collection.has_next = False
-    mock_team_collection.__iter__ = lambda self: iter([mock_team])
+    mock_team_collection.__iter__ = lambda self: iter([mock_team])  # noqa: ARG005
 
     mock_get_query = MagicMock()
     mock_top_query = MagicMock()
@@ -48,7 +48,7 @@ def test_single_quote_escaping() -> None:
     # Mock successful responses
     mock_team_collection = MagicMock()
     mock_team_collection.has_next = False
-    mock_team_collection.__iter__ = lambda self: iter([])
+    mock_team_collection.__iter__ = lambda self: iter([])  # noqa: ARG005
 
     mock_get_query = MagicMock()
     mock_filter_query = MagicMock()

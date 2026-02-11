@@ -19,8 +19,6 @@ interface BuildWelcomeProps {
   isRunning: boolean;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
-  /** Pre-provisioned session ID for file uploads before a session is active. */
-  preProvisionedSessionId?: string | null;
 }
 
 /**
@@ -32,7 +30,6 @@ export default function BuildWelcome({
   onSubmit,
   isRunning,
   sandboxInitializing = false,
-  preProvisionedSessionId,
 }: BuildWelcomeProps) {
   const inputBarRef = useRef<InputBarHandle>(null);
   const userPersona = getBuildUserPersona();
@@ -57,7 +54,7 @@ export default function BuildWelcome({
           isRunning={isRunning}
           placeholder="Analyze my data and create a dashboard..."
           sandboxInitializing={sandboxInitializing}
-          preProvisionedSessionId={preProvisionedSessionId}
+          isWelcomePage
         />
         <ConnectDataBanner />
         <SuggestedPrompts persona={persona} onPromptClick={handlePromptClick} />

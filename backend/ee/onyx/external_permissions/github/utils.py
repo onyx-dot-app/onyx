@@ -91,7 +91,7 @@ class TeamInfo(BaseModel):
 
 
 def _fetch_organization_members(
-    github_client: Github, org_name: str, retry_count: int = 0
+    github_client: Github, org_name: str, retry_count: int = 0  # noqa: ARG001
 ) -> List[UserInfo]:
     """Fetch all organization members including owners and regular members."""
     org_members: List[UserInfo] = []
@@ -124,7 +124,7 @@ def _fetch_organization_members(
 
 
 def _fetch_repository_teams_detailed(
-    repo: Repository, github_client: Github, retry_count: int = 0
+    repo: Repository, github_client: Github, retry_count: int = 0  # noqa: ARG001
 ) -> List[TeamInfo]:
     """Fetch teams with access to the repository and their members."""
     teams_data: List[TeamInfo] = []
@@ -167,7 +167,7 @@ def _fetch_repository_teams_detailed(
 
 
 def fetch_repository_team_slugs(
-    repo: Repository, github_client: Github, retry_count: int = 0
+    repo: Repository, github_client: Github, retry_count: int = 0  # noqa: ARG001
 ) -> List[str]:
     """Fetch team slugs with access to the repository."""
     logger.info(f"Fetching team slugs for repository {repo.full_name}")

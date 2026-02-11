@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 
 from sqlalchemy.orm import Session
@@ -15,15 +16,18 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ProjectFileMetadata
+from onyx.chat.models import ToolCallSimple
 from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
 )
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
@@ -34,6 +38,7 @@ from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import ToolCallDebug
 from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
@@ -329,7 +334,7 @@ def construct_message_history(
 
 def _create_project_files_message(
     project_files: ExtractedProjectFiles,
-    token_counter: Callable[[str], int] | None,
+    token_counter: Callable[[str], int] | None,  # noqa: ARG001
 ) -> ChatMessageSimple:
     """Convert project files to a ChatMessageSimple message.
 
@@ -366,7 +371,7 @@ def run_llm_loop(
     custom_agent_prompt: str | None,
     project_files: ExtractedProjectFiles,
     persona: Persona | None,
-    memories: list[str] | None,
+    user_memory_context: UserMemoryContext | None,
     llm: LLM,
     token_counter: Callable[[str], int],
     db_session: Session,
@@ -389,6 +394,9 @@ def run_llm_loop(
         )  # Here for lazy load LiteLLM
 
         initialize_litellm()
+
+        # Track when the loop starts for calculating time-to-answer
+        loop_start_time = time.monotonic()
 
         # Initialize citation processor for handling citations dynamically
         # When include_citations is True, use HYPERLINK mode to format citations as [[1]](url)
@@ -476,7 +484,7 @@ def run_llm_loop(
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
                         datetime_aware=persona.datetime_aware if persona else True,
-                        memories=memories,
+                        user_memory_context=user_memory_context,
                         tools=tools,
                         should_cite_documents=should_cite_documents
                         or always_cite_documents,
@@ -551,6 +559,11 @@ def run_llm_loop(
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
             tool_defs = [tool.tool_definition() for tool in final_tools]
+
+            # Calculate total processing time from loop start until now
+            # This measures how long the user waits before the answer starts streaming
+            pre_answer_processing_time = time.monotonic() - loop_start_time
+
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=truncated_message_history,
@@ -565,6 +578,7 @@ def run_llm_loop(
                 # final set of documents immediately if desired.
                 final_documents=gathered_documents,
                 user_identity=user_identity,
+                pre_answer_processing_time=pre_answer_processing_time,
             )
             if has_reasoned:
                 reasoning_cycles += 1
@@ -590,6 +604,19 @@ def run_llm_loop(
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
 
+            if INTEGRATION_TESTS_MODE and tool_calls:
+                for tool_call in tool_calls:
+                    emitter.emit(
+                        Packet(
+                            placement=tool_call.placement,
+                            obj=ToolCallDebug(
+                                tool_call_id=tool_call.tool_call_id,
+                                tool_name=tool_call.tool_name,
+                                tool_args=tool_call.tool_args,
+                            ),
+                        )
+                    )
+
             if len(tool_calls) > 1:
                 emitter.emit(
                     Packet(
@@ -611,7 +638,7 @@ def run_llm_loop(
                 tool_calls=tool_calls,
                 tools=final_tools,
                 message_history=truncated_message_history,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
                 next_citation_num=citation_processor.get_next_citation_number(),
@@ -625,7 +652,7 @@ def run_llm_loop(
             # Failure case, give something reasonable to the LLM to try again
             if tool_calls and not tool_responses:
                 failure_messages = create_tool_call_failure_messages(
-                    tool_calls[0], token_counter
+                    tool_calls, token_counter
                 )
                 simple_chat_history.extend(failure_messages)
                 continue
@@ -704,35 +731,68 @@ def run_llm_loop(
                 # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)
 
-                # Store tool call with function name and arguments in separate layers
-                tool_call_message = tool_call.to_msg_str()
-                tool_call_token_count = token_counter(tool_call_message)
-
-                tool_call_msg = ChatMessageSimple(
-                    message=tool_call_message,
-                    token_count=tool_call_token_count,
-                    message_type=MessageType.TOOL_CALL,
-                    tool_call_id=tool_call.tool_call_id,
-                    image_files=None,
-                )
-                simple_chat_history.append(tool_call_msg)
-
-                tool_response_message = tool_response.llm_facing_response
-                tool_response_token_count = token_counter(tool_response_message)
-
-                tool_response_msg = ChatMessageSimple(
-                    message=tool_response_message,
-                    token_count=tool_response_token_count,
-                    message_type=MessageType.TOOL_CALL_RESPONSE,
-                    tool_call_id=tool_call.tool_call_id,
-                    image_files=None,
-                )
-                simple_chat_history.append(tool_response_msg)
-
                 # Update citation processor if this was a search tool
                 update_citation_processor_from_tool_response(
                     tool_response, citation_processor
                 )
+
+            # After processing all tool responses for this turn, add messages to history
+            # using OpenAI parallel tool calling format:
+            # 1. ONE ASSISTANT message with tool_calls array
+            # 2. N TOOL_CALL_RESPONSE messages (one per tool call)
+            if tool_responses:
+                # Filter to only responses with valid tool_call references
+                valid_tool_responses = [
+                    tr for tr in tool_responses if tr.tool_call is not None
+                ]
+
+                # Build ToolCallSimple list for all tool calls in this turn
+                tool_calls_simple: list[ToolCallSimple] = []
+                for tool_response in valid_tool_responses:
+                    tc = tool_response.tool_call
+                    assert (
+                        tc is not None
+                    )  # Already filtered above, this is just for typing purposes
+
+                    tool_call_message = tc.to_msg_str()
+                    tool_call_token_count = token_counter(tool_call_message)
+
+                    tool_calls_simple.append(
+                        ToolCallSimple(
+                            tool_call_id=tc.tool_call_id,
+                            tool_name=tc.tool_name,
+                            tool_arguments=tc.tool_args,
+                            token_count=tool_call_token_count,
+                        )
+                    )
+
+                # Create ONE ASSISTANT message with all tool calls for this turn
+                total_tool_call_tokens = sum(tc.token_count for tc in tool_calls_simple)
+                assistant_with_tools = ChatMessageSimple(
+                    message="",  # No text content when making tool calls
+                    token_count=total_tool_call_tokens,
+                    message_type=MessageType.ASSISTANT,
+                    tool_calls=tool_calls_simple,
+                    image_files=None,
+                )
+                simple_chat_history.append(assistant_with_tools)
+
+                # Add TOOL_CALL_RESPONSE messages for each tool call
+                for tool_response in valid_tool_responses:
+                    tc = tool_response.tool_call
+                    assert tc is not None  # Already filtered above
+
+                    tool_response_message = tool_response.llm_facing_response
+                    tool_response_token_count = token_counter(tool_response_message)
+
+                    tool_response_msg = ChatMessageSimple(
+                        message=tool_response_message,
+                        token_count=tool_response_token_count,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=tc.tool_call_id,
+                        image_files=None,
+                    )
+                    simple_chat_history.append(tool_response_msg)
 
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:

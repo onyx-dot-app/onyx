@@ -17,14 +17,19 @@ SHAREPOINT_DOC_SYNC_TAG = "sharepoint_doc_sync"
 
 def sharepoint_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
     fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[ElementExternalAccess, None, None]:
     sharepoint_connector = SharepointConnector(
         **cc_pair.connector.connector_specific_config,
     )
-    sharepoint_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    sharepoint_connector.load_credentials(credential_json)
 
     yield from generic_doc_sync(
         cc_pair=cc_pair,

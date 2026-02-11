@@ -177,11 +177,6 @@ describe("packetUtils", () => {
       expect(isDisplayPacket(packet)).toBe(true);
     });
 
-    test("returns true for PYTHON_TOOL_START", () => {
-      const packet = createPacket(PacketType.PYTHON_TOOL_START);
-      expect(isDisplayPacket(packet)).toBe(true);
-    });
-
     test("returns false for other packet types", () => {
       const packet = createPacket(PacketType.SEARCH_TOOL_START);
       expect(isDisplayPacket(packet)).toBe(false);
@@ -244,11 +239,6 @@ describe("packetUtils", () => {
 
     test("returns true when packets contain IMAGE_GENERATION_TOOL_START", () => {
       const packets = [createPacket(PacketType.IMAGE_GENERATION_TOOL_START)];
-      expect(isFinalAnswerComing(packets)).toBe(true);
-    });
-
-    test("returns true when packets contain PYTHON_TOOL_START", () => {
-      const packets = [createPacket(PacketType.PYTHON_TOOL_START)];
       expect(isFinalAnswerComing(packets)).toBe(true);
     });
 

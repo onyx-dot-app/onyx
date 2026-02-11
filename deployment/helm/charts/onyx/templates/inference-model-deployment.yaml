@@ -65,4 +65,16 @@ spec:
         resources:
           {{- toYaml .Values.inferenceCapability.resources | nindent 10 }}
         {{- end }}
+        {{- with .Values.inferenceCapability.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.inferenceCapability.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.inferenceCapability.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
 {{- end }}

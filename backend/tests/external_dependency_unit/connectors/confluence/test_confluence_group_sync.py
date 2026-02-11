@@ -129,6 +129,8 @@ def test_confluence_group_sync(
     )
     db_session.add(credential)
     db_session.flush()
+    # Expire the credential so it reloads from DB with SensitiveValue wrapper
+    db_session.expire(credential)
 
     cc_pair = ConnectorCredentialPair(
         connector_id=connector.id,

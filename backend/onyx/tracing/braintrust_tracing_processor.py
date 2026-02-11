@@ -172,13 +172,19 @@ class BraintrustTracingProcessor(TracingProcessor):
             if cost_cents > 0:
                 metrics["cost_cents"] = cost_cents
 
+        metadata: Dict[str, Any] = {
+            "model": span.span_data.model,
+            "model_config": span.span_data.model_config,
+        }
+
+        # Include reasoning in metadata if present
+        if span.span_data.reasoning:
+            metadata["reasoning"] = span.span_data.reasoning
+
         return {
             "input": span.span_data.input,
             "output": span.span_data.output,
-            "metadata": {
-                "model": span.span_data.model,
-                "model_config": span.span_data.model_config,
-            },
+            "metadata": metadata,
             "metrics": metrics,
         }
 

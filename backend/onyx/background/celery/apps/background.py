@@ -102,7 +102,7 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
 
 
 @worker_process_init.connect
-def init_worker(**kwargs: Any) -> None:
+def init_worker(**kwargs: Any) -> None:  # noqa: ARG001
     SqlEngine.reset_engine()
 
 
@@ -129,6 +129,7 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.vespa",
         "onyx.background.celery.tasks.connector_deletion",
         "onyx.background.celery.tasks.doc_permission_syncing",
+        "onyx.background.celery.tasks.opensearch_migration",
         # Docprocessing worker tasks
         "onyx.background.celery.tasks.docprocessing",
         # Docfetching worker tasks

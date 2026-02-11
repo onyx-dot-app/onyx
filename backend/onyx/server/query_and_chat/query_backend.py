@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
@@ -11,12 +10,12 @@ from onyx.context.search.models import SearchDoc
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
+from onyx.context.search.utils import get_query_embedding
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.vespa.index import VespaIndex
 from onyx.server.query_and_chat.models import AdminSearchRequest
 from onyx.server.query_and_chat.models import AdminSearchResponse
 from onyx.server.query_and_chat.models import SourceTag
@@ -54,16 +53,12 @@ def admin_search(
     # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None)
 
-    if not isinstance(document_index, VespaIndex):
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot use admin-search when using a non-Vespa document index",
-        )
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)
     else:
+        query_embedding = get_query_embedding(query, db_session)
         matching_chunks = document_index.admin_retrieval(
-            query=query, filters=final_filters
+            query=query, query_embedding=query_embedding, filters=final_filters
         )
 
     documents = SearchDoc.from_chunks_or_sections(matching_chunks)
