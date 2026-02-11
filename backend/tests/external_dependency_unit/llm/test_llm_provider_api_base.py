@@ -191,14 +191,14 @@ class TestLLMProviderChanges:
         changes. This allows model-only updates when provider has no custom base URL.
         """
         try:
-            _create_test_provider(db_session, provider_name, api_base=None)
+            view = _create_test_provider(db_session, provider_name, api_base=None)
 
             with patch("onyx.server.manage.llm.api.MULTI_TENANT", True):
                 update_request = LLMProviderUpsertRequest(
+                    id=view.id,
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_base="",
-                    default_model_name="gpt-4o-mini",
                 )
 
                 result = put_llm_provider(
@@ -535,11 +535,6 @@ def test_upload_with_custom_config_then_change(
                     name=name,
                     provider=provider_name,
                     model=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
                     api_key_changed=False,
                     custom_config_changed=True,
                     custom_config=custom_config,
@@ -574,11 +569,6 @@ def test_upload_with_custom_config_then_change(
                     name=name,
                     provider=provider_name,
                     model=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
                     api_key_changed=False,
                     custom_config_changed=False,
                 ),
@@ -644,11 +634,10 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
     }
 
     try:
-        put_llm_provider(
+        view = put_llm_provider(
             llm_provider_upsert_request=LLMProviderUpsertRequest(
                 name=name,
                 provider=provider,
-                default_model_name=default_model_name,
                 custom_config=original_custom_config,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
@@ -667,9 +656,9 @@ def test_preserves_masked_sensitive_custom_config_on_provider_update(
         with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
             put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    id=view.id,
                     name=name,
                     provider=provider,
-                    default_model_name=default_model_name,
                     custom_config={
                         "vertex_credentials": _mask_string(
                             original_custom_config["vertex_credentials"]
@@ -721,11 +710,10 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
         return ""
 
     try:
-        put_llm_provider(
+        view = put_llm_provider(
             llm_provider_upsert_request=LLMProviderUpsertRequest(
                 name=name,
                 provider=provider,
-                default_model_name=default_model_name,
                 custom_config=original_custom_config,
                 model_configurations=[
                     ModelConfigurationUpsertRequest(
@@ -744,14 +732,10 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
         with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
             run_llm_config_test(
                 LLMTestRequest(
+                    id=view.id,
                     name=name,
                     provider=provider,
-                    default_model_name=default_model_name,
-                    model_configurations=[
-                        ModelConfigurationUpsertRequest(
-                            name=default_model_name, is_visible=True
-                        )
-                    ],
+                    model=default_model_name,
                     api_key_changed=False,
                     custom_config_changed=True,
                     custom_config={
