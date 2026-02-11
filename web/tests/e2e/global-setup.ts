@@ -4,6 +4,7 @@ import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_USER_CREDENTIALS,
 } from "./constants";
+import { ensureLlmProviderExists } from "./utils/llmProvider";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
@@ -202,6 +203,19 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.password,
     "admin2_auth.json"
   );
+
+  // ── Ensure a public LLM provider exists ───────────────────────────
+  // Many tests depend on a default LLM being configured (file uploads,
+  // assistant creation, etc.).  Re-use the admin session we just saved.
+  const adminCtx = await request.newContext({
+    baseURL,
+    storageState: "admin_auth.json",
+  });
+  try {
+    await ensureLlmProviderExists(adminCtx);
+  } finally {
+    await adminCtx.dispose();
+  }
 }
 
 export default globalSetup;

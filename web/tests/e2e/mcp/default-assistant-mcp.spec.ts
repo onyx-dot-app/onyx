@@ -3,6 +3,10 @@ import type { Page } from "@playwright/test";
 import { loginAs, apiLogin } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
+import {
+  ensureLlmProviderForPage,
+  deleteLlmProvider,
+} from "../utils/llmProvider";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
@@ -92,13 +96,8 @@ test.describe("Default Assistant MCP Integration", () => {
     const adminPage = await adminContext.newPage();
     const adminClient = new OnyxApiClient(adminPage);
 
-    const providers = await adminClient.listLlmProviders();
-    const hasPublicProvider = providers.some((provider) => provider.is_public);
-    if (!hasPublicProvider) {
-      createdProviderId = await adminClient.createPublicProvider(
-        `PW Public Provider ${Date.now()}`
-      );
-    }
+    // Ensure a public LLM provider exists (shared utility)
+    createdProviderId = await ensureLlmProviderForPage(adminPage);
 
     // Clean up any existing servers with the same URL
     try {
@@ -127,8 +126,8 @@ test.describe("Default Assistant MCP Integration", () => {
     const adminPage = await adminContext.newPage();
     const adminClient = new OnyxApiClient(adminPage);
 
-    if (createdProviderId) {
-      await adminClient.deleteProvider(createdProviderId);
+    if (createdProviderId !== null) {
+      await deleteLlmProvider(adminPage, createdProviderId);
     }
 
     if (serverId) {
