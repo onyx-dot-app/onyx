@@ -31,6 +31,11 @@ export enum PacketType {
   CUSTOM_TOOL_START = "custom_tool_start",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
+  // Memory tool packets
+  MEMORY_TOOL_START = "memory_tool_start",
+  MEMORY_TOOL_DELTA = "memory_tool_delta",
+  MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access",
+
   // Reasoning packets
   REASONING_START = "reasoning_start",
   REASONING_DELTA = "reasoning_delta",
@@ -169,6 +174,22 @@ export interface CustomToolDelta extends BaseObj {
   file_ids?: string[] | null;
 }
 
+// Memory Tool Packets
+export interface MemoryToolStart extends BaseObj {
+  type: "memory_tool_start";
+}
+
+export interface MemoryToolDelta extends BaseObj {
+  type: "memory_tool_delta";
+  memory_text: string;
+  operation: "add" | "update";
+  index_to_replace: number | null;
+}
+
+export interface MemoryToolNoAccess extends BaseObj {
+  type: "memory_tool_no_access";
+}
+
 // Reasoning Packets
 export interface ReasoningStart extends BaseObj {
   type: "reasoning_start";
@@ -267,12 +288,19 @@ export type CustomToolObj =
   | CustomToolDelta
   | SectionEnd
   | PacketError;
+export type MemoryToolObj =
+  | MemoryToolStart
+  | MemoryToolDelta
+  | MemoryToolNoAccess
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
   | PythonToolObj
   | FetchToolObj
-  | CustomToolObj;
+  | CustomToolObj
+  | MemoryToolObj;
 
 export type ReasoningObj =
   | ReasoningStart
@@ -365,6 +393,11 @@ export interface FetchToolPacket {
 export interface CustomToolPacket {
   placement: Placement;
   obj: CustomToolObj;
+}
+
+export interface MemoryToolPacket {
+  placement: Placement;
+  obj: MemoryToolObj;
 }
 
 export interface ReasoningPacket {

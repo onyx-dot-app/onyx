@@ -1,3 +1,4 @@
+import json
 import time
 from collections.abc import Callable
 
@@ -45,6 +46,7 @@ from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
+from onyx.tools.models import MemoryToolResponseSnapshot
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -718,6 +720,7 @@ def run_llm_loop(
                     generated_images = tool_response.rich_response.generated_images
 
                 # Persist memory if this is a memory tool response
+                memory_snapshot: MemoryToolResponseSnapshot | None = None
                 if isinstance(tool_response.rich_response, MemoryToolResponse):
                     if user_memory_context and user_memory_context.user_id:
                         if tool_response.rich_response.index_to_replace is not None:
@@ -733,12 +736,23 @@ def run_llm_loop(
                                 memory_text=tool_response.rich_response.memory_text,
                                 db_session=db_session,
                             )
+                    operation = (
+                        "update"
+                        if tool_response.rich_response.index_to_replace is not None
+                        else "add"
+                    )
+                    memory_snapshot = MemoryToolResponseSnapshot(
+                        memory_text=tool_response.rich_response.memory_text,
+                        operation=operation,
+                        index_to_replace=tool_response.rich_response.index_to_replace,
+                    )
 
-                saved_response = (
-                    tool_response.rich_response
-                    if isinstance(tool_response.rich_response, str)
-                    else tool_response.llm_facing_response
-                )
+                if memory_snapshot:
+                    saved_response = json.dumps(memory_snapshot.model_dump())
+                elif isinstance(tool_response.rich_response, str):
+                    saved_response = tool_response.rich_response
+                else:
+                    saved_response = tool_response.llm_facing_response
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message

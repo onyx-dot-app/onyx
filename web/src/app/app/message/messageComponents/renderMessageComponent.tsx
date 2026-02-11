@@ -19,6 +19,7 @@ import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer
 import { ReasoningRenderer } from "./timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
 import { FetchToolRenderer } from "./timeline/renderers/fetch/FetchToolRenderer";
+import { MemoryToolRenderer } from "./timeline/renderers/memory/MemoryToolRenderer";
 import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/DeepResearchPlanRenderer";
 import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
 import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
@@ -62,6 +63,13 @@ function isCustomToolPacket(packet: Packet) {
 
 function isFetchToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.FETCH_TOOL_START;
+}
+
+function isMemoryToolPacket(packet: Packet) {
+  return (
+    packet.obj.type === PacketType.MEMORY_TOOL_START ||
+    packet.obj.type === PacketType.MEMORY_TOOL_NO_ACCESS
+  );
 }
 
 function isReasoningPacket(packet: Packet): packet is ReasoningPacket {
@@ -127,6 +135,9 @@ export function findRenderer(
   }
   if (groupedPackets.packets.some((packet) => isFetchToolPacket(packet))) {
     return FetchToolRenderer;
+  }
+  if (groupedPackets.packets.some((packet) => isMemoryToolPacket(packet))) {
+    return MemoryToolRenderer;
   }
   if (groupedPackets.packets.some((packet) => isReasoningPacket(packet))) {
     return ReasoningRenderer;

@@ -16,6 +16,9 @@ from onyx.chat.emitter import Emitter
 from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
+from onyx.server.query_and_chat.streaming_models import MemoryToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import ToolCallException
@@ -99,8 +102,7 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
 
     @override
     def emit_start(self, placement: Placement) -> None:
-        # TODO
-        pass
+        self.emitter.emit(Packet(placement=placement, obj=MemoryToolStart()))
 
     @override
     def run(
@@ -135,6 +137,18 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
         )
 
         logger.info(f"New memory to be added: {memory_text}")
+
+        operation = "update" if index_to_replace is not None else "add"
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=MemoryToolDelta(
+                    memory_text=memory_text,
+                    operation=operation,
+                    index_to_replace=index_to_replace,
+                ),
+            )
+        )
 
         return ToolResponse(
             rich_response=MemoryToolResponse(
