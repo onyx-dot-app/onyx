@@ -34,20 +34,26 @@ type InteractiveBaseVariantProps =
 /**
  * Height presets for `Interactive.Container`.
  *
- * - `"default"` — Default height of 2.25rem (36px), suitable for most buttons/items
- * - `"compact"` — Reduced height of 1.75rem (28px), for denser UIs or inline elements
+ * - `"lg"` — 2.25rem (36px), suitable for most buttons/items
+ * - `"md"` — 1.75rem (28px), standard compact size
+ * - `"sm"` — 1.5rem (24px), for denser UIs
+ * - `"xs"` — 1.25rem (20px), for inline elements
  * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
   keyof typeof interactiveContainerHeightVariants;
 const interactiveContainerHeightVariants = {
-  default: "h-[2.25rem]",
-  compact: "h-[1.75rem]",
+  lg: "h-[2.25rem]",
+  md: "h-[1.75rem]",
+  sm: "h-[1.5rem]",
+  xs: "h-[1.25rem]",
   fit: "h-fit",
 } as const;
 const interactiveContainerMinWidthVariants = {
-  default: "min-w-[2.25rem]",
-  compact: "min-w-[1.75rem]",
+  lg: "min-w-[2.25rem]",
+  md: "min-w-[1.75rem]",
+  sm: "min-w-[1.5rem]",
+  xs: "min-w-[1.25rem]",
   fit: "",
 } as const;
 
@@ -379,11 +385,13 @@ interface InteractiveContainerProps
   /**
    * Height preset controlling the container's vertical size.
    *
-   * - `"default"` — Fixed 2.25rem (36px), typical button/item height
-   * - `"compact"` — Fixed 1.75rem (28px), for denser UIs
-   * - `"full"` — Fills parent height (`h-full`)
+   * - `"lg"` — 2.25rem (36px), typical button/item height
+   * - `"md"` — 1.75rem (28px), standard compact size
+   * - `"sm"` — 1.5rem (24px), for denser UIs
+   * - `"xs"` — 1.25rem (20px), for inline elements
+   * - `"fit"` — Shrink-wraps to content height (`h-fit`)
    *
-   * @default "default"
+   * @default "lg"
    */
   heightVariant?: InteractiveContainerHeightVariant;
 }
@@ -411,7 +419,7 @@ interface InteractiveContainerProps
  * // Compact, borderless container with no padding
  * <Interactive.Base variant="default" subvariant="ghost">
  *   <Interactive.Container
- *     heightVariant="compact"
+ *     heightVariant="md"
  *     roundingVariant="compact"
  *     paddingVariant="none"
  *   >
@@ -428,7 +436,7 @@ function InteractiveContainer({
   border,
   roundingVariant = "default",
   paddingVariant = "default",
-  heightVariant = "default",
+  heightVariant = "lg",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className and style at runtime (bypassing WithoutStyles),
