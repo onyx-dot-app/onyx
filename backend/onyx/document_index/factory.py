@@ -69,6 +69,11 @@ def get_all_document_indices(
 
     Large chunks and secondary indices are not currently supported so we
     hardcode appropriate values.
+
+    NOTE: Make sure the Vespa index object is returned first. In the rare event
+    that there is some conflict between indexing and the migration task, it is
+    assumed that the state of Vespa is more up-to-date than the state of
+    OpenSearch.
     """
     vespa_document_index = VespaIndex(
         index_name=search_settings.index_name,
