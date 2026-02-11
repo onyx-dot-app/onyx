@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page, Browser, Locator } from "@playwright/test";
-import { loginAs, loginWithCredentials } from "../utils/auth";
+import { loginAs, apiLogin } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpOauthServer, McpServerProcess } from "../utils/mcpServer";
 import { TEST_ADMIN_CREDENTIALS } from "../constants";
@@ -1056,7 +1056,7 @@ test.describe("MCP OAuth flows", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
     try {
       const existingServers = await adminClient.listMcpServers();
       for (const server of existingServers) {
@@ -1128,7 +1128,7 @@ test.describe("MCP OAuth flows", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
     if (adminArtifacts?.assistantId) {
       await adminClient.deleteAssistant(adminArtifacts.assistantId);
@@ -1180,7 +1180,7 @@ test.describe("MCP OAuth flows", () => {
       { email: TEST_ADMIN_CREDENTIALS.email, role: "admin" },
       "AdminFlow primary login"
     );
-    const adminApiClient = new OnyxApiClient(page);
+    const adminApiClient = new OnyxApiClient(page.request);
     logStep("Logged in as admin");
 
     const serverName = `PW MCP Admin ${Date.now()}`;
@@ -1432,7 +1432,7 @@ test.describe("MCP OAuth flows", () => {
 
     await page.context().clearCookies();
     logStep("Cleared cookies");
-    await loginWithCredentials(
+    await apiLogin(
       page,
       curatorCredentials!.email,
       curatorCredentials!.password
@@ -1443,7 +1443,7 @@ test.describe("MCP OAuth flows", () => {
       "CuratorFlow primary login"
     );
     logStep("Logged in as curator");
-    const curatorApiClient = new OnyxApiClient(page);
+    const curatorApiClient = new OnyxApiClient(page.request);
 
     const serverName = `PW MCP Curator ${Date.now()}`;
     const assistantName = `PW Curator Assistant ${Date.now()}`;
@@ -1654,7 +1654,7 @@ test.describe("MCP OAuth flows", () => {
         curatorTwoPage,
         "CuratorFlow secondary pre-login logout"
       );
-      await loginWithCredentials(
+      await apiLogin(
         curatorTwoPage,
         curatorTwoCredentials!.email,
         curatorTwoCredentials!.password

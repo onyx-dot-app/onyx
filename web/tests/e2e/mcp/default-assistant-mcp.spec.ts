@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAs, loginWithCredentials } from "../utils/auth";
+import { loginAs, apiLogin } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
 
@@ -90,15 +90,10 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
-    const providers = await adminClient.listLlmProviders();
-    const hasPublicProvider = providers.some((provider) => provider.is_public);
-    if (!hasPublicProvider) {
-      createdProviderId = await adminClient.createPublicProvider(
-        `PW Public Provider ${Date.now()}`
-      );
-    }
+    // Ensure a public LLM provider exists
+    createdProviderId = await adminClient.ensurePublicProvider();
 
     // Clean up any existing servers with the same URL
     try {
@@ -125,9 +120,9 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
-    if (createdProviderId) {
+    if (createdProviderId !== null) {
       await adminClient.deleteProvider(createdProviderId);
     }
 
@@ -361,7 +356,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
     // Navigate to chat (which uses default assistant for new users)
@@ -470,7 +465,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
 
     await page.goto("/app");
     await ensureOnboardingComplete(page);
@@ -517,7 +512,7 @@ test.describe("Default Assistant MCP Integration", () => {
     const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
     expect(assistantId).not.toBeNull();
 
-    const client = new OnyxApiClient(page);
+    const client = new OnyxApiClient(page.request);
     const assistant = await client.getAssistant(Number(assistantId));
     const hasMcpTool = assistant.tools.some(
       (tool) => tool.mcp_server_id === serverId
@@ -665,7 +660,7 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user to verify tool visibility`);
 
     // Navigate to chat
