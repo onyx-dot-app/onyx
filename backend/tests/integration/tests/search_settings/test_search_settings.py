@@ -43,7 +43,10 @@ def _update_inference_settings(user: DATestUser, settings: dict) -> None:
     response.raise_for_status()
 
 
-def test_get_current_search_settings(admin_user: DATestUser) -> None:
+def test_get_current_search_settings(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     """Verify that GET current search settings returns expected fields."""
     settings = _get_current_search_settings(admin_user)
 
@@ -56,7 +59,10 @@ def test_get_current_search_settings(admin_user: DATestUser) -> None:
     assert "embedding_precision" in settings
 
 
-def test_get_all_search_settings(admin_user: DATestUser) -> None:
+def test_get_all_search_settings(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     """Verify that GET all search settings returns current and secondary."""
     all_settings = _get_all_search_settings(admin_user)
 
@@ -67,6 +73,7 @@ def test_get_all_search_settings(admin_user: DATestUser) -> None:
 
 
 def test_get_secondary_search_settings_none_by_default(
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that no secondary search settings exist by default."""
@@ -74,7 +81,10 @@ def test_get_secondary_search_settings_none_by_default(
     assert secondary is None
 
 
-def test_set_contextual_rag_model(admin_user: DATestUser) -> None:
+def test_set_contextual_rag_model(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     """Set contextual RAG LLM model and verify it persists."""
     settings = _get_current_search_settings(admin_user)
 
@@ -87,7 +97,10 @@ def test_set_contextual_rag_model(admin_user: DATestUser) -> None:
     assert updated["contextual_rag_llm_provider"] == "openai"
 
 
-def test_unset_contextual_rag_model(admin_user: DATestUser) -> None:
+def test_unset_contextual_rag_model(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     """Set a contextual RAG model, then unset it and verify it becomes None."""
     settings = _get_current_search_settings(admin_user)
     settings["contextual_rag_llm_name"] = "gpt-4o-mini"
@@ -110,7 +123,10 @@ def test_unset_contextual_rag_model(admin_user: DATestUser) -> None:
     assert final["contextual_rag_llm_provider"] is None
 
 
-def test_change_contextual_rag_model(admin_user: DATestUser) -> None:
+def test_change_contextual_rag_model(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     """Change contextual RAG from one model to another and verify the switch."""
     settings = _get_current_search_settings(admin_user)
     settings["contextual_rag_llm_name"] = "gpt-4o"
@@ -131,7 +147,10 @@ def test_change_contextual_rag_model(admin_user: DATestUser) -> None:
     assert final["contextual_rag_llm_provider"] == "anthropic"
 
 
-def test_change_contextual_rag_provider_only(admin_user: DATestUser) -> None:
+def test_change_contextual_rag_provider_only(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     """Change only the provider while keeping the same model name."""
     settings = _get_current_search_settings(admin_user)
     settings["contextual_rag_llm_name"] = "gpt-4o"
@@ -148,6 +167,7 @@ def test_change_contextual_rag_provider_only(admin_user: DATestUser) -> None:
 
 
 def test_enable_contextual_rag_preserved_on_inference_update(
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that enable_contextual_rag cannot be toggled via update-inference-settings
@@ -164,6 +184,7 @@ def test_enable_contextual_rag_preserved_on_inference_update(
 
 
 def test_model_name_preserved_on_inference_update(
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that model_name cannot be changed via update-inference-settings
@@ -179,6 +200,7 @@ def test_model_name_preserved_on_inference_update(
 
 
 def test_contextual_rag_settings_reflected_in_get_all(
+    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Verify that contextual RAG updates appear in get-all-search-settings."""
