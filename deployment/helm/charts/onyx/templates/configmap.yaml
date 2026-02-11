@@ -6,8 +6,10 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
-  {{- if .Values.postgresql.enabled }}
-  POSTGRES_HOST: {{ .Release.Name }}-{{ default "postgresql" .Values.postgresql.nameOverride }}-rw
+  {{- $cnpgClusterEnabled := and .Values.postgresql.cluster (eq (default false .Values.postgresql.cluster.enabled) true) }}
+  {{- $hasCustomPostgresHost := and .Values.configMap (not (empty .Values.configMap.POSTGRES_HOST)) }}
+  {{- if and .Values.postgresql.enabled $cnpgClusterEnabled (not $hasCustomPostgresHost) }}
+  POSTGRES_HOST: {{ include "onyx.postgresql.clusterName" . }}-rw
   {{- end }}
   {{- if .Values.vespa.enabled }}
   VESPA_HOST: {{ .Values.vespa.name }}.{{ .Values.vespa.service.name }}.{{ .Release.Namespace }}.svc.cluster.local

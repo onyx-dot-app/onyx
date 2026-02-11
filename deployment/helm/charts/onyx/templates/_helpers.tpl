@@ -155,3 +155,15 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- $engine := default "hpa" .Values.autoscaling.engine -}}
 {{- $engine | lower -}}
 {{- end }}
+
+{{/*
+Return the CloudNativePG Cluster name used by Onyx for POSTGRES_HOST and Cluster CR naming.
+Deliberately independent from postgresql.nameOverride, which configures the operator chart.
+*/}}
+{{- define "onyx.postgresql.clusterName" -}}
+{{- if and .Values.postgresql .Values.postgresql.cluster (not (empty .Values.postgresql.cluster.name)) -}}
+{{- .Values.postgresql.cluster.name -}}
+{{- else -}}
+{{- printf "%s-postgresql" .Release.Name -}}
+{{- end -}}
+{{- end }}
