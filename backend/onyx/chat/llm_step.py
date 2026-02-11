@@ -333,20 +333,32 @@ def extract_tool_calls_from_response_text(
     json_objects = find_all_json_objects(response_text)
 
     matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
+    prev_json_obj: dict[str, Any] | None = None
+    prev_tool_call: tuple[str, dict[str, Any]] | None = None
 
     for json_obj in json_objects:
         matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
-        if matched_tool_call:
-            matched_tool_calls.append(matched_tool_call)
+        if not matched_tool_call:
+            continue
 
-    # `find_all_json_objects` can return both an outer tool-call object and its
-    # nested `arguments` object, which map to the same tool invocation.
-    # Collapse immediately repeated matches: [A, A, B, B] -> [A, B].
-    deduped_tool_calls: list[tuple[str, dict[str, Any]]] = []
-    for tool_call in matched_tool_calls:
-        if not deduped_tool_calls or deduped_tool_calls[-1] != tool_call:
-            deduped_tool_calls.append(tool_call)
-    matched_tool_calls = deduped_tool_calls
+        # `find_all_json_objects` can return both an outer tool-call object and
+        # its nested arguments object. If both resolve to the same tool call,
+        # drop only this nested duplicate artifact.
+        if (
+            prev_json_obj is not None
+            and prev_tool_call is not None
+            and matched_tool_call == prev_tool_call
+            and _is_nested_arguments_duplicate(
+                previous_json_obj=prev_json_obj,
+                current_json_obj=json_obj,
+                tool_name_to_def=tool_name_to_def,
+            )
+        ):
+            continue
+
+        matched_tool_calls.append(matched_tool_call)
+        prev_json_obj = json_obj
+        prev_tool_call = matched_tool_call
 
     tool_calls: list[ToolCallKickoff] = []
     for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
@@ -439,6 +451,42 @@ def _try_match_json_to_tool(
                 # Filter to only include known properties
                 filtered_args = {k: v for k, v in json_obj.items() if k in properties}
                 return (tool_name, filtered_args)
+
+    return None
+
+
+def _is_nested_arguments_duplicate(
+    previous_json_obj: dict[str, Any],
+    current_json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> bool:
+    """Detect when current object is the nested args object from previous tool call."""
+    extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
+    return extracted_args is not None and current_json_obj == extracted_args
+
+
+def _extract_nested_arguments_obj(
+    json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> dict[str, Any] | None:
+    # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
+    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
+        args_obj = json_obj.get("arguments", json_obj.get("parameters"))
+        if isinstance(args_obj, dict):
+            return args_obj
+
+    # Format 2: {"function": {"name": "...", "arguments": {...}}}
+    if "function" in json_obj and isinstance(json_obj["function"], dict):
+        function_obj = json_obj["function"]
+        if "name" in function_obj and function_obj["name"] in tool_name_to_def:
+            args_obj = function_obj.get("arguments", function_obj.get("parameters"))
+            if isinstance(args_obj, dict):
+                return args_obj
+
+    # Format 3: {"tool_name": {...arguments...}}
+    for tool_name in tool_name_to_def:
+        if tool_name in json_obj and isinstance(json_obj[tool_name], dict):
+            return json_obj[tool_name]
 
     return None
 
