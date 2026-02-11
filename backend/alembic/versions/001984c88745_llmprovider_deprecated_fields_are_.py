@@ -18,14 +18,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Make name nullable (was NOT NULL)
-    op.alter_column(
-        "llm_provider",
-        "name",
-        existing_type=sa.String(),
-        nullable=True,
-    )
-
     # Make default_model_name nullable (was NOT NULL)
     op.alter_column(
         "llm_provider",
@@ -63,13 +55,4 @@ def downgrade() -> None:
         "is_default_vision_provider",
         existing_type=sa.Boolean(),
         server_default=sa.false(),
-    )
-
-    # Restore name to NOT NULL (set empty string for any NULLs first)
-    op.execute("UPDATE llm_provider SET name = '' WHERE name IS NULL")
-    op.alter_column(
-        "llm_provider",
-        "name",
-        existing_type=sa.String(),
-        nullable=False,
     )
