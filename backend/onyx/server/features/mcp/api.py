@@ -41,6 +41,7 @@ from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
 from onyx.db.mcp import delete_connection_config
 from onyx.db.mcp import delete_mcp_server
 from onyx.db.mcp import delete_user_connection_configs_for_server
+from onyx.db.mcp import extract_connection_data
 from onyx.db.mcp import get_all_mcp_servers
 from onyx.db.mcp import get_connection_config_by_id
 from onyx.db.mcp import get_mcp_server_by_id
@@ -79,6 +80,7 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -143,7 +145,8 @@ class OnyxTokenStorage(TokenStorage):
     async def get_tokens(self) -> OAuthToken | None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            tokens_raw = config.config.get(MCPOAuthKeys.TOKENS.value)
+            config_data = extract_connection_data(config)
+            tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
             if tokens_raw:
                 return OAuthToken.model_validate(tokens_raw)
             return None
@@ -151,14 +154,14 @@ class OnyxTokenStorage(TokenStorage):
     async def set_tokens(self, tokens: OAuthToken) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config.config[MCPOAuthKeys.TOKENS.value] = tokens.model_dump(mode="json")
-            cfg_headers = {
+            config_data = extract_connection_data(config)
+            config_data[MCPOAuthKeys.TOKENS.value] = tokens.model_dump(mode="json")
+            config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
-            config.config["headers"] = cfg_headers
-            update_connection_config(config.id, db_session, config.config)
+            update_connection_config(config.id, db_session, config_data)
             if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config.config)
+                update_connection_config(self.alt_config_id, db_session, config_data)
 
                 # signal the oauth callback that token exchange is complete
                 r = get_redis_client()
@@ -168,19 +171,21 @@ class OnyxTokenStorage(TokenStorage):
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            client_info_raw = config.config.get(MCPOAuthKeys.CLIENT_INFO.value)
+            config_data = extract_connection_data(config)
+            client_info_raw = config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
             if client_info_raw:
                 return OAuthClientInformationFull.model_validate(client_info_raw)
             if self.alt_config_id:
                 alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
                 if alt_config:
-                    alt_client_info = alt_config.config.get(
+                    alt_config_data = extract_connection_data(alt_config)
+                    alt_client_info = alt_config_data.get(
                         MCPOAuthKeys.CLIENT_INFO.value
                     )
                     if alt_client_info:
                         # Cache the admin client info on the user config for future calls
-                        config.config[MCPOAuthKeys.CLIENT_INFO.value] = alt_client_info
-                        update_connection_config(config.id, db_session, config.config)
+                        config_data[MCPOAuthKeys.CLIENT_INFO.value] = alt_client_info
+                        update_connection_config(config.id, db_session, config_data)
                         return OAuthClientInformationFull.model_validate(
                             alt_client_info
                         )
@@ -189,10 +194,11 @@ class OnyxTokenStorage(TokenStorage):
     async def set_client_info(self, info: OAuthClientInformationFull) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config.config[MCPOAuthKeys.CLIENT_INFO.value] = info.model_dump(mode="json")
-            update_connection_config(config.id, db_session, config.config)
+            config_data = extract_connection_data(config)
+            config_data[MCPOAuthKeys.CLIENT_INFO.value] = info.model_dump(mode="json")
+            update_connection_config(config.id, db_session, config_data)
             if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config.config)
+                update_connection_config(self.alt_config_id, db_session, config_data)
 
 
 def make_oauth_provider(
@@ -436,9 +442,12 @@ async def _connect_oauth(
 
     db.commit()
 
+    connection_config_dict = extract_connection_data(
+        connection_config, apply_mask=False
+    )
     is_connected = (
-        MCPOAuthKeys.CLIENT_INFO.value in connection_config.config
-        and connection_config.config.get("headers")
+        MCPOAuthKeys.CLIENT_INFO.value in connection_config_dict
+        and connection_config_dict.get("headers")
     )
     # Step 1: make unauthenticated request and parse returned www authenticate header
     # Ensure we have a trailing slash for the MCP endpoint
@@ -471,7 +480,7 @@ async def _connect_oauth(
         try:
             x = await initialize_mcp_client(
                 probe_url,
-                connection_headers=connection_config.config.get("headers", {}),
+                connection_headers=connection_config_dict.get("headers", {}),
                 transport=transport,
                 auth=oauth_auth,
             )
@@ -684,15 +693,18 @@ def save_user_credentials(
         # Use template to create the full connection config
         try:
             # TODO: fix and/or type correctly w/base model
+            auth_template_dict = extract_connection_data(
+                auth_template, apply_mask=False
+            )
             config_data = MCPConnectionData(
-                headers=auth_template.config.get("headers", {}),
+                headers=auth_template_dict.get("headers", {}),
                 header_substitutions=request.credentials,
             )
             for oauth_field_key in MCPOAuthKeys:
                 field_key: Literal["client_info", "tokens", "metadata"] = (
                     oauth_field_key.value
                 )
-                if field_val := auth_template.config.get(field_key):
+                if field_val := auth_template_dict.get(field_key):
                     config_data[field_key] = field_val
 
         except Exception as e:
@@ -839,18 +851,20 @@ def _db_mcp_server_to_api_mcp_server(
             and db_server.admin_connection_config is not None
             and include_auth_config
         ):
+            admin_config_dict = extract_connection_data(
+                db_server.admin_connection_config, apply_mask=False
+            )
             if db_server.auth_type == MCPAuthenticationType.API_TOKEN:
+                raw_api_key = admin_config_dict["headers"]["Authorization"].split(" ")[
+                    -1
+                ]
                 admin_credentials = {
-                    "api_key": db_server.admin_connection_config.config["headers"][
-                        "Authorization"
-                    ].split(" ")[-1]
+                    "api_key": mask_string(raw_api_key),
                 }
             elif db_server.auth_type == MCPAuthenticationType.OAUTH:
                 user_authenticated = False
                 client_info = None
-                client_info_raw = db_server.admin_connection_config.config.get(
-                    MCPOAuthKeys.CLIENT_INFO.value
-                )
+                client_info_raw = admin_config_dict.get(MCPOAuthKeys.CLIENT_INFO.value)
                 if client_info_raw:
                     client_info = OAuthClientInformationFull.model_validate(
                         client_info_raw
@@ -861,8 +875,8 @@ def _db_mcp_server_to_api_mcp_server(
                             "Stored client info had empty client ID or secret"
                         )
                     admin_credentials = {
-                        "client_id": client_info.client_id,
-                        "client_secret": client_info.client_secret,
+                        "client_id": mask_string(client_info.client_id),
+                        "client_secret": mask_string(client_info.client_secret),
                     }
                 else:
                     admin_credentials = {}
@@ -879,14 +893,18 @@ def _db_mcp_server_to_api_mcp_server(
                 include_auth_config
                 and db_server.auth_type != MCPAuthenticationType.OAUTH
             ):
-                user_credentials = user_config.config.get(HEADER_SUBSTITUTIONS, {})
+                user_config_dict = extract_connection_data(user_config, apply_mask=True)
+                user_credentials = user_config_dict.get(HEADER_SUBSTITUTIONS, {})
 
         if (
             db_server.auth_type == MCPAuthenticationType.OAUTH
             and db_server.admin_connection_config
         ):
             client_info = None
-            client_info_raw = db_server.admin_connection_config.config.get(
+            oauth_admin_config_dict = extract_connection_data(
+                db_server.admin_connection_config, apply_mask=False
+            )
+            client_info_raw = oauth_admin_config_dict.get(
                 MCPOAuthKeys.CLIENT_INFO.value
             )
             if client_info_raw:
@@ -896,8 +914,8 @@ def _db_mcp_server_to_api_mcp_server(
                     raise ValueError("Stored client info had empty client ID or secret")
                 if can_view_admin_credentials:
                     admin_credentials = {
-                        "client_id": client_info.client_id,
-                        "client_secret": client_info.client_secret,
+                        "client_id": mask_string(client_info.client_id),
+                        "client_secret": mask_string(client_info.client_secret),
                     }
             elif can_view_admin_credentials:
                 admin_credentials = {}
@@ -909,7 +927,10 @@ def _db_mcp_server_to_api_mcp_server(
         try:
             template_config = db_server.admin_connection_config
             if template_config:
-                headers = template_config.config.get("headers", {})
+                template_config_dict = extract_connection_data(
+                    template_config, apply_mask=False
+                )
+                headers = template_config_dict.get("headers", {})
                 auth_template = MCPAuthTemplate(
                     headers=headers,
                     required_fields=[],  # would need to regex, not worth it
@@ -1232,7 +1253,10 @@ def _list_mcp_tools_by_id(
             )
 
     if connection_config:
-        headers.update(connection_config.config.get("headers", {}))
+        connection_config_dict = extract_connection_data(
+            connection_config, apply_mask=False
+        )
+        headers.update(connection_config_dict.get("headers", {}))
 
     import time
 
@@ -1320,7 +1344,10 @@ def _upsert_mcp_server(
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
         client_info = None
         if mcp_server.admin_connection_config:
-            client_info_raw = mcp_server.admin_connection_config.config.get(
+            existing_admin_config_dict = extract_connection_data(
+                mcp_server.admin_connection_config, apply_mask=False
+            )
+            client_info_raw = existing_admin_config_dict.get(
                 MCPOAuthKeys.CLIENT_INFO.value
             )
             if client_info_raw:

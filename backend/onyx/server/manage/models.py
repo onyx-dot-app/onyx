@@ -74,11 +74,17 @@ class UserPreferences(BaseModel):
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
 
 
+class MemoryItem(BaseModel):
+    id: int | None = None
+    content: str
+
+
 class UserPersonalization(BaseModel):
     name: str = ""
     role: str = ""
     use_memories: bool = True
-    memories: list[str] = Field(default_factory=list)
+    memories: list[MemoryItem] = Field(default_factory=list)
+    user_preferences: str = ""
 
 
 class TenantSnapshot(BaseModel):
@@ -159,7 +165,11 @@ class UserInfo(BaseModel):
                 name=user.personal_name or "",
                 role=user.personal_role or "",
                 use_memories=user.use_memories,
-                memories=[memory.memory_text for memory in (user.memories or [])],
+                memories=[
+                    MemoryItem(id=memory.id, content=memory.memory_text)
+                    for memory in (user.memories or [])
+                ],
+                user_preferences=user.user_preferences or "",
             ),
         )
 
@@ -208,11 +218,24 @@ class ChatBackgroundRequest(BaseModel):
     chat_background: str | None
 
 
+MAX_MEMORY_COUNT = 10
+
+
 class PersonalizationUpdateRequest(BaseModel):
     name: str | None = None
     role: str | None = None
     use_memories: bool | None = None
-    memories: list[str] | None = None
+    memories: list[MemoryItem] | None = None
+    user_preferences: str | None = Field(default=None, max_length=500)
+
+    @field_validator("memories", mode="before")
+    @classmethod
+    def validate_memory_count(
+        cls, value: list[MemoryItem] | None
+    ) -> list[MemoryItem] | None:
+        if value is not None and len(value) > MAX_MEMORY_COUNT:
+            raise ValueError(f"Maximum of {MAX_MEMORY_COUNT} memories allowed")
+        return value
 
 
 class SlackBotCreationRequest(BaseModel):
@@ -341,9 +364,21 @@ class SlackBot(BaseModel):
             name=slack_bot_model.name,
             enabled=slack_bot_model.enabled,
             configs_count=len(slack_bot_model.slack_channel_configs),
-            bot_token=slack_bot_model.bot_token,
-            app_token=slack_bot_model.app_token,
-            user_token=slack_bot_model.user_token,
+            bot_token=(
+                slack_bot_model.bot_token.get_value(apply_mask=True)
+                if slack_bot_model.bot_token
+                else ""
+            ),
+            app_token=(
+                slack_bot_model.app_token.get_value(apply_mask=True)
+                if slack_bot_model.app_token
+                else ""
+            ),
+            user_token=(
+                slack_bot_model.user_token.get_value(apply_mask=True)
+                if slack_bot_model.user_token
+                else None
+            ),
         )
 
 

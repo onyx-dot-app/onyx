@@ -216,23 +216,15 @@ if SCHEDULED_EVAL_DATASET_NAMES:
 if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
     beat_task_templates.append(
         {
-            "name": "check-for-documents-for-opensearch-migration",
-            "task": OnyxCeleryTask.CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK,
+            "name": "migrate-chunks-from-vespa-to-opensearch",
+            "task": OnyxCeleryTask.MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK,
+            # Try to enqueue an invocation of this task with this frequency.
             "schedule": timedelta(seconds=120),  # 2 minutes
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
+                # If the task was not dequeued in this time, revoke it.
                 "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        }
-    )
-    beat_task_templates.append(
-        {
-            "name": "migrate-documents-from-vespa-to-opensearch",
-            "task": OnyxCeleryTask.MIGRATE_DOCUMENT_FROM_VESPA_TO_OPENSEARCH_TASK,
-            "schedule": timedelta(seconds=120),  # 2 minutes
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                "expires": BEAT_EXPIRES_DEFAULT,
+                "queue": OnyxCeleryQueues.OPENSEARCH_MIGRATION,
             },
         }
     )

@@ -25,9 +25,6 @@ You can use Markdown tables to format your responses for data, lists, and other 
 """.lstrip()
 
 
-# Section for information about the user if provided such as their name, role, memories, etc.
-USER_INFO_HEADER = "\n\n# User Information\n"
-
 COMPANY_NAME_BLOCK = """
 The user is at an organization called `{company_name}`.
 """

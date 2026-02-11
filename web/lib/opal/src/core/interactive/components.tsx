@@ -1,62 +1,67 @@
+import "@opal/core/interactive/styles.css";
 import React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
-import { SvgChevronDownSmall } from "@opal/icons";
 import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * Variant for interactive elements.
- *
- * Determines the semantic color palette used for the interactive element:
- *
- * - `"none"` — No background styling; defers to child component's background
- * - `"standard"` — Uses theme primary colors (default brand colors)
- * - `"action"` — Uses action/link colors (blue)
- * - `"danger"` — Uses danger colors (red) for destructive actions
- */
-export type InteractiveBaseVariant = "none" | "standard" | "action" | "danger";
+type InteractiveBaseSelectVariantProps = {
+  variant?: "select";
+  subvariant?: "light" | "heavy";
+  selected?: boolean;
+};
 
 /**
- * Subvariant for interactive elements.
+ * Discriminated union tying `variant` to `subvariant`.
  *
- * Determines the background fill treatment of the element:
- *
- * - `"primary"` — Solid filled background with prominent appearance
- * - `"secondary"` — Subtle tinted background (`tint-01`)
- * - `"ghost"` — Transparent background, visible only on hover
+ * - `"none"` accepts no subvariant (`subvariant` must not be provided)
+ * - `"select"` accepts an optional subvariant (defaults to `"light"`) and
+ *   an optional `selected` boolean that switches foreground to action-link colours
+ * - `"default"`, `"action"`, and `"danger"` accept an optional subvariant
  */
-export type InteractiveBaseSubvariant = "primary" | "secondary" | "ghost";
+type InteractiveBaseVariantProps =
+  | { variant?: "none"; subvariant?: never; selected?: never }
+  | InteractiveBaseSelectVariantProps
+  | {
+      variant?: "default" | "action" | "danger";
+      subvariant?: "primary" | "secondary" | "ghost";
+      selected?: never;
+    };
 
 /**
  * Height presets for `Interactive.Container`.
  *
- * - `"standard"` — Default height of 2.25rem (36px), suitable for most buttons/items
+ * - `"default"` — Default height of 2.25rem (36px), suitable for most buttons/items
  * - `"compact"` — Reduced height of 1.75rem (28px), for denser UIs or inline elements
- * - `"full"` — Expands to fill parent height (`h-full`), for flexible layouts
+ * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
-export type InteractiveContainerHeightVariant =
+type InteractiveContainerHeightVariant =
   keyof typeof interactiveContainerHeightVariants;
 const interactiveContainerHeightVariants = {
-  standard: "h-[2.25rem]",
+  default: "h-[2.25rem]",
   compact: "h-[1.75rem]",
-  full: "h-full",
+  fit: "h-fit",
+} as const;
+const interactiveContainerMinWidthVariants = {
+  default: "min-w-[2.25rem]",
+  compact: "min-w-[1.75rem]",
+  fit: "",
 } as const;
 
 /**
  * Padding presets for `Interactive.Container`.
  *
- * - `"standard"` — Default padding of 0.5rem (8px) on all sides
+ * - `"default"` — Default padding of 0.5rem (8px) on all sides
  * - `"thin"` — Reduced padding of 0.25rem (4px), for tighter layouts
  * - `"none"` — No padding, when the child handles its own spacing
  */
-export type InteractiveContainerPaddingVariant =
+type InteractiveContainerPaddingVariant =
   keyof typeof interactiveContainerPaddingVariants;
 const interactiveContainerPaddingVariants = {
-  standard: "p-2",
+  default: "p-2",
   thin: "p-1",
   none: "p-0",
 } as const;
@@ -64,13 +69,13 @@ const interactiveContainerPaddingVariants = {
 /**
  * Border-radius presets for `Interactive.Container`.
  *
- * - `"standard"` — Default radius of 0.75rem (12px), matching card rounding
+ * - `"default"` — Default radius of 0.75rem (12px), matching card rounding
  * - `"compact"` — Smaller radius of 0.5rem (8px), for tighter/inline elements
  */
-export type InteractiveContainerRoundingVariant =
+type InteractiveContainerRoundingVariant =
   keyof typeof interactiveContainerRoundingVariants;
 const interactiveContainerRoundingVariants = {
-  standard: "rounded-12",
+  default: "rounded-12",
   compact: "rounded-08",
 } as const;
 
@@ -79,12 +84,12 @@ const interactiveContainerRoundingVariants = {
 // ---------------------------------------------------------------------------
 
 /**
- * Props for {@link InteractiveBase}.
+ * Base props for {@link InteractiveBase} (without variant/subvariant).
  *
  * Extends standard HTML element attributes (minus `className` and `style`,
  * which are controlled by the design system).
  */
-export interface InteractiveBaseProps
+interface InteractiveBasePropsBase
   extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   /**
    * Ref forwarded to the underlying element (the single child).
@@ -92,31 +97,6 @@ export interface InteractiveBaseProps
    * element the child renders.
    */
   ref?: React.Ref<HTMLElement>;
-
-  /**
-   * Variant determining the semantic color palette.
-   *
-   * - `"none"` — No background styling; defers to child component's background
-   * - `"standard"` — Uses theme primary colors (default)
-   * - `"action"` — Uses action/link colors (blue)
-   * - `"danger"` — Uses danger colors (red)
-   *
-   * @default "standard"
-   */
-  variant?: InteractiveBaseVariant;
-
-  /**
-   * Subvariant determining the background fill treatment.
-   *
-   * Ignored when `variant` is `"none"`.
-   *
-   * - `"primary"` — Solid filled background with prominent appearance
-   * - `"secondary"` — Subtle tinted background (`tint-01`)
-   * - `"ghost"` — Transparent background, visible only on hover
-   *
-   * @default "primary"
-   */
-  subvariant?: InteractiveBaseSubvariant;
 
   /**
    * Tailwind group class to apply (e.g. `"group/AgentCard"`).
@@ -152,13 +132,13 @@ export interface InteractiveBaseProps
   static?: boolean;
 
   /**
-   * When `true`, forces the pressed/active visual state regardless of
+   * When `true`, forces the transient (hover) visual state regardless of
    * actual pointer state.
    *
-   * This sets `data-pressed="true"` on the element, which the CSS uses to
-   * apply the active-state background. Useful for toggle buttons, selected
-   * states, or any UI where you want to programmatically show "pressed"
-   * appearance.
+   * This sets `data-transient="true"` on the element, which the CSS uses to
+   * apply the hover-state background and foreground. Useful for popover
+   * triggers, toggle buttons, or any UI where you want to programmatically
+   * indicate that the element is currently active.
    *
    * @default false
    */
@@ -193,7 +173,25 @@ export interface InteractiveBaseProps
    * ```
    */
   href?: string;
+
+  /**
+   * Link target (e.g. `"_blank"`). Only used when `href` is provided.
+   */
+  target?: string;
 }
+
+/**
+ * Props for {@link InteractiveBase}.
+ *
+ * Intersects the base props with the {@link InteractiveBaseVariantProps}
+ * discriminated union so that `variant` and `subvariant` are correlated:
+ *
+ * - `"none"` — `subvariant` must not be provided
+ * - `"select"` — `subvariant` is optional (defaults to `"light"`); `selected` switches foreground to action-link colours
+ * - `"default"` / `"action"` / `"danger"` — `subvariant` is optional (defaults to `"primary"`)
+ */
+type InteractiveBaseProps = InteractiveBasePropsBase &
+  InteractiveBaseVariantProps;
 
 /**
  * The foundational interactive surface primitive.
@@ -203,9 +201,10 @@ export interface InteractiveBaseProps
  *
  * 1. The `.interactive` CSS class (flex layout, pointer cursor, color transitions)
  * 2. `data-interactive-base-variant` and `data-interactive-base-subvariant`
- *    attributes for variant-specific background colors (omitted when `variant="none"`)
+ *    attributes for variant-specific background colors (both omitted for `"none"`;
+ *    subvariant omitted when not provided)
  * 3. `data-static` attribute when hover feedback is disabled
- * 4. `data-pressed` attribute for forced pressed state
+ * 4. `data-transient` attribute for forced transient (hover) state
  * 5. `data-disabled` attribute for disabled styling
  *
  * All props are merged onto the single child element via Radix `Slot`, meaning
@@ -214,7 +213,7 @@ export interface InteractiveBaseProps
  * @example
  * ```tsx
  * // Basic usage with a container
- * <Interactive.Base variant="standard" subvariant="primary">
+ * <Interactive.Base variant="default" subvariant="primary">
  *   <Interactive.Container border>
  *     <span>Click me</span>
  *   </Interactive.Container>
@@ -250,15 +249,19 @@ export interface InteractiveBaseProps
  */
 function InteractiveBase({
   ref,
-  variant = "standard",
-  subvariant = "primary",
+  variant = "default",
+  subvariant,
+  selected,
   group,
   static: isStatic,
   transient,
   disabled,
   href,
+  target,
   ...props
 }: InteractiveBaseProps) {
+  const effectiveSubvariant =
+    subvariant ?? (variant === "select" ? "light" : "primary");
   const classes = cn(
     "interactive",
     !props.onClick && !href && "!cursor-default !select-auto",
@@ -268,9 +271,10 @@ function InteractiveBase({
   const dataAttrs = {
     "data-interactive-base-variant": variant !== "none" ? variant : undefined,
     "data-interactive-base-subvariant":
-      variant !== "none" ? subvariant : undefined,
+      variant !== "none" ? effectiveSubvariant : undefined,
     "data-static": isStatic ? "true" : undefined,
-    "data-pressed": transient ? "true" : undefined,
+    "data-transient": transient ? "true" : undefined,
+    "data-selected": selected ? "true" : undefined,
     "data-disabled": disabled ? "true" : undefined,
     "aria-disabled": disabled || undefined,
   };
@@ -281,6 +285,8 @@ function InteractiveBase({
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
         href={disabled ? undefined : href}
+        target={target}
+        rel={target === "_blank" ? "noopener noreferrer" : undefined}
         className={classes}
         {...dataAttrs}
         {...rest}
@@ -314,12 +320,30 @@ function InteractiveBase({
  *
  * Extends standard `<div>` attributes (minus `className` and `style`).
  */
-export interface InteractiveContainerProps
+interface InteractiveContainerProps
   extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
   /**
-   * Ref forwarded to the underlying `<div>` element.
+   * Ref forwarded to the underlying element.
    */
-  ref?: React.Ref<HTMLDivElement>;
+  ref?: React.Ref<HTMLElement>;
+
+  /**
+   * HTML button type (e.g. `"submit"`, `"button"`, `"reset"`).
+   *
+   * When provided, renders a `<button>` element instead of a `<div>`.
+   * This keeps all styling (background, rounding, height) on a single
+   * element — unlike a wrapper approach which would split them.
+   *
+   * @example
+   * ```tsx
+   * <Interactive.Base>
+   *   <Interactive.Container type="submit">
+   *     <span>Submit</span>
+   *   </Interactive.Container>
+   * </Interactive.Base>
+   * ```
+   */
+  type?: "submit" | "button" | "reset";
 
   /**
    * When `true`, applies a 1px border using the theme's border color.
@@ -334,32 +358,32 @@ export interface InteractiveContainerProps
   /**
    * Border-radius preset controlling corner rounding.
    *
-   * - `"standard"` — 0.75rem (12px), matching card-level rounding
+   * - `"default"` — 0.75rem (12px), matching card-level rounding
    * - `"compact"` — 0.5rem (8px), for smaller/inline elements
    *
-   * @default "standard"
+   * @default "default"
    */
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /**
    * Padding preset controlling inner spacing.
    *
-   * - `"standard"` — 0.5rem (8px) padding on all sides
+   * - `"default"` — 0.5rem (8px) padding on all sides
    * - `"thin"` — 0.25rem (4px) padding for tighter layouts
    * - `"none"` — No padding; child content controls its own spacing
    *
-   * @default "standard"
+   * @default "default"
    */
   paddingVariant?: InteractiveContainerPaddingVariant;
 
   /**
    * Height preset controlling the container's vertical size.
    *
-   * - `"standard"` — Fixed 2.25rem (36px), typical button/item height
+   * - `"default"` — Fixed 2.25rem (36px), typical button/item height
    * - `"compact"` — Fixed 1.75rem (28px), for denser UIs
    * - `"full"` — Fills parent height (`h-full`)
    *
-   * @default "standard"
+   * @default "default"
    */
   heightVariant?: InteractiveContainerHeightVariant;
 }
@@ -385,7 +409,7 @@ export interface InteractiveContainerProps
  * </Interactive.Base>
  *
  * // Compact, borderless container with no padding
- * <Interactive.Base variant="standard" subvariant="ghost">
+ * <Interactive.Base variant="default" subvariant="ghost">
  *   <Interactive.Container
  *     heightVariant="compact"
  *     roundingVariant="compact"
@@ -400,10 +424,11 @@ export interface InteractiveContainerProps
  */
 function InteractiveContainer({
   ref,
+  type,
   border,
-  roundingVariant = "standard",
-  paddingVariant = "standard",
-  heightVariant = "standard",
+  roundingVariant = "default",
+  paddingVariant = "default",
+  heightVariant = "default",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className and style at runtime (bypassing WithoutStyles),
@@ -416,115 +441,37 @@ function InteractiveContainer({
     className?: string;
     style?: React.CSSProperties;
   };
-  return (
-    <div
-      ref={ref}
-      {...rest}
-      className={cn(
-        border && "border",
-        interactiveContainerRoundingVariants[roundingVariant],
-        interactiveContainerPaddingVariants[paddingVariant],
-        interactiveContainerHeightVariants[heightVariant],
-        slotClassName
-      )}
-      style={slotStyle}
-    />
-  );
-}
+  const sharedProps = {
+    ...rest,
+    className: cn(
+      "interactive-container",
+      interactiveContainerRoundingVariants[roundingVariant],
+      interactiveContainerPaddingVariants[paddingVariant],
+      interactiveContainerHeightVariants[heightVariant],
+      interactiveContainerMinWidthVariants[heightVariant],
+      slotClassName
+    ),
+    "data-border": border ? ("true" as const) : undefined,
+    style: slotStyle,
+  };
 
-// ---------------------------------------------------------------------------
-// InteractiveChevronContainer
-// ---------------------------------------------------------------------------
-
-/**
- * Props for {@link InteractiveChevronContainer}.
- *
- * Extends all `InteractiveContainerProps` with an additional `open` prop.
- */
-export interface InteractiveChevronContainerProps
-  extends InteractiveContainerProps {
-  /**
-   * Explicit open/expanded state for the chevron rotation.
-   *
-   * When `true`, the chevron rotates 180° to point upward (indicating "open").
-   * When `false` or `undefined`, falls back to checking for a Radix
-   * `data-state="open"` attribute (injected by components like `Popover.Trigger`).
-   *
-   * This dual-resolution allows the component to work automatically with Radix
-   * primitives while also supporting explicit control when needed.
-   *
-   * @default undefined (falls back to Radix data-state)
-   */
-  open?: boolean;
-}
-
-/**
- * Container with an animated chevron indicator for expandable/collapsible UI.
- *
- * Extends `Interactive.Container` by adding a chevron-down icon on the right
- * side that rotates 180° when the element is "open". Commonly used for:
- *
- * - Popover triggers
- * - Dropdown menus
- * - Accordion headers
- * - Any expandable section
- *
- * The open state is determined by (in order of precedence):
- * 1. The explicit `open` prop
- * 2. Radix `data-state="open"` attribute (auto-injected by Radix primitives)
- *
- * This means it works automatically when used with Radix `Popover.Trigger`,
- * `DropdownMenu.Trigger`, etc., without any extra wiring.
- *
- * @example
- * ```tsx
- * // With Radix Popover (automatic open state)
- * <Popover>
- *   <Popover.Trigger asChild>
- *     <Interactive.Base>
- *       <Interactive.ChevronContainer border>
- *         <span>Select option</span>
- *       </Interactive.ChevronContainer>
- *     </Interactive.Base>
- *   </Popover.Trigger>
- *   <Popover.Content>...</Popover.Content>
- * </Popover>
- *
- * // With explicit open control
- * <Interactive.Base onClick={() => setOpen(!open)}>
- *   <Interactive.ChevronContainer open={open}>
- *     <span>Toggle section</span>
- *   </Interactive.ChevronContainer>
- * </Interactive.Base>
- * ```
- *
- * @see InteractiveChevronContainerProps for detailed prop documentation
- */
-function InteractiveChevronContainer({
-  open,
-  children,
-  ...containerProps
-}: InteractiveChevronContainerProps) {
-  // Derive open state: explicit prop → Radix data-state (injected via Slot chain)
-  const dataState = (containerProps as Record<string, unknown>)[
-    "data-state"
-  ] as string | undefined;
-  const isOpen = open ?? dataState === "open";
-
-  return (
-    <InteractiveContainer {...containerProps}>
-      <div className="flex flex-row items-center gap-2">
-        <div className="flex-1 min-w-0">{children}</div>
-        <SvgChevronDownSmall
-          className={cn(
-            "shrink-0 transition-transform duration-200",
-            isOpen && "-rotate-180"
-          )}
-          size={14}
-        />
-      </div>
-    </InteractiveContainer>
-  );
+  if (type) {
+    // When Interactive.Base is disabled it injects aria-disabled via Slot.
+    // Map that to the native disabled attribute so a <button type="submit">
+    // cannot trigger form submission in the disabled state.
+    const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
+    const nativeDisabled =
+      ariaDisabled === true || ariaDisabled === "true" || undefined;
+    return (
+      <button
+        ref={ref as React.Ref<HTMLButtonElement>}
+        type={type}
+        disabled={nativeDisabled}
+        {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
+      />
+    );
+  }
+  return <div ref={ref as React.Ref<HTMLDivElement>} {...sharedProps} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -534,22 +481,19 @@ function InteractiveChevronContainer({
 /**
  * Interactive compound component for building clickable surfaces.
  *
- * Provides three sub-components:
+ * Provides two sub-components:
  *
- * - `Interactive.Base` — The foundational layer that applies hover/active/pressed
+ * - `Interactive.Base` — The foundational layer that applies hover/active/transient
  *   state styling via CSS data-attributes. Uses Radix Slot to merge onto child.
  *
  * - `Interactive.Container` — A structural `<div>` with design-system presets
  *   for border, padding, rounding, and height.
  *
- * - `Interactive.ChevronContainer` — Like `Container` but with an animated
- *   chevron icon for expandable UI (popovers, dropdowns, accordions).
- *
  * @example
  * ```tsx
  * import { Interactive } from "@opal/core";
  *
- * <Interactive.Base variant="standard" subvariant="ghost" onClick={handleClick}>
+ * <Interactive.Base variant="default" subvariant="ghost" onClick={handleClick}>
  *   <Interactive.Container border>
  *     <span>Clickable card</span>
  *   </Interactive.Container>
@@ -559,7 +503,15 @@ function InteractiveChevronContainer({
 const Interactive = {
   Base: InteractiveBase,
   Container: InteractiveContainer,
-  ChevronContainer: InteractiveChevronContainer,
 };
 
-export { Interactive };
+export {
+  Interactive,
+  type InteractiveBaseProps,
+  type InteractiveBaseVariantProps,
+  type InteractiveBaseSelectVariantProps,
+  type InteractiveContainerProps,
+  type InteractiveContainerHeightVariant,
+  type InteractiveContainerPaddingVariant,
+  type InteractiveContainerRoundingVariant,
+};

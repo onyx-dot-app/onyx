@@ -10,6 +10,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import Spacer from "@/refresh-components/Spacer";
+import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,
   useCurrentMessageTree,
@@ -45,7 +46,7 @@ export interface MessageListProps {
 
   /**
    * Node ID of the message to use as scroll anchor.
-   * This message will get a data-anchor attribute for ChatScrollContainer.
+   * Used by DynamicBottomSpacer to position the push-up effect.
    */
   anchorNodeId?: number;
 }
@@ -121,18 +122,12 @@ const MessageList = React.memo(
           const parentMessage = message.parentNodeId
             ? messageTree?.get(message.parentNodeId)
             : null;
-          const isAnchor = message.nodeId === anchorNodeId;
-
           if (message.type === "user") {
             const nextMessage =
               messages.length > i + 1 ? messages[i + 1] : null;
 
             return (
-              <div
-                id={messageReactComponentKey}
-                key={messageReactComponentKey}
-                data-anchor={isAnchor ? "true" : undefined}
-              >
+              <div id={messageReactComponentKey} key={messageReactComponentKey}>
                 <HumanMessage
                   disableSwitchingForStreaming={
                     (nextMessage && nextMessage.is_generating) || false
@@ -180,7 +175,6 @@ const MessageList = React.memo(
               <div
                 id={`message-${message.nodeId}`}
                 key={messageReactComponentKey}
-                data-anchor={isAnchor ? "true" : undefined}
               >
                 <AgentMessage
                   rawPackets={message.packets}
@@ -221,6 +215,9 @@ const MessageList = React.memo(
             />
           </div>
         )}
+
+        {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
+        <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
       </div>
     );
   }

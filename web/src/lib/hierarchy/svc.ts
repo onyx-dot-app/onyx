@@ -7,6 +7,19 @@ import {
 
 const HIERARCHY_NODES_PREFIX = "/api/hierarchy-nodes";
 
+async function extractErrorDetail(
+  response: Response,
+  fallback: string
+): Promise<string> {
+  try {
+    const body = await response.json();
+    if (body.detail) return body.detail;
+  } catch {
+    // JSON parsing failed — fall through to fallback
+  }
+  return fallback;
+}
+
 export async function fetchHierarchyNodes(
   source: ValidSources
 ): Promise<HierarchyNodesResponse> {
@@ -15,7 +28,11 @@ export async function fetchHierarchyNodes(
   );
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch hierarchy nodes: ${response.statusText}`);
+    const detail = await extractErrorDetail(
+      response,
+      `Failed to fetch hierarchy nodes: ${response.statusText}`
+    );
+    throw new Error(detail);
   }
 
   return response.json();
@@ -33,9 +50,11 @@ export async function fetchHierarchyNodeDocuments(
   });
 
   if (!response.ok) {
-    throw new Error(
+    const detail = await extractErrorDetail(
+      response,
       `Failed to fetch hierarchy node documents: ${response.statusText}`
     );
+    throw new Error(detail);
   }
 
   return response.json();

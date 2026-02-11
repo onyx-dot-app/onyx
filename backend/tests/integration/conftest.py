@@ -3,6 +3,9 @@ from collections.abc import Callable
 
 import pytest
 
+# Integration tests rely on this mode to enable mock_llm_response paths.
+os.environ["INTEGRATION_TESTS_MODE"] = "true"
+
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -52,7 +55,8 @@ def load_env_vars(env_file: str = ".env") -> None:
                 line = line.strip()
                 if line and not line.startswith("#"):
                     key, value = line.split("=", 1)
-                    os.environ[key] = value.strip()
+                    # Preserve explicitly pre-set vars (e.g. INTEGRATION_TESTS_MODE).
+                    os.environ.setdefault(key, value.strip())
         print("Successfully loaded environment variables")
     except FileNotFoundError:
         print(f"File {env_file} not found")

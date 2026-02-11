@@ -90,7 +90,7 @@ jobs:
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -151,7 +151,7 @@ jobs:
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -212,7 +212,7 @@ jobs:
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -259,7 +259,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm"
@@ -291,6 +291,8 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
@@ -305,7 +307,7 @@ jobs:
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -488,7 +490,7 @@ jobs:
 #         fetch-depth: 0
 
 #     - name: Setup node
-#       uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4
+#       uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
 #       with:
 #         node-version: 22
 

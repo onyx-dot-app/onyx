@@ -7,6 +7,7 @@ import re
 import time
 import traceback
 from collections.abc import Callable
+from contextvars import Token
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -46,6 +47,7 @@ from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -73,6 +75,8 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.request_context import reset_llm_mock_response
+from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
@@ -98,10 +102,6 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
-from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -434,6 +434,7 @@ def handle_stream_message_objects(
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
     processing_start_time = time.monotonic()
+    mock_response_token: Token[str | None] | None = None
 
     llm: LLM | None = None
     chat_session: ChatSession | None = None
@@ -444,6 +445,12 @@ def handle_stream_message_objects(
         llm_user_identifier = "anonymous_user"
     else:
         llm_user_identifier = user.email or str(user_id)
+
+    if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
+        raise ValueError(
+            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
+        )
+
     try:
         if not new_msg_req.chat_session_id:
             if not new_msg_req.chat_session_info:
@@ -477,21 +484,16 @@ def handle_stream_message_objects(
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
-        # Track user message in PostHog for analytics
-        fetch_versioned_implementation_with_fallback(
-            module="onyx.utils.telemetry",
-            attribute="event_telemetry",
-            fallback=noop_fallback,
-        )(
+        mt_cloud_telemetry(
+            tenant_id=tenant_id,
             distinct_id=user.email if not user.is_anonymous else tenant_id,
-            event="user_message_sent",
+            event=MilestoneRecordType.USER_MESSAGE_SENT,
             properties={
                 "origin": new_msg_req.origin.value,
                 "has_files": len(new_msg_req.file_descriptors) > 0,
                 "has_project": chat_session.project_id is not None,
                 "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
                 "deep_research": new_msg_req.deep_research,
-                "tenant_id": tenant_id,
             },
         )
 
@@ -611,7 +613,7 @@ def handle_stream_message_objects(
             # Filter chat_history to only messages after the cutoff
             chat_history = [m for m in chat_history if m.id > cutoff_id]
 
-        memories = get_memories(user, db_session)
+        user_memory_context = get_memories(user, db_session)
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
@@ -620,7 +622,7 @@ def handle_stream_message_objects(
             persona_system_prompt=custom_agent_prompt or "",
             token_counter=token_counter,
             files=new_msg_req.file_descriptors,
-            memories=memories,
+            user_memory_context=user_memory_context,
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
@@ -816,6 +818,11 @@ def handle_stream_message_objects(
                 processing_start_time=processing_start_time,
             )
 
+        # The stream generator can resume on a different worker thread after early yields.
+        # Set this right before launching the LLM loop so run_in_background copies the right context.
+        if new_msg_req.mock_llm_response is not None:
+            mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
+
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
         # for stop signals. run_llm_loop itself doesn't know about stopping.
@@ -858,7 +865,7 @@ def handle_stream_message_objects(
                 custom_agent_prompt=custom_agent_prompt,
                 project_files=extracted_project_files,
                 persona=persona,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,
@@ -919,6 +926,9 @@ def handle_stream_message_objects(
 
         db_session.rollback()
     finally:
+        if mock_response_token is not None:
+            reset_llm_mock_response(mock_response_token)
+
         try:
             if redis_client is not None and chat_session is not None:
                 set_processing_status(
@@ -1035,6 +1045,7 @@ def stream_chat_message_objects(
     translated_new_msg_req = SendMessageRequest(
         message=new_msg_req.message,
         llm_override=new_msg_req.llm_override,
+        mock_llm_response=new_msg_req.mock_llm_response,
         allowed_tool_ids=new_msg_req.allowed_tool_ids,
         forced_tool_id=forced_tool_id,
         file_descriptors=new_msg_req.file_descriptors,

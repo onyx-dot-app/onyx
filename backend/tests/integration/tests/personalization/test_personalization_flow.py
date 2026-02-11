@@ -43,7 +43,10 @@ def test_personalization_round_trip(reset: None) -> None:  # noqa: ARG001
         "name": "Jane Doe",
         "role": "Developer advocate",
         "use_memories": True,
-        "memories": ["Loves peanut butter", "Prefers API docs"],
+        "memories": [
+            {"content": "Loves peanut butter"},
+            {"content": "Prefers API docs"},
+        ],
     }
 
     _patch_personalization(headers, cookies, payload)
@@ -54,7 +57,15 @@ def test_personalization_round_trip(reset: None) -> None:  # noqa: ARG001
     assert personalization["name"] == payload["name"]
     assert personalization["role"] == payload["role"]
     assert personalization["use_memories"] is True
-    assert personalization["memories"] == payload["memories"]
+    returned_memories = personalization["memories"]
+    assert len(returned_memories) == 2
+    for mem in returned_memories:
+        assert isinstance(mem["id"], int)
+        assert isinstance(mem["content"], str)
+    assert [m["content"] for m in returned_memories] == [
+        "Prefers API docs",
+        "Loves peanut butter",
+    ]
 
     # update memories to empty
     payload["memories"] = []

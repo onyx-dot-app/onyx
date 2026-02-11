@@ -90,7 +90,11 @@ def _build_llm_provider_request(
         return LLMProviderUpsertRequest(
             name=f"Image Gen - {image_provider_id}",
             provider=source_provider.provider,
-            api_key=source_provider.api_key,  # Only this from source
+            api_key=(
+                source_provider.api_key.get_value(apply_mask=False)
+                if source_provider.api_key
+                else None
+            ),  # Only this from source
             api_base=api_base,  # From request
             api_version=api_version,  # From request
             default_model_name=model_name,
@@ -227,7 +231,11 @@ def test_image_generation(
             api_key_changed=False,  # Using stored key from source provider
         )
 
-        api_key = source_provider.api_key
+        api_key = (
+            source_provider.api_key.get_value(apply_mask=False)
+            if source_provider.api_key
+            else None
+        )
         provider = source_provider.provider
 
     if provider is None:
@@ -431,7 +439,11 @@ def update_config(
                     api_key_changed=False,
                 )
                 # Preserve existing API key when user didn't change it
-                actual_api_key = old_provider.api_key
+                actual_api_key = (
+                    old_provider.api_key.get_value(apply_mask=False)
+                    if old_provider.api_key
+                    else None
+                )
 
         # 3. Build and create new LLM provider
         provider_request = _build_llm_provider_request(

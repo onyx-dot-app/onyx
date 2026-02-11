@@ -23,10 +23,12 @@ from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
 )
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
@@ -37,6 +39,7 @@ from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import ToolCallDebug
 from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
@@ -487,7 +490,7 @@ def run_llm_loop(
     custom_agent_prompt: str | None,
     project_files: ExtractedProjectFiles,
     persona: Persona | None,
-    memories: list[str] | None,
+    user_memory_context: UserMemoryContext | None,
     llm: LLM,
     token_counter: Callable[[str], int],
     db_session: Session,
@@ -601,7 +604,7 @@ def run_llm_loop(
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
                         datetime_aware=persona.datetime_aware if persona else True,
-                        memories=memories,
+                        user_memory_context=user_memory_context,
                         tools=tools,
                         should_cite_documents=should_cite_documents
                         or always_cite_documents,
@@ -723,6 +726,19 @@ def run_llm_loop(
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
 
+            if INTEGRATION_TESTS_MODE and tool_calls:
+                for tool_call in tool_calls:
+                    emitter.emit(
+                        Packet(
+                            placement=tool_call.placement,
+                            obj=ToolCallDebug(
+                                tool_call_id=tool_call.tool_call_id,
+                                tool_name=tool_call.tool_name,
+                                tool_args=tool_call.tool_args,
+                            ),
+                        )
+                    )
+
             if len(tool_calls) > 1:
                 emitter.emit(
                     Packet(
@@ -744,7 +760,7 @@ def run_llm_loop(
                 tool_calls=tool_calls,
                 tools=final_tools,
                 message_history=truncated_message_history,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 user_info=None,  # TODO, this is part of memories right now, might want to separate it out
                 citation_mapping=citation_mapping,
                 next_citation_num=citation_processor.get_next_citation_number(),

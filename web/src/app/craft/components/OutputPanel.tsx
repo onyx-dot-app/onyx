@@ -162,8 +162,25 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, cachedForSessionId]);
 
-  // Webapp refresh trigger from streaming
+  // Webapp refresh trigger from streaming / restore
   const webappNeedsRefresh = useWebappNeedsRefresh();
+
+  // Track polling window: poll for up to 30s after a restore/refresh trigger
+  const [pollingDeadline, setPollingDeadline] = useState<number | null>(null);
+  const [isWebappReady, setIsWebappReady] = useState(false);
+
+  // When webappNeedsRefresh bumps (restore or file edit), start a 30s polling window
+  // and reset readiness so we poll until the server is back up
+  useEffect(() => {
+    if (webappNeedsRefresh > 0) {
+      setPollingDeadline(Date.now() + 30_000);
+      setIsWebappReady(false);
+
+      // Force a re-render after 30s to stop polling even if server never responded
+      const timer = setTimeout(() => setPollingDeadline(null), 30_000);
+      return () => clearTimeout(timer);
+    }
+  }, [webappNeedsRefresh]);
 
   // Fetch webapp info from dedicated endpoint
   // Only fetch for real sessions when panel is fully open
@@ -173,15 +190,27 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     !session.id.startsWith("temp-") &&
     session.status !== "creating";
 
+  // Poll every 2s while NextJS is starting up (capped at 30s), then stop
+  const shouldPoll =
+    !isWebappReady && pollingDeadline !== null && Date.now() < pollingDeadline;
+
   const { data: webappInfo, mutate } = useSWR(
     shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp-info` : null,
     () => (session?.id ? fetchWebappInfo(session.id) : null),
     {
-      refreshInterval: 0, // Disable polling, use event-based refresh
+      refreshInterval: shouldPoll ? 2000 : 0,
       revalidateOnFocus: true,
-      keepPreviousData: true, // Stale-while-revalidate
+      keepPreviousData: true,
     }
   );
+
+  // Update readiness from SWR response and clear polling deadline
+  useEffect(() => {
+    if (webappInfo?.ready) {
+      setIsWebappReady(true);
+      setPollingDeadline(null);
+    }
+  }, [webappInfo?.ready]);
 
   // Update cache when SWR returns data for current session
   useEffect(() => {
@@ -190,9 +219,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [webappInfo?.webapp_url, session?.id, cachedForSessionId]);
 
-  // Refresh when web/ file changes
-  // webappNeedsRefresh is a counter that increments on each edit, ensuring
-  // each edit triggers a new refresh even if the panel is already open
+  // Refresh when web/ file changes or after restore
+  // webappNeedsRefresh is a counter that increments on each edit/restore,
+  // ensuring each triggers a new refresh even if the panel is already open
   useEffect(() => {
     if (webappNeedsRefresh > 0 && isFullyOpen && session?.id) {
       mutate();

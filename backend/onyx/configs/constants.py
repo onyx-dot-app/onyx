@@ -160,6 +160,8 @@ CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
 CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 
+CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -351,6 +353,7 @@ class MilestoneRecordType(str, Enum):
     CREATED_CONNECTOR = "created_connector"
     CONNECTOR_SUCCEEDED = "connector_succeeded"
     RAN_QUERY = "ran_query"
+    USER_MESSAGE_SENT = "user_message_sent"
     MULTIPLE_ASSISTANTS = "multiple_assistants"
     CREATED_ASSISTANT = "created_assistant"
     CREATED_ONYX_BOT = "created_onyx_bot"
@@ -394,6 +397,8 @@ class OnyxCeleryQueues:
 
     # Sandbox processing queue
     SANDBOX = "sandbox"
+
+    OPENSEARCH_MIGRATION = "opensearch_migration"
 
 
 class OnyxRedisLocks:
@@ -445,6 +450,9 @@ class OnyxRedisLocks:
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
     CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK = "da_lock:cleanup_old_snapshots_beat"
+
+    # Sandbox file sync
+    SANDBOX_FILE_SYNC_LOCK_PREFIX = "da_lock:sandbox_file_sync"
 
 
 class OnyxRedisSignals:
@@ -573,8 +581,11 @@ class OnyxCeleryTask:
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"
     )
-    MIGRATE_DOCUMENT_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_document_from_vespa_to_opensearch_task"
+    MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
+        "migrate_documents_from_vespa_to_opensearch_task"
+    )
+    MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
+        "migrate_chunks_from_vespa_to_opensearch_task"
     )
 
 

@@ -87,6 +87,8 @@ class SendMessageRequest(BaseModel):
     message: str
 
     llm_override: LLMOverride | None = None
+    # Test-only override for deterministic LiteLLM mock responses.
+    mock_llm_response: str | None = None
 
     allowed_tool_ids: list[int] | None = None
     forced_tool_id: int | None = None
@@ -191,6 +193,8 @@ class CreateChatMessageRequest(ChunkContext):
     # allows the caller to override the Persona / Prompt
     # these do not persist in the chat thread details
     llm_override: LLMOverride | None = None
+    # Test-only override for deterministic LiteLLM mock responses.
+    mock_llm_response: str | None = None
     prompt_override: PromptOverride | None = None
 
     # Allows the caller to override the temperature for the chat session
