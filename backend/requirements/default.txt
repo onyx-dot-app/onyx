@@ -706,7 +706,7 @@ pathvalidate==3.3.1
     # via py-key-value-aio
 pdfminer-six==20251107
     # via markitdown
-pillow==12.0.0
+pillow==12.1.1
     # via python-pptx
 platformdirs==4.5.0
     # via
