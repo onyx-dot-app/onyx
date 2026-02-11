@@ -93,13 +93,3 @@ By default, playwright.config.ts is configured to output the results to:
 ```
 web/test-results
 ```
-
-3. Upload results to Chromatic (Optional)
-
-This step would normally not be run by third party developers, but first party devs
-may use this for local troubleshooting and testing.
-
-```
-cd web
-npx chromatic --playwright --project-token={your token here}
-```

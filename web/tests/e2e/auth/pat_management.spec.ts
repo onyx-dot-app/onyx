@@ -2,7 +2,7 @@
  * E2E Test: Personal Access Token (PAT) Management
  * Tests complete user flow: login → create → authenticate → delete
  */
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
 
 test("PAT Complete Workflow", async ({ page }, testInfo) => {

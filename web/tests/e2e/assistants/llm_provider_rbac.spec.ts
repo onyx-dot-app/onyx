@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { Page } from "@playwright/test";
 import { loginAsRandomUser, loginAs } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";

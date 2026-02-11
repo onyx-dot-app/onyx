@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
 import { sendMessage, startNewChat } from "../utils/chatActions";
