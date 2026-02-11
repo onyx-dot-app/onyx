@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { ScrollContainerProvider } from "@/components/chat/ScrollContainerContext";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
@@ -75,6 +76,8 @@ const ChatScrollContainer = React.memo(
       const fadeThresholdPx = DEFAULT_FADE_THRESHOLD_PX;
       const buttonThresholdPx = DEFAULT_BUTTON_THRESHOLD_PX;
       const scrollContainerRef = useRef<HTMLDivElement>(null);
+      const contentWrapperRef = useRef<HTMLDivElement>(null);
+      const spacerHeightRef = useRef(0);
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
@@ -109,7 +112,10 @@ const ChatScrollContainer = React.memo(
           };
         }
 
-        const contentEnd = endDivRef.current.offsetTop;
+        // Exclude the dynamic spacer — it's cosmetic (push-up effect) and
+        // shouldn't make the system think there's real content below the viewport.
+        const contentEnd =
+          endDivRef.current.offsetTop - spacerHeightRef.current;
         const viewportBottom = container.scrollTop + container.clientHeight;
         const contentBelowViewport = contentEnd - viewportBottom;
 
@@ -158,12 +164,14 @@ const ChatScrollContainer = React.memo(
               if (container) {
                 prevScrollTopRef.current = container.scrollTop;
               }
+              // Refresh scroll state so the scroll-to-bottom button hides
+              updateScrollState();
             }, 600);
           } else {
             isAutoScrollingRef.current = false;
           }
         },
-        []
+        [updateScrollState]
       );
 
       // Expose scrollToBottom via ref
@@ -215,8 +223,14 @@ const ChatScrollContainer = React.memo(
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
 
-            // Auto-scroll: follow content if we were at bottom
-            if (autoScrollRef.current && wasAtBottom) {
+            // Auto-scroll: follow content if we were at bottom.
+            // Skip instant auto-scroll during DynamicBottomSpacer's smooth
+            // scroll to avoid competing scroll commands.
+            if (
+              autoScrollRef.current &&
+              wasAtBottom &&
+              container.dataset.smoothScrollActive !== "true"
+            ) {
               // scrollToBottom handles isAutoScrollingRef and ref updates
               scrollToBottom("instant");
             }
@@ -342,13 +356,20 @@ const ChatScrollContainer = React.memo(
             }}
           >
             <div
+              ref={contentWrapperRef}
               className="w-full flex-1 flex flex-col items-center"
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",
               }}
             >
-              {children}
+              <ScrollContainerProvider
+                scrollContainerRef={scrollContainerRef}
+                contentWrapperRef={contentWrapperRef}
+                spacerHeightRef={spacerHeightRef}
+              >
+                {children}
+              </ScrollContainerProvider>
 
               {/* End marker to measure content end */}
               <div ref={endDivRef} />

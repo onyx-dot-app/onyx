@@ -162,6 +162,13 @@ class EmbeddingModelDetail(BaseModel):
         cls,
         search_settings: "SearchSettings",
     ) -> "EmbeddingModelDetail":
+        api_key = None
+        if (
+            search_settings.cloud_provider is not None
+            and search_settings.cloud_provider.api_key is not None
+        ):
+            api_key = search_settings.cloud_provider.api_key.get_value(apply_mask=True)
+
         return cls(
             id=search_settings.id,
             model_name=search_settings.model_name,
@@ -169,7 +176,7 @@ class EmbeddingModelDetail(BaseModel):
             query_prefix=search_settings.query_prefix,
             passage_prefix=search_settings.passage_prefix,
             provider_type=search_settings.provider_type,
-            api_key=search_settings.api_key,
+            api_key=api_key,
             api_url=search_settings.api_url,
         )
 

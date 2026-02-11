@@ -69,7 +69,11 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             if provider_model is None:
                 raise RuntimeError("No web search provider configured.")
             provider_type = WebSearchProviderType(provider_model.provider_type)
-            api_key = provider_model.api_key
+            api_key = (
+                provider_model.api_key.get_value(apply_mask=False)
+                if provider_model.api_key
+                else None
+            )
             config = provider_model.config
 
         # TODO - This should just be enforced at the DB level

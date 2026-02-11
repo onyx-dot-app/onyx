@@ -95,10 +95,10 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.kg.models import KGStage
-from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
+from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from onyx.context.search.enums import RecencyBiasSetting
@@ -122,18 +122,35 @@ class EncryptedString(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(
-        self, value: str | None, dialect: Dialect  # noqa: ARG002
+        self, value: str | SensitiveValue[str] | None, dialect: Dialect  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
+            # Handle both raw strings and SensitiveValue wrappers
+            if isinstance(value, SensitiveValue):
+                # Get raw value for storage
+                value = value.get_value(apply_mask=False)
             return encrypt_string_to_bytes(value)
         return value
 
     def process_result_value(
         self, value: bytes | None, dialect: Dialect  # noqa: ARG002
-    ) -> str | None:
+    ) -> SensitiveValue[str] | None:
         if value is not None:
-            return decrypt_bytes_to_string(value)
-        return value
+            return SensitiveValue(
+                encrypted_bytes=value,
+                decrypt_fn=decrypt_bytes_to_string,
+                is_json=False,
+            )
+        return None
+
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
 
 
 class EncryptedJson(TypeDecorator):
@@ -142,20 +159,38 @@ class EncryptedJson(TypeDecorator):
     cache_ok = True
 
     def process_bind_param(
-        self, value: dict | None, dialect: Dialect  # noqa: ARG002
+        self,
+        value: dict[str, Any] | SensitiveValue[dict[str, Any]] | None,
+        dialect: Dialect,  # noqa: ARG002
     ) -> bytes | None:
         if value is not None:
+            # Handle both raw dicts and SensitiveValue wrappers
+            if isinstance(value, SensitiveValue):
+                # Get raw value for storage
+                value = value.get_value(apply_mask=False)
             json_str = json.dumps(value)
             return encrypt_string_to_bytes(json_str)
         return value
 
     def process_result_value(
         self, value: bytes | None, dialect: Dialect  # noqa: ARG002
-    ) -> dict | None:
+    ) -> SensitiveValue[dict[str, Any]] | None:
         if value is not None:
-            json_str = decrypt_bytes_to_string(value)
-            return json.loads(json_str)
-        return value
+            return SensitiveValue(
+                encrypted_bytes=value,
+                decrypt_fn=decrypt_bytes_to_string,
+                is_json=True,
+            )
+        return None
+
+    def compare_values(self, x: Any, y: Any) -> bool:
+        if x is None or y is None:
+            return x == y
+        if isinstance(x, SensitiveValue):
+            x = x.get_value(apply_mask=False)
+        if isinstance(y, SensitiveValue):
+            y = y.get_value(apply_mask=False)
+        return x == y
 
 
 class NullFilteredString(TypeDecorator):
@@ -216,6 +251,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
     use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    user_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
@@ -276,6 +312,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
+        order_by="desc(Memory.id)",
     )
     oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
         "OAuthUserToken",
@@ -990,6 +1027,25 @@ class OpenSearchTenantMigrationRecord(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+    # Opaque continuation token from Vespa's Visit API.
+    # NULL means "not started" or "visit completed".
+    vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    total_chunks_migrated: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    migration_completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    enable_opensearch_retrieval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )
 
 
@@ -1755,7 +1811,9 @@ class Credential(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    credential_json: Mapped[dict[str, Any]] = mapped_column(EncryptedJson())
+    credential_json: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson()
+    )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
@@ -1793,7 +1851,9 @@ class FederatedConnector(Base):
     source: Mapped[FederatedConnectorSource] = mapped_column(
         Enum(FederatedConnectorSource, native_enum=False)
     )
-    credentials: Mapped[dict[str, str]] = mapped_column(EncryptedJson(), nullable=False)
+    credentials: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=False
+    )
     config: Mapped[dict[str, Any]] = mapped_column(
         postgresql.JSONB(), default=dict, nullable=False, server_default="{}"
     )
@@ -1820,7 +1880,9 @@ class FederatedConnectorOAuthToken(Base):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
-    token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+    token: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=False
+    )
     expires_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime, nullable=True
     )
@@ -1964,7 +2026,9 @@ class SearchSettings(Base):
 
     @property
     def api_key(self) -> str | None:
-        return self.cloud_provider.api_key if self.cloud_provider is not None else None
+        if self.cloud_provider is None or self.cloud_provider.api_key is None:
+            return None
+        return self.cloud_provider.api_key.get_value(apply_mask=False)
 
     @property
     def large_chunks_enabled(self) -> bool:
@@ -2726,7 +2790,9 @@ class LLMProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
     provider: Mapped[str] = mapped_column(String)
-    api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
     api_base: Mapped[str | None] = mapped_column(String, nullable=True)
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     # custom configs that should be passed to the LLM provider at inference time
@@ -2879,7 +2945,7 @@ class CloudEmbeddingProvider(Base):
         Enum(EmbeddingProvider), primary_key=True
     )
     api_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    api_key: Mapped[str | None] = mapped_column(EncryptedString())
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(EncryptedString())
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -2898,7 +2964,9 @@ class InternetSearchProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     provider_type: Mapped[str] = mapped_column(String, nullable=False)
-    api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
     config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -2920,7 +2988,9 @@ class InternetContentProvider(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     provider_type: Mapped[str] = mapped_column(String, nullable=False)
-    api_key: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
     config: Mapped[WebContentProviderConfig | None] = mapped_column(
         PydanticType(WebContentProviderConfig), nullable=True
     )
@@ -3064,8 +3134,12 @@ class OAuthConfig(Base):
     token_url: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Client credentials (encrypted)
-    client_id: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
-    client_secret: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+    client_id: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=False
+    )
+    client_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=False
+    )
 
     # Optional configurations
     scopes: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
@@ -3112,7 +3186,9 @@ class OAuthUserToken(Base):
     #   "expires_at": 1234567890,  # Unix timestamp, optional
     #   "scope": "repo user"  # Optional
     # }
-    token_data: Mapped[dict[str, Any]] = mapped_column(EncryptedJson(), nullable=False)
+    token_data: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=False
+    )
 
     # Metadata
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -3445,9 +3521,15 @@ class SlackBot(Base):
     name: Mapped[str] = mapped_column(String)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    bot_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
-    app_token: Mapped[str] = mapped_column(EncryptedString(), unique=True)
-    user_token: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    bot_token: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), unique=True
+    )
+    app_token: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), unique=True
+    )
+    user_token: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
 
     slack_channel_configs: Mapped[list[SlackChannelConfig]] = relationship(
         "SlackChannelConfig",
@@ -3468,7 +3550,9 @@ class DiscordBotConfig(Base):
     id: Mapped[str] = mapped_column(
         String, primary_key=True, server_default=text("'SINGLETON'")
     )
-    bot_token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+    bot_token: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=False
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -3624,7 +3708,9 @@ class KVStore(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
-    encrypted_value: Mapped[JSON_ro] = mapped_column(EncryptedJson(), nullable=True)
+    encrypted_value: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=True
+    )
 
 
 class FileRecord(Base):
@@ -4344,7 +4430,7 @@ class MCPConnectionConfig(Base):
     #   "registration_access_token": "<token>",  # For managing registration
     #   "registration_client_uri": "<uri>",  # For managing registration
     # }
-    config: Mapped[MCPConnectionData] = mapped_column(
+    config: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
         EncryptedJson(), nullable=False, default=dict
     )
 

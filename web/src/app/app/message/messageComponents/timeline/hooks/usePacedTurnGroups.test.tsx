@@ -414,6 +414,177 @@ describe("usePacedTurnGroups", () => {
     });
   });
 
+  describe("tool-after-message transition", () => {
+    test("resets toolPacingComplete when finalAnswerComing goes true → false with new tool step", () => {
+      const displayGroup = createDisplayGroup(0);
+
+      // Step 1: Render with finalAnswerComing=true, no tool steps
+      // No tools = pacing complete immediately → display groups shown
+      const { result, rerender } = renderHook(
+        ({ turnGroups, finalAnswerComing }) =>
+          usePacedTurnGroups(
+            turnGroups,
+            [displayGroup],
+            false,
+            1,
+            finalAnswerComing
+          ),
+        {
+          initialProps: {
+            turnGroups: [] as TurnGroup[],
+            finalAnswerComing: true,
+          },
+        }
+      );
+
+      expect(result.current.pacedDisplayGroups.length).toBe(1);
+      expect(result.current.pacedFinalAnswerComing).toBe(true);
+
+      // Step 2: finalAnswerComing goes false + new tool step arrives
+      // This simulates the agent switching from message streaming back to tools
+      const step1 = createStep(0, 0);
+      rerender({
+        turnGroups: [createTurnGroup([step1])],
+        finalAnswerComing: false,
+      });
+
+      // toolPacingComplete was reset, so display groups should be hidden
+      // (first tool step is revealed immediately, but pacing just re-started)
+      expect(result.current.pacedTurnGroups.length).toBe(1);
+      expect(result.current.pacedDisplayGroups.length).toBe(0);
+
+      // Step 3: Add a second tool step so pacing is not yet complete
+      const step2 = createStep(1, 0);
+      rerender({
+        turnGroups: [createTurnGroup([step1]), createTurnGroup([step2])],
+        finalAnswerComing: false,
+      });
+
+      // Display groups still hidden (pacing incomplete)
+      expect(result.current.pacedDisplayGroups.length).toBe(0);
+
+      // Step 4: Advance timer to complete pacing
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+
+      // Now pacing is complete → display groups shown again
+      expect(result.current.pacedTurnGroups.length).toBe(2);
+      expect(result.current.pacedDisplayGroups.length).toBe(1);
+    });
+  });
+
+  describe("referential stability", () => {
+    test("returns same array reference when turn groups have not changed", () => {
+      const step1 = createStep(0, 0);
+
+      const { result, rerender } = renderHook(
+        ({ turnGroups }) => usePacedTurnGroups(turnGroups, [], false, 1, false),
+        { initialProps: { turnGroups: [createTurnGroup([step1])] } }
+      );
+
+      // First step revealed immediately
+      expect(result.current.pacedTurnGroups.length).toBe(1);
+
+      // Add second step and reveal it via pacing
+      const step2 = createStep(1, 0);
+      rerender({
+        turnGroups: [createTurnGroup([step1]), createTurnGroup([step2])],
+      });
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+      expect(result.current.pacedTurnGroups.length).toBe(2);
+
+      const stableRef = result.current.pacedTurnGroups;
+
+      // Re-render with new array containing structurally identical turn groups
+      rerender({
+        turnGroups: [createTurnGroup([step1]), createTurnGroup([step2])],
+      });
+
+      // Should be the exact same array reference (nothing changed)
+      expect(result.current.pacedTurnGroups).toBe(stableRef);
+    });
+
+    test("preserves completed group references when streaming group changes", () => {
+      const step1 = createStep(0, 0);
+
+      const { result, rerender } = renderHook(
+        ({ turnGroups, stopPacketSeen }) =>
+          usePacedTurnGroups(turnGroups, [], stopPacketSeen, 1, false),
+        {
+          initialProps: {
+            turnGroups: [createTurnGroup([step1])],
+            stopPacketSeen: false,
+          },
+        }
+      );
+
+      // First step revealed immediately
+      expect(result.current.pacedTurnGroups.length).toBe(1);
+
+      // Add second step and advance timer to reveal it
+      const step2 = createStep(1, 0);
+      rerender({
+        turnGroups: [createTurnGroup([step1]), createTurnGroup([step2])],
+        stopPacketSeen: false,
+      });
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+      expect(result.current.pacedTurnGroups.length).toBe(2);
+
+      const firstGroupRef = result.current.pacedTurnGroups[0];
+
+      // Simulate streaming: step2 gets more packets (new object with longer packets array)
+      const step2Updated: TransformedStep = {
+        ...step2,
+        packets: [
+          ...step2.packets,
+          {
+            placement: { turn_index: 1, tab_index: 0 },
+            obj: { type: PacketType.SEARCH_TOOL_START },
+          } as Packet,
+        ],
+      };
+      rerender({
+        turnGroups: [createTurnGroup([step1]), createTurnGroup([step2Updated])],
+        stopPacketSeen: false,
+      });
+
+      // First group (completed) should keep the same object reference
+      expect(result.current.pacedTurnGroups[0]).toBe(firstGroupRef);
+      // Second group changed (packets.length differs) — new reference
+      expect(result.current.pacedTurnGroups.length).toBe(2);
+    });
+
+    test("returns new array reference when a new step is revealed", () => {
+      const step1 = createStep(0, 0);
+
+      const { result, rerender } = renderHook(
+        ({ turnGroups }) => usePacedTurnGroups(turnGroups, [], false, 1, false),
+        { initialProps: { turnGroups: [createTurnGroup([step1])] } }
+      );
+
+      const firstResult = result.current.pacedTurnGroups;
+      expect(firstResult.length).toBe(1);
+
+      // Add second step and reveal it
+      const step2 = createStep(1, 0);
+      rerender({
+        turnGroups: [createTurnGroup([step1]), createTurnGroup([step2])],
+      });
+      act(() => {
+        jest.advanceTimersByTime(200);
+      });
+
+      // Array reference must differ (length changed)
+      expect(result.current.pacedTurnGroups).not.toBe(firstResult);
+      expect(result.current.pacedTurnGroups.length).toBe(2);
+    });
+  });
+
   describe("timer cleanup", () => {
     test("clears timer on unmount", () => {
       const step1 = createStep(0, 0);

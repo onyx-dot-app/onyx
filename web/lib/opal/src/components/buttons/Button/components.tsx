@@ -10,32 +10,55 @@ import { cn } from "@opal/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-type ButtonProps = InteractiveBaseProps & {
-  /** Left icon component (renders at 1rem x 1rem). */
-  icon?: IconFunctionComponent;
+/**
+ * Content props — a discriminated union on `foldable` that enforces:
+ *
+ * - `foldable: true`  → `icon` and `children` are required (icon stays visible,
+ *                        label + rightIcon fold away)
+ * - `foldable?: false` → at least one of `icon` or `children` must be provided
+ */
+type ButtonContentProps =
+  | {
+      foldable: true;
+      icon: IconFunctionComponent;
+      children: string;
+      rightIcon?: IconFunctionComponent;
+    }
+  | {
+      foldable?: false;
+      icon?: IconFunctionComponent;
+      children: string;
+      rightIcon?: IconFunctionComponent;
+    }
+  | {
+      foldable?: false;
+      icon: IconFunctionComponent;
+      children?: string;
+      rightIcon?: IconFunctionComponent;
+    };
 
-  /** Button label text. Omit for icon-only buttons. */
-  children?: string;
+type ButtonProps = InteractiveBaseProps &
+  ButtonContentProps & {
+    /** Size preset — controls gap, text size, and Container height/rounding. */
+    size?: SizeVariant;
 
-  /** Right icon component (renders at 1rem x 1rem). */
-  rightIcon?: IconFunctionComponent;
+    /** HTML button type. When provided, Container renders a `<button>` element. */
+    type?: "submit" | "button" | "reset";
 
-  /** Size preset — controls gap, text size, and Container height/rounding. */
-  size?: SizeVariant;
+    /** Tooltip text shown on hover. */
+    tooltip?: string;
 
-  /** Tooltip text shown on hover. */
-  tooltip?: string;
-
-  /** Which side the tooltip appears on. */
-  tooltipSide?: TooltipSide;
-};
+    /** Which side the tooltip appears on. */
+    tooltipSide?: TooltipSide;
+  };
 
 function iconWrapper(
   Icon: IconFunctionComponent | undefined,
-  isCompact: boolean
+  isCompact: boolean,
+  includeSpacer: boolean
 ) {
   return Icon ? (
-    <div className="p-0.5">
+    <div className="p-0.5 interactive-foreground-icon">
       <Icon
         className={cn(
           "shrink-0",
@@ -44,9 +67,9 @@ function iconWrapper(
         size={isCompact ? 12 : 16}
       />
     </div>
-  ) : (
-    <div className="w-[0.125rem]" />
-  );
+  ) : includeSpacer ? (
+    <div />
+  ) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,33 +81,55 @@ function Button({
   children,
   rightIcon: RightIcon,
   size = "default",
+  foldable,
+  type,
   tooltip,
   tooltipSide = "top",
   ...interactiveBaseProps
 }: ButtonProps) {
   const isCompact = size === "compact";
 
+  const labelEl = children ? (
+    <span
+      className={cn(
+        "opal-button-label",
+        isCompact ? "font-secondary-body" : "font-main-ui-body"
+      )}
+    >
+      {children}
+    </span>
+  ) : null;
+
   const button = (
     <Interactive.Base {...interactiveBaseProps}>
       <Interactive.Container
+        type={interactiveBaseProps.href ? undefined : type}
         border={interactiveBaseProps.subvariant === "secondary"}
         heightVariant={isCompact ? "compact" : "default"}
         roundingVariant={isCompact ? "compact" : "default"}
         paddingVariant={isCompact ? "thin" : "default"}
       >
-        <div className="opal-button interactive-foreground">
-          {iconWrapper(Icon, isCompact)}
-          {children && (
-            <span
-              className={cn(
-                "opal-button-label",
-                isCompact ? "font-secondary-action" : "font-main-ui-action"
-              )}
-            >
-              {children}
-            </span>
+        <div
+          className={cn(
+            "opal-button interactive-foreground",
+            foldable && "opal-button--foldable"
           )}
-          {iconWrapper(RightIcon, isCompact)}
+        >
+          {iconWrapper(Icon, isCompact, !foldable && !!children)}
+
+          {foldable ? (
+            <div className="opal-button-foldable">
+              <div className="opal-button-foldable-inner">
+                {labelEl}
+                {iconWrapper(RightIcon, isCompact, !!children)}
+              </div>
+            </div>
+          ) : (
+            <>
+              {labelEl}
+              {iconWrapper(RightIcon, isCompact, !!children)}
+            </>
+          )}
         </div>
       </Interactive.Container>
     </Interactive.Base>

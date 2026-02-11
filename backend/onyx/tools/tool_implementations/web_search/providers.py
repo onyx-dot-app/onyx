@@ -77,7 +77,11 @@ def build_search_provider_from_config(
 def _build_search_provider(provider_model: InternetSearchProvider) -> WebSearchProvider:
     return build_search_provider_from_config(
         provider_type=WebSearchProviderType(provider_model.provider_type),
-        api_key=provider_model.api_key or "",
+        api_key=(
+            provider_model.api_key.get_value(apply_mask=False)
+            if provider_model.api_key
+            else ""
+        ),
         config=provider_model.config or {},
     )
 
@@ -129,7 +133,11 @@ def get_default_content_provider() -> WebContentProvider:
         if provider_model:
             provider = build_content_provider_from_config(
                 provider_type=WebContentProviderType(provider_model.provider_type),
-                api_key=provider_model.api_key or "",
+                api_key=(
+                    provider_model.api_key.get_value(apply_mask=False)
+                    if provider_model.api_key
+                    else ""
+                ),
                 config=provider_model.config or WebContentProviderConfig(),
             )
             if provider:

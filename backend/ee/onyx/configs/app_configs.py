@@ -134,7 +134,7 @@ GATED_TENANTS_KEY = "gated_tenants"
 
 # License enforcement - when True, blocks API access for gated/expired licenses
 LICENSE_ENFORCEMENT_ENABLED = (
-    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "").lower() == "true"
+    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "true").lower() == "true"
 )
 
 # Cloud data plane URL - self-hosted instances call this to reach cloud proxy endpoints

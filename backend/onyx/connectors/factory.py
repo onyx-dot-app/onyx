@@ -118,7 +118,12 @@ def instantiate_connector(
         )
         connector.set_credentials_provider(provider)
     else:
-        new_credentials = connector.load_credentials(credential.credential_json)
+        credential_json = (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        )
+        new_credentials = connector.load_credentials(credential_json)
 
         if new_credentials is not None:
             backend_update_credential_json(credential, new_credentials, db_session)

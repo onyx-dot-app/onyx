@@ -153,7 +153,7 @@ def _transform_vespa_acl_to_opensearch_acl(
 def transform_vespa_chunks_to_opensearch_chunks(
     vespa_chunks: list[dict[str, Any]],
     tenant_state: TenantState,
-    document_id: str,
+    sanitized_to_original_doc_id_mapping: dict[str, str],
 ) -> list[DocumentChunk]:
     result: list[DocumentChunk] = []
     for vespa_chunk in vespa_chunks:
@@ -167,11 +167,15 @@ def transform_vespa_chunks_to_opensearch_chunks(
         # bearing on the chunk's document ID field, even if document ID is an
         # argument to the chunk ID. Deliberately choose to use the real doc ID
         # supplied to this function.
-        if vespa_document_id != document_id:
+        if vespa_document_id in sanitized_to_original_doc_id_mapping:
             logger.warning(
-                f"Vespa document ID {vespa_document_id} does not match the document ID supplied {document_id}. "
+                f"Vespa document ID {vespa_document_id} does not match the document ID supplied "
+                f"{sanitized_to_original_doc_id_mapping[vespa_document_id]}. "
                 "The Vespa ID will be discarded."
             )
+        document_id = sanitized_to_original_doc_id_mapping.get(
+            vespa_document_id, vespa_document_id
+        )
 
         # This should exist; fail loudly if it does not.
         chunk_index: int = vespa_chunk[CHUNK_ID]

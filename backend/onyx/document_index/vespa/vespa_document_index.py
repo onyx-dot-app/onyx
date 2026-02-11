@@ -30,6 +30,7 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
+from onyx.document_index.vespa.chunk_retrieval import get_all_chunks_paginated
 from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
@@ -61,6 +62,7 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
 
@@ -647,6 +649,34 @@ class VespaDocumentIndex(DocumentIndex):
         # chunk we're interested in is in the "fields" field.
         raw_document_chunks = [chunk["fields"] for chunk in raw_chunks]
         return raw_document_chunks
+
+    def get_all_raw_document_chunks_paginated(
+        self,
+        continuation_token: str | None,
+        page_size: int,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Gets all the chunks in Vespa, paginated.
+
+        Used in the chunk-level Vespa-to-OpenSearch migration task.
+
+        Args:
+            continuation_token: Token returned by Vespa representing a page
+                offset. None to start from the beginning. Defaults to None.
+            page_size: Best-effort batch size for the visit. Defaults to 1,000.
+
+        Returns:
+            Tuple of (list of chunk dicts, next continuation token or None). The
+                continuation token is None when the visit is complete.
+        """
+        raw_chunks, next_continuation_token = get_all_chunks_paginated(
+            index_name=self._index_name,
+            tenant_state=TenantState(
+                tenant_id=self._tenant_id, multitenant=MULTI_TENANT
+            ),
+            continuation_token=continuation_token,
+            page_size=page_size,
+        )
+        return raw_chunks, next_continuation_token
 
     def index_raw_chunks(self, chunks: list[dict[str, Any]]) -> None:
         """Indexes raw document chunks into Vespa.

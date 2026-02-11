@@ -1056,6 +1056,7 @@ class LocalSandboxManager(SandboxManager):
         sandbox_id: UUID,
         user_id: UUID,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
+        source: str | None = None,  # noqa: ARG002
     ) -> bool:
         """No-op for local mode - files are directly accessible via symlink.
 
@@ -1066,9 +1067,13 @@ class LocalSandboxManager(SandboxManager):
             sandbox_id: The sandbox UUID (unused)
             user_id: The user ID (unused)
             tenant_id: The tenant ID (unused)
+            source: The source type (unused in local mode)
 
         Returns:
             True (always succeeds since no sync is needed)
         """
-        logger.debug(f"sync_files called for local sandbox {sandbox_id} - no-op")
+        source_info = f" source={source}" if source else ""
+        logger.debug(
+            f"sync_files called for local sandbox {sandbox_id}{source_info} - no-op"
+        )
         return True

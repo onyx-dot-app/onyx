@@ -147,6 +147,7 @@ export { default as SvgSun } from "@opal/icons/sun";
 export { default as SvgTag } from "@opal/icons/tag";
 export { default as SvgTerminal } from "@opal/icons/terminal";
 export { default as SvgTerminalSmall } from "@opal/icons/terminal-small";
+export { default as SvgTextLines } from "@opal/icons/text-lines";
 export { default as SvgTextLinesSmall } from "@opal/icons/text-lines-small";
 export { default as SvgThumbsDown } from "@opal/icons/thumbs-down";
 export { default as SvgThumbsUp } from "@opal/icons/thumbs-up";
