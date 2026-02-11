@@ -175,11 +175,7 @@ export function FileCard({
     >
       <div className="max-w-[12rem]">
         <Interactive.Base variant="none" static>
-          <Interactive.Container
-            paddingVariant="none"
-            border
-            heightVariant="fit"
-          >
+          <Interactive.Container border heightVariant="fit">
             <AttachmentItemLayout
               icon={isProcessing ? SimpleLoader : SvgFileText}
               title={file.name}
