@@ -35,16 +35,15 @@ def _stub_filters() -> IndexFilters:
 # ------------------------------------------------------------------
 
 
-def test_ensure_indices_exist_raises(
+def test_ensure_indices_exist_no_raises(
     disabled_index: DisabledDocumentIndex,
 ) -> None:
-    with pytest.raises(RuntimeError, match=ESCAPED_ERROR):
-        disabled_index.ensure_indices_exist(
-            primary_embedding_dim=768,
-            primary_embedding_precision=EmbeddingPrecision.FLOAT,
-            secondary_index_embedding_dim=None,
-            secondary_index_embedding_precision=None,
-        )
+    disabled_index.ensure_indices_exist(
+        primary_embedding_dim=768,
+        primary_embedding_precision=EmbeddingPrecision.FLOAT,
+        secondary_index_embedding_dim=None,
+        secondary_index_embedding_precision=None,
+    )
 
 
 def test_register_multitenant_indices_raises() -> None:
