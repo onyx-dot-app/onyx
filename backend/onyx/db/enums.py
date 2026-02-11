@@ -198,9 +198,9 @@ class ThemePreference(str, PyEnum):
 
 
 class DefaultAppMode(str, PyEnum):
-    AUTO = "auto"
-    CHAT = "chat"
-    SEARCH = "search"
+    AUTO = "AUTO"
+    CHAT = "CHAT"
+    SEARCH = "SEARCH"
 
 
 class SwitchoverType(str, PyEnum):
