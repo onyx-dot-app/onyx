@@ -32,8 +32,14 @@ test.describe("Appearance Theme Settings", () => {
     await page.goto("/admin/theme");
     await page.waitForLoadState("networkidle");
 
-    // Clear form fields
+    // If the form isn't visible (e.g. EE license not active, or test failed
+    // before navigating here), skip cleanup — there's nothing to reset.
     const appNameInput = page.locator('[data-label="application-name-input"]');
+    if (!(await appNameInput.isVisible({ timeout: 3000 }).catch(() => false))) {
+      return;
+    }
+
+    // Clear form fields
     await appNameInput.clear();
 
     const greetingInput = page.locator('[data-label="greeting-message-input"]');
