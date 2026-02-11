@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import EditableTag from "@/refresh-components/buttons/EditableTag";
+import Tag from "@/refresh-components/buttons/Tag";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Divider from "@/refresh-components/Divider";
@@ -454,7 +454,8 @@ function CommandMenuHeader({
           {/* Standalone search icon */}
           <SvgSearch className="w-6 h-6 stroke-text-04" />
           {filters.map((filter) => (
-            <EditableTag
+            <Tag
+              variant="editable"
               key={filter.id}
               label={filter.label}
               icon={filter.icon}
