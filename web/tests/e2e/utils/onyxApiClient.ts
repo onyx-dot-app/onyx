@@ -18,7 +18,10 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `deleteDocumentSet(id)` - Deletes a document set (with polling until complete)
  *
  * **LLM Providers:**
+ * - `listLlmProviders()` - Lists LLM providers (admin endpoint, includes is_public)
+ * - `ensurePublicProvider(name?)` - Idempotently creates a public default LLM provider
  * - `createRestrictedProvider(name, groupId)` - Creates a restricted LLM provider assigned to a group
+ * - `setProviderAsDefault(id)` - Sets an LLM provider as the default for chat
  * - `deleteProvider(id)` - Deletes an LLM provider
  *
  * **User Groups:**
@@ -397,17 +400,40 @@ export class OnyxApiClient {
     return responseData.id;
   }
 
+  /**
+   * Lists LLM providers visible to the admin (includes `is_public`).
+   *
+   * @returns Array of LLM providers with id and is_public fields
+   */
   async listLlmProviders(): Promise<
     Array<{
       id: number;
       is_public?: boolean;
     }>
   > {
-    const response = await this.get("/llm/provider");
+    const response = await this.get("/admin/llm/provider");
     return await this.handleResponse(response, "Failed to list LLM providers");
   }
 
-  async createPublicProvider(providerName: string): Promise<number> {
+  /**
+   * Ensure at least one public LLM provider exists and is set as default.
+   *
+   * Idempotent — returns `null` if a public provider already exists,
+   * or the new provider ID if one was created.
+   *
+   * @param providerName - Name for the provider (default: "PW Default Provider")
+   * @returns The provider ID if one was created, or `null` if already present
+   */
+  async ensurePublicProvider(
+    providerName: string = "PW Default Provider"
+  ): Promise<number | null> {
+    const providers = await this.listLlmProviders();
+    const hasPublic = providers.some((p) => p.is_public);
+
+    if (hasPublic) {
+      return null;
+    }
+
     const response = await this.page.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
@@ -428,10 +454,31 @@ export class OnyxApiClient {
       "Failed to create public provider"
     );
 
+    // Set as default so get_default_llm() works (needed for tokenization, etc.)
+    await this.setProviderAsDefault(responseData.id);
+
     this.log(
       `Created public LLM provider: ${providerName} (ID: ${responseData.id})`
     );
     return responseData.id;
+  }
+
+  /**
+   * Sets an LLM provider as the default for chat.
+   *
+   * @param providerId - The provider ID to set as default
+   */
+  async setProviderAsDefault(providerId: number): Promise<void> {
+    const response = await this.post(
+      `/admin/llm/provider/${providerId}/default`
+    );
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to set provider ${providerId} as default`
+    );
+
+    this.log(`Set LLM provider ${providerId} as default`);
   }
 
   /**

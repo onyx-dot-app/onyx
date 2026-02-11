@@ -19,12 +19,9 @@
  * - Cleans up the provider after all tests in the file complete
  */
 
-import { test as base, expect, Page } from "@playwright/test";
+import { test as base, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import {
-  ensureLlmProviderForPage,
-  deleteLlmProvider,
-} from "@tests/e2e/utils/llmProvider";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 export const test = base.extend<{
   /**
@@ -38,7 +35,8 @@ export const test = base.extend<{
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const createdId = await ensureLlmProviderForPage(page);
+    const client = new OnyxApiClient(page);
+    const createdId = await client.ensurePublicProvider();
     await use(createdId);
 
     // Cleanup: only delete if we created one
@@ -46,7 +44,7 @@ export const test = base.extend<{
       // Re-authenticate in case the test changed the session
       await page.context().clearCookies();
       await loginAs(page, "admin");
-      await deleteLlmProvider(page, createdId);
+      await client.deleteProvider(createdId);
     }
   },
 });

@@ -1,4 +1,5 @@
 import type { Page, APIRequestContext } from "@playwright/test";
+import { OnyxApiClient } from "./onyxApiClient";
 
 /**
  * Shared LLM provider provisioning utilities for E2E tests.
@@ -12,8 +13,8 @@ import type { Page, APIRequestContext } from "@playwright/test";
  *    `request` context (no browser) so it can run in `global-setup.ts` before
  *    any browser is launched.
  *
- * 2. **Per-page** – `ensureLlmProviderForPage` accepts a Playwright `Page` and
- *    works through `page.request`, handy in `beforeAll` blocks or fixtures.
+ * 2. **Per-page** – `ensureLlmProviderForPage` / `deleteLlmProvider` delegate
+ *    to `OnyxApiClient` for use in `beforeAll` blocks or fixtures.
  */
 
 const LLM_PROVIDER_PAYLOAD = {
@@ -26,10 +27,10 @@ const LLM_PROVIDER_PAYLOAD = {
   personas: [],
 };
 
-// ── Helpers for the lightweight `request` context (global-setup) ────────────
+// ── Lightweight `APIRequestContext` variant (for global-setup.ts) ────────────
 
 /**
- * Ensure at least one public LLM provider exists.
+ * Ensure at least one public LLM provider exists and is set as default.
  *
  * Uses the Playwright lightweight `APIRequestContext` — ideal for
  * `global-setup.ts` where no browser is running.
@@ -83,12 +84,13 @@ export async function ensureLlmProviderExists(
   return id;
 }
 
-// ── Helpers that operate on a Playwright Page (fixtures / beforeAll) ────────
+// ── Page-based helpers (delegate to OnyxApiClient) ──────────────────────────
 
 /**
  * Ensure at least one public LLM provider exists, using a Playwright `Page`.
  *
- * Useful inside `test.beforeAll` or custom fixtures.
+ * Delegates to `OnyxApiClient.ensurePublicProvider()`. The page must be
+ * authenticated as an admin.
  *
  * @returns The provider ID if one was created, or `null` if a public
  *          provider already existed.
@@ -96,67 +98,20 @@ export async function ensureLlmProviderExists(
 export async function ensureLlmProviderForPage(
   page: Page
 ): Promise<number | null> {
-  const baseUrl = process.env.BASE_URL || "http://localhost:3000";
-  // Use the admin endpoint which returns LLMProviderView (includes is_public)
-  const listRes = await page.request.get(`${baseUrl}/api/admin/llm/provider`);
-  if (!listRes.ok()) {
-    throw new Error(
-      `[llmProvider] Failed to list LLM providers: ${listRes.status()}`
-    );
-  }
-
-  const providers: Array<{ id: number; is_public?: boolean }> =
-    await listRes.json();
-  const hasPublic = providers.some((p) => p.is_public);
-
-  if (hasPublic) {
-    return null;
-  }
-
-  const createRes = await page.request.put(
-    `${baseUrl}/api/admin/llm/provider?is_creation=true`,
-    { data: LLM_PROVIDER_PAYLOAD }
-  );
-  if (!createRes.ok()) {
-    const body = await createRes.text();
-    throw new Error(
-      `[llmProvider] Failed to create public LLM provider: ${createRes.status()} ${body}`
-    );
-  }
-
-  const { id } = (await createRes.json()) as { id: number };
-
-  // Set the provider as the default so that get_default_llm() works
-  const defaultRes = await page.request.post(
-    `${baseUrl}/api/admin/llm/provider/${id}/default`
-  );
-  if (!defaultRes.ok()) {
-    const body = await defaultRes.text();
-    console.warn(
-      `[llmProvider] Failed to set provider ${id} as default: ${defaultRes.status()} ${body}`
-    );
-  }
-
-  console.log(`[llmProvider] Created public LLM provider (ID: ${id})`);
-  return id;
+  const client = new OnyxApiClient(page);
+  return client.ensurePublicProvider();
 }
 
 /**
- * Delete an LLM provider by ID. Logs a warning on failure rather than
- * throwing, since this is typically used in cleanup paths.
+ * Delete an LLM provider by ID.
+ *
+ * Delegates to `OnyxApiClient.deleteProvider()`. The page must be
+ * authenticated as an admin.
  */
 export async function deleteLlmProvider(
   page: Page,
   providerId: number
 ): Promise<void> {
-  const baseUrl = process.env.BASE_URL || "http://localhost:3000";
-  const res = await page.request.delete(
-    `${baseUrl}/api/admin/llm/provider/${providerId}`
-  );
-  if (!res.ok()) {
-    const body = await res.text();
-    console.warn(
-      `[llmProvider] Failed to delete provider ${providerId}: ${res.status()} ${body}`
-    );
-  }
+  const client = new OnyxApiClient(page);
+  await client.deleteProvider(providerId);
 }
