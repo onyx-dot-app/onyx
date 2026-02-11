@@ -398,6 +398,8 @@ class OnyxCeleryQueues:
     # Sandbox processing queue
     SANDBOX = "sandbox"
 
+    OPENSEARCH_MIGRATION = "opensearch_migration"
+
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -581,6 +583,9 @@ class OnyxCeleryTask:
     )
     MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
         "migrate_documents_from_vespa_to_opensearch_task"
+    )
+    MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
+        "migrate_chunks_from_vespa_to_opensearch_task"
     )
 
 
