@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
@@ -12,7 +13,6 @@ from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
-from onyx.prompts.chat_prompts import USER_INFO_HEADER
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.prompts.prompt_utils import replace_citation_guidance_tag
@@ -25,6 +25,7 @@ from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
+from onyx.prompts.user_info import USER_INFORMATION_HEADER
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -52,7 +53,7 @@ def calculate_reserved_tokens(
     persona_system_prompt: str,
     token_counter: Callable[[str], int],
     files: list[FileDescriptor] | None = None,
-    memories: list[str] | None = None,
+    user_memory_context: UserMemoryContext | None = None,
 ) -> int:
     """
     Calculate reserved token count for system prompt and user files.
@@ -66,7 +67,7 @@ def calculate_reserved_tokens(
         persona_system_prompt: Custom agent system prompt (can be empty string)
         token_counter: Function that counts tokens in text
         files: List of file descriptors from the chat message (optional)
-        memories: List of memory strings (optional)
+        user_memory_context: User memory context (optional)
 
     Returns:
         Total reserved token count
@@ -77,7 +78,7 @@ def calculate_reserved_tokens(
     fake_system_prompt = build_system_prompt(
         base_system_prompt=base_system_prompt,
         datetime_aware=True,
-        memories=memories,
+        user_memory_context=user_memory_context,
         tools=None,
         should_cite_documents=True,
         include_all_guidance=True,
@@ -133,7 +134,7 @@ def build_reminder_message(
 def build_system_prompt(
     base_system_prompt: str,
     datetime_aware: bool = False,
-    memories: list[str] | None = None,
+    user_memory_context: UserMemoryContext | None = None,
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
@@ -157,14 +158,15 @@ def build_system_prompt(
     )
 
     company_context = get_company_context()
-    if company_context or memories:
-        system_prompt += USER_INFO_HEADER
+    formatted_user_context = (
+        user_memory_context.as_formatted_prompt() if user_memory_context else ""
+    )
+    if company_context or formatted_user_context:
+        system_prompt += USER_INFORMATION_HEADER
         if company_context:
             system_prompt += company_context
-        if memories:
-            system_prompt += "\n".join(
-                "- " + memory.strip() for memory in memories if memory.strip()
-            )
+        if formatted_user_context:
+            system_prompt += formatted_user_context
 
     # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed

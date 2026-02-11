@@ -416,7 +416,7 @@ done
             resources=client.V1ResourceRequirements(
                 # Reduced resources since sidecar is mostly idle (sleeping)
                 requests={"cpu": "250m", "memory": "256Mi"},
-                limits={"cpu": "4000m", "memory": "6Gi"},
+                limits={"cpu": "4000m", "memory": "8Gi"},
             ),
         )
 
@@ -451,8 +451,8 @@ done
                 ),
             ],
             resources=client.V1ResourceRequirements(
-                requests={"cpu": "500m", "memory": "1Gi"},
-                limits={"cpu": "2000m", "memory": "6Gi"},
+                requests={"cpu": "1000m", "memory": "2Gi"},
+                limits={"cpu": "4000m", "memory": "8Gi"},
             ),
             # TODO: Re-enable probes when sandbox container runs actual services.
             # Note: Next.js ports are now per-session (dynamic), so container-level

@@ -71,6 +71,7 @@ from onyx.server.manage.llm.utils import infer_vision_support
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
+from onyx.utils.encryption import mask_string as mask_with_ellipsis
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -122,6 +123,48 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
             else:
                 masked_config[key] = value
         provider_view.custom_config = masked_config
+
+
+def _is_sensitive_custom_config_key(key: str) -> bool:
+    key_lower = key.lower()
+    return any(sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS)
+
+
+def _is_masked_value_for_existing(
+    incoming_value: str, existing_value: str, key: str
+) -> bool:
+    """Return True when incoming_value is a masked round-trip of existing_value."""
+    if not _is_sensitive_custom_config_key(key):
+        return False
+
+    masked_candidates = {
+        _mask_string(existing_value),
+        mask_with_ellipsis(existing_value),
+        "****",
+        "••••••••••••",
+        "***REDACTED***",
+    }
+    return incoming_value in masked_candidates
+
+
+def _restore_masked_custom_config_values(
+    existing_custom_config: dict[str, str] | None,
+    new_custom_config: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Restore sensitive custom config values when clients send masked placeholders."""
+    if not existing_custom_config or not new_custom_config:
+        return new_custom_config
+
+    restored_config = dict(new_custom_config)
+
+    for key, incoming_value in restored_config.items():
+        existing_value = existing_custom_config.get(key)
+        if not isinstance(incoming_value, str) or not isinstance(existing_value, str):
+            continue
+        if _is_masked_value_for_existing(incoming_value, existing_value, key):
+            restored_config[key] = existing_value
+
+    return restored_config
 
 
 def _validate_llm_provider_change(
@@ -194,13 +237,18 @@ def test_llm_configuration(
         existing_provider = fetch_existing_llm_provider(
             name=test_llm_request.name, db_session=db_session
         )
+        if existing_provider:
+            test_custom_config = _restore_masked_custom_config_values(
+                existing_custom_config=existing_provider.custom_config,
+                new_custom_config=test_custom_config,
+            )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
             _validate_llm_provider_change(
                 existing_api_base=existing_provider.api_base,
                 existing_custom_config=existing_provider.custom_config,
                 new_api_base=test_llm_request.api_base,
-                new_custom_config=test_llm_request.custom_config,
+                new_custom_config=test_custom_config,
                 api_key_changed=False,
             )
             test_api_key = (
@@ -309,6 +357,12 @@ def put_llm_provider(
 
     # SSRF Protection: Validate api_base and custom_config match stored values
     if existing_provider:
+        llm_provider_upsert_request.custom_config = (
+            _restore_masked_custom_config_values(
+                existing_custom_config=existing_provider.custom_config,
+                new_custom_config=llm_provider_upsert_request.custom_config,
+            )
+        )
         _validate_llm_provider_change(
             existing_api_base=existing_provider.api_base,
             existing_custom_config=existing_provider.custom_config,

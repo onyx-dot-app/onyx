@@ -559,7 +559,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 if override_kwargs.message_history
                 else []
             )
-            memories = override_kwargs.memories
+            memories = (
+                override_kwargs.user_memory_context.as_formatted_list()
+                if override_kwargs.user_memory_context
+                else []
+            )
             user_info = override_kwargs.user_info
 
             # Skip query expansion if this is a repeat search call

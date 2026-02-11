@@ -47,6 +47,7 @@ import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Code from "@/refresh-components/Code";
+import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
@@ -944,11 +945,19 @@ function ChatPreferencesSettings() {
   } = useUser();
   const llmManager = useLlmManager();
 
+  const { popup, setPopup } = usePopup();
+
   const {
     personalizationValues,
     toggleUseMemories,
+    updateUserPreferences,
     handleSavePersonalization,
-  } = useUserPersonalization(user, updateUserPersonalization, {});
+  } = useUserPersonalization(user, updateUserPersonalization, {
+    onSuccess: () =>
+      setPopup({ message: "Preferences saved", type: "success" }),
+    onError: () =>
+      setPopup({ message: "Failed to save preferences", type: "error" }),
+  });
 
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
@@ -961,6 +970,7 @@ function ChatPreferencesSettings() {
 
   return (
     <Section gap={2}>
+      {popup}
       <Section gap={0.75}>
         <InputLayouts.Title title="Chats" />
         <Card>
@@ -991,26 +1001,26 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={0.75}>
-        <InputLayouts.Title title="Prompt Shortcuts" />
-        <Card>
-          <InputLayouts.Horizontal
-            title="Use Prompt Shortcuts"
-            description="Enable shortcuts to quickly insert common prompts."
-          >
-            <Switch
-              checked={user?.preferences?.shortcut_enabled}
-              onCheckedChange={(checked) => {
-                updateUserShortcuts(checked);
-              }}
-            />
-          </InputLayouts.Horizontal>
-
-          {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
-        </Card>
-      </Section>
-
-      <Section gap={0.75}>
-        <InputLayouts.Title title="Personalization" />
+        <InputLayouts.Vertical
+          title="Personal Preferences"
+          description="Describe how you prefer to interact with Onyx. Onyx uses these preferences to tailor responses."
+        >
+          <InputTextArea
+            placeholder="Add your work style, technical level, search habits, response format preferences."
+            value={personalizationValues.user_preferences}
+            onChange={(e) => updateUserPreferences(e.target.value)}
+            onBlur={() => void handleSavePersonalization()}
+            rows={4}
+            maxRows={10}
+            autoResize
+            maxLength={500}
+          />
+          <CharacterCount
+            value={personalizationValues.user_preferences || ""}
+            limit={500}
+          />
+        </InputLayouts.Vertical>
+        <InputLayouts.Title title="Memory" />
         <Card>
           <InputLayouts.Horizontal
             title="Reference Stored Memories"
@@ -1031,6 +1041,25 @@ function ChatPreferencesSettings() {
               onSaveMemories={handleSaveMemories}
             />
           )}
+        </Card>
+      </Section>
+
+      <Section gap={0.75}>
+        <InputLayouts.Title title="Prompt Shortcuts" />
+        <Card>
+          <InputLayouts.Horizontal
+            title="Use Prompt Shortcuts"
+            description="Enable shortcuts to quickly insert common prompts."
+          >
+            <Switch
+              checked={user?.preferences?.shortcut_enabled}
+              onCheckedChange={(checked) => {
+                updateUserShortcuts(checked);
+              }}
+            />
+          </InputLayouts.Horizontal>
+
+          {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
         </Card>
       </Section>
     </Section>
