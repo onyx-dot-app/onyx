@@ -76,6 +76,18 @@ class UserGroup(BaseModel):
         )
 
 
+class MinimalUserGroupSnapshot(BaseModel):
+    id: int
+    name: str
+
+    @classmethod
+    def from_model(cls, user_group_model: UserGroupModel) -> "MinimalUserGroupSnapshot":
+        return cls(
+            id=user_group_model.id,
+            name=user_group_model.name,
+        )
+
+
 class UserGroupCreate(BaseModel):
     name: str
     user_ids: list[UUID]

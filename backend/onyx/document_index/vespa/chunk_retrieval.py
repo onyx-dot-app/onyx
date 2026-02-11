@@ -15,6 +15,7 @@ from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
@@ -271,6 +272,59 @@ def get_chunks_via_visit_api(
             break  # Exit loop if no continuation token
 
     return document_chunks
+
+
+def get_all_chunks_paginated(
+    index_name: str,
+    tenant_state: TenantState,
+    continuation_token: str | None = None,
+    page_size: int = 1_000,
+) -> tuple[list[dict], str | None]:
+    """Gets all chunks in Vespa matching the filters, paginated.
+
+    Args:
+        index_name: The name of the Vespa index to visit.
+        tenant_state: The tenant state to filter by.
+        continuation_token: Token returned by Vespa representing a page offset.
+            None to start from the beginning. Defaults to None.
+        page_size: Best-effort batch size for the visit. Defaults to 1,000.
+
+    Returns:
+        Tuple of (list of chunk dicts, next continuation token or None). The
+            continuation token is None when the visit is complete.
+    """
+    url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
+
+    selection: str = f"{index_name}.large_chunk_reference_ids == null"
+    if MULTI_TENANT:
+        selection += f" and {index_name}.tenant_id=='{tenant_state.tenant_id}'"
+
+    params: dict[str, str | int | None] = {
+        "selection": selection,
+        "wantedDocumentCount": page_size,
+        "format.tensors": "short-value",
+    }
+    if continuation_token is not None:
+        params["continuation"] = continuation_token
+
+    try:
+        with get_vespa_http_client() as http_client:
+            response = http_client.get(url, params=params)
+            response.raise_for_status()
+    except httpx.HTTPError as e:
+        error_base = "Failed to get chunks in Vespa."
+        logger.exception(
+            f"Request URL: {e.request.url}\n"
+            f"Request Headers: {e.request.headers}\n"
+            f"Request Payload: {params}\n"
+        )
+        raise httpx.HTTPError(error_base) from e
+
+    response_data = response.json()
+
+    return [
+        chunk["fields"] for chunk in response_data.get("documents", [])
+    ], response_data.get("continuation") or None
 
 
 # TODO(rkuo): candidate for removal if not being used

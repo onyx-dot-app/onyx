@@ -42,7 +42,7 @@ export default function DocumentSetCard({
             paddingVariant="none"
             border
             data-testid={`document-set-card-${documentSet.id}`}
-            heightVariant="full"
+            heightVariant="fit"
           >
             <AttachmentItemLayout
               icon={SvgFiles}

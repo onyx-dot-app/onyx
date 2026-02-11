@@ -119,8 +119,13 @@ def jira_group_sync(
     if not jira_base_url:
         raise ValueError("No jira_base_url found in connector config")
 
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
     jira_client = build_jira_client(
-        credentials=cc_pair.credential.credential_json,
+        credentials=credential_json,
         jira_base=jira_base_url,
         scoped_token=scoped_token,
     )

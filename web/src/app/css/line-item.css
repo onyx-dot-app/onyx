@@ -118,6 +118,32 @@
   }
 }
 
+/* Skeleton Variant - dashed border placeholder style */
+.line-item-button-skeleton {
+  @apply bg-transparent border border-dashed border-border-01 hover:bg-background-tint-01;
+
+  [data-keyboard-nav="true"] &:hover {
+    @apply bg-transparent;
+  }
+}
+
+.line-item-button-skeleton-emphasized {
+  @apply bg-transparent border border-dashed border-border-01 hover:bg-background-tint-02;
+
+  [data-keyboard-nav="true"] &:hover {
+    @apply bg-transparent;
+  }
+
+  &[data-selected="true"] {
+    @apply bg-background-tint-02;
+  }
+
+  /* Ensure selected wins over keyboard-nav hover override */
+  [data-keyboard-nav="true"] &[data-selected="true"] {
+    @apply bg-background-tint-02;
+  }
+}
+
 /* LineItem Text Variants */
 .line-item-text-main {
   color: var(--text-04) !important;
@@ -158,6 +184,15 @@
   }
 }
 
+.line-item-text-skeleton {
+  font-family: var(--font-hanken-grotesk);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0px;
+  color: var(--text-03) !important;
+}
+
 /* LineItem Icon Variants */
 .line-item-icon-main {
   @apply stroke-text-03;
@@ -185,4 +220,8 @@
   .group\/LineItem[data-selected="true"] & {
     @apply stroke-text-02;
   }
+}
+
+.line-item-icon-skeleton {
+  @apply stroke-text-02;
 }

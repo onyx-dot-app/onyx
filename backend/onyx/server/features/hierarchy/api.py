@@ -1,9 +1,12 @@
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
 from onyx.db.engine.sql_engine import get_session
@@ -22,8 +25,23 @@ from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsResponse
 from onyx.server.features.hierarchy.models import HierarchyNodesResponse
 from onyx.server.features.hierarchy.models import HierarchyNodeSummary
 
+OPENSEARCH_NOT_ENABLED_MESSAGE = (
+    "Per-source knowledge selection is coming soon in v3.0! "
+    "OpenSearch indexing must be enabled to use this feature."
+)
 
 router = APIRouter(prefix=HIERARCHY_NODES_PREFIX)
+
+
+def _require_opensearch() -> None:
+    if (
+        not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+        or not ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=OPENSEARCH_NOT_ENABLED_MESSAGE,
+        )
 
 
 def _get_user_access_info(
@@ -40,6 +58,7 @@ def list_accessible_hierarchy_nodes(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodesResponse:
+    _require_opensearch()
     user_email, external_group_ids = _get_user_access_info(user, db_session)
     nodes = get_accessible_hierarchy_nodes_for_source(
         db_session=db_session,
@@ -66,6 +85,7 @@ def list_accessible_hierarchy_node_documents(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> HierarchyNodeDocumentsResponse:
+    _require_opensearch()
     user_email, external_group_ids = _get_user_access_info(user, db_session)
     cursor = documents_request.cursor
     sort_field = documents_request.sort_field

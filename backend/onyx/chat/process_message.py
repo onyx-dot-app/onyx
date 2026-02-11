@@ -94,10 +94,6 @@ from onyx.tools.tool_constructor import SearchToolConfig
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
-from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -334,12 +330,10 @@ def handle_stream_message_objects(
     else:
         llm_user_identifier = user.email or str(user_id)
 
-    if new_msg_req.mock_llm_response is not None:
-        if not INTEGRATION_TESTS_MODE:
-            raise ValueError(
-                "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
-            )
-        mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
+    if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
+        raise ValueError(
+            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
+        )
 
     try:
         if not new_msg_req.chat_session_id:
@@ -374,21 +368,16 @@ def handle_stream_message_objects(
             event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
         )
 
-        # Track user message in PostHog for analytics
-        fetch_versioned_implementation_with_fallback(
-            module="onyx.utils.telemetry",
-            attribute="event_telemetry",
-            fallback=noop_fallback,
-        )(
+        mt_cloud_telemetry(
+            tenant_id=tenant_id,
             distinct_id=user.email if not user.is_anonymous else tenant_id,
-            event="user_message_sent",
+            event=MilestoneRecordType.USER_MESSAGE_SENT,
             properties={
                 "origin": new_msg_req.origin.value,
                 "has_files": len(new_msg_req.file_descriptors) > 0,
                 "has_project": chat_session.project_id is not None,
                 "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
                 "deep_research": new_msg_req.deep_research,
-                "tenant_id": tenant_id,
             },
         )
 
@@ -480,7 +469,7 @@ def handle_stream_message_objects(
             # Filter chat_history to only messages after the cutoff
             chat_history = [m for m in chat_history if m.id > cutoff_id]
 
-        memories = get_memories(user, db_session)
+        user_memory_context = get_memories(user, db_session)
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
@@ -489,7 +478,7 @@ def handle_stream_message_objects(
             persona_system_prompt=custom_agent_prompt or "",
             token_counter=token_counter,
             files=new_msg_req.file_descriptors,
-            memories=memories,
+            user_memory_context=user_memory_context,
         )
 
         # Process projects, if all of the files fit in the context, it doesn't need to use RAG
@@ -635,6 +624,11 @@ def handle_stream_message_objects(
                 processing_start_time=processing_start_time,
             )
 
+        # The stream generator can resume on a different worker thread after early yields.
+        # Set this right before launching the LLM loop so run_in_background copies the right context.
+        if new_msg_req.mock_llm_response is not None:
+            mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
+
         # Run the LLM loop with explicit wrapper for stop signal handling
         # The wrapper runs run_llm_loop in a background thread and polls every 300ms
         # for stop signals. run_llm_loop itself doesn't know about stopping.
@@ -676,7 +670,7 @@ def handle_stream_message_objects(
                 custom_agent_prompt=custom_agent_prompt,
                 project_files=extracted_project_files,
                 persona=persona,
-                memories=memories,
+                user_memory_context=user_memory_context,
                 llm=llm,
                 token_counter=token_counter,
                 db_session=db_session,

@@ -75,6 +75,7 @@ from onyx.server.manage.llm.utils import infer_vision_support
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
+from onyx.utils.encryption import mask_string as mask_with_ellipsis
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -126,6 +127,48 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
             else:
                 masked_config[key] = value
         provider_view.custom_config = masked_config
+
+
+def _is_sensitive_custom_config_key(key: str) -> bool:
+    key_lower = key.lower()
+    return any(sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS)
+
+
+def _is_masked_value_for_existing(
+    incoming_value: str, existing_value: str, key: str
+) -> bool:
+    """Return True when incoming_value is a masked round-trip of existing_value."""
+    if not _is_sensitive_custom_config_key(key):
+        return False
+
+    masked_candidates = {
+        _mask_string(existing_value),
+        mask_with_ellipsis(existing_value),
+        "****",
+        "••••••••••••",
+        "***REDACTED***",
+    }
+    return incoming_value in masked_candidates
+
+
+def _restore_masked_custom_config_values(
+    existing_custom_config: dict[str, str] | None,
+    new_custom_config: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Restore sensitive custom config values when clients send masked placeholders."""
+    if not existing_custom_config or not new_custom_config:
+        return new_custom_config
+
+    restored_config = dict(new_custom_config)
+
+    for key, incoming_value in restored_config.items():
+        existing_value = existing_custom_config.get(key)
+        if not isinstance(incoming_value, str) or not isinstance(existing_value, str):
+            continue
+        if _is_masked_value_for_existing(incoming_value, existing_value, key):
+            restored_config[key] = existing_value
+
+    return restored_config
 
 
 def _validate_llm_provider_change(
@@ -198,16 +241,25 @@ def test_llm_configuration(
         existing_provider = fetch_existing_llm_provider_by_id(
             id=test_llm_request.id, db_session=db_session
         )
+        if existing_provider:
+            test_custom_config = _restore_masked_custom_config_values(
+                existing_custom_config=existing_provider.custom_config,
+                new_custom_config=test_custom_config,
+            )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
             _validate_llm_provider_change(
                 existing_api_base=existing_provider.api_base,
                 existing_custom_config=existing_provider.custom_config,
                 new_api_base=test_llm_request.api_base,
-                new_custom_config=test_llm_request.custom_config,
+                new_custom_config=test_custom_config,
                 api_key_changed=False,
             )
-            test_api_key = existing_provider.api_key
+            test_api_key = (
+                existing_provider.api_key.get_value(apply_mask=False)
+                if existing_provider.api_key
+                else None
+            )
         if existing_provider and not test_llm_request.custom_config_changed:
             test_custom_config = existing_provider.custom_config
 
@@ -333,6 +385,12 @@ def put_llm_provider(
 
     # SSRF Protection: Validate api_base and custom_config match stored values
     if existing_provider:
+        llm_provider_upsert_request.custom_config = (
+            _restore_masked_custom_config_values(
+                existing_custom_config=existing_provider.custom_config,
+                new_custom_config=llm_provider_upsert_request.custom_config,
+            )
+        )
         _validate_llm_provider_change(
             existing_api_base=existing_provider.api_base,
             existing_custom_config=existing_provider.custom_config,
@@ -363,7 +421,11 @@ def put_llm_provider(
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
-        llm_provider_upsert_request.api_key = existing_provider.api_key
+        llm_provider_upsert_request.api_key = (
+            existing_provider.api_key.get_value(apply_mask=False)
+            if existing_provider.api_key
+            else None
+        )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
@@ -744,7 +806,11 @@ def get_provider_contextual_cost(
                 provider=provider.provider,
                 model=model_configuration.name,
                 deployment_name=provider.deployment_name,
-                api_key=provider.api_key,
+                api_key=(
+                    provider.api_key.get_value(apply_mask=False)
+                    if provider.api_key
+                    else None
+                ),
                 api_base=provider.api_base,
                 api_version=provider.api_version,
                 custom_config=provider.custom_config,
@@ -1024,6 +1090,11 @@ def get_ollama_available_models(
             )
         )
 
+    sorted_results = sorted(
+        all_models_with_context_size_and_vision,
+        key=lambda m: m.name.lower(),
+    )
+
     # Sync new models to DB if provider_name is specified
     if request.provider_name:
         try:
@@ -1034,7 +1105,7 @@ def get_ollama_available_models(
                     "max_input_tokens": r.max_input_tokens,
                     "supports_image_input": r.supports_image_input,
                 }
-                for r in all_models_with_context_size_and_vision
+                for r in sorted_results
             ]
             new_count = sync_model_configurations(
                 db_session=db_session,
@@ -1048,7 +1119,7 @@ def get_ollama_available_models(
         except ValueError as e:
             logger.warning(f"Failed to sync Ollama models to DB: {e}")
 
-    return all_models_with_context_size_and_vision
+    return sorted_results
 
 
 def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:

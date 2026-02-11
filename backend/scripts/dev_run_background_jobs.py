@@ -45,7 +45,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
     ]
 
     cmd_worker_docprocessing = [
@@ -96,7 +96,7 @@ def run_jobs() -> None:
             "--loglevel=INFO",
             "--hostname=background@%n",
             "-Q",
-            "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,monitoring,user_file_processing,user_file_project_sync,user_file_delete",
+            "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,monitoring,user_file_processing,user_file_project_sync,user_file_delete,opensearch_migration",
         ]
         background_workers = [("BACKGROUND", cmd_worker_background)]
     else:

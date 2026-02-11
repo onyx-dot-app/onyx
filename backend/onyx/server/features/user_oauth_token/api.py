@@ -32,11 +32,16 @@ def get_user_oauth_token_status(
     and whether their tokens are expired.
     """
     user_tokens = get_all_user_oauth_tokens(user.id, db_session)
-    return [
-        OAuthTokenStatus(
-            oauth_config_id=token.oauth_config_id,
-            expires_at=OAuthTokenManager.token_expiration_time(token.token_data),
-            is_expired=OAuthTokenManager.is_token_expired(token.token_data),
+    result = []
+    for token in user_tokens:
+        token_data = (
+            token.token_data.get_value(apply_mask=False) if token.token_data else {}
         )
-        for token in user_tokens
-    ]
+        result.append(
+            OAuthTokenStatus(
+                oauth_config_id=token.oauth_config_id,
+                expires_at=OAuthTokenManager.token_expiration_time(token_data),
+                is_expired=OAuthTokenManager.is_token_expired(token_data),
+            )
+        )
+    return result

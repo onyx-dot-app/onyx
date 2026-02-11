@@ -1,4 +1,10 @@
 import os
+
+# Set environment variables BEFORE any other imports to ensure they're picked up
+# by module-level code that reads env vars at import time
+# TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+os.environ["LICENSE_ENFORCEMENT_ENABLED"] = "false"
+
 from collections.abc import AsyncGenerator
 from collections.abc import Generator
 from contextlib import asynccontextmanager
@@ -40,13 +46,11 @@ def mock_current_admin_user() -> MagicMock:
 
 @pytest.fixture(scope="function")
 def client() -> Generator[TestClient, None, None]:
-    # Set environment variables
-    os.environ["ENABLE_PAID_ENTERPRISE_EDITION_FEATURES"] = "True"
-
     # Initialize TestClient with the FastAPI app using a no-op test lifespan
-    app: FastAPI = fetch_versioned_implementation(
+    get_app = fetch_versioned_implementation(
         module="onyx.main", attribute="get_application"
-    )(lifespan_override=test_lifespan)
+    )
+    app: FastAPI = get_app(lifespan_override=test_lifespan)
 
     # Override the database session dependency with a mock
     # (these tests don't actually need DB access)

@@ -44,7 +44,7 @@ from onyx.llm.well_known_providers.constants import (
     VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
-from onyx.server.utils import mask_string
+from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
