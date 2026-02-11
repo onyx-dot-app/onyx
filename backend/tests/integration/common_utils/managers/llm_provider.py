@@ -84,7 +84,7 @@ class LLMProviderManager:
 
         if set_as_default:
             if default_model_name is None:
-                raise ValueError("Default model name is required")
+                default_model_name = "gpt-4o-mini"
 
             set_default_response = requests.post(
                 f"{API_SERVER_URL}/admin/llm/default",
