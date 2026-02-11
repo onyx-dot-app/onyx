@@ -62,10 +62,11 @@ logger = setup_logger()
 
 
 def _should_keep_bedrock_tool_definitions(
-    llm: LLM, simple_chat_history: list[ChatMessageSimple]
+    llm: object, simple_chat_history: list[ChatMessageSimple]
 ) -> bool:
     """Bedrock requires tool config when history includes toolUse/toolResult blocks."""
-    if llm.config.model_provider not in {
+    model_provider = getattr(getattr(llm, "config", None), "model_provider", None)
+    if model_provider not in {
         LlmProviderNames.BEDROCK,
         LlmProviderNames.BEDROCK_CONVERSE,
     }:
