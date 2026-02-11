@@ -175,6 +175,7 @@ def update_user_personalization(
     personal_name: str | None,
     personal_role: str | None,
     use_memories: bool,
+    enable_memory_tool: bool,
     memories: list[MemoryItem],
     user_preferences: str | None,
     db_session: Session,
@@ -186,6 +187,7 @@ def update_user_personalization(
             personal_name=personal_name,
             personal_role=personal_role,
             use_memories=use_memories,
+            enable_memory_tool=enable_memory_tool,
             user_preferences=user_preferences,
         )
     )
