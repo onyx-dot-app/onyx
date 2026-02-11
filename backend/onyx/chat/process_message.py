@@ -575,11 +575,39 @@ def handle_stream_message_objects(
 
             chat_history.append(user_message)
 
+        # Collect file IDs for the file reader tool *before* summary
+        # truncation so that files attached to older (summarized-away)
+        # messages are still accessible via the FileReaderTool.
+        available_files = _collect_available_file_ids(
+            chat_history=chat_history,
+            project_id=chat_session.project_id,
+            user_id=user_id,
+            db_session=db_session,
+        )
+
         # Find applicable summary for the current branch
         # Summary applies if its parent_message_id is in current chat_history
         summary_message = find_summary_for_branch(db_session, chat_history)
+        # Collect file metadata from messages that will be dropped by
+        # summary truncation.  These become "pre-summarized" file metadata
+        # so the forgotten-file mechanism can still tell the LLM about them.
+        summarized_file_metadata: dict[str, FileToolMetadata] = {}
         if summary_message and summary_message.last_summarized_message_id:
             cutoff_id = summary_message.last_summarized_message_id
+            for msg in chat_history:
+                if msg.id > cutoff_id or not msg.files:
+                    continue
+                for fd in msg.files:
+                    file_id = fd.get("id")
+                    if not file_id:
+                        continue
+                    summarized_file_metadata[file_id] = FileToolMetadata(
+                        file_id=file_id,
+                        filename=fd.get("name") or "unknown",
+                        # We don't know the exact size without loading the
+                        # file, but 0 signals "unknown" to the LLM.
+                        approx_char_count=0,
+                    )
             # Filter chat_history to only messages after the cutoff
             chat_history = [m for m in chat_history if m.id > cutoff_id]
 
@@ -640,13 +668,6 @@ def handle_stream_message_objects(
 
         emitter = get_default_emitter()
 
-        # Collect file IDs for the file reader tool to restrict access
-        available_files = _collect_available_file_ids(
-            chat_history=chat_history,
-            project_id=chat_session.project_id,
-            user_id=user_id,
-            db_session=db_session,
-        )
         # Also grant access to persona-attached user files
         if persona.user_files:
             existing = set(available_files.user_file_ids)
@@ -732,11 +753,26 @@ def handle_stream_message_objects(
         # context-window truncation drops older messages, the LLM loop
         # compares surviving file_id tags against this map to discover
         # "forgotten" files and provide their metadata to FileReaderTool.
-        all_injected_file_metadata = (
+        all_injected_file_metadata: dict[str, FileToolMetadata] = (
             chat_history_result.all_injected_file_metadata
             if has_file_reader_tool
             else {}
         )
+
+        # Merge in file metadata from messages dropped by summary
+        # truncation.  These files are no longer in simple_chat_history
+        # so they would otherwise be invisible to the forgotten-file
+        # mechanism.  They will always appear as "forgotten" since no
+        # surviving message carries their file_id tag.
+        if summarized_file_metadata:
+            for fid, meta in summarized_file_metadata.items():
+                all_injected_file_metadata.setdefault(fid, meta)
+
+        if all_injected_file_metadata:
+            logger.debug(
+                "FileReader: file metadata for LLM: "
+                f"{[(fid, m.filename) for fid, m in all_injected_file_metadata.items()]}"
+            )
 
         # Prepend summary message if compression exists
         if summary_message is not None:

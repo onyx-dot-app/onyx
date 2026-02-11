@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from typing import cast
 from uuid import UUID
@@ -12,7 +13,8 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_chat_file_by_id
 from onyx.file_store.utils import load_user_file
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
+from onyx.server.query_and_chat.streaming_models import FileReaderResult
+from onyx.server.query_and_chat.streaming_models import FileReaderStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallException
@@ -25,8 +27,9 @@ FILE_ID_FIELD = "file_id"
 START_CHAR_FIELD = "start_char"
 NUM_CHARS_FIELD = "num_chars"
 
-MAX_NUM_CHARS = 4000
+MAX_NUM_CHARS = 16000
 DEFAULT_NUM_CHARS = MAX_NUM_CHARS
+PREVIEW_CHARS = 500
 
 
 class FileReaderToolOverrideKwargs:
@@ -38,7 +41,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
     DISPLAY_NAME = "File Reader"
     DESCRIPTION = (
         "Read a section of a user-uploaded file by character offset. "
-        "Returns up to 4000 characters starting from the given offset."
+        "Returns up to 16000 characters starting from the given offset."
     )
 
     def __init__(
@@ -96,8 +99,8 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
                         NUM_CHARS_FIELD: {
                             "type": "integer",
                             "description": (
-                                "Number of characters to return (max 4000). "
-                                "Defaults to 4000."
+                                "Number of characters to return (max 16000). "
+                                "Defaults to 16000."
                             ),
                         },
                     },
@@ -110,7 +113,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         self.emitter.emit(
             Packet(
                 placement=placement,
-                obj=CustomToolStart(tool_name=self.DISPLAY_NAME),
+                obj=FileReaderStart(),
             )
         )
 
@@ -142,7 +145,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
 
     def run(
         self,
-        placement: Placement,  # noqa: ARG002
+        placement: Placement,
         override_kwargs: FileReaderToolOverrideKwargs,  # noqa: ARG002
         **llm_kwargs: Any,
     ) -> ToolResponse:
@@ -151,7 +154,7 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
                 message=f"Missing required '{FILE_ID_FIELD}' parameter",
                 llm_facing_message=(
                     f"The read_file tool requires a '{FILE_ID_FIELD}' parameter. "
-                    f'Example: {{"file_id": "abc-123", "start_char": 0, "num_chars": 4000}}'
+                    f'Example: {{"file_id": "abc-123", "start_char": 0, "num_chars": 16000}}'
                 ),
             )
 
@@ -189,9 +192,30 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         end_char = min(start_char + num_chars, total_chars)
         section = full_text[start_char:end_char]
 
+        file_name = chat_file.filename or str(file_id)
+
+        preview_start = section[:PREVIEW_CHARS]
+        preview_end = section[-PREVIEW_CHARS:] if len(section) > PREVIEW_CHARS else ""
+
+        # Emit result packet so the frontend can display what was read
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=FileReaderResult(
+                    file_name=file_name,
+                    file_id=str(file_id),
+                    start_char=start_char,
+                    end_char=end_char,
+                    total_chars=total_chars,
+                    preview_start=preview_start,
+                    preview_end=preview_end,
+                ),
+            )
+        )
+
         has_more = end_char < total_chars
         header = (
-            f"File: {chat_file.filename or file_id}\n"
+            f"File: {file_name}\n"
             f"Characters {start_char}-{end_char} of {total_chars}"
         )
         if has_more:
@@ -199,7 +223,22 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
 
         llm_response = f"{header}\n\n{section}"
 
+        # Build a lightweight summary for DB storage (avoids saving full text).
+        # The LLM-facing response carries the real content; the rich_response
+        # is what gets persisted and re-hydrated on page reload.
+        saved_summary = json.dumps(
+            {
+                "file_name": file_name,
+                "file_id": str(file_id),
+                "start_char": start_char,
+                "end_char": end_char,
+                "total_chars": total_chars,
+                "preview_start": preview_start,
+                "preview_end": preview_end,
+            }
+        )
+
         return ToolResponse(
-            rich_response=None,
+            rich_response=saved_summary,
             llm_facing_response=llm_response,
         )

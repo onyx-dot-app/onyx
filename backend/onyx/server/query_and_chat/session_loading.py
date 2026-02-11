@@ -20,6 +20,8 @@ from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
+from onyx.server.query_and_chat.streaming_models import FileReaderResult
+from onyx.server.query_and_chat.streaming_models import FileReaderStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
@@ -38,6 +40,7 @@ from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.server.query_and_chat.streaming_models import TopLevelBranching
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -198,6 +201,45 @@ def create_custom_tool_packets(
         )
     )
 
+    return packets
+
+
+def create_file_reader_packets(
+    summary_json: str,
+    turn_index: int,
+    tab_index: int = 0,
+) -> list[Packet]:
+    """Recreate FileReaderStart + FileReaderResult + SectionEnd from the stored
+    JSON summary so that the FileReaderToolRenderer can display the result on
+    page reload."""
+    import json
+
+    packets: list[Packet] = []
+    placement = Placement(turn_index=turn_index, tab_index=tab_index)
+
+    packets.append(Packet(placement=placement, obj=FileReaderStart()))
+
+    try:
+        data = json.loads(summary_json)
+        packets.append(
+            Packet(
+                placement=placement,
+                obj=FileReaderResult(
+                    file_name=data["file_name"],
+                    file_id=data["file_id"],
+                    start_char=data["start_char"],
+                    end_char=data["end_char"],
+                    total_chars=data["total_chars"],
+                    preview_start=data.get("preview_start", ""),
+                    preview_end=data.get("preview_end", ""),
+                ),
+            )
+        )
+    except (json.JSONDecodeError, KeyError):
+        # Gracefully degrade for old data that wasn't saved as JSON summary
+        pass
+
+    packets.append(Packet(placement=placement, obj=SectionEnd()))
     return packets
 
 
@@ -457,6 +499,15 @@ def translate_assistant_message_to_packets(
                                     images, turn_num, tab_index=tool_call.tab_index
                                 )
                             )
+
+                    elif tool.in_code_tool_id == FileReaderTool.__name__:
+                        turn_tool_packets.extend(
+                            create_file_reader_packets(
+                                summary_json=tool_call.tool_call_response or "",
+                                turn_index=turn_num,
+                                tab_index=tool_call.tab_index,
+                            )
+                        )
 
                     elif tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
                         # Not ideal but not a huge issue if the research task is lost.

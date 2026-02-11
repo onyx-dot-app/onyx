@@ -332,6 +332,17 @@ def construct_message_history(
         if msg.file_id is not None:
             dropped_file_ids.append(msg.file_id)
 
+    # Also treat "orphaned" metadata entries as dropped -- these are files
+    # from messages removed by summary truncation (before convert_chat_history
+    # ran), so no ChatMessageSimple was ever tagged with their file_id.
+    if all_injected_file_metadata:
+        surviving_file_ids = {
+            msg.file_id for msg in simple_chat_history if msg.file_id is not None
+        }
+        for fid in all_injected_file_metadata:
+            if fid not in surviving_file_ids and fid not in dropped_file_ids:
+                dropped_file_ids.append(fid)
+
     # Build a forgotten-files metadata message if any file messages were
     # dropped AND we have metadata for them (meaning the FileReaderTool is
     # available). Reserve tokens for this message in the budget.
@@ -343,6 +354,10 @@ def construct_message_history(
             if fid in all_injected_file_metadata
         ]
         if forgotten_meta:
+            logger.debug(
+                f"FileReader: building forgotten-files message for "
+                f"{[(m.file_id, m.filename) for m in forgotten_meta]}"
+            )
             forgotten_files_message = _create_file_tool_metadata_message(
                 forgotten_meta, token_counter
             )
