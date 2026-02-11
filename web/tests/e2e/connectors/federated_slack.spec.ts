@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser } from "../utils/auth";
 
