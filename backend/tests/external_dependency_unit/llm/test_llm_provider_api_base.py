@@ -24,6 +24,7 @@ from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import UserRole
 from onyx.llm.constants import LlmProviderNames
+from onyx.server.manage.llm.api import _mask_string
 from onyx.server.manage.llm.api import put_llm_provider
 from onyx.server.manage.llm.api import test_llm_configuration as run_llm_config_test
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -592,6 +593,152 @@ def test_upload_with_custom_config_then_change(
                 f"Expected custom_config {custom_config}, "
                 f"but got {provider.custom_config}"
             )
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, name)
+
+
+def test_preserves_masked_sensitive_custom_config_on_provider_update(
+    db_session: Session,
+) -> None:
+    """Masked sensitive values from the UI should not overwrite stored secrets."""
+    name = f"test-provider-vertex-update-{uuid4().hex[:8]}"
+    provider = LlmProviderNames.VERTEX_AI.value
+    default_model_name = "gemini-2.5-pro"
+    original_custom_config = {
+        "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
+        "vertex_location": "global",
+    }
+
+    try:
+        put_llm_provider(
+            llm_provider_upsert_request=LLMProviderUpsertRequest(
+                name=name,
+                provider=provider,
+                default_model_name=default_model_name,
+                custom_config=original_custom_config,
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name=default_model_name, is_visible=True
+                    )
+                ],
+                api_key_changed=False,
+                custom_config_changed=True,
+                is_auto_mode=False,
+            ),
+            is_creation=True,
+            _=_create_mock_admin(),
+            db_session=db_session,
+        )
+
+        with patch("onyx.server.manage.llm.api.MULTI_TENANT", False):
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=name,
+                    provider=provider,
+                    default_model_name=default_model_name,
+                    custom_config={
+                        "vertex_credentials": _mask_string(
+                            original_custom_config["vertex_credentials"]
+                        ),
+                        "vertex_location": "us-central1",
+                    },
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=default_model_name, is_visible=True
+                        )
+                    ],
+                    api_key_changed=False,
+                    custom_config_changed=True,
+                    is_auto_mode=False,
+                ),
+                is_creation=False,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+        updated_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
+        assert updated_provider is not None
+        assert updated_provider.custom_config is not None
+        assert (
+            updated_provider.custom_config["vertex_credentials"]
+            == original_custom_config["vertex_credentials"]
+        )
+        assert updated_provider.custom_config["vertex_location"] == "us-central1"
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, name)
+
+
+def test_preserves_masked_sensitive_custom_config_on_test_request(
+    db_session: Session,
+) -> None:
+    """LLM test should restore masked sensitive custom config values before invocation."""
+    name = f"test-provider-vertex-test-{uuid4().hex[:8]}"
+    provider = LlmProviderNames.VERTEX_AI.value
+    default_model_name = "gemini-2.5-pro"
+    original_custom_config = {
+        "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
+        "vertex_location": "global",
+    }
+    captured_llms: list[LLM] = []
+
+    def capture_test_llm(llm: LLM) -> str:
+        captured_llms.append(llm)
+        return ""
+
+    try:
+        put_llm_provider(
+            llm_provider_upsert_request=LLMProviderUpsertRequest(
+                name=name,
+                provider=provider,
+                default_model_name=default_model_name,
+                custom_config=original_custom_config,
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name=default_model_name, is_visible=True
+                    )
+                ],
+                api_key_changed=False,
+                custom_config_changed=True,
+                is_auto_mode=False,
+            ),
+            is_creation=True,
+            _=_create_mock_admin(),
+            db_session=db_session,
+        )
+
+        with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
+            run_llm_config_test(
+                LLMTestRequest(
+                    name=name,
+                    provider=provider,
+                    default_model_name=default_model_name,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=default_model_name, is_visible=True
+                        )
+                    ],
+                    api_key_changed=False,
+                    custom_config_changed=True,
+                    custom_config={
+                        "vertex_credentials": _mask_string(
+                            original_custom_config["vertex_credentials"]
+                        ),
+                        "vertex_location": "us-central1",
+                    },
+                ),
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+        assert len(captured_llms) == 1
+        assert captured_llms[0].config.custom_config is not None
+        assert (
+            captured_llms[0].config.custom_config["vertex_credentials"]
+            == original_custom_config["vertex_credentials"]
+        )
+        assert captured_llms[0].config.custom_config["vertex_location"] == "us-central1"
     finally:
         db_session.rollback()
         _cleanup_provider(db_session, name)
