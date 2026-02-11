@@ -1,5 +1,5 @@
 import { GREETING_MESSAGES } from "@/lib/chat/greetingMessages";
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
 import {
   sendMessage,
