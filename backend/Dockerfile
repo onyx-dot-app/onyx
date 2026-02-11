@@ -134,6 +134,7 @@ COPY --chown=onyx:onyx ./alembic_tenants /app/alembic_tenants
 COPY --chown=onyx:onyx ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 COPY --chown=onyx:onyx ./static /app/static
+COPY --chown=onyx:onyx ./keys /app/keys
 
 # Escape hatch scripts
 COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging
