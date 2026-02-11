@@ -146,10 +146,15 @@ func execDockerCompose(args []string, extraEnv []string) {
 // compose project by running "docker compose -p onyx ps --services".
 // On any error it returns nil (completions will just be empty).
 func runningServiceNames() []string {
+	gitRoot, err := paths.GitRoot()
+	if err != nil {
+		return nil
+	}
+
 	args := []string{"compose", "-p", composeProjectName, "ps", "--services"}
 
 	cmd := exec.Command("docker", args...)
-	cmd.Dir = composeDir()
+	cmd.Dir = filepath.Join(gitRoot, "deployment", "docker_compose")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
