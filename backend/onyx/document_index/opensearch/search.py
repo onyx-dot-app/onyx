@@ -113,9 +113,6 @@ DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000
 # cutoff filtering during retrieval.
 ASSUMED_DOCUMENT_AGE_DAYS = 90
 
-# The default number of neighbors to consider for vector similarity search.
-DEFAULT_NUM_CANDIDATES = 1000
-
 
 class DocumentQuery:
     """
@@ -249,7 +246,6 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
-        num_candidates: int = DEFAULT_NUM_CANDIDATES,
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
@@ -278,8 +274,13 @@ class DocumentQuery:
                 f"result window ({DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW})."
             )
 
+        # For now, we use the number of hits to return as the number of nearest
+        # neighbors to consider for vector similarity. The more nearest
+        # neighbors we ask for, the slower the query will be. This is a tuning
+        # question so there is no correct answer but I have vaguely seen online
+        # that k roughly equal to num hits is appropriate.
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector, num_candidates
+            query_text, query_vector, num_candidates=num_hits
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
