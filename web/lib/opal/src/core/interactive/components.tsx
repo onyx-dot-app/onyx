@@ -34,36 +34,27 @@ type InteractiveBaseVariantProps =
 /**
  * Height presets for `Interactive.Container`.
  *
- * - `"default"` — Default height of 2.25rem (36px), suitable for most buttons/items
- * - `"compact"` — Reduced height of 1.75rem (28px), for denser UIs or inline elements
+ * - `"lg"` — 2.25rem (36px), suitable for most buttons/items
+ * - `"md"` — 1.75rem (28px), standard compact size
+ * - `"sm"` — 1.5rem (24px), for denser UIs
+ * - `"xs"` — 1.25rem (20px), for inline elements
  * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
   keyof typeof interactiveContainerHeightVariants;
 const interactiveContainerHeightVariants = {
-  default: "h-[2.25rem]",
-  compact: "h-[1.75rem]",
+  lg: "h-[2.25rem]",
+  md: "h-[1.75rem]",
+  sm: "h-[1.5rem]",
+  xs: "h-[1.25rem]",
   fit: "h-fit",
 } as const;
 const interactiveContainerMinWidthVariants = {
-  default: "min-w-[2.25rem]",
-  compact: "min-w-[1.75rem]",
+  lg: "min-w-[2.25rem]",
+  md: "min-w-[1.75rem]",
+  sm: "min-w-[1.5rem]",
+  xs: "min-w-[1.25rem]",
   fit: "",
-} as const;
-
-/**
- * Padding presets for `Interactive.Container`.
- *
- * - `"default"` — Default padding of 0.5rem (8px) on all sides
- * - `"thin"` — Reduced padding of 0.25rem (4px), for tighter layouts
- * - `"none"` — No padding, when the child handles its own spacing
- */
-type InteractiveContainerPaddingVariant =
-  keyof typeof interactiveContainerPaddingVariants;
-const interactiveContainerPaddingVariants = {
-  default: "p-2",
-  thin: "p-1",
-  none: "p-0",
 } as const;
 
 /**
@@ -366,24 +357,15 @@ interface InteractiveContainerProps
   roundingVariant?: InteractiveContainerRoundingVariant;
 
   /**
-   * Padding preset controlling inner spacing.
-   *
-   * - `"default"` — 0.5rem (8px) padding on all sides
-   * - `"thin"` — 0.25rem (4px) padding for tighter layouts
-   * - `"none"` — No padding; child content controls its own spacing
-   *
-   * @default "default"
-   */
-  paddingVariant?: InteractiveContainerPaddingVariant;
-
-  /**
    * Height preset controlling the container's vertical size.
    *
-   * - `"default"` — Fixed 2.25rem (36px), typical button/item height
-   * - `"compact"` — Fixed 1.75rem (28px), for denser UIs
-   * - `"full"` — Fills parent height (`h-full`)
+   * - `"lg"` — 2.25rem (36px), typical button/item height
+   * - `"md"` — 1.75rem (28px), standard compact size
+   * - `"sm"` — 1.5rem (24px), for denser UIs
+   * - `"xs"` — 1.25rem (20px), for inline elements
+   * - `"fit"` — Shrink-wraps to content height (`h-fit`)
    *
-   * @default "default"
+   * @default "lg"
    */
   heightVariant?: InteractiveContainerHeightVariant;
 }
@@ -408,13 +390,9 @@ interface InteractiveContainerProps
  *   </Interactive.Container>
  * </Interactive.Base>
  *
- * // Compact, borderless container with no padding
+ * // Compact, borderless container
  * <Interactive.Base variant="default" subvariant="ghost">
- *   <Interactive.Container
- *     heightVariant="compact"
- *     roundingVariant="compact"
- *     paddingVariant="none"
- *   >
+ *   <Interactive.Container heightVariant="md" roundingVariant="compact">
  *     <span>Inline item</span>
  *   </Interactive.Container>
  * </Interactive.Base>
@@ -427,8 +405,7 @@ function InteractiveContainer({
   type,
   border,
   roundingVariant = "default",
-  paddingVariant = "default",
-  heightVariant = "default",
+  heightVariant = "lg",
   ...props
 }: InteractiveContainerProps) {
   // Radix Slot injects className and style at runtime (bypassing WithoutStyles),
@@ -446,7 +423,6 @@ function InteractiveContainer({
     className: cn(
       "interactive-container",
       interactiveContainerRoundingVariants[roundingVariant],
-      interactiveContainerPaddingVariants[paddingVariant],
       interactiveContainerHeightVariants[heightVariant],
       interactiveContainerMinWidthVariants[heightVariant],
       slotClassName
@@ -512,6 +488,5 @@ export {
   type InteractiveBaseSelectVariantProps,
   type InteractiveContainerProps,
   type InteractiveContainerHeightVariant,
-  type InteractiveContainerPaddingVariant,
   type InteractiveContainerRoundingVariant,
 };

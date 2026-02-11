@@ -42,7 +42,7 @@ test.describe("Chat Search Command Menu", () => {
       storageState: "admin_auth.json",
     });
     const page = await context.newPage();
-    const client = new OnyxApiClient(page);
+    const client = new OnyxApiClient(page.request);
 
     // Navigate to app to establish session
     await page.goto("/app");
@@ -69,7 +69,7 @@ test.describe("Chat Search Command Menu", () => {
       storageState: "admin_auth.json",
     });
     const page = await context.newPage();
-    const client = new OnyxApiClient(page);
+    const client = new OnyxApiClient(page.request);
 
     // Navigate to app to establish session
     await page.goto("/app");

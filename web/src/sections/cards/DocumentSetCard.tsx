@@ -39,7 +39,6 @@ export default function DocumentSetCard({
           static={disabled || isSelected === undefined}
         >
           <Interactive.Container
-            paddingVariant="none"
             border
             data-testid={`document-set-card-${documentSet.id}`}
             heightVariant="fit"
