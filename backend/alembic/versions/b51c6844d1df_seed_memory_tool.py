@@ -1,7 +1,7 @@
-"""seed_memory_tool
+"""seed_memory_tool and add enable_memory_tool to user
 
 Revision ID: b51c6844d1df
-Revises: 175ea04c7087
+Revises: feead2911109
 Create Date: 2026-02-11 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "b51c6844d1df"
-down_revision = "175ea04c7087"
+down_revision = "feead2911109"
 branch_labels = None
 depends_on = None
 
@@ -22,6 +22,7 @@ MEMORY_TOOL = {
     "display_name": "Add Memory",
     "description": "Save memories about the user for future conversations.",
     "in_code_tool_id": "MemoryTool",
+    "enabled": True,
 }
 
 
@@ -52,15 +53,27 @@ def upgrade() -> None:
         conn.execute(
             sa.text(
                 """
-                INSERT INTO tool (name, display_name, description, in_code_tool_id)
-                VALUES (:name, :display_name, :description, :in_code_tool_id)
+                INSERT INTO tool (name, display_name, description, in_code_tool_id, enabled)
+                VALUES (:name, :display_name, :description, :in_code_tool_id, :enabled)
                 """
             ),
             MEMORY_TOOL,
         )
 
+    op.add_column(
+        "user",
+        sa.Column(
+            "enable_memory_tool",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.true(),
+        ),
+    )
+
 
 def downgrade() -> None:
+    op.drop_column("user", "enable_memory_tool")
+
     conn = op.get_bind()
     conn.execute(
         sa.text("DELETE FROM tool WHERE in_code_tool_id = :in_code_tool_id"),

@@ -778,6 +778,7 @@ function ChatPreferencesSettings() {
   const {
     personalizationValues,
     toggleUseMemories,
+    toggleEnableMemoryTool,
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
@@ -862,8 +863,23 @@ function ChatPreferencesSettings() {
               }}
             />
           </InputLayouts.Horizontal>
+          <InputLayouts.Horizontal
+            title="Update Memories"
+            description="Let Onyx generate and update stored memories."
+          >
+            <Switch
+              checked={personalizationValues.enable_memory_tool}
+              onCheckedChange={(checked) => {
+                toggleEnableMemoryTool(checked);
+                void handleSavePersonalization({
+                  enable_memory_tool: checked,
+                });
+              }}
+            />
+          </InputLayouts.Horizontal>
 
-          {personalizationValues.use_memories && (
+          {(personalizationValues.use_memories ||
+            personalizationValues.enable_memory_tool) && (
             <Memories
               memories={personalizationValues.memories}
               onSaveMemories={handleSaveMemories}

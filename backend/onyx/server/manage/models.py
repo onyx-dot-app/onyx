@@ -84,6 +84,7 @@ class UserPersonalization(BaseModel):
     name: str = ""
     role: str = ""
     use_memories: bool = True
+    enable_memory_tool: bool = True
     memories: list[MemoryItem] = Field(default_factory=list)
     user_preferences: str = ""
 
@@ -166,6 +167,7 @@ class UserInfo(BaseModel):
                 name=user.personal_name or "",
                 role=user.personal_role or "",
                 use_memories=user.use_memories,
+                enable_memory_tool=user.enable_memory_tool,
                 memories=[
                     MemoryItem(id=memory.id, content=memory.memory_text)
                     for memory in (user.memories or [])
@@ -223,6 +225,7 @@ class PersonalizationUpdateRequest(BaseModel):
     name: str | None = None
     role: str | None = None
     use_memories: bool | None = None
+    enable_memory_tool: bool | None = None
     memories: list[MemoryItem] | None = None
     user_preferences: str | None = Field(default=None, max_length=500)
 

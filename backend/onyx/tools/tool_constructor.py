@@ -414,9 +414,9 @@ def construct_tools(
 
         tool_dict[search_tool_db_model.id] = [search_tool]
 
-    # Always inject MemoryTool when the user has memories enabled,
+    # Always inject MemoryTool when the user has the memory tool enabled,
     # bypassing persona tool associations and allowed_tool_ids filtering
-    if user.use_memories:
+    if user.enable_memory_tool:
         try:
             memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
             memory_tool = MemoryTool(

@@ -42,6 +42,7 @@ export interface UserPersonalization {
   role: string;
   memories: MemoryItem[];
   use_memories: boolean;
+  enable_memory_tool: boolean;
   user_preferences: string;
 }
 
