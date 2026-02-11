@@ -93,7 +93,7 @@ function Button({
     <span
       className={cn(
         "opal-button-label",
-        isCompact ? "font-secondary-action" : "font-main-ui-action"
+        isCompact ? "font-secondary-body" : "font-main-ui-body"
       )}
     >
       {children}
