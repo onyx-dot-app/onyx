@@ -1,6 +1,8 @@
 import json
+import re
 import time
 import uuid
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
@@ -51,6 +53,9 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
+_FUNCTION_CALLS_XML_PATTERN = re.compile(
+    r"<function_calls(?:\s[^>]*)?>.*?</function_calls>", re.DOTALL
+)
 
 
 def _sanitize_llm_output(value: str) -> str:
@@ -141,6 +146,92 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
         return {}
 
     return {}
+
+
+def _strip_xml_namespace(tag_name: str) -> str:
+    """Strip XML namespace prefix from a tag name if present."""
+    if "}" in tag_name:
+        return tag_name.split("}", 1)[1]
+    return tag_name
+
+
+def _parse_xml_string_attribute(value: str | None) -> bool | None:
+    """Parse the XML 'string' attribute to a tri-state boolean."""
+    if value is None:
+        return None
+
+    normalized = value.strip().lower()
+    if normalized in {"true", "1"}:
+        return True
+    if normalized in {"false", "0"}:
+        return False
+    return None
+
+
+def _parse_xml_parameter_value(raw_value: str, is_string: bool | None) -> Any:
+    """Parse a DeepSeek XML parameter value to a Python value."""
+    sanitized_value = _sanitize_llm_output(raw_value.strip())
+
+    # If explicitly marked as a plain string, keep it as-is.
+    if is_string is True:
+        return sanitized_value
+
+    # Otherwise, try JSON decoding first for arrays/objects/bools/numbers.
+    try:
+        return json.loads(sanitized_value)
+    except json.JSONDecodeError:
+        return sanitized_value
+
+
+def _extract_tool_calls_from_xml_response_text(
+    response_text: str,
+    tool_name_to_def: dict[str, dict],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Extract DeepSeek-style XML tool calls from response text."""
+    if "<function_calls" not in response_text:
+        return []
+
+    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
+
+    for xml_match in _FUNCTION_CALLS_XML_PATTERN.finditer(response_text):
+        xml_fragment = xml_match.group(0)
+        try:
+            root = ET.fromstring(xml_fragment)
+        except ET.ParseError:
+            continue
+
+        if _strip_xml_namespace(root.tag) != "function_calls":
+            continue
+
+        for invoke_node in root:
+            if _strip_xml_namespace(invoke_node.tag) != "invoke":
+                continue
+
+            tool_name = invoke_node.attrib.get("name")
+            if not tool_name or tool_name not in tool_name_to_def:
+                continue
+
+            tool_args: dict[str, Any] = {}
+            for parameter_node in invoke_node:
+                if _strip_xml_namespace(parameter_node.tag) != "parameter":
+                    continue
+
+                parameter_name = parameter_node.attrib.get("name")
+                if not parameter_name:
+                    continue
+
+                parameter_text = "".join(parameter_node.itertext())
+                string_attr = _parse_xml_string_attribute(
+                    parameter_node.attrib.get("string")
+                )
+                tool_args[parameter_name] = _parse_xml_parameter_value(
+                    raw_value=parameter_text,
+                    is_string=string_attr,
+                )
+
+            matched_tool_calls.append((tool_name, tool_args))
+
+    return matched_tool_calls
 
 
 def _format_message_history_for_logging(
@@ -329,36 +420,43 @@ def extract_tool_calls_from_response_text(
     if not tool_name_to_def:
         return []
 
-    # Find all JSON objects in the response text
-    json_objects = find_all_json_objects(response_text)
+    extraction_source = "XML"
+    matched_tool_calls = _extract_tool_calls_from_xml_response_text(
+        response_text=response_text,
+        tool_name_to_def=tool_name_to_def,
+    )
 
-    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
-    prev_json_obj: dict[str, Any] | None = None
-    prev_tool_call: tuple[str, dict[str, Any]] | None = None
+    # Fallback to JSON extraction if no XML tool calls were found.
+    if not matched_tool_calls:
+        extraction_source = "JSON"
+        json_objects = find_all_json_objects(response_text)
 
-    for json_obj in json_objects:
-        matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
-        if not matched_tool_call:
-            continue
+        prev_json_obj: dict[str, Any] | None = None
+        prev_tool_call: tuple[str, dict[str, Any]] | None = None
 
-        # `find_all_json_objects` can return both an outer tool-call object and
-        # its nested arguments object. If both resolve to the same tool call,
-        # drop only this nested duplicate artifact.
-        if (
-            prev_json_obj is not None
-            and prev_tool_call is not None
-            and matched_tool_call == prev_tool_call
-            and _is_nested_arguments_duplicate(
-                previous_json_obj=prev_json_obj,
-                current_json_obj=json_obj,
-                tool_name_to_def=tool_name_to_def,
-            )
-        ):
-            continue
+        for json_obj in json_objects:
+            matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
+            if not matched_tool_call:
+                continue
 
-        matched_tool_calls.append(matched_tool_call)
-        prev_json_obj = json_obj
-        prev_tool_call = matched_tool_call
+            # `find_all_json_objects` can return both an outer tool-call object and
+            # its nested arguments object. If both resolve to the same tool call,
+            # drop only this nested duplicate artifact.
+            if (
+                prev_json_obj is not None
+                and prev_tool_call is not None
+                and matched_tool_call == prev_tool_call
+                and _is_nested_arguments_duplicate(
+                    previous_json_obj=prev_json_obj,
+                    current_json_obj=json_obj,
+                    tool_name_to_def=tool_name_to_def,
+                )
+            ):
+                continue
+
+            matched_tool_calls.append(matched_tool_call)
+            prev_json_obj = json_obj
+            prev_tool_call = matched_tool_call
 
     tool_calls: list[ToolCallKickoff] = []
     for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
@@ -376,7 +474,7 @@ def extract_tool_calls_from_response_text(
         )
 
     logger.info(
-        f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
+        f"Extracted {len(tool_calls)} tool call(s) from {extraction_source} response text as fallback"
     )
 
     return tool_calls
@@ -638,6 +736,11 @@ def _delta_has_action(delta: Delta) -> bool:
     return bool(delta.content or delta.reasoning_content or delta.tool_calls)
 
 
+def _contains_xml_tool_call_markup(text: str) -> bool:
+    normalized = text.lower()
+    return "<function_calls" in normalized
+
+
 def run_llm_step_pkt_generator(
     history: list[ChatMessageSimple],
     tool_definitions: list[dict],
@@ -723,6 +826,9 @@ def run_llm_step_pkt_generator(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
+    raw_accumulated_answer = ""
+    xml_markup_detection_buffer = ""
+    saw_xml_tool_call_markup = False
 
     processor_state: Any = None
 
@@ -813,13 +919,29 @@ def run_llm_step_pkt_generator(
                 )
                 reasoning_start = True
 
+            content_to_emit: str | None = None
             if delta.content:
+                raw_delta_content = delta.content
+                raw_accumulated_answer += raw_delta_content
+
+                content_to_emit = raw_delta_content
+                if tool_definitions and tool_choice != ToolChoiceOptions.NONE:
+                    xml_markup_detection_buffer = (
+                        xml_markup_detection_buffer + raw_delta_content
+                    )[-500:]
+                    if _contains_xml_tool_call_markup(xml_markup_detection_buffer):
+                        saw_xml_tool_call_markup = True
+                    if saw_xml_tool_call_markup:
+                        # Suppress provider-specific XML tool-call control markup from user-visible output.
+                        content_to_emit = None
+
+            if content_to_emit:
                 # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
                 # about which tool to call, not an actual answer to the user.
                 # Treat this content as reasoning instead of answer.
                 if is_deep_research and tool_choice == ToolChoiceOptions.REQUIRED:
                     # Treat content as reasoning when we know tool calls are coming
-                    accumulated_reasoning += delta.content
+                    accumulated_reasoning += content_to_emit
                     if state_container:
                         state_container.set_reasoning_tokens(accumulated_reasoning)
                     if not reasoning_start:
@@ -837,7 +959,7 @@ def run_llm_step_pkt_generator(
                             tab_index=tab_index,
                             sub_turn_index=sub_turn_index,
                         ),
-                        obj=ReasoningDelta(reasoning=delta.content),
+                        obj=ReasoningDelta(reasoning=content_to_emit),
                     )
                     reasoning_start = True
                 else:
@@ -878,7 +1000,7 @@ def run_llm_step_pkt_generator(
                         answer_start = True
 
                     if citation_processor:
-                        for result in citation_processor.process_token(delta.content):
+                        for result in citation_processor.process_token(content_to_emit):
                             if isinstance(result, str):
                                 accumulated_answer += result
                                 # Save answer incrementally to state container
@@ -909,8 +1031,8 @@ def run_llm_step_pkt_generator(
                                         result.citation_number
                                     )
                     else:
-                        # When citation_processor is None, use delta.content directly without modification
-                        accumulated_answer += delta.content
+                        # When citation_processor is None, use content_to_emit directly without modification
+                        accumulated_answer += content_to_emit
                         # Save answer incrementally to state container
                         if state_container:
                             state_container.set_answer_tokens(accumulated_answer)
@@ -920,7 +1042,7 @@ def run_llm_step_pkt_generator(
                                 tab_index=tab_index,
                                 sub_turn_index=sub_turn_index,
                             ),
-                            obj=AgentResponseDelta(content=delta.content),
+                            obj=AgentResponseDelta(content=content_to_emit),
                         )
 
             if delta.tool_calls:
@@ -1062,6 +1184,7 @@ def run_llm_step_pkt_generator(
             reasoning=accumulated_reasoning if accumulated_reasoning else None,
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
+            raw_answer=raw_accumulated_answer if raw_accumulated_answer else None,
         ),
         bool(has_reasoned),
     )

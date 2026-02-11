@@ -211,3 +211,83 @@ class TestExtractToolCallsFromResponseText:
             {"queries": ["alpha"]},
             {"queries": ["alpha"]},
         ]
+
+    def test_extracts_deepseek_xml_tool_call(self) -> None:
+        response_text = (
+            '<function_calls><invoke name="internal_search">'
+            '<parameter name="queries" string="false">["alpha","beta"]</parameter>'
+            "</invoke></function_calls>"
+        )
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 1
+        assert tool_calls[0].tool_name == "internal_search"
+        assert tool_calls[0].tool_args == {"queries": ["alpha", "beta"]}
+
+    def test_extracts_multiple_deepseek_xml_tool_calls(self) -> None:
+        response_text = (
+            "<function_calls>"
+            '<invoke name="internal_search">'
+            '<parameter name="queries" string="false">["alpha"]</parameter>'
+            "</invoke>"
+            '<invoke name="internal_search">'
+            '<parameter name="queries" string="false">["beta"]</parameter>'
+            "</invoke>"
+            "</function_calls>"
+        )
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 2
+        assert [call.tool_args for call in tool_calls] == [
+            {"queries": ["alpha"]},
+            {"queries": ["beta"]},
+        ]
+
+    def test_extracts_deepseek_xml_with_string_parameter(self) -> None:
+        tool_defs = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "open_url",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"url": {"type": "string"}},
+                        "required": ["url"],
+                    },
+                },
+            }
+        ]
+        response_text = (
+            '<function_calls><invoke name="open_url">'
+            '<parameter name="url" string="true">https://example.com</parameter>'
+            "</invoke></function_calls>"
+        )
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=tool_defs,
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 1
+        assert tool_calls[0].tool_name == "open_url"
+        assert tool_calls[0].tool_args == {"url": "https://example.com"}
+
+    def test_falls_back_to_json_when_xml_is_malformed(self) -> None:
+        response_text = (
+            '<function_calls><invoke name="internal_search">'
+            '<parameter name="queries" string="false">["xml"]</parameter>'
+            '{"name":"internal_search","arguments":{"queries":["json"]}}'
+        )
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 1
+        assert tool_calls[0].tool_name == "internal_search"
+        assert tool_calls[0].tool_args == {"queries": ["json"]}

@@ -2,14 +2,17 @@
 
 import pytest
 
+from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
+from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
+from onyx.llm.interfaces import ToolChoiceOptions
 
 
 def create_message(
@@ -568,3 +571,69 @@ class TestConstructMessageHistory:
         assert '"contents"' in project_message.message
         assert "Project file 0 content" in project_message.message
         assert "Project file 1 content" in project_message.message
+
+
+class TestFallbackToolExtraction:
+    def _tool_defs(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "internal_search",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "queries": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            }
+                        },
+                        "required": ["queries"],
+                    },
+                },
+            }
+        ]
+
+    def test_auto_mode_extracts_xml_tool_calls(self) -> None:
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer=None,
+            raw_answer=(
+                '<function_calls><invoke name="internal_search">'
+                '<parameter name="queries" string="false">["alpha"]</parameter>'
+                "</invoke></function_calls>"
+            ),
+            tool_calls=None,
+        )
+
+        updated, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.AUTO,
+            fallback_extraction_attempted=False,
+            tool_defs=self._tool_defs(),
+            turn_index=0,
+        )
+
+        assert attempted is True
+        assert updated.tool_calls is not None
+        assert len(updated.tool_calls) == 1
+        assert updated.tool_calls[0].tool_name == "internal_search"
+        assert updated.tool_calls[0].tool_args == {"queries": ["alpha"]}
+
+    def test_auto_mode_without_xml_does_not_attempt_fallback(self) -> None:
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer="Normal answer text",
+            tool_calls=None,
+        )
+
+        updated, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.AUTO,
+            fallback_extraction_attempted=False,
+            tool_defs=self._tool_defs(),
+            turn_index=0,
+        )
+
+        assert attempted is False
+        assert updated.tool_calls is None

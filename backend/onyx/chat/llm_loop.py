@@ -60,6 +60,15 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+def _contains_xml_tool_call_markup(text: str | None) -> bool:
+    """Detect provider responses that embed tool calls as XML text."""
+    if not text:
+        return False
+
+    normalized = text.lower()
+    return "<function_calls" in normalized and "<invoke" in normalized
+
+
 def _try_fallback_tool_extraction(
     llm_step_result: LlmStepResult,
     tool_choice: ToolChoiceOptions,
@@ -86,24 +95,36 @@ def _try_fallback_tool_extraction(
     if fallback_extraction_attempted:
         return llm_step_result, False
 
+    answer_for_extraction = llm_step_result.raw_answer or llm_step_result.answer
+
     no_tool_calls = (
         not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0
     )
     reasoning_but_no_answer_or_tools = (
         llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
     )
+    xml_tool_markup_without_native_tool_calls = (
+        bool(tool_defs)
+        and no_tool_calls
+        and (
+            _contains_xml_tool_call_markup(answer_for_extraction)
+            or _contains_xml_tool_call_markup(llm_step_result.reasoning)
+        )
+    )
     should_try_fallback = (
-        tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls
-    ) or reasoning_but_no_answer_or_tools
+        (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)
+        or reasoning_but_no_answer_or_tools
+        or xml_tool_markup_without_native_tool_calls
+    )
 
     if not should_try_fallback:
         return llm_step_result, False
 
     # Try to extract from answer first, then fall back to reasoning
     extracted_tool_calls: list[ToolCallKickoff] = []
-    if llm_step_result.answer:
+    if answer_for_extraction:
         extracted_tool_calls = extract_tool_calls_from_response_text(
-            response_text=llm_step_result.answer,
+            response_text=answer_for_extraction,
             tool_definitions=tool_defs,
             placement=Placement(turn_index=turn_index),
         )
@@ -116,8 +137,9 @@ def _try_fallback_tool_extraction(
 
     if extracted_tool_calls:
         logger.info(
-            f"Extracted {len(extracted_tool_calls)} tool call(s) from response text "
-            f"as fallback (tool_choice was REQUIRED but no tool calls returned)"
+            "Extracted %d tool call(s) from response text as fallback (tool_choice=%s, no native tool calls returned)",
+            len(extracted_tool_calls),
+            tool_choice.value,
         )
         return (
             LlmStepResult(
