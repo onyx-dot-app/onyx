@@ -384,6 +384,7 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
+            # We only need to set environment variables if custom config is set
             env_ctx = (
                 temporary_env_and_lock(self._custom_config)
                 if self._custom_config
