@@ -66,7 +66,7 @@ function FooterLinks({
             Have a license key?
           </Text>
           <Button action tertiary onClick={onActivateLicense}>
-            <Text secondaryBody text03 className="underline">
+            <Text secondaryBody text05 className="underline">
               {licenseText}
             </Text>
           </Button>
@@ -118,7 +118,6 @@ export default function BillingPage() {
   const isLoading = billingLoading || licenseLoading;
   const hasSubscription = billingData && hasActiveSubscription(billingData);
   const billing = hasSubscription ? (billingData as BillingInformation) : null;
-  const currentPlan = billing?.plan_type ?? licenseData?.plan_type ?? undefined;
   const isSelfHosted = !NEXT_PUBLIC_CLOUD_ENABLED;
 
   // User is only air-gapped if they have a manual license AND Stripe is not connected
@@ -294,7 +293,6 @@ export default function BillingPage() {
       checkout: <CheckoutView onAdjustPlan={() => changeView("plans")} />,
       plans: (
         <PlansView
-          currentPlan={currentPlan}
           hasSubscription={!!hasSubscription}
           onCheckout={() => changeView("checkout")}
           hideFeatures={showLicenseActivationInput}
