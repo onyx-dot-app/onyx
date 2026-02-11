@@ -131,10 +131,6 @@ export default function ConfigureConnectorModal({
     setStep("credential");
   };
 
-  const handleConnectorSuccess = () => {
-    onSuccess();
-  };
-
   // Dynamic title and description based on flow type
   const getStepTitle = () => {
     if (isSingleStep) {
@@ -192,14 +188,14 @@ export default function ConfigureConnectorModal({
                 onOAuthRedirect={handleOAuthRedirect}
                 refresh={refreshCredentials}
                 isSingleStep={isSingleStep}
-                onConnectorSuccess={handleConnectorSuccess}
+                onConnectorSuccess={onSuccess}
                 setPopup={setPopup}
               />
             ) : selectedCredential ? (
               <ConnectorConfigStep
                 connectorType={connectorType}
                 credential={selectedCredential}
-                onSuccess={handleConnectorSuccess}
+                onSuccess={onSuccess}
                 onBack={handleBack}
                 setPopup={setPopup}
               />

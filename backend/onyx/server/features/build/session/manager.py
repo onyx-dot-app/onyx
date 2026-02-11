@@ -75,6 +75,9 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
     SSEKeepalive,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.tasks.tasks import (
+    _get_disabled_user_library_paths,
+)
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.features.build.session.prompts import (
@@ -563,6 +566,18 @@ class SessionManager:
         user_name = user.personal_name if user else None
         user_role = user.personal_role if user else None
 
+        # Get excluded user library paths (files with sync_disabled=True)
+        # Only query if not using demo data (user library only applies to user files)
+        excluded_user_library_paths: list[str] | None = None
+        if not demo_data_enabled:
+            excluded_user_library_paths = _get_disabled_user_library_paths(
+                self._db_session, str(user_id)
+            )
+            if excluded_user_library_paths:
+                logger.debug(
+                    f"Excluding {len(excluded_user_library_paths)} disabled user library paths"
+                )
+
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
@@ -575,7 +590,9 @@ class SessionManager:
             user_work_area=user_work_area,
             user_level=user_level,
             use_demo_data=demo_data_enabled,
+            excluded_user_library_paths=excluded_user_library_paths,
         )
+
         sandbox_id = sandbox.id
         logger.info(
             f"Successfully created session {session_id} with workspace in sandbox {sandbox.id}"

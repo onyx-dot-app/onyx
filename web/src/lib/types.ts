@@ -514,6 +514,9 @@ export enum ValidSources {
   Bitbucket = "bitbucket",
   TestRail = "testrail",
 
+  // Craft-specific sources
+  CraftFile = "craft_file",
+
   // Federated Connectors
   FederatedSlack = "federated_slack",
 }
@@ -548,6 +551,7 @@ export type ConfigurableSources = Exclude<
   | ValidSources.IngestionApi
   | ValidSources.FederatedSlack // is part of ValiedSources.Slack
   | ValidSources.UserFile
+  | ValidSources.CraftFile // User Library - managed through dedicated UI
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [

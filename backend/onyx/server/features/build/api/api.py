@@ -27,6 +27,7 @@ from onyx.server.features.build.api.models import BuildConnectorStatus
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
+from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
@@ -51,9 +52,10 @@ def require_onyx_craft_enabled(user: User = Depends(current_user)) -> User:
 
 router = APIRouter(prefix="/build", dependencies=[Depends(require_onyx_craft_enabled)])
 
-# Include sub-routers for sessions and messages
+# Include sub-routers for sessions, messages, and user library
 router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
+router.include_router(user_library_router, tags=["build"])
 
 
 # -----------------------------------------------------------------------------
@@ -86,14 +88,24 @@ def get_build_connectors(
     On the build configure page, all users (including admins) only see connectors
     they own/created. Users can create new connectors if they don't have one of a type.
     """
-    cc_pairs = get_connector_credential_pairs_for_user(
+    # Fetch both FILE_SYSTEM (standard connectors) and RAW_BINARY (User Library) connectors
+    file_system_cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
         get_editable=False,
         eager_load_connector=True,
         eager_load_credential=True,
-        processing_mode=ProcessingMode.FILE_SYSTEM,  # Only show FILE_SYSTEM connectors
+        processing_mode=ProcessingMode.FILE_SYSTEM,
     )
+    raw_binary_cc_pairs = get_connector_credential_pairs_for_user(
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+        eager_load_connector=True,
+        eager_load_credential=True,
+        processing_mode=ProcessingMode.RAW_BINARY,
+    )
+    cc_pairs = file_system_cc_pairs + raw_binary_cc_pairs
 
     # Filter to only show connectors created by the current user
     # All users (including admins) must create their own connectors on the build configure page
