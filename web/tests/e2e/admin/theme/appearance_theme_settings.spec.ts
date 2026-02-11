@@ -21,6 +21,16 @@ test.describe("Appearance Theme Settings", () => {
     await page.goto("/admin/theme");
     await page.waitForLoadState("networkidle");
 
+    // Skip the entire test when Enterprise features are not licensed.
+    // The /admin/theme page is gated behind ee_features_enabled and
+    // renders a license-required message instead of the settings form.
+    const eeLocked = page.getByText(
+      "This functionality requires an active Enterprise license."
+    );
+    if (await eeLocked.isVisible({ timeout: 1000 }).catch(() => false)) {
+      test.skip(true, "Enterprise license not active — skipping theme tests");
+    }
+
     // Clear localStorage to ensure consent modal shows
     await page.evaluate(() => {
       localStorage.removeItem("allUsersInitialPopupFlowCompleted");
