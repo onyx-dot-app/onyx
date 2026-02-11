@@ -1,3 +1,5 @@
+"use client";
+
 import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
 import { FeedbackType } from "@/app/app/interfaces";
@@ -8,20 +10,16 @@ import {
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
-import {
-  handleCopy,
-  convertMarkdownTablesToTsv,
-} from "@/app/app/message/copyingUtils";
+import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
-import { LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { RegenerationFactory } from "./AgentMessage";
@@ -31,6 +29,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
+import { Button } from "@opal/components";
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -216,7 +215,7 @@ export default function MessageToolbar({
 
       <div className="flex md:flex-row justify-between items-center w-full transition-transform duration-300 ease-in-out transform opacity-100 pl-1">
         <TooltipGroup>
-          <div className="flex items-center gap-x-0.5">
+          <div className="flex items-center">
             {includeMessageSwitcher && (
               <div className="-mx-1">
                 <MessageSwitcher
@@ -245,24 +244,23 @@ export default function MessageToolbar({
                 )
               }
               getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
-              tertiary
               data-testid="AgentMessage/copy-button"
             />
-            <IconButton
+            <Button
               icon={SvgThumbsUp}
               onClick={() => handleFeedbackClick("like")}
-              tertiary
-              transient={isFeedbackTransient("like")}
+              variant="select"
+              selected={isFeedbackTransient("like")}
               tooltip={
                 currentFeedback === "like" ? "Remove Like" : "Good Response"
               }
               data-testid="AgentMessage/like-button"
             />
-            <IconButton
+            <Button
               icon={SvgThumbsDown}
               onClick={() => handleFeedbackClick("dislike")}
-              tertiary
-              transient={isFeedbackTransient("dislike")}
+              variant="select"
+              selected={isFeedbackTransient("dislike")}
               tooltip={
                 currentFeedback === "dislike"
                   ? "Remove Dislike"

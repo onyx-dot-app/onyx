@@ -292,7 +292,8 @@ export default function ExpandableTextDisplay({
             </div>
             <div className="flex items-center gap-1 bg-background-tint-00 p-1 rounded-12">
               <CopyIconButton
-                internal
+                subvariant="ghost"
+                size="compact"
                 getCopyText={() => content}
                 tooltip="Copy"
               />
