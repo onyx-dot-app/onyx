@@ -492,7 +492,7 @@ function LibraryTreeView({
                 gap={0}
                 height="fit"
               >
-                <Text secondaryBody text04>
+                <Text secondaryBody text04 className="truncate">
                   {entry.name}
                 </Text>
               </Section>
