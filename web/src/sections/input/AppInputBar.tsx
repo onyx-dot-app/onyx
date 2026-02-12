@@ -54,6 +54,8 @@ import { Button, OpenButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { Section } from "@/layouts/general-layouts";
+import Spacer from "@/refresh-components/Spacer";
 
 const LINE_HEIGHT = 24;
 const MIN_INPUT_HEIGHT = 44;
@@ -570,16 +572,13 @@ const AppInputBar = React.memo(
             </Popover>
 
             {isSearchMode && (
-              <>
-                {message && (
-                  <Button
-                    icon={SvgX}
-                    disabled={!message || isClassifying}
-                    onClick={() => setMessage("")}
-                    prominence="tertiary"
-                    size="sm"
-                  />
-                )}
+              <Section flexDirection="row" width="fit" gap={0}>
+                <Button
+                  icon={SvgX}
+                  disabled={!message || isClassifying}
+                  onClick={() => setMessage("")}
+                  prominence="tertiary"
+                />
                 <Button
                   id="onyx-chat-input-send-button"
                   icon={isClassifying ? SimpleLoader : SvgSearch}
@@ -592,9 +591,9 @@ const AppInputBar = React.memo(
                     }
                   }}
                   prominence="tertiary"
-                  size="sm"
                 />
-              </>
+                <Spacer horizontal rem={0.25} />
+              </Section>
             )}
           </div>
 
