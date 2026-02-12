@@ -1042,6 +1042,12 @@ class OpenSearchTenantMigrationRecord(Base):
     total_chunks_migrated: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
     )
+    total_chunks_errored: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    total_chunks_in_vespa: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

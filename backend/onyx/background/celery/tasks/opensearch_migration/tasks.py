@@ -40,7 +40,6 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
@@ -118,6 +117,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
         )
 
     total_chunks_migrated_this_task = 0
+    total_chunks_errored_this_task = 0
     try:
         # Double check that tenant info is correct.
         if tenant_id != get_current_tenant_id():
@@ -166,7 +166,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                         f"Total chunks migrated: {total_chunks_migrated}."
                     )
                     mark_migration_completed_time_if_not_set_with_commit(db_session)
-                    return True
+                    break
                 task_logger.debug(
                     f"Read the tenant migration record. Total chunks migrated: {total_chunks_migrated}. "
                     f"Continuation token: {continuation_token}"
@@ -184,7 +184,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     f"seconds. Next continuation token: {next_continuation_token}"
                 )
 
-                opensearch_document_chunks: list[DocumentChunk] = (
+                opensearch_document_chunks, errored_chunks = (
                     transform_vespa_chunks_to_opensearch_chunks(
                         raw_vespa_chunks,
                         tenant_state,
@@ -192,9 +192,10 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     )
                 )
                 if len(opensearch_document_chunks) != len(raw_vespa_chunks):
-                    raise RuntimeError(
-                        f"Bug: Number of candidate chunks to migrate ({len(opensearch_document_chunks)}) does not match "
-                        f"number of chunks in Vespa ({len(raw_vespa_chunks)})."
+                    task_logger.error(
+                        f"Migration task error: Number of candidate chunks to migrate ({len(opensearch_document_chunks)}) does "
+                        f"not match number of chunks in Vespa ({len(raw_vespa_chunks)}). {len(errored_chunks)} chunks "
+                        "errored."
                     )
 
                 index_opensearch_chunks_start_time = time.monotonic()
@@ -207,10 +208,12 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 )
 
                 total_chunks_migrated_this_task += len(opensearch_document_chunks)
+                total_chunks_errored_this_task += len(errored_chunks)
                 update_vespa_visit_progress_with_commit(
                     db_session,
                     continuation_token=next_continuation_token,
                     chunks_processed=len(opensearch_document_chunks),
+                    chunks_errored=len(errored_chunks),
                 )
 
                 if next_continuation_token is None and len(raw_vespa_chunks) == 0:
@@ -230,6 +233,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
     task_logger.info(
         f"OpenSearch chunk migration task pausing (time limit reached). "
         f"Total chunks migrated this task: {total_chunks_migrated_this_task}. "
+        f"Total chunks errored this task: {total_chunks_errored_this_task}. "
         f"Elapsed: {time.monotonic() - task_start_time:.3f}s. "
         "Will resume from continuation token on next invocation."
     )
