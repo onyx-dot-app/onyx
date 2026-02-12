@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState, useEffect, useCallback } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import {
   useSession,
   useWebappNeedsRefresh,
@@ -93,11 +93,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     (state) => state.triggerFilesRefresh
   );
 
-  // Global SWR mutate for invalidating file preview caches
-  const { mutate: globalMutate } = useSWRConfig();
-
-  // Counter to force-reload the preview iframe
+  // Counters to force-reload previews
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [filePreviewRefreshKey, setFilePreviewRefreshKey] = useState(0);
 
   // Determine which tab is visually active
   const isFilePreviewActive = activeFilePreviewPath !== null;
@@ -326,11 +324,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
 
   // Unified refresh handler — dispatches based on the active tab/preview
   const handleRefresh = useCallback(() => {
-    if (isFilePreviewActive && activeFilePreviewPath && session?.id) {
-      // File preview tab: invalidate the SWR cache for this file
-      globalMutate(
-        `/api/build/sessions/${session.id}/artifacts/${activeFilePreviewPath}`
-      );
+    if (isFilePreviewActive && activeFilePreviewPath) {
+      // File preview tab: bump key to reload standalone + content previews
+      setFilePreviewRefreshKey((k) => k + 1);
     } else if (activeOutputTab === "preview") {
       // Web preview tab: remount the iframe
       setPreviewRefreshKey((k) => k + 1);
@@ -343,7 +339,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     activeFilePreviewPath,
     activeOutputTab,
     session?.id,
-    globalMutate,
     triggerFilesRefresh,
   ]);
 
@@ -629,6 +624,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
           <FilePreviewContent
             sessionId={session.id}
             filePath={activeFilePreviewPath}
+            refreshKey={filePreviewRefreshKey}
           />
         )}
         {/* Pinned tab content - only show when no file preview is active */}

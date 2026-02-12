@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import useSWR from "swr";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
 import Text from "@/refresh-components/texts/Text";
@@ -21,7 +22,11 @@ import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 interface StandaloneEntry {
   type: "standalone";
   matches: (filePath: string) => boolean;
-  component: React.FC<{ sessionId: string; filePath: string }>;
+  component: React.FC<{
+    sessionId: string;
+    filePath: string;
+    refreshKey?: number;
+  }>;
 }
 
 interface ContentEntry {
@@ -81,6 +86,8 @@ function findContentPreview(
 interface FilePreviewContentProps {
   sessionId: string;
   filePath: string;
+  /** Changing this value forces the preview to reload its data */
+  refreshKey?: number;
 }
 
 /**
@@ -90,15 +97,23 @@ interface FilePreviewContentProps {
 export function FilePreviewContent({
   sessionId,
   filePath,
+  refreshKey,
 }: FilePreviewContentProps) {
   const standalone = findStandalonePreview(filePath);
   if (standalone) {
     const Comp = standalone.component;
-    return <Comp sessionId={sessionId} filePath={filePath} />;
+    return (
+      <Comp sessionId={sessionId} filePath={filePath} refreshKey={refreshKey} />
+    );
   }
 
   return (
-    <FetchedFilePreview sessionId={sessionId} filePath={filePath} fullHeight />
+    <FetchedFilePreview
+      sessionId={sessionId}
+      filePath={filePath}
+      fullHeight
+      refreshKey={refreshKey}
+    />
   );
 }
 
@@ -125,6 +140,7 @@ interface FetchedFilePreviewProps {
   sessionId: string;
   filePath: string;
   fullHeight?: boolean;
+  refreshKey?: number;
 }
 
 /**
@@ -135,8 +151,9 @@ function FetchedFilePreview({
   sessionId,
   filePath,
   fullHeight,
+  refreshKey,
 }: FetchedFilePreviewProps) {
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
     () => fetchFileContent(sessionId, filePath),
     {
@@ -144,6 +161,13 @@ function FetchedFilePreview({
       dedupingInterval: 5000,
     }
   );
+
+  // Re-fetch when refreshKey changes
+  useEffect(() => {
+    if (refreshKey && refreshKey > 0) {
+      mutate();
+    }
+  }, [refreshKey, mutate]);
 
   if (isLoading) {
     if (fullHeight) {

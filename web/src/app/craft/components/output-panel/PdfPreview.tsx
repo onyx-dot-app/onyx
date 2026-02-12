@@ -10,6 +10,7 @@ import { getArtifactUrl } from "@/lib/build/client";
 interface PdfPreviewProps {
   sessionId: string;
   filePath: string;
+  refreshKey?: number;
 }
 
 /**
@@ -18,7 +19,11 @@ interface PdfPreviewProps {
  * it inline (the backend serves artifacts with Content-Disposition: attachment,
  * which would otherwise force a download).
  */
-export default function PdfPreview({ sessionId, filePath }: PdfPreviewProps) {
+export default function PdfPreview({
+  sessionId,
+  filePath,
+  refreshKey,
+}: PdfPreviewProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -58,7 +63,7 @@ export default function PdfPreview({ sessionId, filePath }: PdfPreviewProps) {
       revoked = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [sessionId, filePath]);
+  }, [sessionId, filePath, refreshKey]);
 
   if (error) {
     return (

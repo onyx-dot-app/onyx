@@ -114,25 +114,32 @@ export default function FilesTab({
         : filesTabState.expandedPaths;
 
       if (paths.length > 0) {
-        Promise.all(paths.map((p) => fetchDirectoryListing(sessionId, p))).then(
-          (results) => {
-            if (isPreProvisioned) {
-              setLocalDirectoryCache((prev) => {
-                const next = new Map(prev);
-                paths.forEach((p, i) => {
-                  if (results[i]) next.set(p, results[i]!.entries);
-                });
-                return next;
-              });
-            } else {
-              const newCache: Record<string, FileSystemEntry[]> = {};
-              paths.forEach((p, i) => {
-                if (results[i]) newCache[p] = results[i]!.entries;
-              });
-              updateFilesTabState(sessionId, { directoryCache: newCache });
+        Promise.allSettled(
+          paths.map((p) => fetchDirectoryListing(sessionId, p))
+        ).then((settled) => {
+          // Collect only the successful fetches into a path → entries map
+          const fetched = new Map<string, FileSystemEntry[]>();
+          settled.forEach((r, i) => {
+            const p = paths[i];
+            if (p && r.status === "fulfilled" && r.value) {
+              fetched.set(p, r.value.entries);
             }
+          });
+
+          if (isPreProvisioned) {
+            setLocalDirectoryCache((prev) => {
+              const next = new Map(prev);
+              fetched.forEach((entries, p) => next.set(p, entries));
+              return next;
+            });
+          } else {
+            const obj: Record<string, FileSystemEntry[]> = {};
+            fetched.forEach((entries, p) => {
+              obj[p] = entries;
+            });
+            updateFilesTabState(sessionId, { directoryCache: obj });
           }
-        );
+        });
       }
     }
   }, [

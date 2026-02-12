@@ -12,6 +12,7 @@ import { getArtifactUrl } from "@/lib/build/client";
 interface PptxPreviewProps {
   sessionId: string;
   filePath: string;
+  refreshKey?: number;
 }
 
 /**
@@ -19,11 +20,15 @@ interface PptxPreviewProps {
  * Triggers on-demand conversion via the backend, then renders
  * individual slide JPEGs in a carousel with keyboard navigation.
  */
-export default function PptxPreview({ sessionId, filePath }: PptxPreviewProps) {
+export default function PptxPreview({
+  sessionId,
+  filePath,
+  refreshKey,
+}: PptxPreviewProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading, mutate } = useSWR(
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
     () => fetchPptxPreview(sessionId, filePath),
     {
@@ -51,6 +56,13 @@ export default function PptxPreview({ sessionId, filePath }: PptxPreviewProps) {
   useEffect(() => {
     setImageLoading(true);
   }, [currentSlide, data]);
+
+  // Re-fetch when refreshKey changes
+  useEffect(() => {
+    if (refreshKey && refreshKey > 0) {
+      mutate();
+    }
+  }, [refreshKey, mutate]);
 
   // Keyboard navigation
   useEffect(() => {

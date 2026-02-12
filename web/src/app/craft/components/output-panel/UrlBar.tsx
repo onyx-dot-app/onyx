@@ -10,7 +10,6 @@ import {
   SvgArrowLeft,
   SvgArrowRight,
   SvgExternalLink,
-  SvgRefreshCw,
   SvgRevert,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
