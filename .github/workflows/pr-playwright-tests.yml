@@ -54,6 +54,9 @@ env:
   MCP_SERVER_PUBLIC_HOST: host.docker.internal
   MCP_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
 
+  # Visual regression S3 bucket (shared across all jobs)
+  PLAYWRIGHT_S3_BUCKET: onyx-playwright-artifacts
+
 jobs:
   build-web-image:
     runs-on:
@@ -445,7 +448,7 @@ jobs:
         if: always()
         with:
           name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
-          path: ./web/screenshots/
+          path: ./web/output/screenshots/
           retention-days: 30
 
       # --- Visual Regression Diff ---
@@ -460,11 +463,10 @@ jobs:
         if: always()
         env:
           PROJECT: ${{ matrix.project }}
+          PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
         run: |
           uv run --no-sync --with onyx-devtools ods playwright-diff compare \
-            --baseline "s3://onyx-playwright-artifacts/baselines/${PROJECT}/" \
-            --current ./web/screenshots/ \
-            --output ./web/output/visual-diff/index.html
+            --project "${PROJECT}"
 
       - name: Upload visual diff report to S3
         if: always()
@@ -473,65 +475,50 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          aws s3 sync ./web/output/visual-diff/ \
-            "s3://onyx-playwright-artifacts/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
+          SUMMARY_FILE="web/output/visual-diff/${PROJECT}/summary.json"
+          if [ ! -f "${SUMMARY_FILE}" ]; then
+            echo "No summary file found — skipping S3 upload."
+            exit 0
+          fi
+
+          HAS_DIFF=$(jq -r '.has_differences' "${SUMMARY_FILE}")
+          if [ "${HAS_DIFF}" != "true" ]; then
+            echo "No visual differences for ${PROJECT} — skipping S3 upload."
+            exit 0
+          fi
+
+          aws s3 sync "web/output/visual-diff/${PROJECT}/" \
+            "s3://${PLAYWRIGHT_S3_BUCKET}/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
+
+      - name: Upload visual diff summary
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: visual-diff-summary-${{ matrix.project }}
+          path: ./web/output/visual-diff/${{ matrix.project }}/summary.json
+          if-no-files-found: ignore
+          retention-days: 5
 
       - name: Upload visual diff report artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
           name: visual-diff-report-${{ matrix.project }}-${{ github.run_id }}
-          path: ./web/output/visual-diff/
+          path: ./web/output/visual-diff/${{ matrix.project }}/
+          if-no-files-found: ignore
           retention-days: 30
-
-      - name: Comment visual diff on PR
-        if: always() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          RUN_ID: ${{ github.run_id }}
-          PROJECT: ${{ matrix.project }}
-        run: |
-          REPORT_URL="https://onyx-playwright-artifacts.s3.us-east-2.amazonaws.com/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/index.html"
-          MARKER="<!-- visual-regression-${PROJECT} -->"
-
-          BODY=$(cat <<EOF
-          ${MARKER}
-          ### Visual Regression Report (\`${PROJECT}\`)
-
-          **Run:** [#${RUN_ID}](https://github.com/${{ github.repository }}/actions/runs/${RUN_ID})
-
-          [View Visual Diff Report](${REPORT_URL})
-
-          _This report is informational only and does not block the PR._
-          EOF
-          )
-
-          # Check if a comment with this marker already exists
-          EXISTING_COMMENT_ID=$(gh api \
-            "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
-            2>/dev/null | head -1)
-
-          if [ -n "${EXISTING_COMMENT_ID}" ]; then
-            gh api \
-              --method PATCH \
-              "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
-              -f body="${BODY}"
-          else
-            gh api \
-              --method POST \
-              "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-              -f body="${BODY}"
-          fi
 
       - name: Update S3 baselines
         if: github.ref == 'refs/heads/main' && success()
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          aws s3 sync ./web/screenshots/ \
-            "s3://onyx-playwright-artifacts/baselines/${PROJECT}/" --delete
+          if [ -d "web/output/screenshots/" ] && [ "$(ls -A web/output/screenshots/)" ]; then
+            aws s3 sync "web/output/screenshots/" \
+              "s3://${PLAYWRIGHT_S3_BUCKET}/baselines/${PROJECT}/" --delete
+          else
+            echo "No screenshots to upload for ${PROJECT} — skipping baseline update."
+          fi
 
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
@@ -549,6 +536,100 @@ jobs:
         with:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
+
+  # Post a single combined visual regression comment after all matrix jobs finish
+  visual-regression-comment:
+    needs: [playwright-tests]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download visual diff summaries
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # ratchet:actions/download-artifact@v4
+        with:
+          pattern: visual-diff-summary-*
+          path: summaries/
+
+      - name: Post combined PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
+        run: |
+          MARKER="<!-- visual-regression-report -->"
+          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+
+          # Build the markdown table from all summary files
+          TABLE_HEADER="| Project | Changed | Added | Removed | Unchanged | Report |"
+          TABLE_DIVIDER="|---------|---------|-------|---------|-----------|--------|"
+          TABLE_ROWS=""
+          HAS_ANY_SUMMARY=false
+
+          for SUMMARY_DIR in summaries/visual-diff-summary-*/; do
+            SUMMARY_FILE="${SUMMARY_DIR}summary.json"
+            if [ ! -f "${SUMMARY_FILE}" ]; then
+              continue
+            fi
+
+            HAS_ANY_SUMMARY=true
+            PROJECT=$(jq -r '.project' "${SUMMARY_FILE}")
+            CHANGED=$(jq -r '.changed' "${SUMMARY_FILE}")
+            ADDED=$(jq -r '.added' "${SUMMARY_FILE}")
+            REMOVED=$(jq -r '.removed' "${SUMMARY_FILE}")
+            UNCHANGED=$(jq -r '.unchanged' "${SUMMARY_FILE}")
+            TOTAL=$(jq -r '.total' "${SUMMARY_FILE}")
+            HAS_DIFF=$(jq -r '.has_differences' "${SUMMARY_FILE}")
+
+            if [ "${TOTAL}" = "0" ]; then
+              REPORT_LINK="_No screenshots_"
+            elif [ "${HAS_DIFF}" = "true" ]; then
+              REPORT_URL="https://${S3_BUCKET}.s3.us-east-2.amazonaws.com/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/index.html"
+              REPORT_LINK="[View Report](${REPORT_URL})"
+            else
+              REPORT_LINK="✅ No changes"
+            fi
+
+            TABLE_ROWS="${TABLE_ROWS}| \`${PROJECT}\` | ${CHANGED} | ${ADDED} | ${REMOVED} | ${UNCHANGED} | ${REPORT_LINK} |\n"
+          done
+
+          if [ "${HAS_ANY_SUMMARY}" = "false" ]; then
+            echo "No visual diff summaries found — skipping PR comment."
+            exit 0
+          fi
+
+          BODY=$(printf '%s\n' \
+            "${MARKER}" \
+            "### 🖼️ Visual Regression Report" \
+            "" \
+            "${TABLE_HEADER}" \
+            "${TABLE_DIVIDER}" \
+            "$(printf '%b' "${TABLE_ROWS}")" \
+            "" \
+            "**Run:** [#${RUN_ID}](${RUN_URL})" \
+            "" \
+            "_This report is informational only and does not block the PR._")
+
+          # Upsert: find existing comment with the marker, or create a new one
+          EXISTING_COMMENT_ID=$(gh api \
+            "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
+            2>/dev/null | head -1)
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api \
+              --method PATCH \
+              "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -f body="${BODY}"
+          else
+            gh api \
+              --method POST \
+              "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+              -f body="${BODY}"
+          fi
 
   playwright-required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
