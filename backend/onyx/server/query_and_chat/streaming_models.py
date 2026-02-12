@@ -277,6 +277,8 @@ class FileReaderResult(BaseObj):
     # Short previews of the retrieved text for the collapsed/expanded UI
     preview_start: str = ""
     preview_end: str = ""
+
+
 # Memory Tool Packets
 ################################################
 class MemoryToolStart(BaseObj):
