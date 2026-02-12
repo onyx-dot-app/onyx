@@ -27,7 +27,6 @@ from datetime import datetime
 from datetime import timezone
 from io import BytesIO
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -54,8 +53,14 @@ from onyx.document_index.interfaces import DocumentMetadata
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
+from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
+from onyx.server.features.build.db.user_library import get_or_create_craft_connector
+from onyx.server.features.build.db.user_library import get_user_storage_bytes
 from onyx.server.features.build.indexing.persistent_document_writer import (
     get_persistent_document_writer,
+)
+from onyx.server.features.build.indexing.persistent_document_writer import (
+    PersistentDocumentWriter,
 )
 from onyx.server.features.build.indexing.persistent_document_writer import (
     S3PersistentDocumentWriter,
@@ -101,6 +106,20 @@ class UploadResponse(BaseModel):
     entries: list[LibraryEntryResponse]
     total_uploaded: int
     total_size_bytes: int
+
+
+class ToggleSyncResponse(BaseModel):
+    """Response after toggling file sync."""
+
+    success: bool
+    sync_enabled: bool
+
+
+class DeleteFileResponse(BaseModel):
+    """Response after deleting a file."""
+
+    success: bool
+    deleted: str
 
 
 # =============================================================================
@@ -158,181 +177,102 @@ def _trigger_sandbox_sync(
     )
 
 
-def _get_user_storage_bytes(db_session: Session, user_id: UUID) -> int:
-    """Get total storage usage for a user's library files.
+def _validate_zip_contents(
+    zip_file: zipfile.ZipFile,
+    existing_usage: int,
+) -> None:
+    """Validate zip file contents before extraction.
 
-    Uses SQL aggregation to sum file_size from doc_metadata JSONB for all
-    CRAFT_FILE documents owned by this user, avoiding loading all documents
-    into Python memory.
+    Checks file count limit and total decompressed size against storage quota.
+    Raises HTTPException on validation failure.
     """
-    from sqlalchemy import and_
-    from sqlalchemy import cast
-    from sqlalchemy import func
-    from sqlalchemy import Integer
-    from sqlalchemy import select
-
-    from onyx.db.models import Connector
-    from onyx.db.models import ConnectorCredentialPair
-    from onyx.db.models import Document as DbDocument
-    from onyx.db.models import DocumentByConnectorCredentialPair
-
-    stmt = (
-        select(
-            func.coalesce(
-                func.sum(
-                    cast(
-                        DbDocument.doc_metadata["file_size"].as_string(),
-                        Integer,
-                    )
-                ),
-                0,
-            )
+    if len(zip_file.namelist()) > USER_LIBRARY_MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Zip contains too many files. Maximum is {USER_LIBRARY_MAX_FILES_PER_UPLOAD}.",
         )
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .join(
-            ConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
+
+    # Zip bomb protection: check total decompressed size before extracting
+    declared_total = sum(
+        info.file_size for info in zip_file.infolist() if not info.is_dir()
+    )
+    if existing_usage + declared_total > USER_LIBRARY_MAX_TOTAL_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Zip decompressed size ({declared_total // (1024*1024)}MB) "
+                f"would exceed storage limit."
             ),
         )
-        .join(
-            Connector,
-            ConnectorCredentialPair.connector_id == Connector.id,
+
+
+def _verify_ownership_and_get_document(
+    document_id: str,
+    user: User,
+    db_session: Session,
+) -> Any:
+    """Verify the user owns the document and return it.
+
+    Raises HTTPException on authorization failure or if document not found.
+    """
+    from onyx.db.document import get_document
+
+    user_prefix = f"CRAFT_FILE__{user.id}__"
+    if not document_id.startswith(user_prefix):
+        raise HTTPException(
+            status_code=403, detail="Not authorized to modify this file"
         )
-        .where(Connector.source == DocumentSource.CRAFT_FILE)
-        .where(ConnectorCredentialPair.creator_id == user_id)
-        .where(DbDocument.doc_metadata["is_directory"].as_boolean().is_not(True))
-    )
-    result = db_session.execute(stmt).scalar()
-    return int(result or 0)
+
+    doc = get_document(document_id, db_session)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return doc
 
 
-def _get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int, int]:
-    """Get or create the CRAFT_FILE connector for a user.
+def _store_and_track_file(
+    *,
+    writer: "PersistentDocumentWriter | S3PersistentDocumentWriter",
+    file_path: str,
+    content: bytes,
+    content_type: str | None,
+    user_id: str,
+    connector_id: int,
+    credential_id: int,
+    db_session: Session,
+) -> tuple[str, str]:
+    """Write a file to storage and upsert its document record.
 
     Returns:
-        Tuple of (connector_id, credential_id)
-
-    Note: We need to create a credential even though CRAFT_FILE doesn't require
-    authentication. This is because Onyx's connector-credential pair system
-    requires a credential for all connectors. The credential is empty ({}).
-
-    This function handles recovery from partial creation failures by detecting
-    orphaned connectors (connectors without cc_pairs) and completing their setup.
+        Tuple of (document_id, storage_key)
     """
-    from onyx.connectors.models import InputType
-    from onyx.db.connector import create_connector
-    from onyx.db.connector import fetch_connectors
-    from onyx.db.connector_credential_pair import add_credential_to_connector
-    from onyx.db.connector_credential_pair import (
-        get_connector_credential_pairs_for_user,
-    )
-    from onyx.db.credentials import create_credential
-    from onyx.db.credentials import fetch_credentials_for_user
-    from onyx.db.enums import AccessType
-    from onyx.db.enums import ProcessingMode
-    from onyx.server.documents.models import ConnectorBase
-    from onyx.server.documents.models import CredentialBase
-
-    # Check if user already has a complete CRAFT_FILE cc_pair
-    cc_pairs = get_connector_credential_pairs_for_user(
-        db_session=db_session,
-        user=user,
-        get_editable=False,
-        eager_load_connector=True,
-        eager_load_credential=True,
-        processing_mode=ProcessingMode.RAW_BINARY,
+    storage_key = writer.write_raw_file(
+        path=file_path,
+        content=content,
+        content_type=content_type,
     )
 
-    for cc_pair in cc_pairs:
-        if cc_pair.connector.source == DocumentSource.CRAFT_FILE:
-            return cc_pair.connector.id, cc_pair.credential.id
-
-    # Check for orphaned connector (created but cc_pair creation failed previously)
-    # An orphaned connector has no cc_pairs. We check credentials to verify
-    # it belongs to this user (Connector doesn't have creator_id directly).
-    existing_connectors = fetch_connectors(
-        db_session, sources=[DocumentSource.CRAFT_FILE]
-    )
-    orphaned_connector = None
-    for conn in existing_connectors:
-        if conn.name != "User Library":
-            continue
-        # Verify this connector has no cc_pairs (i.e., is actually orphaned)
-        # and that a matching credential exists for this user
-        if not conn.credentials:
-            orphaned_connector = conn
-            break
-
-    if orphaned_connector:
-        connector_id = orphaned_connector.id
-        logger.info(
-            f"Found orphaned User Library connector {connector_id}, completing setup"
-        )
-    else:
-        # Create new connector
-        connector_data = ConnectorBase(
-            name="User Library",
-            source=DocumentSource.CRAFT_FILE,
-            input_type=InputType.LOAD_STATE,
-            connector_specific_config={"disabled_paths": []},
-            refresh_freq=None,
-            prune_freq=None,
-        )
-        connector_response = create_connector(
-            db_session=db_session,
-            connector_data=connector_data,
-        )
-        connector_id = connector_response.id
-
-    # Try to reuse an existing User Library credential for this user
-    existing_credentials = fetch_credentials_for_user(
-        db_session=db_session,
-        user=user,
-    )
-    credential = None
-    for cred in existing_credentials:
-        if (
-            cred.source == DocumentSource.CRAFT_FILE
-            and cred.name == "User Library Credential"
-        ):
-            credential = cred
-            break
-
-    if credential is None:
-        # Create credential (empty - no auth needed, but required by the system)
-        credential_data = CredentialBase(
-            credential_json={},
-            admin_public=False,
-            source=DocumentSource.CRAFT_FILE,
-            name="User Library Credential",
-        )
-        credential = create_credential(
-            credential_data=credential_data,
-            user=user,
-            db_session=db_session,
-        )
-
-    # Link them with RAW_BINARY processing mode
-    add_credential_to_connector(
-        db_session=db_session,
+    doc_id = _build_document_id(user_id, file_path)
+    doc_metadata = DocumentMetadata(
         connector_id=connector_id,
-        credential_id=credential.id,
-        user=user,
-        cc_pair_name="User Library",
-        access_type=AccessType.PRIVATE,
-        groups=None,
-        processing_mode=ProcessingMode.RAW_BINARY,
+        credential_id=credential_id,
+        document_id=doc_id,
+        semantic_identifier=f"{USER_LIBRARY_SOURCE_DIR}{file_path}",
+        first_link=storage_key,
+        doc_metadata={
+            "storage_key": storage_key,
+            "file_path": file_path,
+            "file_size": len(content),
+            "mime_type": content_type,
+            "is_directory": False,
+        },
+    )
+    upsert_documents(db_session, [doc_metadata])
+    upsert_document_by_connector_credential_pair(
+        db_session, connector_id, credential_id, [doc_id]
     )
 
-    db_session.commit()
-    return connector_id, credential.id
+    return doc_id, storage_key
 
 
 # =============================================================================
@@ -403,10 +343,10 @@ async def upload_files(
         )
 
     # Check cumulative storage usage
-    existing_usage = _get_user_storage_bytes(db_session, user.id)
+    existing_usage = get_user_storage_bytes(db_session, user.id)
 
     # Get or create connector
-    connector_id, credential_id = _get_or_create_craft_connector(db_session, user)
+    connector_id, credential_id = get_or_create_craft_connector(db_session, user)
 
     # Get the persistent document writer
     writer = get_persistent_document_writer(
@@ -447,32 +387,15 @@ async def upload_files(
         safe_filename = api_sanitize_filename(file.filename or "unnamed")
         file_path = f"{base_path}/{safe_filename}".replace("//", "/")
 
-        # Write raw binary to storage
-        storage_key = writer.write_raw_file(
-            path=file_path,
+        doc_id, _ = _store_and_track_file(
+            writer=writer,
+            file_path=file_path,
             content=content,
             content_type=file.content_type,
-        )
-
-        # Track in document table
-        doc_id = _build_document_id(str(user.id), file_path)
-        doc_metadata = DocumentMetadata(
+            user_id=str(user.id),
             connector_id=connector_id,
             credential_id=credential_id,
-            document_id=doc_id,
-            semantic_identifier=f"user_library{file_path}",
-            first_link=storage_key,
-            doc_metadata={
-                "storage_key": storage_key,
-                "file_path": file_path,
-                "file_size": file_size,
-                "mime_type": file.content_type,
-                "is_directory": False,
-            },
-        )
-        upsert_documents(db_session, [doc_metadata])
-        upsert_document_by_connector_credential_pair(
-            db_session, connector_id, credential_id, [doc_id]
+            db_session=db_session,
         )
 
         uploaded_entries.append(
@@ -500,7 +423,7 @@ async def upload_files(
     )
 
     # Trigger sandbox sync for user_library source only
-    _trigger_sandbox_sync(str(user.id), tenant_id, source="user_library")
+    _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
 
     logger.info(
         f"Uploaded {len(uploaded_entries)} files ({total_size} bytes) for user {user.id}"
@@ -537,10 +460,10 @@ async def upload_zip(
         )
 
     # Check cumulative storage usage
-    existing_usage = _get_user_storage_bytes(db_session, user.id)
+    existing_usage = get_user_storage_bytes(db_session, user.id)
 
     # Get or create connector
-    connector_id, credential_id = _get_or_create_craft_connector(db_session, user)
+    connector_id, credential_id = get_or_create_craft_connector(db_session, user)
 
     # Get the persistent document writer
     writer = get_persistent_document_writer(
@@ -550,42 +473,33 @@ async def upload_zip(
 
     uploaded_entries: list[LibraryEntryResponse] = []
     total_size = 0
-    base_path = _sanitize_path(path)
+
+    # Extract zip contents into a subfolder named after the zip file
+    zip_name = api_sanitize_filename(file.filename or "upload")
+    if zip_name.lower().endswith(".zip"):
+        zip_name = zip_name[:-4]
+    folder_path = f"{_sanitize_path(path)}/{zip_name}".replace("//", "/")
+    base_path = folder_path
+
     now = datetime.now(timezone.utc)
+
+    # Track all directory paths we need to create records for
+    directory_paths: set[str] = set()
 
     try:
         with zipfile.ZipFile(BytesIO(content), "r") as zip_file:
-            # Check file count
-            if len(zip_file.namelist()) > USER_LIBRARY_MAX_FILES_PER_UPLOAD:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Zip contains too many files. Maximum is {USER_LIBRARY_MAX_FILES_PER_UPLOAD}.",
-                )
-
-            # Zip bomb protection: check total decompressed size before extracting
-            declared_total = sum(
-                info.file_size for info in zip_file.infolist() if not info.is_dir()
-            )
-            max_decompressed = USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
-            if existing_usage + declared_total > max_decompressed:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Zip decompressed size ({declared_total // (1024*1024)}MB) "
-                        f"would exceed storage limit."
-                    ),
-                )
+            _validate_zip_contents(zip_file, existing_usage)
 
             for zip_info in zip_file.infolist():
-                # Skip directories
-                if zip_info.is_dir():
-                    continue
-
                 # Skip hidden files and __MACOSX
                 if (
                     zip_info.filename.startswith("__MACOSX")
                     or "/." in zip_info.filename
                 ):
+                    continue
+
+                # Skip directories - we'll create records from file paths below
+                if zip_info.is_dir():
                     continue
 
                 # Read file content
@@ -611,35 +525,25 @@ async def upload_zip(
                 file_path = f"{base_path}{sanitized_zip_path}".replace("//", "/")
                 file_name = file_path.split("/")[-1]
 
+                # Collect all intermediate directories for this file
+                parts = file_path.split("/")
+                for i in range(
+                    2, len(parts)
+                ):  # start at 2 to skip empty + first segment
+                    directory_paths.add("/".join(parts[:i]))
+
                 # Guess content type
                 content_type, _ = mimetypes.guess_type(file_name)
 
-                # Write raw binary to storage
-                storage_key = writer.write_raw_file(
-                    path=file_path,
+                doc_id, _ = _store_and_track_file(
+                    writer=writer,
+                    file_path=file_path,
                     content=file_content,
                     content_type=content_type,
-                )
-
-                # Track in document table
-                doc_id = _build_document_id(str(user.id), file_path)
-                doc_metadata = DocumentMetadata(
+                    user_id=str(user.id),
                     connector_id=connector_id,
                     credential_id=credential_id,
-                    document_id=doc_id,
-                    semantic_identifier=f"user_library{file_path}",
-                    first_link=storage_key,
-                    doc_metadata={
-                        "storage_key": storage_key,
-                        "file_path": file_path,
-                        "file_size": file_size,
-                        "mime_type": content_type,
-                        "is_directory": False,
-                    },
-                )
-                upsert_documents(db_session, [doc_metadata])
-                upsert_document_by_connector_credential_pair(
-                    db_session, connector_id, credential_id, [doc_id]
+                    db_session=db_session,
                 )
 
                 uploaded_entries.append(
@@ -658,6 +562,25 @@ async def upload_zip(
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid zip file")
 
+    # Create directory document records so they appear in the tree view
+    if directory_paths:
+        dir_doc_ids: list[str] = []
+        for dir_path in sorted(directory_paths):
+            dir_doc_id = _build_document_id(str(user.id), dir_path)
+            dir_doc_ids.append(dir_doc_id)
+            dir_metadata = DocumentMetadata(
+                connector_id=connector_id,
+                credential_id=credential_id,
+                document_id=dir_doc_id,
+                semantic_identifier=f"{USER_LIBRARY_SOURCE_DIR}{dir_path}",
+                first_link="",
+                doc_metadata={"is_directory": True},
+            )
+            upsert_documents(db_session, [dir_metadata])
+        upsert_document_by_connector_credential_pair(
+            db_session, connector_id, credential_id, dir_doc_ids
+        )
+
     # Mark connector as having succeeded (sets last_successful_index_time)
     # This allows the demo data toggle to be disabled
     update_connector_credential_pair(
@@ -670,7 +593,7 @@ async def upload_zip(
     )
 
     # Trigger sandbox sync for user_library source only
-    _trigger_sandbox_sync(str(user.id), tenant_id, source="user_library")
+    _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
 
     logger.info(
         f"Extracted {len(uploaded_entries)} files ({total_size} bytes) from zip for user {user.id}"
@@ -695,7 +618,7 @@ def create_directory(
     No S3 object is created (S3 doesn't have real directories).
     """
     # Get or create connector
-    connector_id, credential_id = _get_or_create_craft_connector(db_session, user)
+    connector_id, credential_id = get_or_create_craft_connector(db_session, user)
 
     # Build path
     parent_path = _sanitize_path(request.parent_path)
@@ -708,7 +631,7 @@ def create_directory(
         connector_id=connector_id,
         credential_id=credential_id,
         document_id=doc_id,
-        semantic_identifier=f"user_library{dir_path}",
+        semantic_identifier=f"{USER_LIBRARY_SOURCE_DIR}{dir_path}",
         first_link="",
         doc_metadata={
             "is_directory": True,
@@ -738,7 +661,7 @@ def toggle_file_sync(
     enabled: bool = Query(...),
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> dict[str, Any]:
+) -> ToggleSyncResponse:
     """Enable/disable syncing a file to sandboxes.
 
     When sync is disabled, the file's metadata is updated with sync_disabled=True.
@@ -746,7 +669,6 @@ def toggle_file_sync(
 
     If the item is a directory, all children are also toggled.
     """
-    from onyx.db.document import get_document
     from onyx.db.document import get_documents_by_source
     from onyx.db.document import update_document_metadata__no_commit
 
@@ -754,17 +676,7 @@ def toggle_file_sync(
     if tenant_id is None:
         raise HTTPException(status_code=500, detail="Tenant ID not found")
 
-    # Verify ownership
-    user_prefix = f"CRAFT_FILE__{user.id}__"
-    if not document_id.startswith(user_prefix):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to modify this file"
-        )
-
-    # Get document
-    doc = get_document(document_id, db_session)
-    if doc is None:
-        raise HTTPException(status_code=404, detail="File not found")
+    doc = _verify_ownership_and_get_document(document_id, user, db_session)
 
     # Update metadata for this document
     new_metadata = dict(doc.doc_metadata or {})
@@ -776,18 +688,15 @@ def toggle_file_sync(
     if doc_metadata.get("is_directory"):
         folder_path = doc.semantic_id
         if folder_path:
-            # Get CRAFT_FILE documents for this user (filtered at SQL level)
             all_docs = get_documents_by_source(
                 db_session=db_session,
                 source=DocumentSource.CRAFT_FILE,
                 creator_id=user.id,
             )
-            # Find children of this folder
             for child_doc in all_docs:
                 if child_doc.semantic_id and child_doc.semantic_id.startswith(
                     folder_path + "/"
                 ):
-                    # Update metadata
                     child_metadata = dict(child_doc.doc_metadata or {})
                     child_metadata["sync_disabled"] = not enabled
                     update_document_metadata__no_commit(
@@ -796,7 +705,7 @@ def toggle_file_sync(
 
     db_session.commit()
 
-    return {"success": True, "sync_enabled": enabled}
+    return ToggleSyncResponse(success=True, sync_enabled=enabled)
 
 
 @router.delete("/files/{document_id}")
@@ -804,26 +713,15 @@ def delete_file(
     document_id: str,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> dict[str, Any]:
+) -> DeleteFileResponse:
     """Delete a file from both S3 and the document table."""
     from onyx.db.document import delete_document_by_id__no_commit
-    from onyx.db.document import get_document
 
     tenant_id = get_current_tenant_id()
     if tenant_id is None:
         raise HTTPException(status_code=500, detail="Tenant ID not found")
 
-    # Verify ownership
-    user_prefix = f"CRAFT_FILE__{user.id}__"
-    if not document_id.startswith(user_prefix):
-        raise HTTPException(
-            status_code=403, detail="Not authorized to delete this file"
-        )
-
-    # Get document
-    doc = get_document(document_id, db_session)
-    if doc is None:
-        raise HTTPException(status_code=404, detail="File not found")
+    doc = _verify_ownership_and_get_document(document_id, user, db_session)
 
     # Delete from storage if it's a file (not directory)
     doc_metadata = doc.doc_metadata or {}
@@ -866,6 +764,6 @@ def delete_file(
     db_session.commit()
 
     # Trigger sync to apply changes
-    _trigger_sandbox_sync(str(user.id), tenant_id, source="user_library")
+    _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
 
-    return {"success": True, "deleted": document_id}
+    return DeleteFileResponse(success=True, deleted=document_id)

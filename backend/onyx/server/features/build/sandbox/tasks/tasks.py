@@ -22,6 +22,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
@@ -305,8 +306,8 @@ def _get_disabled_user_library_paths(db_session: "Session", user_id: str) -> lis
         # setup_session_workspace() handles directory exclusion by
         # checking if paths are children of an excluded directory.
         semantic_id = doc.semantic_id or ""
-        if semantic_id.startswith("user_library"):
-            file_path = semantic_id[len("user_library") :]
+        if semantic_id.startswith(USER_LIBRARY_SOURCE_DIR):
+            file_path = semantic_id[len(USER_LIBRARY_SOURCE_DIR) :]
             if file_path:
                 disabled_paths.append(file_path)
 

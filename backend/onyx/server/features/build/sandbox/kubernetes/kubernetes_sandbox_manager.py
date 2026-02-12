@@ -194,6 +194,98 @@ def _get_local_aws_credential_env_vars() -> list[client.V1EnvVar]:
     return env_vars
 
 
+def _build_filtered_symlink_script(
+    session_path: str,
+    excluded_user_library_paths: list[str],
+) -> str:
+    """Build a shell script that creates filtered symlinks for user_library.
+
+    Creates symlinks for all top-level directories in /workspace/files/,
+    then selectively symlinks user_library files, excluding disabled paths.
+
+    TODO: Replace this inline shell script with a standalone Python script
+    that gets copied onto the pod and invoked with arguments. This would
+    be easier to test and maintain.
+
+    Args:
+        session_path: The session directory path in the pod
+        excluded_user_library_paths: Paths to exclude from symlinks
+    """
+    excluded_paths_lines = "\n".join(p.lstrip("/") for p in excluded_user_library_paths)
+    heredoc_delim = f"_EXCL_{uuid4().hex[:12]}_"
+    return f"""
+# Create filtered files directory with exclusions
+mkdir -p {session_path}/files
+
+# Symlink all top-level directories except user_library
+for item in /workspace/files/*; do
+    [ -e "$item" ] || continue
+    name=$(basename "$item")
+    if [ "$name" != "user_library" ]; then
+        ln -sf "$item" {session_path}/files/"$name"
+    fi
+done
+
+# Write excluded paths to a temp file (one per line, via heredoc for safety)
+EXCL_FILE=$(mktemp)
+cat > "$EXCL_FILE" << '{heredoc_delim}'
+{excluded_paths_lines}
+{heredoc_delim}
+
+# Check if a relative path is excluded (exact match or child of excluded dir)
+is_excluded() {{
+    local rel_path="$1"
+    while IFS= read -r excl || [ -n "$excl" ]; do
+        [ -z "$excl" ] && continue
+        if [ "$rel_path" = "$excl" ]; then
+            return 0
+        fi
+        case "$rel_path" in
+            "$excl"/*) return 0 ;;
+        esac
+    done < "$EXCL_FILE"
+    return 1
+}}
+
+# Recursively create symlinks for non-excluded files
+create_filtered_symlinks() {{
+    src_dir="$1"
+    dst_dir="$2"
+    rel_base="$3"
+
+    for item in "$src_dir"/*; do
+        [ -e "$item" ] || continue
+        name=$(basename "$item")
+        if [ -n "$rel_base" ]; then
+            rel_path="$rel_base/$name"
+        else
+            rel_path="$name"
+        fi
+
+        if is_excluded "$rel_path"; then
+            continue
+        fi
+
+        if [ -d "$item" ]; then
+            mkdir -p "$dst_dir/$name"
+            create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
+            rmdir "$dst_dir/$name" 2>/dev/null || true
+        else
+            ln -sf "$item" "$dst_dir/$name"
+        fi
+    done
+}}
+
+if [ -d "/workspace/files/user_library" ]; then
+    mkdir -p {session_path}/files/user_library
+    create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
+    rmdir {session_path}/files/user_library 2>/dev/null || true
+fi
+
+rm -f "$EXCL_FILE"
+"""
+
+
 class KubernetesSandboxManager(SandboxManager):
     """Kubernetes-based sandbox manager for production deployments.
 
@@ -1199,90 +1291,9 @@ echo "Creating files symlink to demo data: {symlink_target}"
 ln -sf {symlink_target} {session_path}/files
 """
         elif excluded_user_library_paths:
-            # User files with exclusions: create filtered symlink structure
-            # Instead of symlinking to /workspace/files directly, create a directory
-            # with symlinks to each top-level item, then filter user_library contents
-            #
-            # Use newline-delimited exclusion list written via heredoc to avoid
-            # shell injection from path names. Paths are also pre-sanitized by
-            # _sanitize_path() which enforces an alphanumeric whitelist.
-            # The heredoc delimiter is randomized to prevent a filename from
-            # accidentally terminating the heredoc early.
-            excluded_paths_lines = "\n".join(
-                p.lstrip("/") for p in excluded_user_library_paths
+            files_symlink_setup = _build_filtered_symlink_script(
+                session_path, excluded_user_library_paths
             )
-            heredoc_delim = f"_EXCL_{uuid4().hex[:12]}_"
-            files_symlink_setup = f"""
-# Create filtered files directory with exclusions
-mkdir -p {session_path}/files
-
-# Symlink all top-level directories except user_library
-for item in /workspace/files/*; do
-    [ -e "$item" ] || continue
-    name=$(basename "$item")
-    if [ "$name" != "user_library" ]; then
-        ln -sf "$item" {session_path}/files/"$name"
-    fi
-done
-
-# Write excluded paths to a temp file (one per line, via heredoc for safety)
-EXCL_FILE=$(mktemp)
-cat > "$EXCL_FILE" << '{heredoc_delim}'
-{excluded_paths_lines}
-{heredoc_delim}
-
-# Check if a relative path is excluded (exact match or child of excluded dir)
-is_excluded() {{
-    local rel_path="$1"
-    while IFS= read -r excl || [ -n "$excl" ]; do
-        [ -z "$excl" ] && continue
-        if [ "$rel_path" = "$excl" ]; then
-            return 0
-        fi
-        case "$rel_path" in
-            "$excl"/*) return 0 ;;
-        esac
-    done < "$EXCL_FILE"
-    return 1
-}}
-
-# Recursively create symlinks for non-excluded files
-create_filtered_symlinks() {{
-    src_dir="$1"
-    dst_dir="$2"
-    rel_base="$3"
-
-    for item in "$src_dir"/*; do
-        [ -e "$item" ] || continue
-        name=$(basename "$item")
-        if [ -n "$rel_base" ]; then
-            rel_path="$rel_base/$name"
-        else
-            rel_path="$name"
-        fi
-
-        if is_excluded "$rel_path"; then
-            continue
-        fi
-
-        if [ -d "$item" ]; then
-            mkdir -p "$dst_dir/$name"
-            create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
-            rmdir "$dst_dir/$name" 2>/dev/null || true
-        else
-            ln -sf "$item" "$dst_dir/$name"
-        fi
-    done
-}}
-
-if [ -d "/workspace/files/user_library" ]; then
-    mkdir -p {session_path}/files/user_library
-    create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
-    rmdir {session_path}/files/user_library 2>/dev/null || true
-fi
-
-rm -f "$EXCL_FILE"
-"""
         else:
             # Normal mode: symlink to user's S3-synced knowledge files
             symlink_target = "/workspace/files"
@@ -2123,20 +2134,14 @@ echo "Session config regeneration complete"
             s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
             local_path = "/workspace/files/"
 
-        # s5cmd sync: high-performance parallel S3 sync
-        # --delete: mirror S3 to local (remove files that no longer exist in source)
-        #           Use --delete for external connectors (gmail, google_drive) where
-        #           files can be removed from the source.
-        #           Do NOT use --delete for user_library - files are only added by user
-        #           uploads, and deletions are handled explicitly by the delete_file endpoint.
+        # s5cmd sync with --delete for external connectors only.
         # timeout: prevent zombie processes from kubectl exec disconnections
         # trap: kill child processes on exit/disconnect
         source_info = f" (source={source})" if source else ""
 
-        # Only use --delete for external connectors where the source of truth is external.
-        # For user_library, we only add files - deletions are handled explicitly.
-        # When source is None (sync all), we also skip --delete to be safe.
-        use_delete = source is not None and source != "user_library"
+        # Sources where --delete is explicitly forbidden (deletions handled via API)
+        NO_DELETE_SOURCES = {"user_library"}
+        use_delete = source is not None and source not in NO_DELETE_SOURCES
         delete_flag = " --delete" if use_delete else ""
 
         sync_script = f"""

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/Modal";
+import ShadowDiv from "@/refresh-components/ShadowDiv";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgFolder,
@@ -258,21 +259,21 @@ export default function UserLibraryModal({
               )}
 
               {/* File list */}
-              <div className="w-full border border-border-01 rounded-08 min-h-[200px] max-h-[400px] overflow-auto">
+              <div className="w-full border border-border-01 rounded-08 min-h-[200px]">
                 {isLoading ? (
-                  <div className="flex flex-col items-center justify-center p-8">
+                  <Section padding={2} height="fit">
                     <Text secondaryBody text03>
                       Loading files...
                     </Text>
-                  </div>
+                  </Section>
                 ) : error ? (
-                  <div className="flex flex-col items-center justify-center p-8">
+                  <Section padding={2} height="fit">
                     <Text secondaryBody text03>
                       Failed to load files
                     </Text>
-                  </div>
+                  </Section>
                 ) : fileCount === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-8">
+                  <Section padding={2} height="fit" gap={0.25}>
                     <SvgFileText size={32} className="mb-3 stroke-text-02" />
                     <Text secondaryBody text03>
                       No files uploaded yet
@@ -281,9 +282,9 @@ export default function UserLibraryModal({
                       Upload Excel, Word, PowerPoint, or other files for your
                       agent to work with
                     </Text>
-                  </div>
+                  </Section>
                 ) : (
-                  <div className="w-full p-2">
+                  <ShadowDiv className="max-h-[400px] p-2">
                     <LibraryTreeView
                       entries={hierarchicalTree}
                       expandedPaths={expandedPaths}
@@ -293,7 +294,7 @@ export default function UserLibraryModal({
                       onUploadToFolder={handleUploadToFolder}
                       formatFileSize={formatFileSize}
                     />
-                  </div>
+                  </ShadowDiv>
                 )}
               </div>
             </Section>

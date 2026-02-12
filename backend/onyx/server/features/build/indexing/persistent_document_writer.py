@@ -88,6 +88,11 @@ def sanitize_filename(name: str, replace_slash: bool = True) -> str:
     return sanitized
 
 
+def normalize_leading_slash(path: str) -> str:
+    """Ensure a path starts with exactly one leading slash."""
+    return "/" + path.lstrip("/")
+
+
 def get_base_filename(doc: Document, replace_slash: bool = True) -> str:
     """Get base filename from document, preferring semantic identifier.
 
@@ -292,8 +297,7 @@ class PersistentDocumentWriter:
             Full filesystem path where file was written
         """
         # Build full path: {base_path}/{tenant}/knowledge/{user}/user_library/{path}
-        # Normalize path - ensure it starts with / and doesn't have double slashes
-        normalized_path = "/" + path.lstrip("/")
+        normalized_path = normalize_leading_slash(path)
         full_path = (
             self.base_path
             / self.tenant_id
@@ -320,7 +324,7 @@ class PersistentDocumentWriter:
             path: Relative path within user's library (e.g., "/project-data/financials.xlsx")
         """
         # Build full path
-        normalized_path = "/" + path.lstrip("/")
+        normalized_path = normalize_leading_slash(path)
         full_path = (
             self.base_path
             / self.tenant_id
