@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -889,7 +890,7 @@ def run_llm_loop(
                                 db_session=db_session,
                             )
                             persisted_memory_id = memory.id
-                    operation = (
+                    operation: Literal["add", "update"] = (
                         "update"
                         if tool_response.rich_response.index_to_replace is not None
                         else "add"

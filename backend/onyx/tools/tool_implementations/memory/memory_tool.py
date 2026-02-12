@@ -8,6 +8,7 @@ memories that exist for the user.
 
 from typing import Any
 from typing import cast
+from typing import Literal
 
 from pydantic import BaseModel
 from typing_extensions import override
@@ -138,7 +139,9 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
 
         logger.info(f"New memory to be added: {memory_text}")
 
-        operation = "update" if index_to_replace is not None else "add"
+        operation: Literal["add", "update"] = (
+            "update" if index_to_replace is not None else "add"
+        )
         self.emitter.emit(
             Packet(
                 placement=placement,

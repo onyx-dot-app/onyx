@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import cast
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -339,7 +340,7 @@ def create_fetch_packets(
 
 def create_memory_packets(
     memory_text: str,
-    operation: str,
+    operation: Literal["add", "update"],
     memory_id: int | None,
     turn_index: int,
     tab_index: int = 0,
@@ -574,7 +575,10 @@ def translate_assistant_message_to_packets(
                             turn_tool_packets.extend(
                                 create_memory_packets(
                                     memory_text=memory_data["memory_text"],
-                                    operation=memory_data["operation"],
+                                    operation=cast(
+                                        Literal["add", "update"],
+                                        memory_data["operation"],
+                                    ),
                                     memory_id=memory_data.get("memory_id"),
                                     turn_index=turn_num,
                                     tab_index=tool_call.tab_index,
