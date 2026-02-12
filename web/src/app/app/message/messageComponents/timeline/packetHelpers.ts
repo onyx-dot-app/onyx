@@ -106,3 +106,11 @@ export const stepHasCollapsedStreamingContent = (
 // Check if packets belong to a deep research plan
 export const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START);
+
+// Check if packets belong to a memory tool
+export const isMemoryToolPackets = (packets: Packet[]): boolean =>
+  packets.some(
+    (p) =>
+      p.obj.type === PacketType.MEMORY_TOOL_START ||
+      p.obj.type === PacketType.MEMORY_TOOL_NO_ACCESS
+  );

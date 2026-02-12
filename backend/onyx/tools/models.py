@@ -217,6 +217,13 @@ class CustomToolRunContext(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
+class MemoryToolResponseSnapshot(BaseModel):
+    memory_text: str
+    operation: Literal["add", "update"]
+    memory_id: int | None = None
+    index: int | None = None
+
+
 class ToolCallInfo(BaseModel):
     # The parent_tool_call_id is the actual generated tool call id
     # It is NOT the DB ID which often does not exist yet when the ToolCallInfo is created
