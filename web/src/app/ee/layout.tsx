@@ -24,6 +24,13 @@ export default async function AdminLayout({
     if (settingsResponse?.ok) {
       const settings = await settingsResponse.json();
       if (settings.ee_features_enabled === false) {
+        // When the app is in GATED_ACCESS (expired or missing license), defer
+        // to the root layout's GatedContentWrapper which handles path-based
+        // exemptions (e.g. allowing /admin/billing for license management).
+        if (settings.application_status === "gated_access") {
+          return children;
+        }
+
         return (
           <div className="flex h-screen">
             <div className="mx-auto my-auto text-lg font-bold text-red-500">
