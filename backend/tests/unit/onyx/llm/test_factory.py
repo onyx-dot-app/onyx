@@ -1,12 +1,12 @@
 from unittest.mock import patch
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.factory import _build_provider_extra_headers
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import llm_from_provider
-from onyx.llm.factory import _build_provider_extra_headers
+from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationView
-from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 
 
 def test_build_provider_extra_headers_adds_bearer_for_ollama_api_key() -> None:
