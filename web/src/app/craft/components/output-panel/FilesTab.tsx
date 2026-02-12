@@ -152,6 +152,8 @@ export default function FilesTab({
     mutate,
     isPreProvisioned,
     updateFilesTabState,
+    localExpandedPaths,
+    filesTabState.expandedPaths,
   ]);
 
   // Update cache when root listing changes
