@@ -15,6 +15,8 @@ on:
 
 permissions:
   contents: read
+  id-token: write       # Required for OIDC-based AWS credential exchange (S3 access)
+  pull-requests: write  # Required for posting visual diff PR comments
 
 env:
   # Test Environment Variables
@@ -445,6 +447,102 @@ jobs:
           name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
           path: ./web/screenshots/
           retention-days: 30
+
+      # --- Visual Regression Diff ---
+      - name: Configure AWS credentials
+        if: always()
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Setup Go
+        if: always()
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: tools/ods/go.mod
+          cache-dependency-path: tools/ods/go.sum
+
+      - name: Build ods
+        if: always()
+        run: cd tools/ods && go build -o "${GITHUB_WORKSPACE}/ods-bin" . && chmod +x "${GITHUB_WORKSPACE}/ods-bin"
+
+      - name: Generate visual diff report
+        if: always()
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          "${GITHUB_WORKSPACE}/ods-bin" playwright-diff compare \
+            --baseline "s3://onyx-internal-tools/playwright-baselines/${PROJECT}/" \
+            --current ./web/screenshots/ \
+            --output ./web/output/visual-diff/index.html
+
+      - name: Upload visual diff report to S3
+        if: always()
+        env:
+          PROJECT: ${{ matrix.project }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          aws s3 sync ./web/output/visual-diff/ \
+            "s3://onyx-internal-tools/playwright-reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
+
+      - name: Upload visual diff report artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: visual-diff-report-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/output/visual-diff/
+          retention-days: 30
+
+      - name: Comment visual diff on PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          PROJECT: ${{ matrix.project }}
+        run: |
+          REPORT_URL="https://onyx-internal-tools.s3.us-east-2.amazonaws.com/playwright-reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/index.html"
+          MARKER="<!-- visual-regression-${PROJECT} -->"
+
+          BODY=$(cat <<EOF
+          ${MARKER}
+          ### Visual Regression Report (\`${PROJECT}\`)
+
+          **Run:** [#${RUN_ID}](https://github.com/${{ github.repository }}/actions/runs/${RUN_ID})
+
+          [View Visual Diff Report](${REPORT_URL})
+
+          _This report is informational only and does not block the PR._
+          EOF
+          )
+
+          # Check if a comment with this marker already exists
+          EXISTING_COMMENT_ID=$(gh api \
+            "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
+            2>/dev/null | head -1)
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api \
+              --method PATCH \
+              "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -f body="${BODY}"
+          else
+            gh api \
+              --method POST \
+              "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              -f body="${BODY}"
+          fi
+
+      - name: Update S3 baselines
+        if: github.ref == 'refs/heads/main' && success()
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          aws s3 sync ./web/screenshots/ \
+            "s3://onyx-internal-tools/playwright-baselines/${PROJECT}/" --delete
 
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
