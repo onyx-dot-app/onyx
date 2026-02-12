@@ -264,6 +264,7 @@ def update_vespa_visit_progress_with_commit(
     db_session: Session,
     continuation_token: str | None,
     chunks_processed: int,
+    chunks_errored: int,
 ) -> None:
     """Updates the Vespa migration progress and commits.
 
@@ -275,12 +276,15 @@ def update_vespa_visit_progress_with_commit(
             is complete.
         chunks_processed: Number of chunks processed in this batch (added to
             the running total).
+        chunks_errored: Number of chunks errored in this batch (added to the
+            running errored total).
     """
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
         raise RuntimeError("OpenSearchTenantMigrationRecord not found.")
     record.vespa_visit_continuation_token = continuation_token
     record.total_chunks_migrated += chunks_processed
+    record.total_chunks_errored += chunks_errored
     db_session.commit()
 
 
