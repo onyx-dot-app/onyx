@@ -6,13 +6,20 @@ import { SvgAlertTriangle, SvgCheck, SvgCopy } from "@opal/icons";
 
 type CopyState = "idle" | "copied" | "error";
 
-export interface CopyIconButtonProps
-  extends Omit<ButtonProps, "variant" | "icon" | "onClick"> {
+/** Omit that distributes over unions, preserving discriminated-union branches. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+export type CopyIconButtonProps = DistributiveOmit<
+  ButtonProps,
+  "variant" | "icon" | "onClick"
+> & {
   // Function that returns the text to copy to clipboard
   getCopyText: () => string;
   // Optional function to get HTML content for rich copy
   getHtmlContent?: () => string;
-}
+};
 
 export default function CopyIconButton({
   getCopyText,

@@ -989,6 +989,7 @@ export default function Page() {
                             icon={SvgEdit}
                             tooltip="Edit"
                             prominence="tertiary"
+                            size="sm"
                             onClick={() => {
                               if (!canOpenModal) return;
                               openSearchModal(
@@ -1188,6 +1189,7 @@ export default function Page() {
                             icon={SvgEdit}
                             tooltip="Edit"
                             prominence="tertiary"
+                            size="sm"
                             onClick={() => {
                               openContentModal(
                                 provider.provider_type,

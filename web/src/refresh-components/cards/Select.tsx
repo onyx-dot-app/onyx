@@ -154,6 +154,7 @@ export default function Select({
                   icon={SvgSettings}
                   tooltip="Edit"
                   prominence="tertiary"
+                  size="sm"
                   disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}
@@ -179,6 +180,7 @@ export default function Select({
                   icon={SvgSettings}
                   tooltip="Edit"
                   prominence="tertiary"
+                  size="sm"
                   disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}
