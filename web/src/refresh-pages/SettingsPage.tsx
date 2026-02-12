@@ -879,7 +879,8 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           {(personalizationValues.use_memories ||
-            personalizationValues.enable_memory_tool) && (
+            personalizationValues.enable_memory_tool ||
+            personalizationValues.memories.length > 0) && (
             <Memories
               memories={personalizationValues.memories}
               onSaveMemories={handleSaveMemories}
