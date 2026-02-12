@@ -462,7 +462,7 @@ jobs:
           PROJECT: ${{ matrix.project }}
         run: |
           uv run --no-sync --with onyx-devtools ods playwright-diff compare \
-            --baseline "s3://onyx-playwright-artifacts/playwright-baselines/${PROJECT}/" \
+            --baseline "s3://onyx-playwright-artifacts/baselines/${PROJECT}/" \
             --current ./web/screenshots/ \
             --output ./web/output/visual-diff/index.html
 
