@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useEffect, useCallback } from "react";
+import { memo, useState, useEffect, useCallback, useRef } from "react";
 import useSWR from "swr";
 import {
   useSession,
@@ -14,21 +14,20 @@ import {
   useTabHistory,
   OutputTabType,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import {
-  fetchWebappInfo,
-  fetchArtifacts,
-  exportDocx,
-} from "@/app/craft/services/apiServices";
+import { fetchWebappInfo, exportDocx } from "@/app/craft/services/apiServices";
 import { cn, getFileIcon } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgGlobe,
   SvgHardDrive,
-  SvgFiles,
+  SvgPaperclip,
+  SvgPlus,
   SvgX,
   SvgMinus,
   SvgMaximize2,
 } from "@opal/icons";
+import Button from "@/refresh-components/buttons/Button";
+import { useUploadFilesContext } from "@/app/craft/contexts/UploadFilesContext";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
 
@@ -37,14 +36,14 @@ import UrlBar from "@/app/craft/components/output-panel/UrlBar";
 import PreviewTab from "@/app/craft/components/output-panel/PreviewTab";
 import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 import FilesTab from "@/app/craft/components/output-panel/FilesTab";
-import ArtifactsTab from "@/app/craft/components/output-panel/ArtifactsTab";
+import AttachmentsTab from "@/app/craft/components/output-panel/AttachmentsTab";
 
 type TabValue = OutputTabType;
 
 const tabs: { value: TabValue; label: string; icon: React.FC<IconProps> }[] = [
   { value: "preview", label: "Preview", icon: SvgGlobe },
   { value: "files", label: "Files", icon: SvgHardDrive },
-  { value: "artifacts", label: "Artifacts", icon: SvgFiles },
+  { value: "attachments", label: "Attachments", icon: SvgPaperclip },
 ];
 
 interface BuildOutputPanelProps {
@@ -53,13 +52,13 @@ interface BuildOutputPanelProps {
 }
 
 /**
- * BuildOutputPanel - Right panel showing preview, files, and artifacts
+ * BuildOutputPanel - Right panel showing preview, files, and attachments
  *
  * Features:
- * - Tabbed interface (Preview, Files, Artifacts)
+ * - Tabbed interface (Preview, Files, Attachments)
  * - Live preview iframe for webapp artifacts
  * - File browser for exploring sandbox filesystem
- * - Artifact list with download/view options
+ * - Attachment grid with file previews and delete support
  */
 const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const session = useSession();
@@ -91,6 +90,24 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   // Store actions for refresh
   const triggerFilesRefresh = useBuildSessionStore(
     (state) => state.triggerFilesRefresh
+  );
+
+  // Upload attachments
+  const { uploadFiles } = useUploadFilesContext();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      await uploadFiles(Array.from(files));
+      e.target.value = "";
+    },
+    [uploadFiles]
   );
 
   // Counters to force-reload previews
@@ -333,6 +350,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     } else if (activeOutputTab === "files" && session?.id) {
       // Files tab: clear cache and re-fetch directory listing
       triggerFilesRefresh(session.id);
+    } else if (activeOutputTab === "attachments" && session?.id) {
+      // Attachments tab: re-fetch attachment listing
+      triggerFilesRefresh(session.id);
     }
   }, [
     isFilePreviewActive,
@@ -341,25 +361,6 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     session?.id,
     triggerFilesRefresh,
   ]);
-
-  // Fetch artifacts - poll every 5 seconds when on artifacts tab
-  const shouldFetchArtifacts =
-    session?.id &&
-    !session.id.startsWith("temp-") &&
-    session.status !== "creating" &&
-    activeTab === "artifacts";
-
-  const { data: polledArtifacts } = useSWR(
-    shouldFetchArtifacts ? `/api/build/sessions/${session.id}/artifacts` : null,
-    () => (session?.id ? fetchArtifacts(session.id) : null),
-    {
-      refreshInterval: 5000, // Refresh every 5 seconds to catch new artifacts
-      revalidateOnFocus: true,
-    }
-  );
-
-  // Use polled artifacts if available, otherwise fall back to session store
-  const artifacts = polledArtifacts ?? session?.artifacts ?? [];
 
   return (
     <div
@@ -425,8 +426,8 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.value;
-              // Disable artifacts tab when no session
-              const isDisabled = tab.value === "artifacts" && !session;
+              // Disable attachments tab when no session
+              const isDisabled = tab.value === "attachments" && !session;
               return (
                 <button
                   key={tab.value}
@@ -434,7 +435,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                   disabled={isDisabled}
                   title={
                     isDisabled
-                      ? "Start building something to see artifacts!"
+                      ? "Start building something to see attachments!"
                       : undefined
                   }
                   className={cn(
@@ -585,7 +586,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                     : isPreProvisioning
                       ? "provisioning-sandbox://..."
                       : "no-sandbox://"
-                : "artifacts://"
+                : "attachments://"
         }
         showNavigation={true}
         canGoBack={canGoBack}
@@ -615,6 +616,27 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
         onRefresh={handleRefresh}
+        actionButton={
+          !isFilePreviewActive &&
+          activeOutputTab === "attachments" &&
+          session ? (
+            <Button
+              tertiary
+              action
+              leftIcon={SvgPlus}
+              onClick={handleUploadClick}
+            >
+              Upload Attachment
+            </Button>
+          ) : undefined
+        }
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileInputChange}
       />
 
       {/* Tab Content */}
@@ -650,10 +672,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                 isProvisioning={!session && isPreProvisioning}
               />
             )}
-            {activeOutputTab === "artifacts" && (
-              <ArtifactsTab
-                artifacts={artifacts}
+            {activeOutputTab === "attachments" && (
+              <AttachmentsTab
                 sessionId={session?.id ?? null}
+                onFileClick={session ? handleFileClick : undefined}
               />
             )}
           </>

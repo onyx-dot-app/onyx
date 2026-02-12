@@ -38,6 +38,8 @@ export interface UrlBarProps {
   isDownloading?: boolean;
   /** Optional refresh callback — shows a refresh icon at the right edge of the URL pill */
   onRefresh?: () => void;
+  /** Optional action button rendered to the right of the URL pill (e.g. Upload Attachment) */
+  actionButton?: React.ReactNode;
 }
 
 /**
@@ -60,6 +62,7 @@ export default function UrlBar({
   onDownload,
   isDownloading = false,
   onRefresh,
+  actionButton,
 }: UrlBarProps) {
   const handleOpenInNewTab = () => {
     if (previewUrl) {
@@ -152,6 +155,8 @@ export default function UrlBar({
             {isDownloading ? "Exporting..." : "Export to .docx"}
           </Button>
         )}
+        {/* Generic action button slot (e.g. Upload Attachment) */}
+        {actionButton}
       </div>
     </div>
   );
