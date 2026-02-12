@@ -637,10 +637,12 @@ class TestMigrateChunksFromVespaToOpenSearchTask:
             chunk["content"] = (
                 f"Different content {chunk[CHUNK_ID]} for {test_documents[0].id}"
             )
-        chunks_for_document_in_opensearch = transform_vespa_chunks_to_opensearch_chunks(
-            document_in_opensearch,
-            TenantState(tenant_id=get_current_tenant_id(), multitenant=False),
-            {},
+        chunks_for_document_in_opensearch, _ = (
+            transform_vespa_chunks_to_opensearch_chunks(
+                document_in_opensearch,
+                TenantState(tenant_id=get_current_tenant_id(), multitenant=False),
+                {},
+            )
         )
         opensearch_client.bulk_index_documents(
             documents=chunks_for_document_in_opensearch,
