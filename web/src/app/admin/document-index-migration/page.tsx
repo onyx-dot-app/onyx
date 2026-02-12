@@ -156,11 +156,11 @@ function RetrievalSourceSection() {
 
   return (
     <Card>
-      <Text headingH3>Retrieval Source</Text>
-
-      <Text mainUiBody text03>
-        Controls which document index is used for retrieval.
-      </Text>
+      <LineItemLayout
+        title="Retrieval Source"
+        description="Controls which document index is used for retrieval."
+        variant="secondary"
+      />
 
       <InputSelect
         value={currentValue}
