@@ -63,6 +63,13 @@ const interactiveContainerMinWidthVariants = {
   xs: "min-w-[1.25rem]",
   fit: "",
 } as const;
+const interactiveContainerPaddingVariants = {
+  lg: "p-2",
+  md: "p-1",
+  sm: "p-1",
+  xs: "p-0.5",
+  fit: "",
+} as const;
 
 /**
  * Border-radius presets for `Interactive.Container`.
@@ -409,6 +416,7 @@ function InteractiveContainer({
       interactiveContainerRoundingVariants[roundingVariant],
       interactiveContainerHeightVariants[heightVariant],
       interactiveContainerMinWidthVariants[heightVariant],
+      interactiveContainerPaddingVariants[heightVariant],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,

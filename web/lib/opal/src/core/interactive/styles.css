@@ -16,7 +16,7 @@
 
 /* Utility class — descendants opt in to parent-controlled foreground color */
 .interactive-foreground {
-  @apply transition-colors duration-150 ease-in-out;
+  @apply transition-all duration-150 ease-in-out;
   color: var(--interactive-foreground);
 }
 
@@ -25,7 +25,7 @@
    icon color at rest (e.g. select) set --interactive-foreground-icon; all
    other states leave it unset so icons track the text color automatically. */
 .interactive-foreground-icon {
-  @apply transition-colors duration-150 ease-in-out;
+  @apply transition-all duration-150 ease-in-out;
   color: var(--interactive-foreground-icon, var(--interactive-foreground));
 }
 
