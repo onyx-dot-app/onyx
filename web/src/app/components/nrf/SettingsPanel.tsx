@@ -189,7 +189,7 @@ export const SettingsPanel = ({
                   key={bg.id}
                   thumbnailUrl={bg.thumbnail}
                   label={bg.label}
-                  isNone={bg.url === CHAT_BACKGROUND_NONE}
+                  isNone={bg.src === CHAT_BACKGROUND_NONE}
                   isSelected={currentBackgroundId === bg.id}
                   onClick={() => handleBackgroundChange(bg.id)}
                 />

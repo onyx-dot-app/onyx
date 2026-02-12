@@ -32,8 +32,8 @@ export function AppBackgroundProvider({
     const chatBackgroundId = user?.preferences?.chat_background;
     const appBackground = getBackgroundById(chatBackgroundId ?? null);
     const hasBackground =
-      !!appBackground && appBackground.url !== CHAT_BACKGROUND_NONE;
-    const appBackgroundUrl = hasBackground ? appBackground.url : null;
+      !!appBackground && appBackground.src !== CHAT_BACKGROUND_NONE;
+    const appBackgroundUrl = hasBackground ? appBackground.src : null;
 
     return {
       appBackground,
