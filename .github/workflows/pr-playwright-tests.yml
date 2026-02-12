@@ -463,16 +463,21 @@ jobs:
       - name: Determine baseline revision
         if: always()
         id: baseline-rev
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GH_REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
             # PRs compare against the base branch (e.g. main, release/2.5)
-            echo "rev=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "rev=${BASE_REF}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GH_REF}" == refs/tags/* ]]; then
             # Tag builds compare against the tag name
-            echo "rev=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "rev=${REF_NAME}" >> "$GITHUB_OUTPUT"
           else
             # Push builds (main, release/*) compare against the branch name
-            echo "rev=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "rev=${REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate screenshot diff report
