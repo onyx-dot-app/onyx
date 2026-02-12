@@ -10,14 +10,19 @@ M = 32  # Increased for better accuracy.
 # specified when creating an index.
 DEFAULT_MAX_CHUNK_SIZE = 512
 
-# Number of vectors to examine for top k neighbors for the HNSW method. Values
-# typically range between 100 - 200.
-EF_SEARCH = 200
+# Number of vectors to examine for top k neighbors for the HNSW method.
+EF_SEARCH = 256
+
+# The default number of neighbors to consider for knn vector similarity search.
+# We need this higher than the number of results because the scoring is hybrid.
+# If there is only 1 query, setting k equal to the number of results is enough,
+# but since there is heavy reordering due to hybrid scoring, we need to set k higher.
+DEFAULT_K_NUM_CANDIDATES = 50  # TODO likely need to bump this way higher
 
 # Default weights to use for hybrid search normalization. These values should
-# sum to 1.
-SEARCH_TITLE_VECTOR_WEIGHT = 0.05
-SEARCH_TITLE_KEYWORD_WEIGHT = 0.05
-SEARCH_CONTENT_VECTOR_WEIGHT = 0.50  # Increased to favor semantic search.
-SEARCH_CONTENT_KEYWORD_WEIGHT = 0.35  # Decreased to favor semantic search.
-SEARCH_CONTENT_PHRASE_WEIGHT = 0.05
+# sum to 1. Order matches hybrid sub-queries: title vector, title keyword,
+# content vector, content keyword (keyword + phrase combined).
+SEARCH_TITLE_VECTOR_WEIGHT = 0.1
+SEARCH_TITLE_KEYWORD_WEIGHT = 0.1
+SEARCH_CONTENT_VECTOR_WEIGHT = 0.4
+SEARCH_CONTENT_KEYWORD_WEIGHT = 0.4
