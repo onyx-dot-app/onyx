@@ -731,7 +731,7 @@ export default function ActionsPopover({
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SimpleLoader : SvgKey}
       rightChildren={
-        <Button icon={SvgChevronRight} subvariant="ghost" size="compact" />
+        <Button icon={SvgChevronRight} prominence="tertiary" size="compact" />
       }
     >
       Re-Authenticate
@@ -994,7 +994,7 @@ export default function ActionsPopover({
             <Button
               icon={SvgSliders}
               transient={open}
-              subvariant="ghost"
+              prominence="tertiary"
               tooltip="Manage Actions"
               disabled={disabled}
             />

@@ -54,7 +54,7 @@ export default function NonAdminStep() {
             </Text>
           </div>
           <OpalButton
-            subvariant="ghost"
+            prominence="tertiary"
             size="compact"
             icon={SvgX}
             onClick={() => setShowHeader(false)}

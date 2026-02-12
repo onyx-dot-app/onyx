@@ -392,7 +392,7 @@ const InputComboBox = ({
               )}
               {hasOptions && (
                 <Button
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   onClick={noProp(toggleDropdown)}
                   disabled={disabled}

@@ -35,7 +35,7 @@ export default function MessageSwitcher({
       <Button
         icon={SvgChevronLeft}
         onClick={previous}
-        subvariant="ghost"
+        prominence="tertiary"
         disabled={disableForStreaming}
         tooltip={disableForStreaming ? DISABLED_MESSAGE : "Previous"}
       />
@@ -55,7 +55,7 @@ export default function MessageSwitcher({
       <Button
         icon={SvgChevronRight}
         onClick={next}
-        subvariant="ghost"
+        prominence="tertiary"
         disabled={disableForStreaming}
         tooltip={disableForStreaming ? DISABLED_MESSAGE : "Next"}
       />

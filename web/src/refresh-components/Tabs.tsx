@@ -504,7 +504,7 @@ const TabsList = React.forwardRef<
               className="flex items-center gap-1 pl-2 flex-shrink-0"
             >
               <Button
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 icon={SvgChevronLeft}
                 onClick={handleScrollLeft}
@@ -512,7 +512,7 @@ const TabsList = React.forwardRef<
                 tooltip="Scroll tabs left"
               />
               <Button
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 icon={SvgChevronRight}
                 onClick={handleScrollRight}

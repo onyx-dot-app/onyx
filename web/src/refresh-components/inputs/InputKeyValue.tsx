@@ -179,7 +179,7 @@ const KeyValueInputItem = ({
       </div>
       <div className="flex items-start pt-[2px]">
         <OpalButton
-          subvariant="ghost"
+          prominence="tertiary"
           size="compact"
           icon={SvgMinusCircle}
           onClick={onRemove}

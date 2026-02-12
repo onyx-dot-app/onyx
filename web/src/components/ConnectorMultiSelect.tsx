@@ -207,7 +207,7 @@ export const ConnectorMultiSelect = ({
                   </div>
                 </div>
                 <Button
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   type="button"
                   aria-label="Remove connector"

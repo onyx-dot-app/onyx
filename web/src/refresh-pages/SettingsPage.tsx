@@ -723,7 +723,7 @@ function PromptShortcuts() {
                   <OpalButton
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
-                    subvariant="ghost"
+                    prominence="tertiary"
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
                     aria-label="Remove shortcut"
                     tooltip={
@@ -1314,7 +1314,7 @@ function AccountsAccessSettings() {
                               <OpalButton
                                 icon={SvgTrash}
                                 onClick={() => setTokenToDelete(pat)}
-                                subvariant="ghost"
+                                prominence="tertiary"
                                 size="compact"
                                 aria-label={`Delete token ${pat.name}`}
                               />
@@ -1440,7 +1440,7 @@ function FederatedConnectorCard({
             connector.has_oauth_token ? (
               <OpalButton
                 icon={SvgUnplug}
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}

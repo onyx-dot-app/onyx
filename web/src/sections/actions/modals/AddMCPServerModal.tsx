@@ -226,7 +226,7 @@ export default function AddMCPServerModal({
                       >
                         <OpalButton
                           icon={SvgUnplug}
-                          subvariant="ghost"
+                          prominence="tertiary"
                           type="button"
                           tooltip="Disconnect Server"
                           onClick={handleDisconnectClick}

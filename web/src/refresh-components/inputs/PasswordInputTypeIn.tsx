@@ -292,7 +292,7 @@ export default function PasswordInputTypeIn({
             onClick={noProp(() => setIsPasswordVisible((v) => !v))}
             type="button"
             variant={isRevealed ? "action" : undefined}
-            subvariant="ghost"
+            prominence="tertiary"
             size="compact"
             tooltipSide="left"
             tooltip={toggleLabel}

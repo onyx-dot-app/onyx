@@ -870,7 +870,7 @@ export default function SourceHierarchyBrowser({
                       {isFolder && (
                         <OpalButton
                           icon={SvgChevronRight}
-                          subvariant="ghost"
+                          prominence="tertiary"
                           size="compact"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -925,13 +925,13 @@ export default function SourceHierarchyBrowser({
             <OpalButton
               icon={SvgEye}
               variant={viewSelectedOnly ? "action" : undefined}
-              subvariant="ghost"
+              prominence="tertiary"
               size={viewSelectedOnly ? undefined : "compact"}
               onClick={handleToggleViewSelected}
             />
             <OpalButton
               icon={SvgXCircle}
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               onClick={handleDeselectAll}
             />

@@ -48,7 +48,7 @@ export const ParallelStreamingHeader = React.memo(
           rightContent={
             collapsible ? (
               <Button
-                subvariant="ghost"
+                prominence="tertiary"
                 onClick={onToggle}
                 icon={isExpanded ? SvgFold : SvgExpand}
                 aria-label={

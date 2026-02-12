@@ -63,7 +63,7 @@ const OnboardingHeader = React.memo(
               </Section>
             ) : (
               <OpalButton
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 icon={SvgX}
                 onClick={handleHideOnboarding}

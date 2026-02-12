@@ -64,7 +64,7 @@ export function TimelineStepContent({
                 </Button>
               ) : (
                 <OpalButton
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   onClick={onToggle}
                   icon={

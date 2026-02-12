@@ -79,7 +79,7 @@ export function PopoverSearchInput({
       <OpalButton
         icon={SvgChevronLeft}
         onClick={handleClickBackButton}
-        subvariant="ghost"
+        prominence="tertiary"
         size="compact"
       />
       <InputTypeIn

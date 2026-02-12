@@ -110,7 +110,7 @@ export default function NotificationsPopover({
         <Text headingH3>Notifications</Text>
         <Button
           icon={SvgX}
-          subvariant="ghost"
+          prominence="tertiary"
           size="compact"
           onClick={onClose}
         />
@@ -146,7 +146,7 @@ export default function NotificationsPopover({
                   rightChildren={
                     !notification.dismissed ? (
                       <Button
-                        subvariant="ghost"
+                        prominence="tertiary"
                         size="compact"
                         icon={SvgX}
                         onClick={(e) => handleDismiss(notification.id, e)}

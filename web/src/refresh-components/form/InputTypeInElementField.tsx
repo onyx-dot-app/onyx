@@ -52,7 +52,7 @@ export default function InputTypeInElementField({
       />
       <Button
         icon={SvgMinusCircle}
-        subvariant="ghost"
+        prominence="tertiary"
         disabled={!onRemove || isEmpty}
         onClick={onRemove}
         tooltip="Remove"

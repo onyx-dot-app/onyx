@@ -191,7 +191,7 @@ function OllamaFormFields({
                     disabled={disabled || isFetchingModels}
                     rightSection={
                       <Button
-                        subvariant="ghost"
+                        prominence="tertiary"
                         size="compact"
                         icon={({ className }) => (
                           <SvgRefreshCw
@@ -313,7 +313,7 @@ function OllamaFormFields({
                     disabled={disabled || isFetchingModels}
                     rightSection={
                       <Button
-                        subvariant="ghost"
+                        prominence="tertiary"
                         size="compact"
                         icon={({ className }) => (
                           <SvgRefreshCw

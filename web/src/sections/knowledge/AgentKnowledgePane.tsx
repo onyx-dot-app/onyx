@@ -773,7 +773,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         <OpalButton
           icon={SvgPlusCircle}
           onClick={onAddKnowledge}
-          subvariant="ghost"
+          prominence="tertiary"
           aria-label="knowledge-add-button"
         />
       </GeneralLayouts.Section>

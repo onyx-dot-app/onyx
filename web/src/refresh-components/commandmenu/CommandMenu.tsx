@@ -468,7 +468,7 @@ function CommandMenuHeader({
           <DialogPrimitive.Close asChild>
             <Button
               icon={SvgX}
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               onClick={onClose}
               aria-label="Close menu"

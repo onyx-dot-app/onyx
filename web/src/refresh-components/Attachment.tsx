@@ -26,7 +26,7 @@ export default function Attachments({ fileName, open }: AttachmentsProps) {
           aria-label="Expand document"
           onClick={open}
           icon={SvgMaximize2}
-          subvariant="ghost"
+          prominence="tertiary"
           size="compact"
         />
       )}

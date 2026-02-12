@@ -372,7 +372,7 @@ const InputBar = memo(
                 <Button
                   icon={SvgPaperclip}
                   tooltip="Attach Files"
-                  subvariant="ghost"
+                  prominence="tertiary"
                   disabled={disabled}
                   onClick={() => fileInputRef.current?.click()}
                 />

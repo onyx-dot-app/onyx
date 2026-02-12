@@ -130,7 +130,7 @@ export const FilterComponent = forwardRef<
         <DropdownMenuTrigger asChild>
           <OpalButton
             icon={SvgFilter}
-            subvariant="secondary"
+            prominence="secondary"
             transient={isOpen}
           />
         </DropdownMenuTrigger>

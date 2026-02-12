@@ -70,7 +70,7 @@ export default function Pagination({
       <OpalButton
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        subvariant="ghost"
+        prominence="tertiary"
         icon={SvgChevronLeft}
       />
 
@@ -110,7 +110,7 @@ export default function Pagination({
       <OpalButton
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        subvariant="ghost"
+        prominence="tertiary"
         icon={SvgChevronRight}
       />
     </div>

@@ -115,7 +115,7 @@ export default function MCPLineItem({
           {canClickIntoServer && (
             <Button
               icon={SvgChevronRight}
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               onClick={onSelect}
             />
@@ -123,7 +123,7 @@ export default function MCPLineItem({
           {showReauthButton && (
             <Button
               icon={SvgKey}
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               onClick={onAuthenticate}
             />

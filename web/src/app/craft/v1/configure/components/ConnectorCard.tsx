@@ -124,7 +124,7 @@ export default function ConnectorCard({
       <Popover.Trigger asChild>
         <Button
           icon={SvgMoreHorizontal}
-          subvariant="ghost"
+          prominence="tertiary"
           onClick={(e) => {
             e.stopPropagation();
             setPopoverOpen(!popoverOpen);
@@ -160,7 +160,7 @@ export default function ConnectorCard({
       </Popover.Content>
     </Popover>
   ) : (
-    <Button icon={SvgPlug} subvariant="ghost" size="compact" />
+    <Button icon={SvgPlug} prominence="tertiary" size="compact" />
   );
 
   return (

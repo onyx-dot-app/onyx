@@ -28,7 +28,7 @@ export function InputBarPreviewImageProvider({
         <Button
           icon={SvgX}
           onClick={onDelete}
-          subvariant="ghost"
+          prominence="tertiary"
           size="compact"
         />
       )}
@@ -126,7 +126,7 @@ export function InputBarPreview({
         <Button
           onClick={onDelete}
           icon={SvgX}
-          subvariant="ghost"
+          prominence="tertiary"
           size="compact"
         />
       </div>

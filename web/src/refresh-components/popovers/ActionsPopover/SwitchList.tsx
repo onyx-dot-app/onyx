@@ -61,7 +61,7 @@ export default function SwitchList({
         <div className="flex items-center gap-1" key="search">
           <Button
             icon={SvgChevronLeft}
-            subvariant="ghost"
+            prominence="tertiary"
             size="compact"
             aria-label="Back"
             onClick={() => {

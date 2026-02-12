@@ -55,7 +55,7 @@ function Header({ children, onClose }: HeaderProps) {
         </div>
         <Button
           icon={SvgX}
-          subvariant="ghost"
+          prominence="tertiary"
           onClick={onClose}
           tooltip="Close Sidebar"
         />

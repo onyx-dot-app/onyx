@@ -98,7 +98,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
               {onToggleShowOnlyEnabled && enabledCount > 0 && (
                 <OpalButton
                   icon={SvgEye}
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   onClick={onToggleShowOnlyEnabled}
                   transient={showOnlyEnabled}
@@ -115,7 +115,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
               {onUpdateToolsStatus && enabledCount > 0 && (
                 <OpalButton
                   icon={SvgXCircle}
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   onClick={() => onUpdateToolsStatus(false)}
                   tooltip="Disable all tools"

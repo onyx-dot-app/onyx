@@ -149,13 +149,13 @@ export const SettingsPanel = ({
               <Button
                 icon={isDark ? SvgMoon : SvgSun}
                 onClick={toggleTheme}
-                subvariant="ghost"
+                prominence="tertiary"
                 tooltip={`Switch to ${isDark ? "light" : "dark"} theme`}
               />
               <Button
                 icon={SvgX}
                 onClick={toggleSettings}
-                subvariant="ghost"
+                prominence="tertiary"
                 tooltip="Close settings"
               />
             </div>

@@ -988,7 +988,7 @@ export default function Page() {
                           <OpalButton
                             icon={SvgEdit}
                             tooltip="Edit"
-                            subvariant="ghost"
+                            prominence="tertiary"
                             onClick={() => {
                               if (!canOpenModal) return;
                               openSearchModal(
@@ -1187,7 +1187,7 @@ export default function Page() {
                           <OpalButton
                             icon={SvgEdit}
                             tooltip="Edit"
-                            subvariant="ghost"
+                            prominence="tertiary"
                             onClick={() => {
                               openContentModal(
                                 provider.provider_type,

@@ -18,7 +18,7 @@ export default function CopyIconButton({
   getCopyText,
   getHtmlContent,
   tooltip,
-  subvariant = "ghost",
+  prominence = "tertiary",
   ...iconButtonProps
 }: CopyIconButtonProps) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
@@ -101,9 +101,9 @@ export default function CopyIconButton({
   }
 
   // Assertion is safe: CopyIconButton always supplies icon + onClick,
-  // satisfying Button's content union. Spread may override subvariant.
+  // satisfying Button's content union. Spread may override prominence.
   const buttonProps = {
-    subvariant,
+    prominence,
     ...iconButtonProps,
     icon: getIcon(),
     onClick: handleCopy,

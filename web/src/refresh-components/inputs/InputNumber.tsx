@@ -166,7 +166,7 @@ export default function InputNumber({
             icon={SvgRevert}
             onClick={handleReset}
             disabled={!canReset || isDisabled}
-            subvariant="ghost"
+            prominence="tertiary"
             size="compact"
           />
         )}

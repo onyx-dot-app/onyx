@@ -314,7 +314,7 @@ export function PersonasTable({
                   {!persona.builtin_persona && isEditable ? (
                     <OpalButton
                       icon={SvgTrash}
-                      subvariant="ghost"
+                      prominence="tertiary"
                       onClick={() => openDeleteModal(persona)}
                     />
                   ) : (

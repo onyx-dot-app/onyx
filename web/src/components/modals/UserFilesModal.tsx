@@ -271,14 +271,14 @@ export default function UserFilesModal({
                 </Text>
                 <OpalButton
                   icon={SvgEye}
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   onClick={() => setShowOnlySelected(!showOnlySelected)}
                   transient={showOnlySelected}
                 />
                 <OpalButton
                   icon={SvgXCircle}
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   onClick={handleDeselectAll}
                   disabled={selectedCount === 0}

@@ -74,7 +74,7 @@ function MessageEditing({
         />
         <div className="flex justify-end gap-1">
           <Button onClick={handleSubmit}>Submit</Button>
-          <Button subvariant="secondary" onClick={handleCancel}>
+          <Button prominence="secondary" onClick={handleCancel}>
             Cancel
           </Button>
         </div>
@@ -218,12 +218,12 @@ const HumanMessage = React.memo(function HumanMessage({
               <div className="flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
-                  subvariant="ghost"
+                  prominence="tertiary"
                   data-testid="HumanMessage/copy-button"
                 />
                 <Button
                   icon={SvgEdit}
-                  subvariant="ghost"
+                  prominence="tertiary"
                   tooltip="Edit"
                   onClick={() => setIsEditing(true)}
                   data-testid="HumanMessage/edit-button"
@@ -244,7 +244,7 @@ const HumanMessage = React.memo(function HumanMessage({
               <Button
                 icon={SvgEdit}
                 onClick={() => setIsEditing(true)}
-                subvariant="ghost"
+                prominence="tertiary"
                 tooltip="Edit"
               />
             </div>

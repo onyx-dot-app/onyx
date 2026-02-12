@@ -142,7 +142,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                 onMouseEnter={() => handleIconHover(true)}
                 onMouseLeave={() => handleIconHover(false)}
                 icon={getFolderIcon()}
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 onClick={noProp(handleIconClick)}
               />

@@ -143,18 +143,26 @@ export default function Calendar({
         Chevron: ({ className, orientation, size: _size, ...props }) => {
           if (orientation === "left")
             return (
-              <OpalButton icon={SvgChevronLeft} subvariant="ghost" {...props} />
+              <OpalButton
+                icon={SvgChevronLeft}
+                prominence="tertiary"
+                {...props}
+              />
             );
           if (orientation === "right")
             return (
               <OpalButton
                 icon={SvgChevronRight}
-                subvariant="ghost"
+                prominence="tertiary"
                 {...props}
               />
             );
           return (
-            <OpalButton icon={SvgChevronDown} subvariant="ghost" {...props} />
+            <OpalButton
+              icon={SvgChevronDown}
+              prominence="tertiary"
+              {...props}
+            />
           );
         },
         DayButton: CalendarDayButton,

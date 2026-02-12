@@ -127,7 +127,7 @@ export default function ShareChatSessionModal({
               {/* <CopyButton content={shareLink} /> */}
               <CopyIconButton
                 getCopyText={() => shareLink}
-                subvariant="secondary"
+                prominence="secondary"
               />
               <a
                 href={shareLink}

@@ -622,7 +622,7 @@ const ChatInputBar = React.memo(
                     tooltip="Attach Files"
                     transient={open}
                     disabled={disabled}
-                    subvariant="ghost"
+                    prominence="tertiary"
                   />
                 )}
                 selectedFileIds={currentMessageFiles.map((f) => f.id)}

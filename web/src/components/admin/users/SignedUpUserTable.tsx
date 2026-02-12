@@ -258,7 +258,7 @@ export default function SignedUpUserTable({
     return (
       <Popover>
         <Popover.Trigger asChild>
-          <OpalButton subvariant="secondary" icon={SvgMoreHorizontal} />
+          <OpalButton prominence="secondary" icon={SvgMoreHorizontal} />
         </Popover.Trigger>
         <Popover.Content>
           <div className="grid gap-1">

@@ -70,21 +70,21 @@ export default function ExpandableContentWrapper({
           </Text>
           <div className="flex flex-row items-center justify-end gap-1">
             <Button
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               onClick={downloadFile}
               icon={SvgDownloadCloud}
               tooltip="Download file"
             />
             <Button
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               onClick={toggleExpand}
               icon={expanded ? SvgFold : SvgMaximize2}
               tooltip={expanded ? "Minimize" : "Full screen"}
             />
             <Button
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               onClick={close}
               icon={SvgX}

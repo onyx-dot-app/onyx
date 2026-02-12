@@ -237,7 +237,7 @@ export default function ExpandableTextDisplay({
         <div className="flex justify-end items-end mt-1 w-8">
           {isTruncated && (
             <Button
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
               icon={SvgMaximize2}
               tooltip="View Full Text"
@@ -267,7 +267,7 @@ export default function ExpandableTextDisplay({
             <DialogPrimitive.Close asChild>
               <Button
                 icon={SvgX}
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 onClick={() => setIsModalOpen(false)}
               />
@@ -294,13 +294,13 @@ export default function ExpandableTextDisplay({
             </div>
             <div className="flex items-center gap-1 bg-background-tint-00 p-1 rounded-12">
               <CopyIconButton
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 getCopyText={() => content}
                 tooltip="Copy"
               />
               <Button
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
                 icon={SvgDownload}
                 tooltip="Download"

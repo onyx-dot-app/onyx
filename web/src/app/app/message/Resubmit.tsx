@@ -68,7 +68,7 @@ export const ErrorBanner = ({
                   Stack trace
                 </Button>
                 <CopyIconButton
-                  subvariant="ghost"
+                  prominence="tertiary"
                   getCopyText={() => stackTrace}
                 />
               </div>

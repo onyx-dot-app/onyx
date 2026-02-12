@@ -657,7 +657,7 @@ const MemoizedAppSidebarInner = memo(
                     action={
                       <OpalButton
                         icon={SvgFolderPlus}
-                        subvariant="ghost"
+                        prominence="tertiary"
                         size="compact"
                         tooltip="New Project"
                         onClick={() => createProjectModal.toggle(true)}

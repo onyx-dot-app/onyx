@@ -132,7 +132,7 @@ export default function InputFile({
       disabled={isNonEditable}
       onClick={noProp(openFilePicker)}
       type="button"
-      subvariant="ghost"
+      prominence="tertiary"
       size="compact"
       aria-label="Attach file"
     />

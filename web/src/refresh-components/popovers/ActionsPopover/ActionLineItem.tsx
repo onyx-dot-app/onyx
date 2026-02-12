@@ -173,7 +173,7 @@ export default function ActionLineItem({
                     router.push(adminConfigureHref as Route);
                     onClose?.();
                   })}
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   tooltip={adminConfigureTooltip}
                 />
@@ -193,7 +193,7 @@ export default function ActionLineItem({
                     <Button
                       icon={SvgSlash}
                       onClick={noProp(onToggle)}
-                      subvariant="ghost"
+                      prominence="tertiary"
                       size="compact"
                       tooltip={disabled ? "Enable" : "Disable"}
                     />

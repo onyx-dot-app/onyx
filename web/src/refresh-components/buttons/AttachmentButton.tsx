@@ -156,7 +156,7 @@ export default function AttachmentButton({
             <Button
               icon={actionIcon}
               onClick={noProp(onAction)}
-              subvariant="ghost"
+              prominence="tertiary"
               size="compact"
             />
           </div>

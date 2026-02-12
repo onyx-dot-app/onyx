@@ -73,7 +73,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
           </Button>
         ) : (
           <OpalButton
-            subvariant="ghost"
+            prominence="tertiary"
             onClick={onToggle}
             icon={isExpanded ? SvgFold : SvgExpand}
             aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}

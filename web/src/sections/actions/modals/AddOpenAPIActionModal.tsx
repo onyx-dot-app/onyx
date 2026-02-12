@@ -266,13 +266,13 @@ function FormContent({
             {values.definition.trim() && (
               <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
                 <CopyIconButton
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
                 <OpalButton
-                  subvariant="ghost"
+                  prominence="tertiary"
                   size="compact"
                   icon={SvgBracketCurly}
                   tooltip="Format definition"
@@ -366,7 +366,7 @@ function FormContent({
             >
               <OpalButton
                 icon={SvgUnplug}
-                subvariant="ghost"
+                prominence="tertiary"
                 type="button"
                 tooltip="Disable action"
                 onClick={() => {

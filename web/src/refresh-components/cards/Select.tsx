@@ -153,7 +153,7 @@ export default function Select({
                 <OpalButton
                   icon={SvgSettings}
                   tooltip="Edit"
-                  subvariant="ghost"
+                  prominence="tertiary"
                   disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}
@@ -178,7 +178,7 @@ export default function Select({
                 <OpalButton
                   icon={SvgSettings}
                   tooltip="Edit"
-                  subvariant="ghost"
+                  prominence="tertiary"
                   disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}

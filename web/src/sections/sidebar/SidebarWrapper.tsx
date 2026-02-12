@@ -18,7 +18,7 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
     (shouldFold: boolean) => (
       <Button
         icon={SvgSidebar}
-        subvariant="ghost"
+        prominence="tertiary"
         tooltip="Close Sidebar"
         onClick={onFoldClick}
       />

@@ -138,7 +138,7 @@ function OpenRouterFormFields(
                 }
                 rightSection={
                   <Button
-                    subvariant="ghost"
+                    prominence="tertiary"
                     size="compact"
                     icon={({ className }) => (
                       <SvgRefreshCw

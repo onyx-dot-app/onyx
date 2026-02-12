@@ -598,7 +598,7 @@ export default function OpenAPIAuthenticationModal({
                               <CopyIconButton
                                 getCopyText={() => redirectUri}
                                 tooltip="Copy redirect URI"
-                                subvariant="ghost"
+                                prominence="tertiary"
                                 size="compact"
                               />
                             </div>

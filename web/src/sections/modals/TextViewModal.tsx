@@ -214,20 +214,20 @@ export default function TextViewModal({
         >
           <Section flexDirection="row" justifyContent="start" gap={0.25}>
             <OpalButton
-              subvariant="ghost"
+              prominence="tertiary"
               onClick={handleZoomOut}
               icon={SvgZoomOut}
               tooltip="Zoom Out"
             />
             <Text mainUiBody>{zoom}%</Text>
             <OpalButton
-              subvariant="ghost"
+              prominence="tertiary"
               onClick={handleZoomIn}
               icon={SvgZoomIn}
               tooltip="Zoom In"
             />
             <OpalButton
-              subvariant="ghost"
+              prominence="tertiary"
               onClick={handleDownload}
               icon={SvgDownloadCloud}
               tooltip="Download"

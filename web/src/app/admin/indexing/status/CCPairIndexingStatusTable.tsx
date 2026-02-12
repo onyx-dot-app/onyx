@@ -210,7 +210,7 @@ function ConnectorRow({
       <TableCell>
         {isEditable && (
           <SimpleTooltip tooltip="Manage Connector">
-            <Button icon={SvgSettings} subvariant="ghost" />
+            <Button icon={SvgSettings} prominence="tertiary" />
           </SimpleTooltip>
         )}
       </TableCell>
@@ -265,7 +265,7 @@ function FederatedConnectorRow({
       <TableCell>
         <Button
           icon={SvgSettings}
-          subvariant="ghost"
+          prominence="tertiary"
           onClick={(e: React.MouseEvent) => {
             e.stopPropagation();
             navigateWithModifier(e, federatedUrl, router);

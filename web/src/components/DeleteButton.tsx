@@ -13,7 +13,7 @@ export function DeleteButton({ onClick, disabled }: DeleteButtonProps) {
       icon={SvgTrash}
       tooltip="Delete"
       disabled={disabled}
-      subvariant="ghost"
+      prominence="tertiary"
       size="compact"
     />
   );

@@ -305,7 +305,7 @@ export default function InlineFileManagement({
                         <OpalButton
                           icon={SvgX}
                           variant="danger"
-                          subvariant="ghost"
+                          prominence="tertiary"
                           size="compact"
                           onClick={() => handleRemoveNewFile(index)}
                           tooltip="Remove file"

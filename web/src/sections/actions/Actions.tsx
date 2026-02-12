@@ -65,7 +65,7 @@ const Actions = React.memo(
                 <OpalButton
                   icon={SvgUnplug}
                   tooltip="Disconnect Server"
-                  subvariant="ghost"
+                  prominence="tertiary"
                   onClick={onDisconnect}
                   aria-label={`Disconnect ${serverName} server`}
                 />
@@ -75,7 +75,7 @@ const Actions = React.memo(
               <OpalButton
                 icon={SvgSettings}
                 tooltip="Manage Server"
-                subvariant="ghost"
+                prominence="tertiary"
                 onClick={onManage}
                 aria-label={`Manage ${serverName} server`}
               />
@@ -123,7 +123,7 @@ const Actions = React.memo(
               <OpalButton
                 icon={SvgTrash}
                 tooltip="Delete Server"
-                subvariant="ghost"
+                prominence="tertiary"
                 onClick={onDelete}
                 aria-label={`Delete ${serverName} server`}
               />
@@ -132,7 +132,7 @@ const Actions = React.memo(
               <OpalButton
                 icon={SvgSettings}
                 tooltip="Manage Server"
-                subvariant="ghost"
+                prominence="tertiary"
                 onClick={onManage}
                 aria-label={`Manage ${serverName} server`}
               />
@@ -160,7 +160,7 @@ const Actions = React.memo(
             <OpalButton
               icon={SvgSettings}
               tooltip="Manage Server"
-              subvariant="ghost"
+              prominence="tertiary"
               onClick={onManage}
               aria-label={`Manage ${serverName} server`}
             />

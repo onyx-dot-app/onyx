@@ -63,7 +63,7 @@ function ModelConfigurationRow({
             }
           }}
           icon={SvgX}
-          subvariant="secondary"
+          prominence="secondary"
         />
       </div>
     </div>

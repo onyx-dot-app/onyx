@@ -402,7 +402,7 @@ export default function BuildChatPanel({
               <OpalButton
                 icon={SvgSidebar}
                 onClick={() => setLeftSidebarFolded(false)}
-                subvariant="ghost"
+                prominence="tertiary"
                 size="compact"
               />
             )}
