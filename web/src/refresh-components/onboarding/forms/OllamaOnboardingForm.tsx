@@ -192,7 +192,7 @@ function OllamaFormFields({
                     rightSection={
                       <Button
                         prominence="tertiary"
-                        size="compact"
+                        size="sm"
                         icon={({ className }) => (
                           <SvgRefreshCw
                             className={cn(
@@ -314,7 +314,7 @@ function OllamaFormFields({
                     rightSection={
                       <Button
                         prominence="tertiary"
-                        size="compact"
+                        size="sm"
                         icon={({ className }) => (
                           <SvgRefreshCw
                             className={cn(

@@ -27,7 +27,7 @@ export default function Attachments({ fileName, open }: AttachmentsProps) {
           onClick={open}
           icon={SvgMaximize2}
           prominence="tertiary"
-          size="compact"
+          size="sm"
         />
       )}
     </div>

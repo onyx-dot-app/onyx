@@ -139,7 +139,7 @@ function OpenRouterFormFields(
                 rightSection={
                   <Button
                     prominence="tertiary"
-                    size="compact"
+                    size="sm"
                     icon={({ className }) => (
                       <SvgRefreshCw
                         className={cn(

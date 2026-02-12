@@ -29,7 +29,7 @@ export function InputBarPreviewImageProvider({
           icon={SvgX}
           onClick={onDelete}
           prominence="tertiary"
-          size="compact"
+          size="sm"
         />
       )}
       {isUploading && (
@@ -127,7 +127,7 @@ export function InputBarPreview({
           onClick={onDelete}
           icon={SvgX}
           prominence="tertiary"
-          size="compact"
+          size="sm"
         />
       </div>
     </div>

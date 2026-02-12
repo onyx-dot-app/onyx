@@ -1,5 +1,4 @@
 /* Shared types */
-export type SizeVariant = "default" | "compact";
 export type TooltipSide = "top" | "bottom" | "left" | "right";
 
 /* Button */

@@ -599,7 +599,7 @@ export default function OpenAPIAuthenticationModal({
                                 getCopyText={() => redirectUri}
                                 tooltip="Copy redirect URI"
                                 prominence="tertiary"
-                                size="compact"
+                                size="sm"
                               />
                             </div>
                           </div>

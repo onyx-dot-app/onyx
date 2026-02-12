@@ -174,7 +174,7 @@ export default function ActionLineItem({
                     onClose?.();
                   })}
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   tooltip={adminConfigureTooltip}
                 />
               )}
@@ -194,7 +194,7 @@ export default function ActionLineItem({
                       icon={SvgSlash}
                       onClick={noProp(onToggle)}
                       prominence="tertiary"
-                      size="compact"
+                      size="sm"
                       tooltip={disabled ? "Enable" : "Disable"}
                     />
                   </span>

@@ -198,7 +198,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                               // we render an `IconButton SvgX` to remove a person from the list.
                               <OpalButton
                                 prominence="tertiary"
-                                size="compact"
+                                size="sm"
                                 icon={SvgX}
                                 onClick={() => handleRemoveUser(user.id)}
                               />
@@ -218,7 +218,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                         rightChildren={
                           <OpalButton
                             prominence="tertiary"
-                            size="compact"
+                            size="sm"
                             icon={SvgX}
                             onClick={() => handleRemoveGroup(group.id)}
                           />

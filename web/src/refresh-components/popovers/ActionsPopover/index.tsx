@@ -731,7 +731,7 @@ export default function ActionsPopover({
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SimpleLoader : SvgKey}
       rightChildren={
-        <Button icon={SvgChevronRight} prominence="tertiary" size="compact" />
+        <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
       }
     >
       Re-Authenticate

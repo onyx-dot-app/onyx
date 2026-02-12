@@ -108,12 +108,7 @@ export default function NotificationsPopover({
     <Section gap={0.5} padding={0.25}>
       <Section flexDirection="row" justifyContent="between" padding={0.5}>
         <Text headingH3>Notifications</Text>
-        <Button
-          icon={SvgX}
-          prominence="tertiary"
-          size="compact"
-          onClick={onClose}
-        />
+        <Button icon={SvgX} prominence="tertiary" size="sm" onClick={onClose} />
       </Section>
 
       <Separator noPadding className="px-2" />
@@ -147,7 +142,7 @@ export default function NotificationsPopover({
                     !notification.dismissed ? (
                       <Button
                         prominence="tertiary"
-                        size="compact"
+                        size="sm"
                         icon={SvgX}
                         onClick={(e) => handleDismiss(notification.id, e)}
                         tooltip="Dismiss"

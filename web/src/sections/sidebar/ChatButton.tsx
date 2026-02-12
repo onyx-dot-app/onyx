@@ -80,7 +80,7 @@ export function PopoverSearchInput({
         icon={SvgChevronLeft}
         onClick={handleClickBackButton}
         prominence="tertiary"
-        size="compact"
+        size="sm"
       />
       <InputTypeIn
         type="text"

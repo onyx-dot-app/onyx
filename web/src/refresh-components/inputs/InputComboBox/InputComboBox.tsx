@@ -393,7 +393,7 @@ const InputComboBox = ({
               {hasOptions && (
                 <Button
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   onClick={noProp(toggleDropdown)}
                   disabled={disabled}
                   icon={isOpen ? SvgChevronUp : SvgChevronDown}

@@ -237,7 +237,7 @@ export const FederatedConnectorSelector = ({
                   <div className="flex items-center ml-2 gap-1">
                     <Button
                       prominence="tertiary"
-                      size="compact"
+                      size="sm"
                       type="button"
                       aria-label="Remove connector"
                       tooltip="Remove connector"

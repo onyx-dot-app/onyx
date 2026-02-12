@@ -532,7 +532,7 @@ export default function MCPAuthenticationModal({
                             getCopyText={() => redirectUri}
                             tooltip="Copy redirect URI"
                             prominence="tertiary"
-                            size="compact"
+                            size="sm"
                           />
                         </div>
                       </div>

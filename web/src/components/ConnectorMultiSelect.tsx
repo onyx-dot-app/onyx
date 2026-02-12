@@ -208,7 +208,7 @@ export const ConnectorMultiSelect = ({
                 </div>
                 <Button
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   type="button"
                   aria-label="Remove connector"
                   tooltip="Remove connector"

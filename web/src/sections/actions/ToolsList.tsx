@@ -99,7 +99,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 <OpalButton
                   icon={SvgEye}
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   onClick={onToggleShowOnlyEnabled}
                   transient={showOnlyEnabled}
                   tooltip={
@@ -116,7 +116,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 <OpalButton
                   icon={SvgXCircle}
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   onClick={() => onUpdateToolsStatus(false)}
                   tooltip="Disable all tools"
                   aria-label="Disable all tools"

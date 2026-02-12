@@ -160,7 +160,7 @@ export default function ConnectorCard({
       </Popover.Content>
     </Popover>
   ) : (
-    <Button icon={SvgPlug} prominence="tertiary" size="compact" />
+    <Button icon={SvgPlug} prominence="tertiary" size="sm" />
   );
 
   return (

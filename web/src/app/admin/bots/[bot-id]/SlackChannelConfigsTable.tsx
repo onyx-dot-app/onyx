@@ -145,7 +145,7 @@ export default function SlackChannelConfigsTable({
                           }}
                           icon={SvgTrash}
                           prominence="tertiary"
-                          size="compact"
+                          size="sm"
                         />
                       </TableCell>
                     </TableRow>

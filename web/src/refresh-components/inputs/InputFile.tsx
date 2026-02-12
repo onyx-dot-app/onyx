@@ -133,7 +133,7 @@ export default function InputFile({
       onClick={noProp(openFilePicker)}
       type="button"
       prominence="tertiary"
-      size="compact"
+      size="sm"
       aria-label="Attach file"
     />
   );

@@ -267,13 +267,13 @@ function FormContent({
               <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
                 <CopyIconButton
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
                 <OpalButton
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   icon={SvgBracketCurly}
                   tooltip="Format definition"
                   onClick={handleFormat}

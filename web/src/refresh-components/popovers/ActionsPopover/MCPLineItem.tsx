@@ -116,7 +116,7 @@ export default function MCPLineItem({
             <Button
               icon={SvgChevronRight}
               prominence="tertiary"
-              size="compact"
+              size="sm"
               onClick={onSelect}
             />
           )}
@@ -124,7 +124,7 @@ export default function MCPLineItem({
             <Button
               icon={SvgKey}
               prominence="tertiary"
-              size="compact"
+              size="sm"
               onClick={onAuthenticate}
             />
           )}

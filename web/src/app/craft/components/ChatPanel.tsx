@@ -403,7 +403,7 @@ export default function BuildChatPanel({
                 icon={SvgSidebar}
                 onClick={() => setLeftSidebarFolded(false)}
                 prominence="tertiary"
-                size="compact"
+                size="sm"
               />
             )}
             <SandboxStatusIndicator />

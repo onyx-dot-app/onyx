@@ -1315,7 +1315,7 @@ function AccountsAccessSettings() {
                                 icon={SvgTrash}
                                 onClick={() => setTokenToDelete(pat)}
                                 prominence="tertiary"
-                                size="compact"
+                                size="sm"
                                 aria-label={`Delete token ${pat.name}`}
                               />
                             }
@@ -1441,7 +1441,7 @@ function FederatedConnectorCard({
               <OpalButton
                 icon={SvgUnplug}
                 prominence="tertiary"
-                size="compact"
+                size="sm"
                 onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}
               />

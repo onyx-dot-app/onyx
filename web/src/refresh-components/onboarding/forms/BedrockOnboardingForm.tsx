@@ -348,7 +348,7 @@ function BedrockFormFields(props: OnboardingFormChildProps<BedrockFormValues>) {
                 rightSection={
                   <Button
                     prominence="tertiary"
-                    size="compact"
+                    size="sm"
                     icon={({ className }) => (
                       <SvgRefreshCw
                         className={cn(

@@ -65,7 +65,7 @@ export function TimelineStepContent({
               ) : (
                 <OpalButton
                   prominence="tertiary"
-                  size="compact"
+                  size="sm"
                   onClick={onToggle}
                   icon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand

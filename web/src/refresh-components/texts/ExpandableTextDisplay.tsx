@@ -238,7 +238,7 @@ export default function ExpandableTextDisplay({
           {isTruncated && (
             <Button
               prominence="tertiary"
-              size="compact"
+              size="sm"
               icon={SvgMaximize2}
               tooltip="View Full Text"
               onClick={() => setIsModalOpen(true)}
@@ -268,7 +268,7 @@ export default function ExpandableTextDisplay({
               <Button
                 icon={SvgX}
                 prominence="tertiary"
-                size="compact"
+                size="sm"
                 onClick={() => setIsModalOpen(false)}
               />
             </DialogPrimitive.Close>
@@ -295,13 +295,13 @@ export default function ExpandableTextDisplay({
             <div className="flex items-center gap-1 bg-background-tint-00 p-1 rounded-12">
               <CopyIconButton
                 prominence="tertiary"
-                size="compact"
+                size="sm"
                 getCopyText={() => content}
                 tooltip="Copy"
               />
               <Button
                 prominence="tertiary"
-                size="compact"
+                size="sm"
                 icon={SvgDownload}
                 tooltip="Download"
                 onClick={handleDownload}

@@ -306,7 +306,7 @@ export default function InlineFileManagement({
                           icon={SvgX}
                           variant="danger"
                           prominence="tertiary"
-                          size="compact"
+                          size="sm"
                           onClick={() => handleRemoveNewFile(index)}
                           tooltip="Remove file"
                           title="Remove file"

@@ -62,7 +62,7 @@ export default function SwitchList({
           <Button
             icon={SvgChevronLeft}
             prominence="tertiary"
-            size="compact"
+            size="sm"
             aria-label="Back"
             onClick={() => {
               setSearchTerm("");

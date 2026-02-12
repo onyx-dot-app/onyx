@@ -505,7 +505,7 @@ const TabsList = React.forwardRef<
             >
               <Button
                 prominence="tertiary"
-                size="compact"
+                size="sm"
                 icon={SvgChevronLeft}
                 onClick={handleScrollLeft}
                 disabled={!canScrollLeft}
@@ -513,7 +513,7 @@ const TabsList = React.forwardRef<
               />
               <Button
                 prominence="tertiary"
-                size="compact"
+                size="sm"
                 icon={SvgChevronRight}
                 onClick={handleScrollRight}
                 disabled={!canScrollRight}

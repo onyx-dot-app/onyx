@@ -420,7 +420,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
                   <Button
                     icon={SvgX}
                     prominence="tertiary"
-                    size="compact"
+                    size="sm"
                     onClick={onClose}
                   />
                 </DialogPrimitive.Close>

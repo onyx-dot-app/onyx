@@ -14,7 +14,7 @@ export function DeleteButton({ onClick, disabled }: DeleteButtonProps) {
       tooltip="Delete"
       disabled={disabled}
       prominence="tertiary"
-      size="compact"
+      size="sm"
     />
   );
 }

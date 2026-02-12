@@ -469,7 +469,7 @@ function CommandMenuHeader({
             <Button
               icon={SvgX}
               prominence="tertiary"
-              size="compact"
+              size="sm"
               onClick={onClose}
               aria-label="Close menu"
             />
