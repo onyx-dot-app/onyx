@@ -88,6 +88,11 @@ def sanitize_filename(name: str, replace_slash: bool = True) -> str:
     return sanitized
 
 
+def normalize_leading_slash(path: str) -> str:
+    """Ensure a path starts with exactly one leading slash."""
+    return "/" + path.lstrip("/")
+
+
 def get_base_filename(doc: Document, replace_slash: bool = True) -> str:
     """Get base filename from document, preferring semantic identifier.
 
@@ -272,6 +277,69 @@ class PersistentDocumentWriter:
 
         logger.debug(f"Wrote document to {path}")
 
+    def write_raw_file(
+        self,
+        path: str,
+        content: bytes,
+        content_type: str | None = None,  # noqa: ARG002
+    ) -> str:
+        """Write a raw binary file to local filesystem (for User Library).
+
+        Unlike write_documents which serializes Document objects to JSON, this method
+        writes raw binary content directly. Used for user-uploaded files like xlsx, pptx.
+
+        Args:
+            path: Relative path within user's library (e.g., "/project-data/financials.xlsx")
+            content: Raw binary content to write
+            content_type: MIME type of the file (stored as metadata, unused locally)
+
+        Returns:
+            Full filesystem path where file was written
+        """
+        # Build full path: {base_path}/{tenant}/knowledge/{user}/user_library/{path}
+        normalized_path = normalize_leading_slash(path)
+        full_path = (
+            self.base_path
+            / self.tenant_id
+            / "knowledge"
+            / self.user_id
+            / "user_library"
+            / normalized_path.lstrip("/")
+        )
+
+        # Create parent directories if they don't exist
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write the raw binary content
+        with open(full_path, "wb") as f:
+            f.write(content)
+
+        logger.debug(f"Wrote raw file to {full_path}")
+        return str(full_path)
+
+    def delete_raw_file(self, path: str) -> None:
+        """Delete a raw file from local filesystem.
+
+        Args:
+            path: Relative path within user's library (e.g., "/project-data/financials.xlsx")
+        """
+        # Build full path
+        normalized_path = normalize_leading_slash(path)
+        full_path = (
+            self.base_path
+            / self.tenant_id
+            / "knowledge"
+            / self.user_id
+            / "user_library"
+            / normalized_path.lstrip("/")
+        )
+
+        if full_path.exists():
+            full_path.unlink()
+            logger.debug(f"Deleted raw file at {full_path}")
+        else:
+            logger.warning(f"File not found for deletion: {full_path}")
+
 
 class S3PersistentDocumentWriter:
     """Writes indexed documents to S3 with hierarchical structure.
@@ -374,6 +442,73 @@ class S3PersistentDocumentWriter:
         except ClientError as e:
             logger.error(f"Failed to write to S3: {e}")
             raise
+
+    def write_raw_file(
+        self,
+        path: str,
+        content: bytes,
+        content_type: str | None = None,
+    ) -> str:
+        """Write a raw binary file to S3 (for User Library).
+
+        Unlike write_documents which serializes Document objects to JSON, this method
+        writes raw binary content directly. Used for user-uploaded files like xlsx, pptx.
+
+        Args:
+            path: Relative path within user's library (e.g., "/project-data/financials.xlsx")
+            content: Raw binary content to write
+            content_type: MIME type of the file
+
+        Returns:
+            S3 key where file was written
+        """
+        # Build S3 key: {tenant}/knowledge/{user}/user_library/{path}
+        normalized_path = path.lstrip("/")
+        s3_key = (
+            f"{self.tenant_id}/knowledge/{self.user_id}/user_library/{normalized_path}"
+        )
+
+        s3_client = self._get_s3_client()
+
+        try:
+            s3_client.put_object(
+                Bucket=self.bucket,
+                Key=s3_key,
+                Body=content,
+                ContentType=content_type or "application/octet-stream",
+            )
+            logger.debug(f"Wrote raw file to s3://{self.bucket}/{s3_key}")
+            return s3_key
+        except ClientError as e:
+            logger.error(f"Failed to write raw file to S3: {e}")
+            raise
+
+    def delete_raw_file(self, s3_key: str) -> None:
+        """Delete a raw file from S3.
+
+        Args:
+            s3_key: Full S3 key of the file to delete
+        """
+        s3_client = self._get_s3_client()
+
+        try:
+            s3_client.delete_object(Bucket=self.bucket, Key=s3_key)
+            logger.debug(f"Deleted raw file at s3://{self.bucket}/{s3_key}")
+        except ClientError as e:
+            logger.error(f"Failed to delete raw file from S3: {e}")
+            raise
+
+    def delete_raw_file_by_path(self, path: str) -> None:
+        """Delete a raw file from S3 by its relative path.
+
+        Args:
+            path: Relative path within user's library (e.g., "/project-data/financials.xlsx")
+        """
+        normalized_path = path.lstrip("/")
+        s3_key = (
+            f"{self.tenant_id}/knowledge/{self.user_id}/user_library/{normalized_path}"
+        )
+        self.delete_raw_file(s3_key)
 
 
 def get_persistent_document_writer(

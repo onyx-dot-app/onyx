@@ -142,6 +142,11 @@ export interface SourceMetadata {
   uniqueKey?: string;
   // For federated connectors, this stores the base source type for the icon
   baseSourceType?: ValidSources;
+  // For connectors that are always available (don't need connection setup)
+  // e.g., User Library (CraftFile) where users just upload files
+  alwaysConnected?: boolean;
+  // Custom description to show instead of status (e.g., "Manage your uploaded files")
+  customDescription?: string;
 }
 
 export interface SearchDefaultOverrides {

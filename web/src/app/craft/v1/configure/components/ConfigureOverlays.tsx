@@ -29,10 +29,14 @@ export function ConnectorInfoOverlay({ visible }: ConnectorInfoOverlayProps) {
 
 interface ReprovisionWarningOverlayProps {
   visible: boolean;
+  onUpdate?: () => void;
+  isUpdating?: boolean;
 }
 
 export function ReprovisionWarningOverlay({
   visible,
+  onUpdate,
+  isUpdating,
 }: ReprovisionWarningOverlayProps) {
   return (
     <div
@@ -45,9 +49,11 @@ export function ReprovisionWarningOverlay({
     >
       <Message
         warning
-        text="Click Update to apply your changes"
+        text={isUpdating ? "Updating..." : "Click Update to apply your changes"}
         description="Your sandbox will be recreated with your new settings. Previously running sessions will not be affected by your changes."
         close={false}
+        actions={isUpdating ? false : "Update"}
+        onAction={isUpdating ? undefined : onUpdate}
       />
     </div>
   );

@@ -194,6 +194,98 @@ def _get_local_aws_credential_env_vars() -> list[client.V1EnvVar]:
     return env_vars
 
 
+def _build_filtered_symlink_script(
+    session_path: str,
+    excluded_user_library_paths: list[str],
+) -> str:
+    """Build a shell script that creates filtered symlinks for user_library.
+
+    Creates symlinks for all top-level directories in /workspace/files/,
+    then selectively symlinks user_library files, excluding disabled paths.
+
+    TODO: Replace this inline shell script with a standalone Python script
+    that gets copied onto the pod and invoked with arguments. This would
+    be easier to test and maintain.
+
+    Args:
+        session_path: The session directory path in the pod
+        excluded_user_library_paths: Paths to exclude from symlinks
+    """
+    excluded_paths_lines = "\n".join(p.lstrip("/") for p in excluded_user_library_paths)
+    heredoc_delim = f"_EXCL_{uuid4().hex[:12]}_"
+    return f"""
+# Create filtered files directory with exclusions
+mkdir -p {session_path}/files
+
+# Symlink all top-level directories except user_library
+for item in /workspace/files/*; do
+    [ -e "$item" ] || continue
+    name=$(basename "$item")
+    if [ "$name" != "user_library" ]; then
+        ln -sf "$item" {session_path}/files/"$name"
+    fi
+done
+
+# Write excluded paths to a temp file (one per line, via heredoc for safety)
+EXCL_FILE=$(mktemp)
+cat > "$EXCL_FILE" << '{heredoc_delim}'
+{excluded_paths_lines}
+{heredoc_delim}
+
+# Check if a relative path is excluded (exact match or child of excluded dir)
+is_excluded() {{
+    local rel_path="$1"
+    while IFS= read -r excl || [ -n "$excl" ]; do
+        [ -z "$excl" ] && continue
+        if [ "$rel_path" = "$excl" ]; then
+            return 0
+        fi
+        case "$rel_path" in
+            "$excl"/*) return 0 ;;
+        esac
+    done < "$EXCL_FILE"
+    return 1
+}}
+
+# Recursively create symlinks for non-excluded files
+create_filtered_symlinks() {{
+    src_dir="$1"
+    dst_dir="$2"
+    rel_base="$3"
+
+    for item in "$src_dir"/*; do
+        [ -e "$item" ] || continue
+        name=$(basename "$item")
+        if [ -n "$rel_base" ]; then
+            rel_path="$rel_base/$name"
+        else
+            rel_path="$name"
+        fi
+
+        if is_excluded "$rel_path"; then
+            continue
+        fi
+
+        if [ -d "$item" ]; then
+            mkdir -p "$dst_dir/$name"
+            create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
+            rmdir "$dst_dir/$name" 2>/dev/null || true
+        else
+            ln -sf "$item" "$dst_dir/$name"
+        fi
+    done
+}}
+
+if [ -d "/workspace/files/user_library" ]; then
+    mkdir -p {session_path}/files/user_library
+    create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
+    rmdir {session_path}/files/user_library 2>/dev/null || true
+fi
+
+rm -f "$EXCL_FILE"
+"""
+
+
 class KubernetesSandboxManager(SandboxManager):
     """Kubernetes-based sandbox manager for production deployments.
 
@@ -1087,6 +1179,7 @@ done
         user_work_area: str | None = None,
         user_level: str | None = None,
         use_demo_data: bool = False,
+        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1115,6 +1208,8 @@ done
             user_level: User's level for demo persona (e.g., "ic", "manager")
             use_demo_data: If True, symlink files/ to /workspace/demo_data;
                           else to /workspace/files (S3-synced user files)
+            excluded_user_library_paths: List of paths within user_library/ to exclude
+                (e.g., ["/data/file.xlsx"]). These files won't be accessible in the session.
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1195,6 +1290,10 @@ printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_str
 echo "Creating files symlink to demo data: {symlink_target}"
 ln -sf {symlink_target} {session_path}/files
 """
+        elif excluded_user_library_paths:
+            files_symlink_setup = _build_filtered_symlink_script(
+                session_path, excluded_user_library_paths
+            )
         else:
             # Normal mode: symlink to user's S3-synced knowledge files
             symlink_target = "/workspace/files"
@@ -2008,6 +2107,10 @@ echo "Session config regeneration complete"
 
         This is safe to call multiple times - s5cmd sync is idempotent.
 
+        Note: For user_library source, --delete is NOT used since deletions
+        are handled explicitly by the delete_file API endpoint. File visibility
+        in sessions is controlled via filtered symlinks in setup_session_workspace().
+
         Args:
             sandbox_id: The sandbox UUID
             user_id: The user ID (for S3 path construction)
@@ -2031,11 +2134,16 @@ echo "Session config regeneration complete"
             s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
             local_path = "/workspace/files/"
 
-        # s5cmd sync: high-performance parallel S3 sync
-        # --delete: mirror S3 to local (remove files that no longer exist in source)
+        # s5cmd sync with --delete for external connectors only.
         # timeout: prevent zombie processes from kubectl exec disconnections
         # trap: kill child processes on exit/disconnect
         source_info = f" (source={source})" if source else ""
+
+        # Sources where --delete is explicitly forbidden (deletions handled via API)
+        NO_DELETE_SOURCES = {"user_library"}
+        use_delete = source is not None and source not in NO_DELETE_SOURCES
+        delete_flag = " --delete" if use_delete else ""
+
         sync_script = f"""
 # Kill child processes on exit/disconnect to prevent zombie s5cmd workers
 cleanup() {{ pkill -P $$ 2>/dev/null || true; }}
@@ -2052,7 +2160,7 @@ mkdir -p "{local_path}"
 # Exit codes: 0=success, 1=success with warnings, 124=timeout
 sync_exit_code=0
 timeout --signal=TERM --kill-after=10s 5m \
-    /s5cmd --stat sync --delete "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
+    /s5cmd --stat sync{delete_flag} "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
 
 echo "=== Sync finished (exit code: $sync_exit_code) ==="
 

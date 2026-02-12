@@ -2,11 +2,15 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
@@ -18,6 +22,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
@@ -263,6 +268,52 @@ def _acquire_sandbox_file_sync_lock(lock: RedisLock) -> Iterator[bool]:
             lock.release()
 
 
+def _get_disabled_user_library_paths(db_session: "Session", user_id: str) -> list[str]:
+    """Get list of disabled user library file paths for exclusion during sync.
+
+    Queries the document table for CRAFT_FILE documents with sync_disabled=True
+    and returns their relative paths within user_library/.
+
+    Args:
+        db_session: Database session
+        user_id: The user ID to filter documents
+
+    Returns:
+        List of relative file paths to exclude (e.g., ["/data/file.xlsx", "/old/report.pdf"])
+    """
+    from uuid import UUID
+
+    from onyx.configs.constants import DocumentSource
+    from onyx.db.document import get_documents_by_source
+
+    disabled_paths: list[str] = []
+
+    # Get CRAFT_FILE documents for this user (filtered at SQL level)
+    documents = get_documents_by_source(
+        db_session=db_session,
+        source=DocumentSource.CRAFT_FILE,
+        creator_id=UUID(user_id),
+    )
+
+    for doc in documents:
+        doc_metadata = doc.doc_metadata or {}
+        if not doc_metadata.get("sync_disabled"):
+            continue
+
+        # Extract file path from semantic_id
+        # semantic_id format: "user_library/path/to/file.xlsx"
+        # Include both files AND directories - the shell script in
+        # setup_session_workspace() handles directory exclusion by
+        # checking if paths are children of an excluded directory.
+        semantic_id = doc.semantic_id or ""
+        if semantic_id.startswith(USER_LIBRARY_SOURCE_DIR):
+            file_path = semantic_id[len(USER_LIBRARY_SOURCE_DIR) :]
+            if file_path:
+                disabled_paths.append(file_path)
+
+    return disabled_paths
+
+
 @shared_task(
     name=OnyxCeleryTask.SANDBOX_FILE_SYNC,
     soft_time_limit=TIMEOUT_SECONDS,
@@ -285,10 +336,14 @@ def sync_sandbox_files(
     Per-user locking ensures only one sync runs at a time for a given user.
     If a sync is already in progress, this task will wait until it completes.
 
+    Note: File visibility in sessions is controlled via filtered symlinks in
+    setup_session_workspace(), not at the sync level. The sync mirrors S3
+    faithfully; disabled files are excluded only when creating new sessions.
+
     Args:
         user_id: The user ID whose sandbox should be synced
         tenant_id: The tenant ID for S3 path construction
-        source: Optional source type (e.g., "gmail", "google_drive").
+        source: Optional source type (e.g., "gmail", "google_drive", "user_library").
                 If None, syncs all sources.
 
     Returns:

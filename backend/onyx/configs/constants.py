@@ -227,6 +227,9 @@ class DocumentSource(str, Enum):
     MOCK_CONNECTOR = "mock_connector"
     # Special case for user files
     USER_FILE = "user_file"
+    # Raw files for Craft sandbox access (xlsx, pptx, docx, etc.)
+    # Uses RAW_BINARY processing mode - no text extraction
+    CRAFT_FILE = "craft_file"
 
 
 class FederatedConnectorSource(str, Enum):

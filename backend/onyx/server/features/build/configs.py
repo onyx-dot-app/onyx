@@ -132,3 +132,30 @@ ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
 # Free users always get 5 messages total (not configurable)
 # Per-user overrides are managed via PostHog feature flag "craft-has-usage-limits"
 CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
+
+# ============================================================================
+# User Library Configuration
+# For user-uploaded raw files (xlsx, pptx, docx, etc.) in Craft
+# ============================================================================
+
+# Maximum size per file in MB (default 500MB)
+USER_LIBRARY_MAX_FILE_SIZE_MB = int(
+    os.environ.get("USER_LIBRARY_MAX_FILE_SIZE_MB", "500")
+)
+USER_LIBRARY_MAX_FILE_SIZE_BYTES = USER_LIBRARY_MAX_FILE_SIZE_MB * 1024 * 1024
+
+# Maximum total storage per user in GB (default 10GB)
+USER_LIBRARY_MAX_TOTAL_SIZE_GB = int(
+    os.environ.get("USER_LIBRARY_MAX_TOTAL_SIZE_GB", "10")
+)
+USER_LIBRARY_MAX_TOTAL_SIZE_BYTES = USER_LIBRARY_MAX_TOTAL_SIZE_GB * 1024 * 1024 * 1024
+
+# Maximum files per single upload request (default 100)
+USER_LIBRARY_MAX_FILES_PER_UPLOAD = int(
+    os.environ.get("USER_LIBRARY_MAX_FILES_PER_UPLOAD", "100")
+)
+
+# String constants for User Library entities
+USER_LIBRARY_CONNECTOR_NAME = "User Library"
+USER_LIBRARY_CREDENTIAL_NAME = "User Library Credential"
+USER_LIBRARY_SOURCE_DIR = "user_library"
