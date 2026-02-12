@@ -453,18 +453,56 @@ jobs:
           retention-days: 30
 
       # --- Visual Regression Diff ---
-      - name: Clear pre-existing AWS credentials
+      - name: Debug OIDC and AWS credential state
         if: always()
         run: |
-          # The runs-on/action with extras=ecr-cache exports AWS credentials
-          # for ECR access. These cause configure-aws-credentials to attempt
-          # role-chaining (sts:AssumeRole) instead of OIDC
-          # (sts:AssumeRoleWithWebIdentity). Clear them so OIDC is used.
+          echo "=== Pre-existing AWS env vars ==="
+          echo "AWS_ACCESS_KEY_ID is set: ${AWS_ACCESS_KEY_ID:+yes}"
+          echo "AWS_SECRET_ACCESS_KEY is set: ${AWS_SECRET_ACCESS_KEY:+yes}"
+          echo "AWS_SESSION_TOKEN is set: ${AWS_SESSION_TOKEN:+yes}"
+          echo "AWS_ROLE_ARN is set: ${AWS_ROLE_ARN:+yes}"
+          echo "AWS_WEB_IDENTITY_TOKEN_FILE is set: ${AWS_WEB_IDENTITY_TOKEN_FILE:+yes}"
+          echo "AWS_PROFILE is set: ${AWS_PROFILE:+yes}"
+
+          echo ""
+          echo "=== OIDC token endpoint ==="
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL is set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN is set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
+
+          echo ""
+          echo "=== AWS config files ==="
+          ls -la ~/.aws/ 2>/dev/null || echo "No ~/.aws directory"
+          # Show structure only, not values
+          if [ -f ~/.aws/credentials ]; then
+            echo "~/.aws/credentials exists with sections:"
+            grep '^\[' ~/.aws/credentials
+          else
+            echo "No ~/.aws/credentials file"
+          fi
+          if [ -f ~/.aws/config ]; then
+            echo "~/.aws/config exists with sections:"
+            grep '^\[' ~/.aws/config
+          else
+            echo "No ~/.aws/config file"
+          fi
+
+          echo ""
+          echo "=== Current identity (before configure-aws-credentials) ==="
+          aws sts get-caller-identity || echo "No AWS identity available"
+
+          echo ""
+          echo "=== Clearing any pre-existing AWS credentials ==="
+          # Clear env vars via GITHUB_ENV for subsequent steps
           {
             echo "AWS_ACCESS_KEY_ID="
             echo "AWS_SECRET_ACCESS_KEY="
             echo "AWS_SESSION_TOKEN="
+            echo "AWS_ROLE_ARN="
+            echo "AWS_WEB_IDENTITY_TOKEN_FILE="
+            echo "AWS_PROFILE="
           } >> "$GITHUB_ENV"
+          # Also remove any credential files that might override OIDC
+          rm -f ~/.aws/credentials
 
       - name: Configure AWS credentials
         if: always()
@@ -476,6 +514,10 @@ jobs:
       - name: Verify AWS identity
         if: always()
         run: |
+          echo "=== Post-configure credential state ==="
+          echo "AWS_ACCESS_KEY_ID is set: ${AWS_ACCESS_KEY_ID:+yes}"
+          echo "AWS_SECRET_ACCESS_KEY is set: ${AWS_SECRET_ACCESS_KEY:+yes}"
+          echo "AWS_SESSION_TOKEN is set: ${AWS_SESSION_TOKEN:+yes}"
           aws sts get-caller-identity
 
       - name: Install the latest version of uv
