@@ -25,6 +25,15 @@ postgresql:
     superuserSecret:
       name: onyx-postgresql  # keep in sync with auth.postgresql
 
+# -- Master toggle for vector database support. When false:
+#   - Sets DISABLE_VECTOR_DB=true on all backend pods
+#   - Skips the indexing model server deployment (embeddings not needed)
+#   - Skips docprocessing and docfetching celery workers
+#   - You should also set vespa.enabled=false and opensearch.enabled=false
+#     to prevent those subcharts from deploying
+vectorDB:
+  enabled: true
+
 vespa:
   name: da-vespa-0
   service:

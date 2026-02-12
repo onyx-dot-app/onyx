@@ -463,12 +463,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def is_available(cls, db_session: Session) -> bool:
         """Check if search tool is available.
 
-        The search tool is available if ANY of the following exist:
+        Returns False when the vector DB is disabled (search cannot function
+        without it). Otherwise, available if ANY of the following exist:
         - Regular connectors (team knowledge)
         - Federated connectors (e.g., Slack)
         - User files (User Knowledge mode)
         """
+        from onyx.configs.app_configs import DISABLE_VECTOR_DB
         from onyx.db.connector import check_user_files_exist
+
+        if DISABLE_VECTOR_DB:
+            return False
 
         return (
             check_connectors_exist(db_session)

@@ -413,10 +413,20 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
 
     @override
     @classmethod
-    def is_available(cls, db_session: Session) -> bool:
-        """OpenURLTool is always available since it falls back to built-in crawler."""
+    def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
+        """OpenURLTool is available unless the vector DB is disabled.
+
+        The tool uses id_based_retrieval to match URLs to indexed documents,
+        which requires a vector database. When DISABLE_VECTOR_DB is set, the
+        tool is disabled entirely.
+        """
+        from onyx.configs.app_configs import DISABLE_VECTOR_DB
+
+        if DISABLE_VECTOR_DB:
+            return False
+
         # The tool can use either a configured provider or the built-in crawler,
-        # so it's always available
+        # so it's always available when the vector DB is present
         return True
 
     def tool_definition(self) -> dict:

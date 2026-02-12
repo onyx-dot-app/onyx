@@ -34,6 +34,8 @@ class StreamingType(Enum):
     PYTHON_TOOL_DELTA = "python_tool_delta"
     CUSTOM_TOOL_START = "custom_tool_start"
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
+    FILE_READER_START = "file_reader_start"
+    FILE_READER_RESULT = "file_reader_result"
     REASONING_START = "reasoning_start"
     REASONING_DELTA = "reasoning_delta"
     REASONING_DONE = "reasoning_done"
@@ -254,6 +256,26 @@ class CustomToolDelta(BaseObj):
 
 
 ################################################
+# File Reader Packets
+################################################
+class FileReaderStart(BaseObj):
+    type: Literal["file_reader_start"] = StreamingType.FILE_READER_START.value
+
+
+class FileReaderResult(BaseObj):
+    type: Literal["file_reader_result"] = StreamingType.FILE_READER_RESULT.value
+
+    file_name: str
+    file_id: str
+    start_char: int
+    end_char: int
+    total_chars: int
+    # Short previews of the retrieved text for the collapsed/expanded UI
+    preview_start: str = ""
+    preview_end: str = ""
+
+
+################################################
 # Deep Research Packets
 ################################################
 class DeepResearchPlanStart(BaseObj):
@@ -322,6 +344,8 @@ PacketObj = Union[
     PythonToolDelta,
     CustomToolStart,
     CustomToolDelta,
+    FileReaderStart,
+    FileReaderResult,
     # Reasoning Packets
     ReasoningStart,
     ReasoningDelta,

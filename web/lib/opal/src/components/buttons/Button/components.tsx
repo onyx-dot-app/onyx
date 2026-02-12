@@ -104,10 +104,9 @@ function Button({
     <Interactive.Base {...interactiveBaseProps}>
       <Interactive.Container
         type={interactiveBaseProps.href ? undefined : type}
-        border={interactiveBaseProps.subvariant === "secondary"}
-        heightVariant={isCompact ? "compact" : "default"}
+        border={interactiveBaseProps.prominence === "secondary"}
+        heightVariant={isCompact ? "md" : "lg"}
         roundingVariant={isCompact ? "compact" : "default"}
-        paddingVariant={isCompact ? "thin" : "default"}
       >
         <div
           className={cn(

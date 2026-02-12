@@ -31,6 +31,7 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  FILE_READER_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import { Card } from "@/refresh-components/cards";
@@ -85,6 +86,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -449,6 +451,8 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
+  const settings = useSettingsContext();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -521,6 +525,9 @@ export default function AgentEditorPage({
   );
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
+  const fileReaderTool = availableTools?.find(
+    (t) => t.in_code_tool_id === FILE_READER_TOOL_ID
   );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
@@ -609,6 +616,13 @@ export default function AgentEditorPage({
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
       ) ??
         false),
+    file_reader:
+      !!fileReaderTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === FILE_READER_TOOL_ID
+      ) ??
+        // Default to enabled for new assistants when the tool is available
+        !!fileReaderTool),
 
     // MCP servers - dynamically add fields for each server with nested tool fields
     ...Object.fromEntries(
@@ -739,8 +753,13 @@ export default function AgentEditorPage({
       // Always look up tools in availableTools to ensure we can find all tools
 
       const toolIds = [];
-      if (values.enable_knowledge && searchTool) {
-        toolIds.push(searchTool.id);
+      if (values.enable_knowledge) {
+        if (vectorDbEnabled && searchTool) {
+          toolIds.push(searchTool.id);
+        }
+      }
+      if (values.file_reader && fileReaderTool) {
+        toolIds.push(fileReaderTool.id);
       }
       if (values.image_generation && imageGenTool) {
         toolIds.push(imageGenTool.id);
@@ -1234,6 +1253,7 @@ export default function AgentEditorPage({
                           existingAgent?.attached_documents
                         }
                         initialHierarchyNodes={existingAgent?.hierarchy_nodes}
+                        vectorDbEnabled={vectorDbEnabled}
                       />
 
                       <Separator noPadding />
@@ -1316,6 +1336,24 @@ export default function AgentEditorPage({
                                 <SwitchField
                                   name="code_interpreter"
                                   disabled={!codeInterpreterTool}
+                                />
+                              </InputLayouts.Horizontal>
+                            </Card>
+
+                            <Card
+                              variant={
+                                !!fileReaderTool ? undefined : "disabled"
+                              }
+                            >
+                              <InputLayouts.Horizontal
+                                name="file_reader"
+                                title="File Reader"
+                                description="Read sections of uploaded files. Required for files that exceed the context window."
+                                disabled={!fileReaderTool}
+                              >
+                                <SwitchField
+                                  name="file_reader"
+                                  disabled={!fileReaderTool}
                                 />
                               </InputLayouts.Horizontal>
                             </Card>

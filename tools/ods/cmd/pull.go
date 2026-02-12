@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// PullOptions holds options for the pull command
+// PullOptions holds options for the pull command.
 type PullOptions struct {
 	Tag string
 }

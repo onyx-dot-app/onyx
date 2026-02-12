@@ -177,7 +177,7 @@ async def forward_to_control_plane(
     url = f"{CONTROL_PLANE_API_BASE_URL}{path}"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             if method == "GET":
                 response = await client.get(url, headers=headers, params=params)
             elif method == "POST":

@@ -56,10 +56,10 @@ def test_zip_metadata_handling(
     file_paths = upload_response.file_paths
     assert file_paths, "File upload failed - no file paths returned"
     if has_metadata:
-        metadata = upload_response.zip_metadata
-        assert metadata, "Metadata should be present"
+        zip_metadata_file_id = upload_response.zip_metadata_file_id
+        assert zip_metadata_file_id, "Metadata file ID should be present"
     else:
-        metadata = {}
+        zip_metadata_file_id = None
 
     # Create a dummy credential for the file connector
     credential = CredentialManager.create(
@@ -77,7 +77,7 @@ def test_zip_metadata_handling(
         connector_specific_config={
             "file_locations": file_paths,
             "file_names": [os.path.basename(file_path) for file_path in file_paths],
-            "zip_metadata": metadata,
+            "zip_metadata_file_id": zip_metadata_file_id,
         },
         access_type=AccessType.PUBLIC,
         groups=[],
