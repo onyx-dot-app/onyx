@@ -96,10 +96,12 @@ for bootstep in base_bootsteps:
     celery_app.steps["worker"].add(bootstep)
 
 celery_app.autodiscover_tasks(
-    [
-        "onyx.background.celery.tasks.pruning",
-        # Sandbox tasks (file sync, cleanup)
-        "onyx.server.features.build.sandbox.tasks",
-        "onyx.background.celery.tasks.hierarchyfetching",
-    ]
+    app_base.filter_task_modules(
+        [
+            "onyx.background.celery.tasks.pruning",
+            # Sandbox tasks (file sync, cleanup)
+            "onyx.server.features.build.sandbox.tasks",
+            "onyx.background.celery.tasks.hierarchyfetching",
+        ]
+    )
 )

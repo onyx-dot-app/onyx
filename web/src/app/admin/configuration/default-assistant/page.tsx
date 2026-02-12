@@ -280,6 +280,9 @@ function DefaultAssistantConfig() {
                 mcpServers={mcpServersResponse?.mcp_servers}
                 enabledToolsMap={values.enabled_tools_map}
                 setFieldValue={setFieldValue}
+                hideSearchTool={
+                  combinedSettings?.settings.vector_db_enabled === false
+                }
               />
 
               <div className="flex justify-end pt-4">

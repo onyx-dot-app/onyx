@@ -171,6 +171,7 @@ def process_onyx_metadata(
 
     return (
         OnyxMetadata(
+            document_id=metadata.get("id"),
             source_type=source_type,
             link=metadata.get("link"),
             file_display_name=metadata.get("file_display_name"),

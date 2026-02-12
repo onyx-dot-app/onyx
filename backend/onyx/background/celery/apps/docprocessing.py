@@ -107,7 +107,9 @@ for bootstep in base_bootsteps:
     celery_app.steps["worker"].add(bootstep)
 
 celery_app.autodiscover_tasks(
-    [
-        "onyx.background.celery.tasks.docprocessing",
-    ]
+    app_base.filter_task_modules(
+        [
+            "onyx.background.celery.tasks.docprocessing",
+        ]
+    )
 )

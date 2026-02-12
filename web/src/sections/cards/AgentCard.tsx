@@ -103,7 +103,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         variant="none"
-        static
       >
         <Card padding={0} gap={0} height="full">
           <div className="flex self-stretch h-[6rem]">

@@ -50,7 +50,7 @@ test("Restricted LLM Provider should not appear for unauthorized users", async (
   let groupId: number | null = null;
   let providerId: number | null = null;
 
-  const client = new OnyxApiClient(page);
+  const client = new OnyxApiClient(page.request);
 
   try {
     groupId = await client.createUserGroup(restrictedGroupName);

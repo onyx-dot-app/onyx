@@ -18,6 +18,7 @@ import {
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  FILE_READER_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { HoverPopup } from "@/components/HoverPopup";
 import { Info } from "lucide-react";
@@ -54,6 +55,9 @@ export function ToolSelector({
   );
   const pythonTool = tools.find((t) => t.in_code_tool_id === PYTHON_TOOL_ID);
   const openUrlTool = tools.find((t) => t.in_code_tool_id === OPEN_URL_TOOL_ID);
+  const fileReaderTool = tools.find(
+    (t) => t.in_code_tool_id === FILE_READER_TOOL_ID
+  );
 
   // Check if Web Search is enabled - if so, OpenURL must be enabled
   const isWebSearchEnabled = webSearchTool && enabledToolsMap[webSearchTool.id];
@@ -66,7 +70,8 @@ export function ToolSelector({
         tool.in_code_tool_id !== IMAGE_GENERATION_TOOL_ID &&
         tool.in_code_tool_id !== WEB_SEARCH_TOOL_ID &&
         tool.in_code_tool_id !== PYTHON_TOOL_ID &&
-        tool.in_code_tool_id !== OPEN_URL_TOOL_ID
+        tool.in_code_tool_id !== OPEN_URL_TOOL_ID &&
+        tool.in_code_tool_id !== FILE_READER_TOOL_ID
     );
 
     const mcp = allCustom.filter((tool) => tool.mcp_server_id);
@@ -256,6 +261,14 @@ export function ToolSelector({
             "Execute Python code in a secure, isolated environment to " +
             "analyze data, create visualizations, and perform computations"
           }
+        />
+      )}
+
+      {fileReaderTool && (
+        <BooleanFormField
+          name={`enabled_tools_map.${fileReaderTool.id}`}
+          label={fileReaderTool.display_name}
+          subtext="Read sections of uploaded files. Required for files that exceed the context window."
         />
       )}
 
