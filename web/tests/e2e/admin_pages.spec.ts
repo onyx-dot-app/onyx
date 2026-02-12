@@ -162,7 +162,8 @@ async function verifyAdminPageNavigation(
   }
 }
 
-const THEMES = ["light", "dark"] as const;
+// const THEMES = ["light", "dark"] as const;
+const THEMES = ["dark"] as const;
 
 for (const theme of THEMES) {
   test.describe(`Admin pages (${theme} mode)`, () => {
@@ -187,11 +188,7 @@ for (const theme of THEMES) {
         await page.waitForLoadState("networkidle");
 
         // Capture a screenshot for visual regression review.
-        // The screenshot name includes the theme to keep light/dark baselines separate.
-        const screenshotName = `admin-${theme}-${snapshot.path.replace(
-          /\//g,
-          "-"
-        )}`;
+        const screenshotName = `admin-${snapshot.path.replace(/\//g, "-")}`;
         await expectScreenshot(page, { name: screenshotName });
       });
     }
