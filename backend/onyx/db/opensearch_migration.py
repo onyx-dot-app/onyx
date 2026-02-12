@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.opensearch_migration.constants import (
     TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
 )
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
 from onyx.db.models import Document
 from onyx.db.models import OpenSearchDocumentMigrationRecord
@@ -379,11 +380,12 @@ def get_opensearch_retrieval_state(
 ) -> bool:
     """Returns the state of the OpenSearch retrieval.
 
-    If the tenant migration record is not found, defaults to False.
+    If the tenant migration record is not found, defaults to
+    ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX.
     """
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
-        return False
+        return ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
     return record.enable_opensearch_retrieval
 
 
