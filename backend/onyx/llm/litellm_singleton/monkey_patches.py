@@ -145,27 +145,42 @@ def _patch_ollama_chunk_parser() -> None:
             # PROCESS REASONING CONTENT
             reasoning_content: Optional[str] = None
             content: Optional[str] = None
-            if chunk["message"].get("thinking") is not None:
-                # Always process thinking content when present
-                reasoning_content = chunk["message"].get("thinking")
+            thinking_content = chunk["message"].get("thinking")
+            if thinking_content:  # Truthy check: skips None and empty string ""
+                reasoning_content = thinking_content
                 if self.started_reasoning_content is False:
                     self.started_reasoning_content = True
-            elif chunk["message"].get("content") is not None:
-                # Mark thinking as finished when we start getting regular content
-                if (
-                    self.started_reasoning_content
-                    and not self.finished_reasoning_content
-                ):
-                    self.finished_reasoning_content = True
-
+            if chunk["message"].get("content") is not None:
                 message_content = chunk["message"].get("content")
+                # Track whether we are inside <think>...</think> tagged content.
+                in_think_tag_block = bool(getattr(self, "_in_think_tag_block", False))
                 if "<think>" in message_content:
                     message_content = message_content.replace("<think>", "")
                     self.started_reasoning_content = True
+                    self.finished_reasoning_content = False
+                    in_think_tag_block = True
                 if "</think>" in message_content and self.started_reasoning_content:
                     message_content = message_content.replace("</think>", "")
                     self.finished_reasoning_content = True
+                    in_think_tag_block = False
+
+                # For native Ollama "thinking" streams, content without active
+                # think tags indicates a transition into regular assistant output.
                 if (
+                    self.started_reasoning_content
+                    and not self.finished_reasoning_content
+                    and not in_think_tag_block
+                    and not thinking_content
+                ):
+                    self.finished_reasoning_content = True
+
+                self._in_think_tag_block = in_think_tag_block
+
+                # When Ollama returns both "thinking" and "content" in the same
+                # chunk, preserve both instead of classifying content as reasoning.
+                if thinking_content and not in_think_tag_block:
+                    content = message_content
+                elif (
                     self.started_reasoning_content
                     and not self.finished_reasoning_content
                 ):
