@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { SvgArrowExchange } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Card from "@/refresh-components/cards/Card";
-import { Section } from "@/layouts/general-layouts";
+import { LineItemLayout } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Button from "@/refresh-components/buttons/Button";
@@ -25,29 +25,8 @@ function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-interface StatusRowProps {
-  label: string;
-  value: string;
-}
-
-function StatusRow({ label, value }: StatusRowProps) {
-  return (
-    <Section
-      flexDirection="row"
-      justifyContent="between"
-      alignItems="center"
-      height="fit"
-    >
-      <Text mainUiBody text03>
-        {label}
-      </Text>
-      <Text mainUiBody>{value}</Text>
-    </Section>
-  );
-}
-
 function MigrationStatusSection() {
-  const { data, isLoading } = useSWR<MigrationStatus>(
+  const { data, isLoading, error } = useSWR<MigrationStatus>(
     "/api/admin/opensearch-migration/status",
     errorHandlingFetcher
   );
@@ -63,6 +42,17 @@ function MigrationStatusSection() {
     );
   }
 
+  if (error) {
+    return (
+      <Card>
+        <Text headingH3>Migration Status</Text>
+        <Text mainUiBody text03>
+          Failed to load migration status.
+        </Text>
+      </Card>
+    );
+  }
+
   const hasStarted = data?.created_at != null;
   const hasCompleted = data?.migration_completed_at != null;
 
@@ -70,22 +60,35 @@ function MigrationStatusSection() {
     <Card>
       <Text headingH3>Migration Status</Text>
 
-      <StatusRow
-        label="Started"
-        value={hasStarted ? formatTimestamp(data.created_at!) : "Not started"}
+      <LineItemLayout
+        title="Started"
+        variant="secondary"
+        rightChildren={
+          <Text mainUiBody>
+            {hasStarted ? formatTimestamp(data.created_at!) : "Not started"}
+          </Text>
+        }
       />
 
-      <StatusRow
-        label="Chunks Migrated"
-        value={String(data?.total_chunks_migrated ?? 0)}
+      <LineItemLayout
+        title="Chunks Migrated"
+        variant="secondary"
+        rightChildren={
+          <Text mainUiBody>{String(data?.total_chunks_migrated ?? 0)}</Text>
+        }
       />
 
-      <StatusRow
-        label="Completed"
-        value={
-          hasCompleted
-            ? formatTimestamp(data.migration_completed_at!)
-            : "In progress"
+      <LineItemLayout
+        title="Completed"
+        variant="secondary"
+        rightChildren={
+          <Text mainUiBody>
+            {hasCompleted
+              ? formatTimestamp(data.migration_completed_at!)
+              : hasStarted
+                ? "In progress"
+                : "Not started"}
+          </Text>
         }
       />
     </Card>
@@ -93,7 +96,7 @@ function MigrationStatusSection() {
 }
 
 function RetrievalSourceSection() {
-  const { data, isLoading, mutate } = useSWR<RetrievalStatus>(
+  const { data, isLoading, error, mutate } = useSWR<RetrievalStatus>(
     "/api/admin/opensearch-migration/retrieval",
     errorHandlingFetcher
   );
@@ -135,6 +138,17 @@ function RetrievalSourceSection() {
         <Text headingH3>Retrieval Source</Text>
         <Text mainUiBody text03>
           Loading...
+        </Text>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <Text headingH3>Retrieval Source</Text>
+        <Text mainUiBody text03>
+          Failed to load retrieval settings.
         </Text>
       </Card>
     );
