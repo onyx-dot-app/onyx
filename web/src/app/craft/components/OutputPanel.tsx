@@ -19,13 +19,12 @@ import {
   fetchArtifacts,
   exportDocx,
 } from "@/app/craft/services/apiServices";
-import { cn } from "@/lib/utils";
+import { cn, getFileIcon } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgGlobe,
   SvgHardDrive,
   SvgFiles,
-  SvgFileText,
   SvgX,
   SvgMinus,
   SvgMaximize2,
@@ -259,11 +258,16 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, navigateTabForward]);
 
-  // Determine if the active file preview is a markdown file (for download button)
+  // Determine if the active file preview is a markdown or pptx file (for download buttons)
   const isMarkdownPreview =
     isFilePreviewActive &&
     activeFilePreviewPath &&
     /\.md$/i.test(activeFilePreviewPath);
+
+  const isPptxPreview =
+    isFilePreviewActive &&
+    activeFilePreviewPath &&
+    /\.pptx$/i.test(activeFilePreviewPath);
 
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
@@ -289,7 +293,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, activeFilePreviewPath]);
 
-  const handleMdDownload = useCallback(() => {
+  const handleRawFileDownload = useCallback(() => {
     if (!session?.id || !activeFilePreviewPath) return;
     const encodedPath = activeFilePreviewPath
       .split("/")
@@ -461,6 +465,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             {/* Preview tabs */}
             {filePreviewTabs.map((previewTab) => {
               const isActive = activeFilePreviewPath === previewTab.path;
+              const TabIcon = getFileIcon(previewTab.fileName);
               return (
                 <button
                   key={previewTab.path}
@@ -485,7 +490,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       }}
                     />
                   )}
-                  <SvgFileText
+                  <TabIcon
                     size={14}
                     className={cn(
                       "stroke-current flex-shrink-0",
@@ -561,7 +566,12 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             ? displayUrl
             : null
         }
-        onDownloadRaw={isMarkdownPreview ? handleMdDownload : undefined}
+        onDownloadRaw={
+          isMarkdownPreview || isPptxPreview ? handleRawFileDownload : undefined
+        }
+        downloadRawTooltip={
+          isPptxPreview ? "Download PPTX" : "Download MD file"
+        }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
       />

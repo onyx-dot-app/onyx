@@ -351,7 +351,7 @@ class KubernetesSandboxManager(SandboxManager):
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
-        self._skills_path = build_dir / "skills"
+        self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
             f"KubernetesSandboxManager initialized: "
@@ -1334,6 +1334,13 @@ mkdir -p {session_path}/attachments
 # Setup outputs
 {outputs_setup}
 
+# Symlink skills (baked into image at /workspace/skills/)
+if [ -d /workspace/skills ]; then
+    mkdir -p {session_path}/.opencode
+    ln -sf /workspace/skills {session_path}/.opencode/skills
+    echo "Linked skills to /workspace/skills"
+fi
+
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
@@ -2092,6 +2099,84 @@ echo "Session config regeneration complete"
             Internal cluster URL for the Next.js server on the specified port
         """
         return self._get_nextjs_url(str(sandbox_id), port)
+
+    def generate_pptx_preview(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        pptx_path: str,
+        cache_dir: str,
+    ) -> tuple[list[str], bool]:
+        """Convert PPTX to slide images using soffice + pdftoppm in the pod.
+
+        Runs preview.py in the sandbox container which:
+        1. Checks if cached slides exist and are newer than the PPTX
+        2. If not, converts PPTX -> PDF -> JPEG slides
+        3. Returns list of slide image paths
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        # Security: sanitize paths
+        pptx_path_obj = Path(pptx_path.lstrip("/"))
+        pptx_clean_parts = [p for p in pptx_path_obj.parts if p != ".."]
+        clean_pptx = str(Path(*pptx_clean_parts)) if pptx_clean_parts else "."
+
+        cache_path_obj = Path(cache_dir.lstrip("/"))
+        cache_clean_parts = [p for p in cache_path_obj.parts if p != ".."]
+        clean_cache = str(Path(*cache_clean_parts)) if cache_clean_parts else "."
+
+        session_root = f"/workspace/sessions/{session_id}"
+        pptx_abs = f"{session_root}/{clean_pptx}"
+        cache_abs = f"{session_root}/{clean_cache}"
+
+        exec_command = [
+            "python",
+            "/workspace/skills/pptx/scripts/preview.py",
+            pptx_abs,
+            cache_abs,
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            lines = [line.strip() for line in resp.strip().split("\n") if line.strip()]
+
+            if not lines:
+                raise ValueError("Empty response from PPTX conversion")
+
+            if lines[0] == "ERROR_NOT_FOUND":
+                raise ValueError(f"File not found: {pptx_path}")
+
+            if lines[0] == "ERROR_NO_PDF":
+                raise ValueError("soffice did not produce a PDF file")
+
+            cached = lines[0] == "CACHED"
+            # Skip the status line, rest are file paths
+            abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
+
+            # Convert absolute paths to session-relative paths
+            prefix = f"{session_root}/"
+            rel_paths = []
+            for p in abs_paths:
+                if p.startswith(prefix):
+                    rel_paths.append(p[len(prefix) :])
+                elif p.endswith(".jpg"):
+                    rel_paths.append(p)
+
+            return (rel_paths, cached)
+
+        except ApiException as e:
+            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
 
     def sync_files(
         self,

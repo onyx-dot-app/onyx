@@ -1683,6 +1683,62 @@ class SessionManager:
         docx_filename = filename.rsplit(".", 1)[0] + ".docx"
         return (docx_bytes, docx_filename)
 
+    def get_pptx_preview(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> dict[str, Any] | None:
+        """
+        Generate slide image previews for a PPTX file.
+
+        Converts the PPTX to individual JPEG slide images using
+        soffice + pdftoppm, with caching to avoid re-conversion.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the PPTX file within session workspace
+
+        Returns:
+            Dict with slide_count, slide_paths, and cached flag,
+            or None if session not found.
+
+        Raises:
+            ValueError: If path is invalid or conversion fails
+        """
+        import hashlib
+
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            return None
+
+        # Validate file extension
+        if not path.lower().endswith(".pptx"):
+            raise ValueError("Only .pptx files are supported for preview")
+
+        # Compute cache directory from path hash
+        path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
+        cache_dir = f"outputs/.pptx-preview/{path_hash}"
+
+        slide_paths, cached = self._sandbox_manager.generate_pptx_preview(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            pptx_path=path,
+            cache_dir=cache_dir,
+        )
+
+        return {
+            "slide_count": len(slide_paths),
+            "slide_paths": slide_paths,
+            "cached": cached,
+        }
+
     def get_webapp_info(
         self,
         session_id: UUID,

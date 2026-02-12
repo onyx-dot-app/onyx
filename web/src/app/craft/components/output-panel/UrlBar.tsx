@@ -29,6 +29,8 @@ export interface UrlBarProps {
   previewUrl?: string | null;
   /** Optional callback to download the raw file — shows a cloud-download icon inside the URL pill */
   onDownloadRaw?: () => void;
+  /** Tooltip text for the raw download button */
+  downloadRawTooltip?: string;
   /** Optional download callback — shows an export button in the URL bar when provided */
   onDownload?: () => void;
   /** Whether a download/export is currently in progress */
@@ -51,6 +53,7 @@ export default function UrlBar({
   onForward,
   previewUrl,
   onDownloadRaw,
+  downloadRawTooltip = "Download file",
   onDownload,
   isDownloading = false,
 }: UrlBarProps) {
@@ -96,13 +99,13 @@ export default function UrlBar({
         )}
         {/* URL display */}
         <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2">
-          {/* Download raw MD file button */}
+          {/* Download raw file button */}
           {onDownloadRaw && (
-            <SimpleTooltip tooltip="Download MD file" delayDuration={200}>
+            <SimpleTooltip tooltip={downloadRawTooltip} delayDuration={200}>
               <button
                 onClick={onDownloadRaw}
                 className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label="Download MD file"
+                aria-label={downloadRawTooltip}
               >
                 <SvgDownloadCloud size={14} />
               </button>
