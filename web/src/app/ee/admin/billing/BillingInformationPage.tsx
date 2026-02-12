@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   createCustomerPortalSession,
@@ -19,7 +20,9 @@ import Button from "@/refresh-components/buttons/Button";
 import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
 import { SvgClipboard, SvgWallet } from "@opal/icons";
+
 export default function BillingInformationPage() {
+  const router = useRouter();
   const { popup, setPopup } = usePopup();
 
   const {
@@ -41,6 +44,17 @@ export default function BillingInformationPage() {
     }
   }, [setPopup]);
 
+  // Redirect to the main billing page when there's no subscription.
+  // /admin/billing has the full plans, checkout, and license upload flow.
+  useEffect(() => {
+    if (
+      !isLoading &&
+      (!billingInformation || !hasActiveSubscription(billingInformation))
+    ) {
+      router.replace("/admin/billing");
+    }
+  }, [isLoading, billingInformation, router]);
+
   if (isLoading) {
     return <div className="text-center py-8">Loading...</div>;
   }
@@ -55,15 +69,13 @@ export default function BillingInformationPage() {
   }
 
   if (!billingInformation || !hasActiveSubscription(billingInformation)) {
-    return (
-      <div className="text-center py-8">No billing information available.</div>
-    );
+    // Will redirect via the useEffect above
+    return <div className="text-center py-8">Loading...</div>;
   }
 
   const handleManageSubscription = async () => {
     try {
       const response = await createCustomerPortalSession();
-      console.log("response", response);
       if (!response.stripe_customer_portal_url) {
         throw new Error("No portal URL returned from the server");
       }
