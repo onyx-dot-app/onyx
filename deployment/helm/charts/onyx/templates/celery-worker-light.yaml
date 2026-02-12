@@ -60,16 +60,7 @@ spec:
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
-            [
-              "celery",
-              "-A",
-              "onyx.background.celery.versioned_apps.light",
-              "worker",
-              "--loglevel=INFO",
-              "--hostname=light@%n",
-              "-Q",
-              "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
-            ]
+            {{- toYaml .Values.celery_worker_light.command | nindent 12 }}
           resources:
             {{- toYaml .Values.celery_worker_light.resources | nindent 12 }}
           envFrom:
