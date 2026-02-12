@@ -310,6 +310,8 @@ export type CustomToolObj =
 export type FileReaderToolObj =
   | FileReaderStart
   | FileReaderResult
+  | SectionEnd
+  | PacketError;
 export type MemoryToolObj =
   | MemoryToolStart
   | MemoryToolDelta
