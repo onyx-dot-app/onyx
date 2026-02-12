@@ -677,19 +677,11 @@ def connector_document_extraction(
                 logger.debug(f"Indexing batch of documents: {batch_description}")
                 memory_tracer.increment_and_maybe_trace()
 
-                if processing_mode == ProcessingMode.RAW_BINARY:
-                    # RAW_BINARY mode - files are uploaded via API directly to S3
-                    # CraftFileConnector yields no documents (load_from_state returns empty)
-                    # This code path should not be reached since the connector
-                    # doesn't produce document batches. Log a warning if we get here.
-                    logger.warning(
-                        f"Unexpected RAW_BINARY document batch received: "
-                        f"docs={len(doc_batch_cleaned)} attempt={index_attempt_id}. "
-                        f"CraftFileConnector should not yield documents."
-                    )
-                    continue
+                # NOTE: RAW_BINARY processing mode is not handled here.
+                # CRAFT_FILE documents use direct S3 upload via API endpoints,
+                # bypassing the connector indexing flow entirely.
 
-                elif processing_mode == ProcessingMode.FILE_SYSTEM:
+                if processing_mode == ProcessingMode.FILE_SYSTEM:
                     # File system only - write directly to persistent storage,
                     # skip chunking/embedding/Vespa but still track documents in DB
 
@@ -825,8 +817,9 @@ def connector_document_extraction(
 
         # Trigger file sync to user's sandbox (if running)
         # This syncs files from S3 to any running sandbox pod
-        # Applies to both FILE_SYSTEM (connector JSON documents) and RAW_BINARY (user uploads)
-        if processing_mode in (ProcessingMode.FILE_SYSTEM, ProcessingMode.RAW_BINARY):
+        # NOTE: Only FILE_SYSTEM connectors trigger sync here. RAW_BINARY (User Library)
+        # bypasses the connector flow and triggers sync directly from the API endpoints.
+        if processing_mode == ProcessingMode.FILE_SYSTEM:
             creator_id = index_attempt.connector_credential_pair.creator_id
             if creator_id:
                 source_value = db_connector.source.value

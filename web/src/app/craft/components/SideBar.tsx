@@ -263,7 +263,7 @@ function BuildSessionButton({
               ? "Deleted"
               : deleteError
                 ? "Delete Failed"
-                : "Delete Build"
+                : "Delete Craft"
           }
           icon={deleteSuccess ? SvgCheckCircle : SvgTrash}
           onClose={isDeleting || deleteSuccess ? undefined : closeModal}
