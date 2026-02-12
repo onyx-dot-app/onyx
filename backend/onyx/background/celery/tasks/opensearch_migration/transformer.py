@@ -152,7 +152,7 @@ def transform_vespa_chunks_to_opensearch_chunks(
     vespa_chunks: list[dict[str, Any]],
     tenant_state: TenantState,
     sanitized_to_original_doc_id_mapping: dict[str, str],
-) -> tuple[list[DocumentChunk], list[DocumentChunk]]:
+) -> tuple[list[DocumentChunk], list[dict[str, Any]]]:
     result: list[DocumentChunk] = []
     errored_chunks: list[dict[str, Any]] = []
     for vespa_chunk in vespa_chunks:
