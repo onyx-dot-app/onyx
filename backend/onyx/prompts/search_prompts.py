@@ -22,8 +22,8 @@ The current date is {current_date}.
 """
 
 SEMANTIC_QUERY_REPHRASE_USER_PROMPT = """
-Given the chat history and the final user query, provide a standalone query that is as representative of the user query \
-as possible. In most cases, it should be exactly the same as the last user query. \
+Given the chat history above (if any) and the final user query (provided below), provide a standalone query that is as
+representative of the user query as possible. In most cases, it should be exactly the same as the last user query. \
 It should be fully semantic and natural language unless the user query is already a keyword query. \
 Focus on the last user message, in most cases the history and extra context should be ignored.
 
@@ -61,8 +61,8 @@ The current date is {current_date}.
 
 
 KEYWORD_REPHRASE_USER_PROMPT = """
-Given a chat history and a follow up user input, provide a set of keyword only queries that can help find relevant documents. \
-Provide a single query per line (where each query consists of one or more keywords). \
+Given the chat history above (if any) and the final user query (provided below), provide a set of keyword only queries that can
+help find relevant documents. Provide a single query per line (where each query consists of one or more keywords). \
 The queries must be purely keywords and not contain any natural language. \
 Each query should have as few keywords as necessary to represent the user's search intent.
 
@@ -71,13 +71,11 @@ Guidelines:
 - Do not replace or expand niche, proprietary, or obscure terms
 - Focus on the last user message, in most cases the history and any extra context should be ignored.
 {additional_context}
-
 =========================
+CRITICAL: ONLY provide the keyword queries, one set of keywords per line and nothing else.
 
 Final user query:
 {user_query}
-
-CRITICAL: ONLY provide the keyword queries, one set of keywords per line and nothing else.
 """.strip()
 
 

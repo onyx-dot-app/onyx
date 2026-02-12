@@ -26,7 +26,7 @@ def generate_chat_session_name(
     reminder_prompt = ChatMessageSimple(
         message=CHAT_NAMING_REMINDER,
         token_count=100,
-        message_type=MessageType.USER,
+        message_type=MessageType.USER_REMINDER,
     )
 
     complete_message_history = [system_prompt] + chat_history + [reminder_prompt]

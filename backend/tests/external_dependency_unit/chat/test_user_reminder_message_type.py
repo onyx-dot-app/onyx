@@ -13,9 +13,19 @@ from onyx.chat.llm_step import translate_history_to_llm_format
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import UserMessage
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
+
+
+def _ensure_list(
+    result: list[ChatCompletionMessage] | ChatCompletionMessage,
+) -> list[ChatCompletionMessage]:
+    """Convert LanguageModelInput to a list for easier testing."""
+    if isinstance(result, list):
+        return result
+    return [result]
 
 
 @pytest.fixture
@@ -46,7 +56,8 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
@@ -70,10 +81,12 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
+        assert isinstance(msg, UserMessage)
         expected_content = (
             f"{SYSTEM_REMINDER_TAG_OPEN}\n{reminder_text}\n{SYSTEM_REMINDER_TAG_CLOSE}"
         )
@@ -91,7 +104,8 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         # Should be a UserMessage since LLM APIs don't have a native reminder type
@@ -123,12 +137,14 @@ class TestUserReminderMessageType:
             ),
         ]
 
-        result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        result = _ensure_list(raw_result)
 
         assert len(result) == 4
         # Check the reminder message (last one)
         reminder_msg = result[3]
         assert isinstance(reminder_msg, UserMessage)
+        assert isinstance(reminder_msg.content, str)
         assert reminder_msg.content.startswith(SYSTEM_REMINDER_TAG_OPEN)
         assert reminder_msg.content.endswith(SYSTEM_REMINDER_TAG_CLOSE)
         assert "Remember to be concise." in reminder_msg.content
@@ -148,12 +164,14 @@ class TestUserReminderMessageType:
             )
         ]
 
-        result = translate_history_to_llm_format(history, mock_llm_config)
+        raw_result = translate_history_to_llm_format(history, mock_llm_config)
+        result = _ensure_list(raw_result)
 
         assert len(result) == 1
         msg = result[0]
         assert isinstance(msg, UserMessage)
         # Regular user message should NOT have the tags
+        assert isinstance(msg.content, str)
         assert SYSTEM_REMINDER_TAG_OPEN not in msg.content
         assert SYSTEM_REMINDER_TAG_CLOSE not in msg.content
         assert msg.content == "This is a normal user message."
