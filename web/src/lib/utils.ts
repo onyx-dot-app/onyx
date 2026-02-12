@@ -10,6 +10,9 @@ import {
 } from "@opal/icons";
 import { ALLOWED_URL_PROTOCOLS } from "./constants";
 
+const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+const BARE_EMAIL_REGEX = /^[^\s@/]+@[^\s@/:]+\.[^\s@/:]+$/;
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -20,24 +23,35 @@ export const truncateString = (str: string, maxLength: number) => {
 
 /**
  * Ensures an href has a protocol, adding https:// only to bare domains.
- * Preserves existing protocols, relative paths, anchors, mailto:, and tel: links.
+ * Converts bare email addresses to mailto: links.
+ * Preserves existing protocols, relative paths, and anchors.
  */
 export function ensureHrefProtocol(
   href: string | undefined
 ): string | undefined {
   if (!href) return href;
+  const trimmedHref = href.trim();
+  if (!trimmedHref) return href;
+
   const needsProtocol =
-    !href.includes("://") &&
-    !href.startsWith("/") &&
-    !href.startsWith("#") &&
-    !href.startsWith("mailto:") &&
-    !href.startsWith("tel:");
-  return needsProtocol ? `https://${href}` : href;
+    !URI_SCHEME_REGEX.test(trimmedHref) &&
+    !trimmedHref.startsWith("/") &&
+    !trimmedHref.startsWith("#");
+  if (!needsProtocol) {
+    return trimmedHref;
+  }
+
+  if (BARE_EMAIL_REGEX.test(trimmedHref)) {
+    return `mailto:${trimmedHref}`;
+  }
+
+  return `https://${trimmedHref}`;
 }
 
 /**
  * Custom URL transformer function for ReactMarkdown.
  * Only allows a small, safe set of protocols and strips everything else.
+ * Bare email addresses are normalized to mailto: links.
  * Returning null removes the href attribute entirely.
  */
 export function transformLinkUri(href: string): string | null {
@@ -56,8 +70,12 @@ export function transformLinkUri(href: string): string | null {
 
     return null;
   } catch {
+    if (BARE_EMAIL_REGEX.test(trimmedHref)) {
+      return `mailto:${trimmedHref}`;
+    }
+
     // Allow relative URLs, but drop anything that looks like a protocol-prefixed link
-    if (/^[a-zA-Z][a-zA-Z\d+.-]*:\S*/.test(trimmedHref)) {
+    if (URI_SCHEME_REGEX.test(trimmedHref)) {
       return null;
     }
 

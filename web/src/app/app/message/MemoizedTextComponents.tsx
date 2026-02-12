@@ -18,6 +18,7 @@ import {
   getDisplayNameForSource,
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
+import { ensureHrefProtocol } from "@/lib/utils";
 
 export const MemoizedAnchor = memo(
   ({
@@ -175,17 +176,7 @@ export const MemoizedLink = memo(
       );
     }
 
-    let url = href || rest.children?.toString();
-    if (url && !url.includes("://")) {
-      // Only add https:// if the URL doesn't already have a protocol
-      const httpsUrl = `https://${url}`;
-      try {
-        new URL(httpsUrl);
-        url = httpsUrl;
-      } catch {
-        // If not a valid URL, don't modify original url
-      }
-    }
+    const url = ensureHrefProtocol(href);
 
     return (
       <a
