@@ -285,6 +285,107 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     });
   });
 
+  test("preserves additional models when updating an openai-compatible provider", async () => {
+    const user = setupUser();
+
+    const existingProvider = {
+      id: 7,
+      name: "ArcAI",
+      provider: "openai",
+      api_key: "old-key",
+      api_base: "https://example-openai-compatible.local/v1",
+      api_version: "",
+      default_model_name: "gpt-oss-20b-bw-failover",
+      model_configurations: [
+        {
+          name: "gpt-oss-20b-bw-failover",
+          is_visible: true,
+          max_input_tokens: null,
+          supports_image_input: null,
+        },
+      ],
+      custom_config: {},
+      is_public: true,
+      is_auto_mode: false,
+      groups: [],
+      personas: [],
+      deployment_name: null,
+      is_default_provider: false,
+      default_vision_model: null,
+      is_default_vision_provider: null,
+    };
+
+    // Mock POST /api/admin/llm/test
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+
+    // Mock PUT /api/admin/llm/provider
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...existingProvider,
+        model_configurations: [
+          {
+            name: "gpt-oss-20b-bw-failover",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: null,
+          },
+          {
+            name: "nemotron",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: null,
+          },
+        ],
+      }),
+    } as Response);
+
+    render(<CustomForm existingLlmProvider={existingProvider} />);
+
+    const editButton = screen.getByRole("button", { name: /edit/i });
+    await user.click(editButton);
+
+    const addNewButtons = screen.getAllByRole("button", { name: /add new/i });
+    const modelConfigurationAddButton = addNewButtons[1];
+    expect(modelConfigurationAddButton).toBeDefined();
+    await user.click(modelConfigurationAddButton!);
+
+    const secondModelNameInput = screen.getByPlaceholderText(/model-name-2/i);
+    await user.type(secondModelNameInput, "nemotron");
+
+    const submitButton = screen.getByRole("button", { name: /update/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/admin/llm/provider",
+        expect.objectContaining({
+          method: "PUT",
+        })
+      );
+    });
+
+    const updateCall = fetchSpy.mock.calls.find(
+      (call) =>
+        call[0] === "/api/admin/llm/provider" &&
+        call[1]?.method?.toUpperCase() === "PUT"
+    );
+    expect(updateCall).toBeDefined();
+
+    const requestBody = JSON.parse(updateCall![1].body as string);
+    expect(requestBody.default_model_name).toBe("gpt-oss-20b-bw-failover");
+    expect(requestBody.model_configurations).toHaveLength(2);
+    expect(requestBody.model_configurations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "gpt-oss-20b-bw-failover" }),
+        expect.objectContaining({ name: "nemotron" }),
+      ])
+    );
+  });
+
   test("sets provider as default when shouldMarkAsDefault is true", async () => {
     const user = setupUser();
 
