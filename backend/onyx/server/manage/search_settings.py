@@ -227,10 +227,15 @@ def get_all_search_settings(
 ) -> FullModelVersionResponse:
     current_search_settings = get_current_search_settings(db_session)
     secondary_search_settings = get_secondary_search_settings(db_session)
+    default_contextual_model = fetch_default_contextual_rag_model(db_session)
     return FullModelVersionResponse(
-        current_settings=SavedSearchSettings.from_db_model(current_search_settings),
+        current_settings=SavedSearchSettings.from_db_model(
+            current_search_settings, contextual_model=default_contextual_model
+        ),
         secondary_settings=(
-            SavedSearchSettings.from_db_model(secondary_search_settings)
+            SavedSearchSettings.from_db_model(
+                secondary_search_settings, contextual_model=default_contextual_model
+            )
             if secondary_search_settings
             else None
         ),
