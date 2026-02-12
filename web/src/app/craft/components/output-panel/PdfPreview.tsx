@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgFileText } from "@opal/icons";
@@ -27,11 +27,19 @@ export default function PdfPreview({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+
+    // Revoke the previous blob URL before starting a new fetch
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setBlobUrl(null);
     setLoading(true);
     setError(false);
-    setBlobUrl(null);
 
     const encodedPath = filePath
       .split("/")
@@ -39,29 +47,29 @@ export default function PdfPreview({
       .join("/");
     const artifactUrl = getArtifactUrl(sessionId, encodedPath);
 
-    let revoked = false;
-    let objectUrl: string | null = null;
-
-    fetch(artifactUrl)
+    fetch(artifactUrl, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.status}`);
         return res.blob();
       })
       .then((blob) => {
-        if (revoked) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
+        const url = URL.createObjectURL(blob);
+        blobUrlRef.current = url;
+        setBlobUrl(url);
+        setLoading(false);
       })
-      .catch(() => {
-        if (!revoked) setError(true);
-      })
-      .finally(() => {
-        if (!revoked) setLoading(false);
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(true);
+        setLoading(false);
       });
 
     return () => {
-      revoked = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      controller.abort();
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
     };
   }, [sessionId, filePath, refreshKey]);
 
