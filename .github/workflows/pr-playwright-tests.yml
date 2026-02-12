@@ -474,7 +474,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           aws s3 sync ./web/output/visual-diff/ \
-            "s3://onyx-internal-tools/playwright-reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
+            "s3://onyx-playwright-artifacts/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
 
       - name: Upload visual diff report artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -492,7 +492,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           PROJECT: ${{ matrix.project }}
         run: |
-          REPORT_URL="https://onyx-internal-tools.s3.us-east-2.amazonaws.com/playwright-reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/index.html"
+          REPORT_URL="https://onyx-playwright-artifacts.s3.us-east-2.amazonaws.com/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/index.html"
           MARKER="<!-- visual-regression-${PROJECT} -->"
 
           BODY=$(cat <<EOF
@@ -532,7 +532,7 @@ jobs:
           PROJECT: ${{ matrix.project }}
         run: |
           aws s3 sync ./web/screenshots/ \
-            "s3://onyx-internal-tools/playwright-baselines/${PROJECT}/" --delete
+            "s3://onyx-playwright-artifacts/baselines/${PROJECT}/" --delete
 
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs

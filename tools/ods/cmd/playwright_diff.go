@@ -84,7 +84,7 @@ Examples:
 
   # Compare against S3 baselines
   ods playwright-diff compare \
-    --baseline s3://onyx-internal-tools/playwright-baselines/admin/ \
+    --baseline s3://onyx-playwright-artifacts/baselines/admin/ \
     --current ./web/screenshots/ \
     --output ./visual-diff/index.html`,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -119,12 +119,12 @@ Examples:
   # Upload to default location
   ods playwright-diff upload-baselines \
     --dir ./web/screenshots/ \
-    --dest s3://onyx-internal-tools/playwright-baselines/admin/
+    --dest s3://onyx-playwright-artifacts/baselines/admin/
 
   # Upload with delete (remove old baselines not in current set)
   ods playwright-diff upload-baselines \
     --dir ./web/screenshots/ \
-    --dest s3://onyx-internal-tools/playwright-baselines/admin/ \
+    --dest s3://onyx-playwright-artifacts/baselines/admin/ \
     --delete`,
 		Run: func(cmd *cobra.Command, args []string) {
 			runUploadBaselines(opts)
