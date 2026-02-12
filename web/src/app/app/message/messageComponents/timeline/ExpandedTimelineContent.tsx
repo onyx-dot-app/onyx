@@ -95,6 +95,7 @@ const TimelineStep = React.memo(function TimelineStep({
       isSingleStep,
       isReasoning,
       isDeepResearchPlan,
+      isMemoryTool,
       getCollapsedIcon,
     ]
   );
