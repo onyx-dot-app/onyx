@@ -509,6 +509,12 @@ def fetch_default_vision_model(db_session: Session) -> ModelConfiguration | None
     return fetch_default_model(db_session, LLMModelFlowType.VISION)
 
 
+def fetch_default_contextual_rag_model(
+    db_session: Session,
+) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, LLMModelFlowType.CONTEXTUAL_RAG)
+
+
 def fetch_default_model(
     db_session: Session,
     flow_type: LLMModelFlowType,

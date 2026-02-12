@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import create_search_settings
@@ -163,6 +164,10 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
         db_session=db_session,
     )
 
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is not None
+    assert default_model.name == TEST_CONTEXTUAL_RAG_LLM_NAME
+
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
     mock_get_llm.assert_called_once_with(
@@ -194,11 +199,15 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     )
 
     # Create baseline PRESENT settings with contextual RAG already enabled
-    create_search_settings(
-        search_settings=_make_saved_search_settings(),
+    set_new_search_settings(
+        search_settings_new=_make_creation_request(),
+        _=MagicMock(),
         db_session=db_session,
-        status=IndexModelStatus.PRESENT,
     )
+
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is not None
+    assert default_model.name == TEST_CONTEXTUAL_RAG_LLM_NAME
 
     # Retire any FUTURE settings left over from other tests so the
     # pipeline uses the PRESENT (primary) settings we just created.
@@ -215,6 +224,10 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
         _=MagicMock(),
         db_session=db_session,
     )
+
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is not None
+    assert default_model.name == UPDATED_CONTEXTUAL_RAG_LLM_NAME
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
@@ -247,6 +260,9 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
         _=MagicMock(),
         db_session=db_session,
     )
+
+    default_model = fetch_default_contextual_rag_model(db_session)
+    assert default_model is None
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 

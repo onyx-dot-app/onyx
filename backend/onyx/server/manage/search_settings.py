@@ -118,13 +118,13 @@ def set_new_search_settings(
     #     )
 
     # new_search_settings = _create_new_search_settings(
-    #     search_settings=new_search_settings_request, db_session=db_session
+    #     search_settings_request=new_search_settings_request, db_session=db_session
     # )
 
     # # Ensure Vespa has the new index immediately
     # get_multipass_config(search_settings)
     # get_multipass_config(new_search_settings)
-    # document_index = get_default_document_index(search_settings, new_search_settings)
+    # document_index = get_default_document_index(search_settings, new_search_settings, db_session)
 
     # document_index.ensure_indices_exist(
     #     primary_embedding_dim=search_settings.final_embedding_dim,
@@ -138,12 +138,6 @@ def set_new_search_settings(
     #     expire_index_attempts(
     #         search_settings_id=search_settings.id, db_session=db_session
     #     )
-    #     for cc_pair in get_connector_credential_pairs(db_session):
-    #         resync_cc_pair(
-    #             cc_pair=cc_pair,
-    #             search_settings_id=new_search_settings.id,
-    #             db_session=db_session,
-    #         )
 
     # db_session.commit()
     # return IdReturn(id=new_search_settings.id)
