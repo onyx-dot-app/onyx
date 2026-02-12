@@ -19,6 +19,7 @@ import {
   isPythonToolPackets,
   isReasoningPackets,
   isDeepResearchPlanPackets,
+  isMemoryToolPackets,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // =============================================================================
@@ -65,6 +66,11 @@ const TimelineStep = React.memo(function TimelineStep({
     [step.packets]
   );
 
+  const isMemoryTool = useMemo(
+    () => isMemoryToolPackets(step.packets),
+    [step.packets]
+  );
+
   const getCollapsedIcon = useCallback(
     (result: TimelineRendererResult) =>
       isSearchTool ? (result.icon as FunctionComponent<IconProps>) : undefined,
@@ -79,7 +85,7 @@ const TimelineStep = React.memo(function TimelineStep({
         isFirstStep={isFirstStep}
         isSingleStep={isSingleStep}
         collapsible={true}
-        noPaddingRight={isReasoning || isDeepResearchPlan}
+        noPaddingRight={isReasoning || isDeepResearchPlan || isMemoryTool}
         getCollapsedIcon={getCollapsedIcon}
       />
     ),
@@ -89,6 +95,7 @@ const TimelineStep = React.memo(function TimelineStep({
       isSingleStep,
       isReasoning,
       isDeepResearchPlan,
+      isMemoryTool,
       getCollapsedIcon,
     ]
   );

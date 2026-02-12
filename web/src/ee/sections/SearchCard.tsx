@@ -55,9 +55,9 @@ export default function SearchCard({
   );
 
   return (
-    <Interactive.Base onClick={handleClick} subvariant="secondary">
-      <Interactive.Container heightVariant="fit" paddingVariant="thin">
-        <Section alignItems="start" gap={0} padding={0}>
+    <Interactive.Base onClick={handleClick} prominence="secondary">
+      <Interactive.Container heightVariant="fit">
+        <Section alignItems="start" gap={0} padding={0.25}>
           {/* Title Row */}
           <Section
             flexDirection="row"

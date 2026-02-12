@@ -51,7 +51,6 @@ class TestApplyLicenseStatusToSettings:
     @pytest.mark.parametrize(
         "license_status,expected_app_status,expected_ee_enabled",
         [
-            (None, ApplicationStatus.ACTIVE, False),
             (ApplicationStatus.GATED_ACCESS, ApplicationStatus.GATED_ACCESS, False),
             (ApplicationStatus.ACTIVE, ApplicationStatus.ACTIVE, True),
         ],
@@ -83,6 +82,48 @@ class TestApplyLicenseStatusToSettings:
         result = apply_license_status_to_settings(base_settings)
         assert result.application_status == expected_app_status
         assert result.ee_features_enabled is expected_ee_enabled
+
+    @patch("ee.onyx.server.settings.api.ENTERPRISE_EDITION_ENABLED", True)
+    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.settings.api.get_current_tenant_id")
+    @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
+    def test_no_license_with_ee_flag_gates_access(
+        self,
+        mock_get_metadata: MagicMock,
+        mock_get_tenant: MagicMock,
+        base_settings: Settings,
+    ) -> None:
+        """No license + ENTERPRISE_EDITION_ENABLED=true → GATED_ACCESS."""
+        from ee.onyx.server.settings.api import apply_license_status_to_settings
+
+        mock_get_tenant.return_value = "test_tenant"
+        mock_get_metadata.return_value = None
+
+        result = apply_license_status_to_settings(base_settings)
+        assert result.application_status == ApplicationStatus.GATED_ACCESS
+        assert result.ee_features_enabled is False
+
+    @patch("ee.onyx.server.settings.api.ENTERPRISE_EDITION_ENABLED", False)
+    @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.settings.api.get_current_tenant_id")
+    @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
+    def test_no_license_without_ee_flag_allows_community(
+        self,
+        mock_get_metadata: MagicMock,
+        mock_get_tenant: MagicMock,
+        base_settings: Settings,
+    ) -> None:
+        """No license + ENTERPRISE_EDITION_ENABLED=false → community mode (no gating)."""
+        from ee.onyx.server.settings.api import apply_license_status_to_settings
+
+        mock_get_tenant.return_value = "test_tenant"
+        mock_get_metadata.return_value = None
+
+        result = apply_license_status_to_settings(base_settings)
+        assert result.application_status == ApplicationStatus.ACTIVE
+        assert result.ee_features_enabled is False
 
     @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)

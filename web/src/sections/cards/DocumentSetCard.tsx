@@ -36,10 +36,10 @@ export default function DocumentSetCard({
               : () => onSelectToggle?.(!isSelected)
           }
           variant="none"
-          static={disabled || isSelected === undefined}
         >
           <Interactive.Container
             data-testid={`document-set-card-${documentSet.id}`}
+            border
             heightVariant="fit"
           >
             <AttachmentItemLayout

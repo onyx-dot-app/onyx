@@ -781,6 +781,7 @@ function ChatPreferencesSettings() {
   const {
     personalizationValues,
     toggleUseMemories,
+    toggleEnableMemoryTool,
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
@@ -886,8 +887,23 @@ function ChatPreferencesSettings() {
               }}
             />
           </InputLayouts.Horizontal>
+          <InputLayouts.Horizontal
+            title="Update Memories"
+            description="Let Onyx generate and update stored memories."
+          >
+            <Switch
+              checked={personalizationValues.enable_memory_tool}
+              onCheckedChange={(checked) => {
+                toggleEnableMemoryTool(checked);
+                void handleSavePersonalization({
+                  enable_memory_tool: checked,
+                });
+              }}
+            />
+          </InputLayouts.Horizontal>
 
-          {personalizationValues.use_memories && (
+          {(personalizationValues.use_memories ||
+            personalizationValues.enable_memory_tool) && (
             <Memories
               memories={personalizationValues.memories}
               onSaveMemories={handleSaveMemories}
@@ -1327,15 +1343,8 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Interactive.Base
-                        key={pat.id}
-                        subvariant="secondary"
-                        static
-                      >
-                        <Interactive.Container
-                          paddingVariant="none"
-                          heightVariant="fit"
-                        >
+                      <Interactive.Container key={pat.id} heightVariant="fit">
+                        <div className="w-full bg-background-tint-01">
                           <AttachmentItemLayout
                             icon={SvgKey}
                             title={pat.name}
@@ -1350,8 +1359,8 @@ function AccountsAccessSettings() {
                               />
                             }
                           />
-                        </Interactive.Container>
-                      </Interactive.Base>
+                        </div>
+                      </Interactive.Container>
                     );
                   })}
                 </Section>

@@ -1,20 +1,23 @@
 "use client";
 
 import {
-  SvgArrowUpCircle,
-  SvgBarChart,
-  SvgFileText,
+  SvgDashboard,
+  SvgHistory,
+  SvgFiles,
   SvgGlobe,
+  SvgHardDrive,
   SvgHeadsetMic,
   SvgKey,
   SvgLock,
-  SvgOrganization,
   SvgPaintBrush,
-  SvgSearch,
+  SvgOrganization,
   SvgServer,
+  SvgShield,
+  SvgSliders,
+  SvgUserManage,
   SvgUsers,
 } from "@opal/icons";
-import "./billing.css";
+import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
@@ -52,20 +55,23 @@ interface PlanConfig {
 // ----------------------------------------------------------------------------
 
 const BUSINESS_FEATURES: PlanFeature[] = [
-  { icon: SvgSearch, text: "Enterprise Search" },
-  { icon: SvgBarChart, text: "Query History & Usage Dashboard" },
-  { icon: SvgServer, text: "On-Premise Deployments" },
-  { icon: SvgGlobe, text: "Region-Specific Deployments" },
-  { icon: SvgUsers, text: "RBAC Support" },
-  { icon: SvgOrganization, text: "Permission Inheritance" },
-  { icon: SvgKey, text: "OIDC/SAML SSO" },
+  { icon: SvgFiles, text: "Inherit Document Permissions" },
+  { icon: SvgHistory, text: "Query History and Usage Dashboard" },
+  { icon: SvgShield, text: "Role Based Access Control (RBAC)" },
   { icon: SvgLock, text: "Encryption of Secrets" },
+  { icon: SvgKey, text: "Service Account API Keys" },
+  { icon: SvgHardDrive, text: "Self-hosting (Optional)" },
+  { icon: SvgPaintBrush, text: "Custom Theming" },
 ];
 
 const ENTERPRISE_FEATURES: PlanFeature[] = [
-  { icon: SvgHeadsetMic, text: "Priority Support" },
-  { icon: SvgPaintBrush, text: "White-labeling" },
-  { icon: SvgFileText, text: "Enterprise SLAs" },
+  { icon: SvgUsers, text: "SCIM / Group Sync" },
+  { icon: SvgDashboard, text: "Full White-labeling" },
+  { icon: SvgUserManage, text: "Custom Roles and Permissions" },
+  { icon: SvgSliders, text: "Configurable Usage Limits" },
+  { icon: SvgServer, text: "Custom Deployments" },
+  { icon: SvgGlobe, text: "Region-Specific Data Processing" },
+  { icon: SvgHeadsetMic, text: "Enterprise SLAs and Priority Support" },
 ];
 
 // ----------------------------------------------------------------------------
@@ -126,7 +132,13 @@ function PlanCard({
               {pricing}
             </Text>
           )}
-          <Text mainUiBody text03>
+          <Text
+            secondaryBody
+            text03
+            className={
+              pricing ? "whitespace-pre-line" : "whitespace-pre-line min-h-9"
+            }
+          >
             {description}
           </Text>
         </Section>
@@ -189,7 +201,7 @@ function PlanCard({
                 height="auto"
               >
                 <div className="plan-card-feature-icon">
-                  <feature.icon size={16} />
+                  <feature.icon size={16} className="stroke-text-03" />
                 </div>
                 <Text mainUiBody text03>
                   {feature.text}
@@ -208,21 +220,16 @@ function PlanCard({
 // ----------------------------------------------------------------------------
 
 interface PlansViewProps {
-  currentPlan?: string;
   hasSubscription?: boolean;
   onCheckout: () => void;
   hideFeatures?: boolean;
 }
 
 export default function PlansView({
-  currentPlan,
   hasSubscription,
   onCheckout,
   hideFeatures,
 }: PlansViewProps) {
-  const isBusinessPlan =
-    currentPlan?.toLowerCase() === "business" || hasSubscription;
-
   const plans: PlanConfig[] = [
     {
       icon: SvgUsers,
@@ -230,19 +237,18 @@ export default function PlansView({
       pricing: "$20",
       description:
         "per seat/month billed annually\nor $25 per seat if billed monthly",
-      buttonLabel: isBusinessPlan ? "Get Business Plan" : "Upgrade Plan",
+      buttonLabel: "Get Business Plan",
       buttonVariant: "primary",
-      buttonIcon: isBusinessPlan ? undefined : SvgArrowUpCircle,
       onClick: onCheckout,
       features: BUSINESS_FEATURES,
       featuresPrefix: "Get more work done with AI for your team.",
-      isCurrentPlan: isBusinessPlan,
+      isCurrentPlan: hasSubscription,
     },
     {
       icon: SvgOrganization,
       title: "Enterprise",
       description:
-        "Flexible pricing & deployment options for large organizations",
+        "Flexible pricing & deployment options\nfor large organizations",
       buttonLabel: "Contact Sales",
       buttonVariant: "secondary",
       href: SALES_URL,

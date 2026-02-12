@@ -47,14 +47,14 @@ test.describe("InlineFileManagement", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
     testCcPairId = await apiClient.createFileConnector(
       `Test File Connector ${Date.now()}`
     );
   });
 
   test.afterEach(async ({ page }) => {
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
 
     if (testCcPairId !== null) {
       try {

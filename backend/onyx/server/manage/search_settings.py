@@ -24,6 +24,7 @@ from onyx.file_processing.unstructured import update_unstructured_api_key
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
 from onyx.server.models import IdReturn
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
 
 
-@router.post("/set-new-search-settings")
+@router.post("/set-new-search-settings", dependencies=[Depends(require_vector_db)])
 def set_new_search_settings(
     search_settings_new: SearchSettingsCreationRequest,  # noqa: ARG001
     _: User = Depends(current_admin_user),
@@ -133,7 +134,7 @@ def set_new_search_settings(
     # return IdReturn(id=new_search_settings.id)
 
 
-@router.post("/cancel-new-embedding")
+@router.post("/cancel-new-embedding", dependencies=[Depends(require_vector_db)])
 def cancel_new_embedding(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -153,7 +154,9 @@ def cancel_new_embedding(
 
         # remove the old index from the vector db
         primary_search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(primary_search_settings, None)
+        document_index = get_default_document_index(
+            primary_search_settings, None, db_session
+        )
         document_index.ensure_indices_exist(
             primary_embedding_dim=primary_search_settings.final_embedding_dim,
             primary_embedding_precision=primary_search_settings.embedding_precision,

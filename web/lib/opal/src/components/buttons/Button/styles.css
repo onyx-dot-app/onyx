@@ -28,9 +28,8 @@
   transition: gap 200ms ease-in-out;
 }
 
-.interactive:hover:not([data-static]):not([data-disabled])
-  .opal-button--foldable,
-.interactive[data-transient="true"]:not([data-static]):not([data-disabled])
+.interactive:hover:not([data-disabled]) .opal-button--foldable,
+.interactive[data-transient="true"]:not([data-disabled])
   .opal-button--foldable {
   gap: 0.25rem;
 }
@@ -59,10 +58,10 @@
 }
 
 /* Expanded: hovered or transient (mirrors Interactive.Base's hover selectors) */
-.interactive:hover:not([data-static]):not([data-disabled])
+.interactive:hover:not([data-disabled])
   .opal-button--foldable
   .opal-button-foldable,
-.interactive[data-transient="true"]:not([data-static]):not([data-disabled])
+.interactive[data-transient="true"]:not([data-disabled])
   .opal-button--foldable
   .opal-button-foldable {
   grid-template-columns: 1fr;

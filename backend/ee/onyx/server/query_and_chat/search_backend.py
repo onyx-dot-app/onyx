@@ -26,6 +26,7 @@ from onyx.db.models import User
 from onyx.llm.factory import get_default_llm
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -66,7 +67,11 @@ def search_flow_classification(
     return SearchFlowClassificationResponse(is_search_flow=is_search_flow)
 
 
-@router.post("/send-search-message", response_model=None)
+@router.post(
+    "/send-search-message",
+    response_model=None,
+    dependencies=[Depends(require_vector_db)],
+)
 def handle_send_search_message(
     request: SendSearchQueryRequest,
     user: User = Depends(current_user),

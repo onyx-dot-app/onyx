@@ -191,9 +191,6 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
       "This is the first message to establish conversation history"
     );
 
-    // Wait for content to settle
-    await page.waitForTimeout(500);
-
     // Send a follow-up message - this should trigger the fresh chat effect
     await sendMessage(
       page,
@@ -204,18 +201,20 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     const lastUserMessage = page.locator("#onyx-human-message").last();
     await lastUserMessage.waitFor({ state: "visible" });
 
-    // Allow time for spacer animation to complete
-    await page.waitForTimeout(800);
-
     // Check that the follow-up message is positioned near the top of the container
     // (within ~150px to account for sticky header and some padding)
-    const position = await getElementPositionInContainer(page, lastUserMessage);
-
-    expect(position).not.toBeNull();
-    if (position) {
-      // The message should be near the top (accounting for ~64px header + buffer)
-      expect(position.topOffset).toBeLessThan(150);
-    }
+    await expect
+      .poll(
+        async () => {
+          const position = await getElementPositionInContainer(
+            page,
+            lastUserMessage
+          );
+          return position?.topOffset ?? Number.POSITIVE_INFINITY;
+        },
+        { timeout: 5000 }
+      )
+      .toBeLessThan(150);
   });
 
   test("Dynamic spacer element exists and has correct attributes", async ({
@@ -224,18 +223,12 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     // Send a message to start a conversation
     await sendMessage(page, "Test message to initialize chat");
 
-    // Wait for content to settle
-    await page.waitForTimeout(500);
-
     // Send a follow-up to trigger the spacer
     await sendMessage(page, "Follow-up message");
 
-    // Allow time for spacer to activate
-    await page.waitForTimeout(800);
-
     // Verify the dynamic spacer element exists with correct attributes
     const spacer = page.locator('[data-dynamic-spacer="true"]');
-    await expect(spacer).toBeVisible();
+    await expect(spacer).toBeVisible({ timeout: 10000 });
     await expect(spacer).toHaveAttribute("aria-hidden", "true");
   });
 
@@ -246,14 +239,8 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     await sendMessage(page, "First message in the conversation");
     await sendMessage(page, "Second message in the conversation");
 
-    // Wait for content to settle
-    await page.waitForTimeout(500);
-
     // Send a follow-up (triggers fresh chat effect)
     await sendMessage(page, "Third message - should be at top");
-
-    // Allow spacer animation to complete
-    await page.waitForTimeout(800);
 
     // Now scroll up to verify previous messages are accessible
     const scrollContainer = getScrollContainer(page);
@@ -262,7 +249,11 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     });
 
     // Wait for scroll to complete
-    await page.waitForTimeout(300);
+    await expect
+      .poll(() => scrollContainer.evaluate((el: HTMLElement) => el.scrollTop), {
+        timeout: 5000,
+      })
+      .toBeLessThanOrEqual(1);
 
     // Verify the first message is now visible
     const firstUserMessage = page.locator("#onyx-human-message").first();
