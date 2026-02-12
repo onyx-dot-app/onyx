@@ -246,7 +246,15 @@ ods cherry-pick abc123 def456 ghi789 --release 2.5
 ### `screenshot-diff` - Visual Regression Testing
 
 Compare Playwright screenshots against baselines and generate visual diff reports.
-Baselines are stored in S3 and compared against locally captured screenshots.
+Baselines are stored per-project and per-revision in S3:
+
+```
+s3://<bucket>/baselines/<project>/<rev>/
+```
+
+This allows storing baselines for `main`, release branches (`release/2.5`), and
+version tags (`v2.0.0`) side-by-side. Revisions containing `/` are sanitised to
+`-` in the S3 path (e.g. `release/2.5` → `release-2.5`).
 
 ```shell
 ods screenshot-diff <subcommand>
@@ -262,9 +270,10 @@ When set, the following defaults are applied:
 
 | Flag | Default |
 |------|---------|
-| `--baseline` | `s3://onyx-playwright-artifacts/baselines/<project>/` |
+| `--baseline` | `s3://onyx-playwright-artifacts/baselines/<project>/<rev>/` |
 | `--current` | `web/output/screenshots/` |
 | `--output` | `web/output/screenshot-diff/<project>/index.html` |
+| `--rev` | `main` |
 
 The S3 bucket defaults to `onyx-playwright-artifacts` and can be overridden with the
 `PLAYWRIGHT_S3_BUCKET` environment variable.
@@ -274,8 +283,11 @@ The S3 bucket defaults to `onyx-playwright-artifacts` and can be overridden with
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--project` | | Project name (e.g. `admin`); sets sensible defaults |
+| `--rev` | `main` | Revision baseline to compare against |
+| `--from-rev` | | Source (older) revision for cross-revision comparison |
+| `--to-rev` | | Target (newer) revision for cross-revision comparison |
 | `--baseline` | | Baseline directory or S3 URL (`s3://...`) |
-| `--current` | | Current screenshots directory |
+| `--current` | | Current screenshots directory or S3 URL (`s3://...`) |
 | `--output` | `screenshot-diff/index.html` | Output path for the HTML report |
 | `--threshold` | `0.2` | Per-channel pixel difference threshold (0.0–1.0) |
 | `--max-diff-ratio` | `0.01` | Max diff pixel ratio before marking as changed |
@@ -285,6 +297,7 @@ The S3 bucket defaults to `onyx-playwright-artifacts` and can be overridden with
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--project` | | Project name (e.g. `admin`); sets sensible defaults |
+| `--rev` | `main` | Revision to store the baseline under |
 | `--dir` | | Local directory containing screenshots to upload |
 | `--dest` | | S3 destination URL (`s3://...`) |
 | `--delete` | `false` | Delete S3 files not present locally |
@@ -292,8 +305,14 @@ The S3 bucket defaults to `onyx-playwright-artifacts` and can be overridden with
 **Examples:**
 
 ```shell
-# Compare the "admin" project against S3 baselines (uses all defaults)
+# Compare local screenshots against the main baseline (default)
 ods screenshot-diff compare --project admin
+
+# Compare against a release branch baseline
+ods screenshot-diff compare --project admin --rev release/2.5
+
+# Compare two revisions directly (both sides fetched from S3)
+ods screenshot-diff compare --project admin --from-rev v1.0.0 --to-rev v2.0.0
 
 # Compare with explicit paths
 ods screenshot-diff compare \
@@ -301,8 +320,14 @@ ods screenshot-diff compare \
   --current ./web/output/screenshots/ \
   --output ./report/index.html
 
-# Upload new baselines for the "admin" project
+# Upload baselines for main (default)
 ods screenshot-diff upload-baselines --project admin
+
+# Upload baselines for a release branch
+ods screenshot-diff upload-baselines --project admin --rev release/2.5
+
+# Upload baselines for a version tag
+ods screenshot-diff upload-baselines --project admin --rev v2.0.0
 
 # Upload with delete (remove old baselines not in current set)
 ods screenshot-diff upload-baselines --project admin --delete

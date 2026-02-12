@@ -460,14 +460,31 @@ jobs:
           enable-cache: false
           version: "0.9.9"
 
-      - name: Generate visual diff report
+      - name: Determine baseline revision
+        if: always()
+        id: baseline-rev
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PRs compare against the base branch (e.g. main, release/2.5)
+            echo "rev=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Tag builds compare against the tag name
+            echo "rev=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            # Push builds (main, release/*) compare against the branch name
+            echo "rev=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate screenshot diff report
         if: always()
         env:
           PROJECT: ${{ matrix.project }}
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
+          BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
           uv run --no-sync --with onyx-devtools ods screenshot-diff compare \
-            --project "${PROJECT}"
+            --project "${PROJECT}" \
+            --rev "${BASELINE_REV}"
 
       - name: Upload visual diff report to S3
         if: always()
@@ -510,13 +527,22 @@ jobs:
           retention-days: 30
 
       - name: Update S3 baselines
-        if: github.ref == 'refs/heads/main' && success()
+        if: >-
+          success() && (
+            github.ref == 'refs/heads/main' ||
+            startsWith(github.ref, 'refs/heads/release/') ||
+            startsWith(github.ref, 'refs/tags/v')
+          )
         env:
           PROJECT: ${{ matrix.project }}
+          PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
+          BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
           if [ -d "web/output/screenshots/" ] && [ "$(ls -A web/output/screenshots/)" ]; then
-            aws s3 sync "web/output/screenshots/" \
-              "s3://${PLAYWRIGHT_S3_BUCKET}/baselines/${PROJECT}/" --delete
+            uv run --no-sync --with onyx-devtools ods screenshot-diff upload-baselines \
+              --project "${PROJECT}" \
+              --rev "${BASELINE_REV}" \
+              --delete
           else
             echo "No screenshots to upload for ${PROJECT} — skipping baseline update."
           fi
