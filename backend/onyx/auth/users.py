@@ -60,6 +60,7 @@ from sqlalchemy import nulls_last
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.disposable_email_validator import is_disposable_email
@@ -110,6 +111,7 @@ from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
@@ -272,6 +274,22 @@ def verify_email_domain(email: str) -> None:
             )
 
 
+def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
+    """Raise HTTPException(402) if adding users would exceed the seat limit.
+
+    No-op for multi-tenant or CE deployments.
+    """
+    if MULTI_TENANT:
+        return
+
+    result = fetch_ee_implementation_or_noop(
+        "onyx.db.license", "check_seat_availability", None
+    )(db_session, seats_needed=seats_needed)
+
+    if result is not None and not result.available:
+        raise HTTPException(status_code=402, detail=result.error_message)
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
@@ -400,6 +418,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         or user_create.email in get_default_admin_user_emails()
                     ):
                         user_create.role = UserRole.ADMIN
+
+                # Check seat availability for new users (single-tenant only)
+                with get_session_with_current_tenant() as sync_db:
+                    existing = get_user_by_email(user_create.email, sync_db)
+                    if existing is None:
+                        enforce_seat_limit(sync_db)
 
                 user_created = False
                 try:
@@ -610,6 +634,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise exceptions.UserNotExists()
 
                 except exceptions.UserNotExists:
+                    # Check seat availability before creating (single-tenant only)
+                    with get_session_with_current_tenant() as sync_db:
+                        enforce_seat_limit(sync_db)
+
                     password = self.password_helper.generate()
                     user_dict = {
                         "email": account_email,

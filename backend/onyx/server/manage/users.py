@@ -30,6 +30,7 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.auth.users import enforce_seat_limit
 from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
@@ -395,13 +396,8 @@ def bulk_invite_users(
     ]
 
     # Check seat availability for new users
-    # Only for self-hosted (non-multi-tenant) deployments
-    if not MULTI_TENANT and emails_needing_seats:
-        result = fetch_ee_implementation_or_noop(
-            "onyx.db.license", "check_seat_availability", None
-        )(db_session, seats_needed=len(emails_needing_seats))
-        if result is not None and not result.available:
-            raise HTTPException(status_code=402, detail=result.error_message)
+    if emails_needing_seats:
+        enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
 
     if MULTI_TENANT:
         try:
@@ -567,12 +563,7 @@ def activate_user_api(
 
     # Check seat availability before activating
     # Only for self-hosted (non-multi-tenant) deployments
-    if not MULTI_TENANT:
-        result = fetch_ee_implementation_or_noop(
-            "onyx.db.license", "check_seat_availability", None
-        )(db_session, seats_needed=1)
-        if result is not None and not result.available:
-            raise HTTPException(status_code=402, detail=result.error_message)
+    enforce_seat_limit(db_session)
 
     activate_user(user_to_activate, db_session)
 
