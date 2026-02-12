@@ -86,7 +86,7 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 # Auth Configs
 #####
 # Upgrades users from disabled auth to basic auth and shows warning.
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
+_auth_type_str = (os.environ.get("AUTH_TYPE") or "basic").lower()
 if _auth_type_str == "disabled":
     logger.warning(
         "AUTH_TYPE='disabled' is no longer supported. "
