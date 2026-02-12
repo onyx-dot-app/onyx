@@ -617,10 +617,14 @@ def handle_stream_message_objects(
 
         custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
-        # When use_memories is disabled, don't inject memories into the prompt
-        # or count them in token reservation, but still pass the full context
+        # When use_memories is disabled, strip memories from the prompt context
+        # but keep user info/preferences. The full context is still passed
         # to the LLM loop for memory tool persistence.
-        prompt_memory_context = user_memory_context if user.use_memories else None
+        prompt_memory_context = (
+            user_memory_context
+            if user.use_memories
+            else user_memory_context.without_memories()
+        )
 
         reserved_token_count = calculate_reserved_tokens(
             db_session=db_session,

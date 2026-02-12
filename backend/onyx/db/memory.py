@@ -32,6 +32,15 @@ class UserMemoryContext(BaseModel):
     user_preferences: str | None = None
     memories: tuple[str, ...] = ()
 
+    def without_memories(self) -> "UserMemoryContext":
+        """Return a copy with memories cleared but user info/preferences intact."""
+        return UserMemoryContext(
+            user_id=self.user_id,
+            user_info=self.user_info,
+            user_preferences=self.user_preferences,
+            memories=(),
+        )
+
     def as_formatted_list(self) -> list[str]:
         """Returns combined list of user info, preferences, and memories."""
         result = []
