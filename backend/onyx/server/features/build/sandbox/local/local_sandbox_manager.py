@@ -71,7 +71,7 @@ class LocalSandboxManager(SandboxManager):
         """Initialize managers."""
         # Paths for templates
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
-        skills_path = build_dir / "skills"
+        skills_path = build_dir / "sandbox" / "kubernetes" / "docker" / "skills"
         agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         self._directory_manager = DirectoryManager(
