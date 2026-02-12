@@ -162,21 +162,38 @@ async function verifyAdminPageNavigation(
   }
 }
 
-for (const snapshot of ADMIN_PAGES) {
-  test(`Admin - ${snapshot.name}`, async ({ page }) => {
-    await verifyAdminPageNavigation(
-      page,
-      snapshot.path,
-      snapshot.pageTitle,
-      snapshot.options
-    );
+const THEMES = ["light", "dark"] as const;
 
-    // Wait for all network requests to settle before capturing the screenshot.
-    await page.waitForLoadState("networkidle");
+for (const theme of THEMES) {
+  test.describe(`Admin pages (${theme} mode)`, () => {
+    // Inject the theme into localStorage before every navigation so
+    // next-themes picks it up on first render.
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript((t: string) => {
+        localStorage.setItem("theme", t);
+      }, theme);
+    });
 
-    // Capture a screenshot for visual regression review.
-    // The screenshot name is derived from the admin page path to ensure uniqueness.
-    const screenshotName = `admin-${snapshot.path.replace(/\//g, "-")}`;
-    await expectScreenshot(page, { name: screenshotName });
+    for (const snapshot of ADMIN_PAGES) {
+      test(`Admin - ${snapshot.name}`, async ({ page }) => {
+        await verifyAdminPageNavigation(
+          page,
+          snapshot.path,
+          snapshot.pageTitle,
+          snapshot.options
+        );
+
+        // Wait for all network requests to settle before capturing the screenshot.
+        await page.waitForLoadState("networkidle");
+
+        // Capture a screenshot for visual regression review.
+        // The screenshot name includes the theme to keep light/dark baselines separate.
+        const screenshotName = `admin-${theme}-${snapshot.path.replace(
+          /\//g,
+          "-"
+        )}`;
+        await expectScreenshot(page, { name: screenshotName });
+      });
+    }
   });
 }
