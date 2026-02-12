@@ -10,31 +10,73 @@ import MarkdownFilePreview, {
   type FileRendererProps,
 } from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
+import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 
-// ── File renderer registry ───────────────────────────────────────────────
-// Ordered by priority — first match wins.
-// To add a new preview type, add an entry here + create a component.
-interface FileRenderer {
-  canRender: (filePath: string, mimeType: string, isImage: boolean) => boolean;
+// ── Preview registry ─────────────────────────────────────────────────────
+// Unified registry for all file preview types. First match wins.
+//
+// "standalone" — binary formats that handle their own data fetching.
+// "content"    — text-based formats that receive already-fetched content.
+
+interface StandaloneEntry {
+  type: "standalone";
+  matches: (filePath: string) => boolean;
+  component: React.FC<{ sessionId: string; filePath: string }>;
+}
+
+interface ContentEntry {
+  type: "content";
+  matches: (filePath: string, mimeType: string, isImage: boolean) => boolean;
   component: React.FC<FileRendererProps>;
 }
+
+type PreviewEntry = StandaloneEntry | ContentEntry;
 
 function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
   return <ImagePreview src={content} fileName={fileName} />;
 }
 
-const FILE_RENDERERS: FileRenderer[] = [
+const PREVIEW_REGISTRY: PreviewEntry[] = [
   {
-    canRender: (_, __, isImage) => isImage,
+    type: "standalone",
+    matches: (path) => /\.pptx$/i.test(path),
+    component: PptxPreview,
+  },
+  {
+    type: "standalone",
+    matches: (path) => /\.pdf$/i.test(path),
+    component: PdfPreview,
+  },
+  {
+    type: "content",
+    matches: (_, __, isImage) => isImage,
     component: ImageRendererWrapper,
   },
   {
-    canRender: (path) => /\.md$/i.test(path),
+    type: "content",
+    matches: (path) => /\.md$/i.test(path),
     component: MarkdownFilePreview,
   },
 ];
 
-// ── FilePreviewContent ───────────────────────────────────────────────────
+function findStandalonePreview(filePath: string): StandaloneEntry | undefined {
+  return PREVIEW_REGISTRY.find(
+    (e): e is StandaloneEntry => e.type === "standalone" && e.matches(filePath)
+  );
+}
+
+function findContentPreview(
+  filePath: string,
+  mimeType: string,
+  isImage: boolean
+): ContentEntry | undefined {
+  return PREVIEW_REGISTRY.find(
+    (e): e is ContentEntry =>
+      e.type === "content" && e.matches(filePath, mimeType, isImage)
+  );
+}
+
+// ── Public components ────────────────────────────────────────────────────
 
 interface FilePreviewContentProps {
   sessionId: string;
@@ -42,60 +84,58 @@ interface FilePreviewContentProps {
 }
 
 /**
- * FilePreviewContent - Displays file content in a scrollable monospace view
- * Fetches content via SWR and displays loading/error/content states.
- * PPTX files are handled by a dedicated preview component.
+ * FilePreviewContent — full-height file preview for the main output panel.
+ * Routes to the appropriate preview component based on file type.
  */
 export function FilePreviewContent({
   sessionId,
   filePath,
 }: FilePreviewContentProps) {
-  if (/\.pptx$/i.test(filePath)) {
-    return <PptxPreview sessionId={sessionId} filePath={filePath} />;
+  const standalone = findStandalonePreview(filePath);
+  if (standalone) {
+    const Comp = standalone.component;
+    return <Comp sessionId={sessionId} filePath={filePath} />;
   }
 
   return (
-    <GenericFilePreview sessionId={sessionId} filePath={filePath} fullHeight />
+    <FetchedFilePreview sessionId={sessionId} filePath={filePath} fullHeight />
   );
 }
 
-// ── InlineFilePreview ────────────────────────────────────────────────────
-
 /**
- * InlineFilePreview - Simple file preview for pre-provisioned mode
- * Same as FilePreviewContent but without the full height wrapper
+ * InlineFilePreview — compact file preview for pre-provisioned mode.
+ * Same routing logic, without full-height layout.
  */
 export function InlineFilePreview({
   sessionId,
   filePath,
-}: {
-  sessionId: string;
-  filePath: string;
-}) {
-  if (/\.pptx$/i.test(filePath)) {
-    return <PptxPreview sessionId={sessionId} filePath={filePath} />;
+}: FilePreviewContentProps) {
+  const standalone = findStandalonePreview(filePath);
+  if (standalone) {
+    const Comp = standalone.component;
+    return <Comp sessionId={sessionId} filePath={filePath} />;
   }
 
-  return <GenericFilePreview sessionId={sessionId} filePath={filePath} />;
+  return <FetchedFilePreview sessionId={sessionId} filePath={filePath} />;
 }
 
-// ── GenericFilePreview (inner) ───────────────────────────────────────────
+// ── FetchedFilePreview (inner) ───────────────────────────────────────────
 
-interface GenericFilePreviewProps {
+interface FetchedFilePreviewProps {
   sessionId: string;
   filePath: string;
   fullHeight?: boolean;
 }
 
 /**
- * Inner component that uses SWR to fetch and render non-PPTX files.
- * Extracted to keep hooks unconditional within this component.
+ * Fetches file content via SWR, then delegates to the first matching
+ * "content" entry in the registry (or falls back to raw monospace text).
  */
-function GenericFilePreview({
+function FetchedFilePreview({
   sessionId,
   filePath,
   fullHeight,
-}: GenericFilePreviewProps) {
+}: FetchedFilePreviewProps) {
   const { data, error, isLoading } = useSWR(
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
     () => fetchFileContent(sessionId, filePath),
@@ -209,23 +249,23 @@ function GenericFilePreview({
     );
   }
 
-  // Use renderer registry — first match wins
+  // Match against content-based renderers
   const fileName = filePath.split("/").pop() || filePath;
-  const rendererProps: FileRendererProps = {
-    content: data.content,
-    fileName,
-    filePath,
-    mimeType: data.mimeType ?? "text/plain",
-    isImage: !!data.isImage,
-  };
+  const mimeType = data.mimeType ?? "text/plain";
+  const isImage = !!data.isImage;
 
-  const renderer = FILE_RENDERERS.find((r) =>
-    r.canRender(filePath, rendererProps.mimeType, rendererProps.isImage)
-  );
-
-  if (renderer) {
-    const Comp = renderer.component;
-    return <Comp {...rendererProps} />;
+  const contentPreview = findContentPreview(filePath, mimeType, isImage);
+  if (contentPreview) {
+    const Comp = contentPreview.component;
+    return (
+      <Comp
+        content={data.content}
+        fileName={fileName}
+        filePath={filePath}
+        mimeType={mimeType}
+        isImage={isImage}
+      />
+    );
   }
 
   // Default fallback: raw text

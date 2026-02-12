@@ -106,6 +106,34 @@ export default function FilesTab({
       }
       // Refresh root directory listing
       mutate();
+
+      // Re-fetch all currently expanded subdirectories so they don't get
+      // stuck on "Loading..." after the cache was cleared
+      const paths = isPreProvisioned
+        ? Array.from(localExpandedPaths)
+        : filesTabState.expandedPaths;
+
+      if (paths.length > 0) {
+        Promise.all(paths.map((p) => fetchDirectoryListing(sessionId, p))).then(
+          (results) => {
+            if (isPreProvisioned) {
+              setLocalDirectoryCache((prev) => {
+                const next = new Map(prev);
+                paths.forEach((p, i) => {
+                  if (results[i]) next.set(p, results[i]!.entries);
+                });
+                return next;
+              });
+            } else {
+              const newCache: Record<string, FileSystemEntry[]> = {};
+              paths.forEach((p, i) => {
+                if (results[i]) newCache[p] = results[i]!.entries;
+              });
+              updateFilesTabState(sessionId, { directoryCache: newCache });
+            }
+          }
+        );
+      }
     }
   }, [
     filesNeedsRefresh,
@@ -113,6 +141,8 @@ export default function FilesTab({
     mutate,
     isPreProvisioned,
     updateFilesTabState,
+    localExpandedPaths,
+    filesTabState.expandedPaths,
   ]);
 
   // Update cache when root listing changes

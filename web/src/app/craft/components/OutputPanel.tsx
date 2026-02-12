@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState, useEffect, useCallback } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import {
   useSession,
   useWebappNeedsRefresh,
@@ -87,6 +87,17 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const setActiveFilePreviewPath = useBuildSessionStore(
     (state) => state.setActiveFilePreviewPath
   );
+
+  // Store actions for refresh
+  const triggerFilesRefresh = useBuildSessionStore(
+    (state) => state.triggerFilesRefresh
+  );
+
+  // Global SWR mutate for invalidating file preview caches
+  const { mutate: globalMutate } = useSWRConfig();
+
+  // Counter to force-reload the preview iframe
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
 
   // Determine which tab is visually active
   const isFilePreviewActive = activeFilePreviewPath !== null;
@@ -269,6 +280,11 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     activeFilePreviewPath &&
     /\.pptx$/i.test(activeFilePreviewPath);
 
+  const isPdfPreview =
+    isFilePreviewActive &&
+    activeFilePreviewPath &&
+    /\.pdf$/i.test(activeFilePreviewPath);
+
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
   const handleDocxDownload = useCallback(async () => {
@@ -307,6 +323,29 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     link.click();
     document.body.removeChild(link);
   }, [session?.id, activeFilePreviewPath]);
+
+  // Unified refresh handler — dispatches based on the active tab/preview
+  const handleRefresh = useCallback(() => {
+    if (isFilePreviewActive && activeFilePreviewPath && session?.id) {
+      // File preview tab: invalidate the SWR cache for this file
+      globalMutate(
+        `/api/build/sessions/${session.id}/artifacts/${activeFilePreviewPath}`
+      );
+    } else if (activeOutputTab === "preview") {
+      // Web preview tab: remount the iframe
+      setPreviewRefreshKey((k) => k + 1);
+    } else if (activeOutputTab === "files" && session?.id) {
+      // Files tab: clear cache and re-fetch directory listing
+      triggerFilesRefresh(session.id);
+    }
+  }, [
+    isFilePreviewActive,
+    activeFilePreviewPath,
+    activeOutputTab,
+    session?.id,
+    globalMutate,
+    triggerFilesRefresh,
+  ]);
 
   // Fetch artifacts - poll every 5 seconds when on artifacts tab
   const shouldFetchArtifacts =
@@ -567,13 +606,20 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             : null
         }
         onDownloadRaw={
-          isMarkdownPreview || isPptxPreview ? handleRawFileDownload : undefined
+          isMarkdownPreview || isPptxPreview || isPdfPreview
+            ? handleRawFileDownload
+            : undefined
         }
         downloadRawTooltip={
-          isPptxPreview ? "Download PPTX" : "Download MD file"
+          isPdfPreview
+            ? "Download PDF"
+            : isPptxPreview
+              ? "Download PPTX"
+              : "Download MD file"
         }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
+        onRefresh={handleRefresh}
       />
 
       {/* Tab Content */}
@@ -595,7 +641,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
               (!session ? (
                 <CraftingLoader />
               ) : (
-                <PreviewTab webappUrl={displayUrl} />
+                <PreviewTab
+                  webappUrl={displayUrl}
+                  refreshKey={previewRefreshKey}
+                />
               ))}
             {activeOutputTab === "files" && (
               <FilesTab
