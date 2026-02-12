@@ -10,7 +10,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import Separator from "@/refresh-components/Separator";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import {
   validateToolDefinition,
@@ -266,12 +266,14 @@ function FormContent({
             {values.definition.trim() && (
               <div className="invisible group-hover/DefinitionTextAreaField:visible absolute z-[100000] top-2 right-2 bg-background-tint-00">
                 <CopyIconButton
-                  internal
+                  prominence="tertiary"
+                  size="sm"
                   getCopyText={() => values.definition}
                   tooltip="Copy definition"
                 />
-                <IconButton
-                  internal
+                <OpalButton
+                  prominence="tertiary"
+                  size="sm"
                   icon={SvgBracketCurly}
                   tooltip="Format definition"
                   onClick={handleFormat}
@@ -362,9 +364,9 @@ function FormContent({
               alignItems="center"
               width="fit"
             >
-              <IconButton
+              <OpalButton
                 icon={SvgUnplug}
-                tertiary
+                prominence="tertiary"
                 type="button"
                 tooltip="Disable action"
                 onClick={() => {

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import {
   Table,
   TableBody,
@@ -302,10 +302,11 @@ export default function InlineFileManagement({
                   >
                     {isEditing && (
                       <TableCell>
-                        <IconButton
+                        <OpalButton
                           icon={SvgX}
-                          danger
-                          internal
+                          variant="danger"
+                          prominence="tertiary"
+                          size="sm"
                           onClick={() => handleRemoveNewFile(index)}
                           tooltip="Remove file"
                           title="Remove file"

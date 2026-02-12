@@ -5,6 +5,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@/lib/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
@@ -52,8 +53,9 @@ export default function NonAdminStep() {
               You're all set!
             </Text>
           </div>
-          <IconButton
-            internal
+          <OpalButton
+            prominence="tertiary"
+            size="sm"
             icon={SvgX}
             onClick={() => setShowHeader(false)}
           />

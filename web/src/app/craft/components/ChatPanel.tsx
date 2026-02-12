@@ -37,6 +37,7 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
+import { Button as OpalButton } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
@@ -398,10 +399,11 @@ export default function BuildChatPanel({
           <div className="flex flex-row items-center gap-2 max-w-[75%]">
             {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
             {isMobile && leftSidebarFolded && (
-              <IconButton
+              <OpalButton
                 icon={SvgSidebar}
                 onClick={() => setLeftSidebarFolded(false)}
-                internal
+                prominence="tertiary"
+                size="sm"
               />
             )}
             <SandboxStatusIndicator />

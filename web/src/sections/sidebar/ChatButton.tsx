@@ -21,6 +21,7 @@ import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
@@ -75,10 +76,11 @@ export function PopoverSearchInput({
 
   return (
     <div className="flex flex-row items-center">
-      <IconButton
+      <OpalButton
         icon={SvgChevronLeft}
         onClick={handleClickBackButton}
-        internal
+        prominence="tertiary"
+        size="sm"
       />
       <InputTypeIn
         type="text"

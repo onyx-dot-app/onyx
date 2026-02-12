@@ -4,12 +4,12 @@ import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SvgMoreHorizontal, SvgPlug, SvgSettings, SvgTrash } from "@opal/icons";
+import { Button } from "@opal/components";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -122,10 +122,9 @@ export default function ConnectorCard({
   const rightContent = isDeleting ? null : isConnected ? (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <Popover.Trigger asChild>
-        <IconButton
+        <Button
           icon={SvgMoreHorizontal}
-          tertiary
-          internal
+          prominence="tertiary"
           onClick={(e) => {
             e.stopPropagation();
             setPopoverOpen(!popoverOpen);
@@ -161,7 +160,7 @@ export default function ConnectorCard({
       </Popover.Content>
     </Popover>
   ) : (
-    <IconButton icon={SvgPlug} internal />
+    <Button icon={SvgPlug} prominence="tertiary" size="sm" />
   );
 
   return (

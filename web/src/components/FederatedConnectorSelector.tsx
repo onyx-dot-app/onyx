@@ -8,9 +8,9 @@ import { SourceIcon } from "@/components/SourceIcon";
 import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgX } from "@opal/icons";
+import { Button } from "@opal/components";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -235,8 +235,9 @@ export const FederatedConnectorSelector = ({
                     )}
                   </div>
                   <div className="flex items-center ml-2 gap-1">
-                    <IconButton
-                      internal
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
                       type="button"
                       aria-label="Remove connector"
                       tooltip="Remove connector"

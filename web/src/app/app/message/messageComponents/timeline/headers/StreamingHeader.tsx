@@ -1,8 +1,8 @@
 import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
+import { Button as OpalButton } from "@opal/components";
 import { useStreamingDuration } from "../hooks/useStreamingDuration";
 import { formatDurationSeconds } from "@/lib/time";
 
@@ -72,8 +72,8 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             {formatDurationSeconds(elapsedSeconds)}
           </Button>
         ) : (
-          <IconButton
-            tertiary
+          <OpalButton
+            prominence="tertiary"
             onClick={onToggle}
             icon={isExpanded ? SvgFold : SvgExpand}
             aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}

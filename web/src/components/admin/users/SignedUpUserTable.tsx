@@ -38,8 +38,8 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import ResetPasswordModal from "./ResetPasswordModal";
 import { LogOut, UserMinus } from "lucide-react";
 import Popover from "@/refresh-components/Popover";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgKey, SvgMoreHorizontal } from "@opal/icons";
+import { Button as OpalButton } from "@opal/components";
 const ITEMS_PER_PAGE = 10;
 const PAGES_PER_BATCH = 2;
 
@@ -258,7 +258,7 @@ export default function SignedUpUserTable({
     return (
       <Popover>
         <Popover.Trigger asChild>
-          <IconButton secondary icon={SvgMoreHorizontal} />
+          <OpalButton prominence="secondary" icon={SvgMoreHorizontal} />
         </Popover.Trigger>
         <Popover.Content>
           <div className="grid gap-1">

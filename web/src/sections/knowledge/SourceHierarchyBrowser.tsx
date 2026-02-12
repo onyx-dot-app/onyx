@@ -10,7 +10,7 @@ import React, {
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Separator from "@/refresh-components/Separator";
@@ -868,9 +868,10 @@ export default function SourceHierarchyBrowser({
                     >
                       <Truncated>{item.data.title}</Truncated>
                       {isFolder && (
-                        <IconButton
+                        <OpalButton
                           icon={SvgChevronRight}
-                          internal
+                          prominence="tertiary"
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleClickIntoFolder(
@@ -921,16 +922,17 @@ export default function SourceHierarchyBrowser({
               {currentSourceSelectedCount}{" "}
               {currentSourceSelectedCount === 1 ? "item" : "items"} selected
             </Text>
-            <IconButton
+            <OpalButton
               icon={SvgEye}
-              internal={!viewSelectedOnly}
-              action={viewSelectedOnly}
-              tertiary={viewSelectedOnly}
+              variant={viewSelectedOnly ? "action" : undefined}
+              prominence="tertiary"
+              size={viewSelectedOnly ? undefined : "sm"}
               onClick={handleToggleViewSelected}
             />
-            <IconButton
+            <OpalButton
               icon={SvgXCircle}
-              internal
+              prominence="tertiary"
+              size="sm"
               onClick={handleDeselectAll}
             />
           </GeneralLayouts.Section>

@@ -130,7 +130,7 @@ export function AnonymousUserPath({
                   `${settings?.webDomain}/anonymous/${anonymousUserPath ?? ""}`
                 }
                 tooltip="Copy invite link"
-                secondary
+                prominence="secondary"
               />
             </GeneralLayouts.Section>
           </>

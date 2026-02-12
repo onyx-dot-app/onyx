@@ -1,5 +1,5 @@
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgTrash } from "@opal/icons";
+import { Button } from "@opal/components";
 
 export interface DeleteButtonProps {
   onClick?: (event: React.MouseEvent<HTMLElement>) => void | Promise<void>;
@@ -8,12 +8,13 @@ export interface DeleteButtonProps {
 
 export function DeleteButton({ onClick, disabled }: DeleteButtonProps) {
   return (
-    <IconButton
+    <Button
       onClick={onClick}
       icon={SvgTrash}
       tooltip="Delete"
       disabled={disabled}
-      internal
+      prominence="tertiary"
+      size="sm"
     />
   );
 }

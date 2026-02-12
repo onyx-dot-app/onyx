@@ -32,10 +32,8 @@ import {
   ProjectFile,
   UserFileStatus,
 } from "@/app/app/projects/projectsService";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
-import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -52,6 +50,7 @@ import {
   SvgStop,
   SvgX,
 } from "@opal/icons";
+import { Button, OpenButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -573,14 +572,15 @@ const AppInputBar = React.memo(
             {isSearchMode && (
               <>
                 {message && (
-                  <IconButton
+                  <Button
                     icon={SvgX}
                     disabled={!message || isClassifying}
                     onClick={() => setMessage("")}
-                    internal
+                    prominence="tertiary"
+                    size="sm"
                   />
                 )}
-                <IconButton
+                <Button
                   id="onyx-chat-input-send-button"
                   icon={isClassifying ? SimpleLoader : SvgSearch}
                   disabled={!message || isClassifying || hasUploadingFiles}
@@ -591,8 +591,8 @@ const AppInputBar = React.memo(
                       onSubmit(message);
                     }
                   }}
-                  className="mr-1"
-                  tertiary
+                  prominence="tertiary"
+                  size="sm"
                 />
               </>
             )}
@@ -674,12 +674,12 @@ const AppInputBar = React.memo(
                   }}
                   handleUploadChange={handleUploadChange}
                   trigger={(open) => (
-                    <IconButton
+                    <Button
                       icon={SvgPlusCircle}
                       tooltip="Attach Files"
-                      tertiary
                       transient={open}
                       disabled={disabled}
+                      prominence="tertiary"
                     />
                   )}
                   selectedFileIds={currentMessageFiles.map((f) => f.id)}
@@ -701,17 +701,16 @@ const AppInputBar = React.memo(
                     />
                   )}
                   {showDeepResearch && (
-                    <SelectButton
-                      leftIcon={SvgHourglass}
+                    <OpenButton
+                      icon={SvgHourglass}
                       onClick={toggleDeepResearch}
-                      engaged={deepResearchEnabled}
-                      action
-                      folded
+                      variant="select"
+                      selected={deepResearchEnabled}
+                      foldable
                       disabled={disabled}
-                      className="bg-transparent"
                     >
                       Deep Research
-                    </SelectButton>
+                    </OpenButton>
                   )}
 
                   {selectedAssistant &&
@@ -724,21 +723,20 @@ const AppInputBar = React.memo(
                         return null;
                       }
                       return (
-                        <SelectButton
+                        <OpenButton
                           key={toolId}
-                          leftIcon={getIconForAction(tool)}
+                          icon={getIconForAction(tool)}
                           onClick={() => {
                             setForcedToolIds(
                               forcedToolIds.filter((id) => id !== toolId)
                             );
                           }}
-                          engaged
-                          action
+                          variant="select"
+                          selected
                           disabled={disabled}
-                          className="bg-transparent"
                         >
                           {tool.display_name}
-                        </SelectButton>
+                        </OpenButton>
                       );
                     })}
                 </div>
@@ -759,7 +757,7 @@ const AppInputBar = React.memo(
                 </div>
 
                 {/* Submit button */}
-                <IconButton
+                <Button
                   id="onyx-chat-input-send-button"
                   icon={
                     isClassifying

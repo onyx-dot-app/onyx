@@ -6,7 +6,7 @@ import { cn, noProp } from "@/lib/utils";
 import { Disabled } from "@/refresh-components/Disabled";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   SvgArrowExchange,
@@ -150,11 +150,11 @@ export default function Select({
                 {selectLabel}
               </SelectButton>
               {onEdit && (
-                <IconButton
+                <OpalButton
                   icon={SvgSettings}
                   tooltip="Edit"
-                  internal
-                  tertiary
+                  prominence="tertiary"
+                  size="sm"
                   disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}
@@ -176,11 +176,11 @@ export default function Select({
                 {selectedLabel}
               </SelectButton>
               {onEdit && (
-                <IconButton
+                <OpalButton
                   icon={SvgSettings}
                   tooltip="Edit"
-                  internal
-                  tertiary
+                  prominence="tertiary"
+                  size="sm"
                   disabled={disabled}
                   onClick={noProp(onEdit)}
                   aria-label={`Edit ${title}`}

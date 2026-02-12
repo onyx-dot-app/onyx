@@ -13,7 +13,7 @@ import * as TableLayouts from "@/layouts/table-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Separator from "@/refresh-components/Separator";
@@ -785,10 +785,10 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         <Text text03 secondaryBody>
           Add documents or connected sources to use for this agent.
         </Text>
-        <IconButton
+        <OpalButton
           icon={SvgPlusCircle}
           onClick={onAddKnowledge}
-          tertiary
+          prominence="tertiary"
           aria-label="knowledge-add-button"
         />
       </GeneralLayouts.Section>
