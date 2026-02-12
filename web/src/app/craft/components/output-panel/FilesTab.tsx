@@ -96,6 +96,13 @@ export default function FilesTab({
 
   // Refresh files list when outputs/ directory changes
   const filesNeedsRefresh = useFilesNeedsRefresh();
+
+  // Snapshot of currently expanded paths — avoids putting both local and store
+  // versions in the dependency array (only one is used per mode).
+  const currentExpandedPaths = isPreProvisioned
+    ? Array.from(localExpandedPaths)
+    : filesTabState.expandedPaths;
+
   useEffect(() => {
     if (filesNeedsRefresh > 0 && sessionId && mutate) {
       // Clear directory cache to ensure all directories are refreshed
@@ -109,18 +116,14 @@ export default function FilesTab({
 
       // Re-fetch all currently expanded subdirectories so they don't get
       // stuck on "Loading..." after the cache was cleared
-      const paths = isPreProvisioned
-        ? Array.from(localExpandedPaths)
-        : filesTabState.expandedPaths;
-
-      if (paths.length > 0) {
+      if (currentExpandedPaths.length > 0) {
         Promise.allSettled(
-          paths.map((p) => fetchDirectoryListing(sessionId, p))
+          currentExpandedPaths.map((p) => fetchDirectoryListing(sessionId, p))
         ).then((settled) => {
           // Collect only the successful fetches into a path → entries map
           const fetched = new Map<string, FileSystemEntry[]>();
           settled.forEach((r, i) => {
-            const p = paths[i];
+            const p = currentExpandedPaths[i];
             if (p && r.status === "fulfilled" && r.value) {
               fetched.set(p, r.value.entries);
             }
@@ -142,14 +145,13 @@ export default function FilesTab({
         });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     filesNeedsRefresh,
     sessionId,
     mutate,
     isPreProvisioned,
     updateFilesTabState,
-    localExpandedPaths,
-    filesTabState.expandedPaths,
   ]);
 
   // Update cache when root listing changes
