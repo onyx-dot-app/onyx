@@ -43,6 +43,7 @@ function MemoryTagWithTooltip({
         <MemoriesModal
           initialTargetMemoryId={memoryId}
           initialTargetIndex={memoryIndex}
+          highlightFirstOnOpen
         />
       </memoriesModal.Provider>
       {memoriesModal.isOpen ? (

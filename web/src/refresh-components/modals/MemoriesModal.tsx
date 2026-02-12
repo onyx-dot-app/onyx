@@ -124,6 +124,7 @@ interface MemoriesModalProps {
   onClose?: () => void;
   initialTargetMemoryId?: number | null;
   initialTargetIndex?: number | null;
+  highlightFirstOnOpen?: boolean;
 }
 
 export default function MemoriesModal({
@@ -132,6 +133,7 @@ export default function MemoriesModal({
   onClose,
   initialTargetMemoryId,
   initialTargetIndex,
+  highlightFirstOnOpen = false,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const { popup, setPopup } = usePopup();
@@ -189,7 +191,11 @@ export default function MemoriesModal({
       if (target) {
         setHighlightMemoryId(target.id);
       }
-    } else if (effectiveMemories.length > 0 && effectiveMemories[0]) {
+    } else if (
+      highlightFirstOnOpen &&
+      effectiveMemories.length > 0 &&
+      effectiveMemories[0]
+    ) {
       // Fallback: highlight the first displayed item (newest)
       setHighlightMemoryId(effectiveMemories[0].id);
     }
