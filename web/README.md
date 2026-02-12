@@ -85,7 +85,7 @@ npx playwright test --ui
 npx playwright test --headed
 ```
 
-3. Inspect results
+2. Inspect results
 
 By default, playwright.config.ts is configured to output the results to:
 
@@ -93,7 +93,7 @@ By default, playwright.config.ts is configured to output the results to:
 web/output/playwright/
 ```
 
-4. Visual regression screenshots
+3. Visual regression screenshots
 
 Screenshots are captured automatically during test runs when `VISUAL_REGRESSION=true` is set.
 Baselines are stored in `web/tests/e2e/__screenshots__/` and can be updated with
