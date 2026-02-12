@@ -95,7 +95,7 @@ def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> N
     ]
 
 
-def test_mock_llm_response_reasoning_fallback_tool_call_debug(
+def test_mock_llm_response_embedded_json_fallback_tool_call_debug(
     admin_user: DATestUser,
 ) -> None:
     _assert_integration_mode_enabled()
@@ -108,15 +108,17 @@ def test_mock_llm_response_reasoning_fallback_tool_call_debug(
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
     search_tool_id = _get_internal_search_tool_id(admin_user)
 
-    # In deep_research mode with REQUIRED tool choice, streamed content is treated as
-    # reasoning first. This validates fallback extraction from reasoning text.
+    # Validate fallback extraction when the model returns tool-call JSON embedded in
+    # normal assistant text instead of structured tool_call objects.
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message="use the search tool",
         user_performing_action=admin_user,
         forced_tool_ids=[search_tool_id],
-        mock_llm_response='{"name":"internal_search","arguments":{"queries":["gamma"]}}',
-        deep_research=True,
+        mock_llm_response=(
+            'I will call a tool now. {"name":"internal_search",'
+            '"arguments":{"queries":["gamma"]}}'
+        ),
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
