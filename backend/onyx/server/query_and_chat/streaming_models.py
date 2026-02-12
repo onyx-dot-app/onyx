@@ -42,6 +42,10 @@ class StreamingType(Enum):
     CITATION_INFO = "citation_info"
     TOOL_CALL_DEBUG = "tool_call_debug"
 
+    MEMORY_TOOL_START = "memory_tool_start"
+    MEMORY_TOOL_DELTA = "memory_tool_delta"
+    MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access"
+
     DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
     DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
     RESEARCH_AGENT_START = "research_agent_start"
@@ -275,6 +279,25 @@ class FileReaderResult(BaseObj):
     preview_end: str = ""
 
 
+# Memory Tool Packets
+################################################
+class MemoryToolStart(BaseObj):
+    type: Literal["memory_tool_start"] = StreamingType.MEMORY_TOOL_START.value
+
+
+class MemoryToolDelta(BaseObj):
+    type: Literal["memory_tool_delta"] = StreamingType.MEMORY_TOOL_DELTA.value
+
+    memory_text: str
+    operation: Literal["add", "update"]
+    memory_id: int | None = None
+    index: int | None = None
+
+
+class MemoryToolNoAccess(BaseObj):
+    type: Literal["memory_tool_no_access"] = StreamingType.MEMORY_TOOL_NO_ACCESS.value
+
+
 ################################################
 # Deep Research Packets
 ################################################
@@ -346,6 +369,9 @@ PacketObj = Union[
     CustomToolDelta,
     FileReaderStart,
     FileReaderResult,
+    MemoryToolStart,
+    MemoryToolDelta,
+    MemoryToolNoAccess,
     # Reasoning Packets
     ReasoningStart,
     ReasoningDelta,

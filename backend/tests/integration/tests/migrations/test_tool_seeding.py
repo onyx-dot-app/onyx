@@ -56,6 +56,12 @@ EXPECTED_TOOLS = {
         in_code_tool_id="FileReaderTool",
         user_id=None,
     ),
+    "MemoryTool": ToolSeedingExpectedResult(
+        name="MemoryTool",
+        display_name="Add Memory",
+        in_code_tool_id="MemoryTool",
+        user_id=None,
+    ),
 }
 
 
@@ -100,7 +106,7 @@ def test_tool_seeding_migration() -> None:
 
         # Should have all 9 builtin tools
         assert (
-            len(tools) == 9
+            len(tools) == 10
         ), f"Should have created exactly 9 builtin tools, got {len(tools)}"
 
         def validate_tool(expected: ToolSeedingExpectedResult) -> None:
@@ -136,3 +142,6 @@ def test_tool_seeding_migration() -> None:
 
         # Check FileReaderTool
         validate_tool(EXPECTED_TOOLS["FileReaderTool"])
+
+        # Check MemoryTool
+        validate_tool(EXPECTED_TOOLS["MemoryTool"])

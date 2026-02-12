@@ -232,6 +232,9 @@ def run_tool_calls(
     skip_search_query_expansion: bool = False,
     # A map of url -> summary for passing web results to open url tool
     url_snippet_map: dict[str, str] = {},
+    # When False, don't pass memory context to search tools for query expansion
+    # (but still pass it to the memory tool for persistence)
+    inject_memories_in_prompt: bool = True,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -339,11 +342,14 @@ def run_tool_calls(
             if last_user_message is None:
                 raise ValueError("No user message found in message history")
 
+            search_memory_context = (
+                user_memory_context if inject_memories_in_prompt else None
+            )
             override_kwargs = SearchToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
                 original_query=last_user_message,
                 message_history=minimal_history,
-                user_memory_context=user_memory_context,
+                user_memory_context=search_memory_context,
                 user_info=user_info,
                 skip_query_expansion=skip_search_query_expansion,
             )
@@ -367,7 +373,21 @@ def run_tool_calls(
             starting_citation_num += 100
 
         elif isinstance(tool, MemoryTool):
-            raise NotImplementedError("MemoryTool is not implemented")
+            override_kwargs = MemoryToolOverrideKwargs(
+                user_name=(
+                    user_memory_context.user_info.name if user_memory_context else None
+                ),
+                user_email=(
+                    user_memory_context.user_info.email if user_memory_context else None
+                ),
+                user_role=(
+                    user_memory_context.user_info.role if user_memory_context else None
+                ),
+                existing_memories=(
+                    list(user_memory_context.memories) if user_memory_context else []
+                ),
+                chat_history=minimal_history,
+            )
 
         tool_run_params.append((tool, tool_call, override_kwargs))
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from typing import cast
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -27,6 +29,8 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import IntermediateReportDelta
 from onyx.server.query_and_chat.streaming_models import IntermediateReportStart
+from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
+from onyx.server.query_and_chat.streaming_models import MemoryToolStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments
 from onyx.server.query_and_chat.streaming_models import OpenUrlStart
 from onyx.server.query_and_chat.streaming_models import OpenUrlUrls
@@ -44,6 +48,7 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileRea
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -333,6 +338,45 @@ def create_fetch_packets(
     return packets
 
 
+def create_memory_packets(
+    memory_text: str,
+    operation: Literal["add", "update"],
+    memory_id: int | None,
+    turn_index: int,
+    tab_index: int = 0,
+    index: int | None = None,
+) -> list[Packet]:
+    packets: list[Packet] = []
+
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=MemoryToolStart(),
+        )
+    )
+
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=MemoryToolDelta(
+                memory_text=memory_text,
+                operation=operation,
+                memory_id=memory_id,
+                index=index,
+            ),
+        ),
+    )
+
+    packets.append(
+        Packet(
+            placement=Placement(turn_index=turn_index, tab_index=tab_index),
+            obj=SectionEnd(),
+        )
+    )
+
+    return packets
+
+
 def create_search_packets(
     search_queries: list[str],
     search_docs: list[SavedSearchDoc],
@@ -524,6 +568,23 @@ def translate_assistant_message_to_packets(
                                 tab_index=tool_call.tab_index,
                             )
                         )
+
+                    elif tool.in_code_tool_id == MemoryTool.__name__:
+                        if tool_call.tool_call_response:
+                            memory_data = json.loads(tool_call.tool_call_response)
+                            turn_tool_packets.extend(
+                                create_memory_packets(
+                                    memory_text=memory_data["memory_text"],
+                                    operation=cast(
+                                        Literal["add", "update"],
+                                        memory_data["operation"],
+                                    ),
+                                    memory_id=memory_data.get("memory_id"),
+                                    turn_index=turn_num,
+                                    tab_index=tool_call.tab_index,
+                                    index=memory_data.get("index"),
+                                )
+                            )
 
                     else:
                         # Custom tool or unknown tool
