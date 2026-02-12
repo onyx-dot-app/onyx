@@ -832,10 +832,10 @@ function ChatPreferencesSettings() {
       <Section gap={0.75}>
         <InputLayouts.Vertical
           title="Personal Preferences"
-          description="Describe how you prefer to interact with Onyx. Onyx uses these preferences to tailor responses."
+          description="Provide your custom preferences in natural language."
         >
           <InputTextArea
-            placeholder="Add your work style, technical level, search habits, response format preferences."
+            placeholder="Describe how you want the system to behave and the tone it should use."
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
             onBlur={() => void handleSavePersonalization()}
