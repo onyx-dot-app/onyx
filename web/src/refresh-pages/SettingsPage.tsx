@@ -791,7 +791,10 @@ function ChatPreferencesSettings() {
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
     async (newMemories: MemoryItem[]): Promise<boolean> => {
-      const result = await handleSavePersonalization({ memories: newMemories });
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
       return !!result;
     },
     [handleSavePersonalization]

@@ -162,9 +162,10 @@ export default function MemoriesModal({
 
   const internalSaveMemories = useCallback(
     async (newMemories: MemoryItem[]): Promise<boolean> => {
-      const result = await handleSavePersonalization({
-        memories: newMemories,
-      });
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
       return !!result;
     },
     [handleSavePersonalization]
