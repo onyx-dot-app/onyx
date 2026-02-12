@@ -88,6 +88,15 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     (state) => state.setActiveFilePreviewPath
   );
 
+  // Store actions for refresh
+  const triggerFilesRefresh = useBuildSessionStore(
+    (state) => state.triggerFilesRefresh
+  );
+
+  // Counters to force-reload previews
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [filePreviewRefreshKey, setFilePreviewRefreshKey] = useState(0);
+
   // Determine which tab is visually active
   const isFilePreviewActive = activeFilePreviewPath !== null;
   const activeTab = isFilePreviewActive ? null : activeOutputTab;
@@ -269,6 +278,11 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     activeFilePreviewPath &&
     /\.pptx$/i.test(activeFilePreviewPath);
 
+  const isPdfPreview =
+    isFilePreviewActive &&
+    activeFilePreviewPath &&
+    /\.pdf$/i.test(activeFilePreviewPath);
+
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
   const handleDocxDownload = useCallback(async () => {
@@ -307,6 +321,26 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     link.click();
     document.body.removeChild(link);
   }, [session?.id, activeFilePreviewPath]);
+
+  // Unified refresh handler — dispatches based on the active tab/preview
+  const handleRefresh = useCallback(() => {
+    if (isFilePreviewActive && activeFilePreviewPath) {
+      // File preview tab: bump key to reload standalone + content previews
+      setFilePreviewRefreshKey((k) => k + 1);
+    } else if (activeOutputTab === "preview") {
+      // Web preview tab: remount the iframe
+      setPreviewRefreshKey((k) => k + 1);
+    } else if (activeOutputTab === "files" && session?.id) {
+      // Files tab: clear cache and re-fetch directory listing
+      triggerFilesRefresh(session.id);
+    }
+  }, [
+    isFilePreviewActive,
+    activeFilePreviewPath,
+    activeOutputTab,
+    session?.id,
+    triggerFilesRefresh,
+  ]);
 
   // Fetch artifacts - poll every 5 seconds when on artifacts tab
   const shouldFetchArtifacts =
@@ -567,13 +601,20 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             : null
         }
         onDownloadRaw={
-          isMarkdownPreview || isPptxPreview ? handleRawFileDownload : undefined
+          isMarkdownPreview || isPptxPreview || isPdfPreview
+            ? handleRawFileDownload
+            : undefined
         }
         downloadRawTooltip={
-          isPptxPreview ? "Download PPTX" : "Download MD file"
+          isPdfPreview
+            ? "Download PDF"
+            : isPptxPreview
+              ? "Download PPTX"
+              : "Download MD file"
         }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
+        onRefresh={handleRefresh}
       />
 
       {/* Tab Content */}
@@ -583,6 +624,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
           <FilePreviewContent
             sessionId={session.id}
             filePath={activeFilePreviewPath}
+            refreshKey={filePreviewRefreshKey}
           />
         )}
         {/* Pinned tab content - only show when no file preview is active */}
@@ -595,7 +637,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
               (!session ? (
                 <CraftingLoader />
               ) : (
-                <PreviewTab webappUrl={displayUrl} />
+                <PreviewTab
+                  webappUrl={displayUrl}
+                  refreshKey={previewRefreshKey}
+                />
               ))}
             {activeOutputTab === "files" && (
               <FilesTab
