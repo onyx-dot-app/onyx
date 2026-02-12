@@ -350,7 +350,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
-        response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
+        response = requests.get(sitemap_url, headers=DEFAULT_HEADERS, timeout=30)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, "html.parser")
@@ -519,13 +519,13 @@ class WebConnector(LoadConnector):
 
         # First do a HEAD request to check content type without downloading the entire content
         head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
+            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True, timeout=30
         )
         is_pdf = is_pdf_content(head_response)
 
         if is_pdf or initial_url.lower().endswith(".pdf"):
             # PDF files are not checked for links
-            response = requests.get(initial_url, headers=DEFAULT_HEADERS)
+            response = requests.get(initial_url, headers=DEFAULT_HEADERS, timeout=30)
             page_text, metadata, images = read_pdf_file(
                 file=io.BytesIO(response.content)
             )
