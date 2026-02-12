@@ -82,7 +82,7 @@ function Button({
   rightIcon: RightIcon,
   size = "default",
   foldable,
-  type,
+  type = "button",
   tooltip,
   tooltipSide = "top",
   ...interactiveBaseProps
@@ -103,7 +103,7 @@ function Button({
   const button = (
     <Interactive.Base {...interactiveBaseProps}>
       <Interactive.Container
-        type={interactiveBaseProps.href ? undefined : type}
+        type={type}
         border={interactiveBaseProps.prominence === "secondary"}
         heightVariant={isCompact ? "md" : "lg"}
         roundingVariant={isCompact ? "compact" : "default"}
