@@ -453,6 +453,19 @@ jobs:
           retention-days: 30
 
       # --- Visual Regression Diff ---
+      - name: Clear pre-existing AWS credentials
+        if: always()
+        run: |
+          # The runs-on/action with extras=ecr-cache exports AWS credentials
+          # for ECR access. These cause configure-aws-credentials to attempt
+          # role-chaining (sts:AssumeRole) instead of OIDC
+          # (sts:AssumeRoleWithWebIdentity). Clear them so OIDC is used.
+          {
+            echo "AWS_ACCESS_KEY_ID="
+            echo "AWS_SECRET_ACCESS_KEY="
+            echo "AWS_SESSION_TOKEN="
+          } >> "$GITHUB_ENV"
+
       - name: Configure AWS credentials
         if: always()
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
