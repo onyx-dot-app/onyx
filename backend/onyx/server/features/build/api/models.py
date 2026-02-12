@@ -332,3 +332,11 @@ class GenerateSuggestionsResponse(BaseModel):
     """Response containing generated suggestions."""
 
     suggestions: list[SuggestionBubble]
+
+
+class PptxPreviewResponse(BaseModel):
+    """Response with PPTX slide preview metadata."""
+
+    slide_count: int
+    slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
+    cached: bool  # Whether result was served from cache

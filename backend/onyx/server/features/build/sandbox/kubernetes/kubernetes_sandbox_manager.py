@@ -2100,6 +2100,134 @@ echo "Session config regeneration complete"
         """
         return self._get_nextjs_url(str(sandbox_id), port)
 
+    def generate_pptx_preview(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        pptx_path: str,
+        cache_dir: str,
+    ) -> tuple[list[str], bool]:
+        """Convert PPTX to slide images using soffice + pdftoppm in the pod.
+
+        Executes a shell script in the sandbox container that:
+        1. Checks if cached slides exist and are newer than the PPTX
+        2. If not, converts PPTX -> PDF -> JPEG slides
+        3. Returns list of slide image paths
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        # Security: sanitize paths
+        pptx_path_obj = Path(pptx_path.lstrip("/"))
+        pptx_clean_parts = [p for p in pptx_path_obj.parts if p != ".."]
+        clean_pptx = str(Path(*pptx_clean_parts)) if pptx_clean_parts else "."
+
+        cache_path_obj = Path(cache_dir.lstrip("/"))
+        cache_clean_parts = [p for p in cache_path_obj.parts if p != ".."]
+        clean_cache = str(Path(*cache_clean_parts)) if cache_clean_parts else "."
+
+        session_root = f"/workspace/sessions/{session_id}"
+        pptx_abs = f"{session_root}/{clean_pptx}"
+        cache_abs = f"{session_root}/{clean_cache}"
+
+        quoted_pptx = shlex.quote(pptx_abs)
+        quoted_cache = shlex.quote(cache_abs)
+
+        # Shell script that handles caching + conversion
+        script = f"""
+set -e
+PPTX={quoted_pptx}
+CACHE={quoted_cache}
+
+if [ ! -f "$PPTX" ]; then
+    echo "ERROR_NOT_FOUND"
+    exit 0
+fi
+
+# Check cache: if slides exist and are newer than PPTX, return them
+if [ -d "$CACHE" ] && ls "$CACHE"/slide-*.jpg >/dev/null 2>&1; then
+    FIRST_SLIDE=$(ls -1 "$CACHE"/slide-*.jpg | head -1)
+    if [ "$FIRST_SLIDE" -nt "$PPTX" ] || [ "$FIRST_SLIDE" -ot "$PPTX" -a \\
+        "$(stat -c %Y "$FIRST_SLIDE")" = "$(stat -c %Y "$PPTX")" ]; then
+        if [ ! "$PPTX" -nt "$FIRST_SLIDE" ]; then
+            echo "CACHED"
+            ls -1 "$CACHE"/slide-*.jpg | sort
+            exit 0
+        fi
+    fi
+    rm -f "$CACHE"/slide-*.jpg
+fi
+
+mkdir -p "$CACHE"
+
+# Convert PPTX -> PDF using soffice with the skill helper
+cd /workspace/skills/pptx/scripts
+python -c "
+from office.soffice import run_soffice
+result = run_soffice(['--headless', '--convert-to', 'pdf', '--outdir', '$CACHE', '$PPTX'])
+if result.returncode != 0:
+    import sys
+    print('CONVERSION_ERROR', file=sys.stderr)
+    sys.exit(1)
+"
+
+# Find the PDF and convert to slides
+PDF_FILE=$(ls -1 "$CACHE"/*.pdf 2>/dev/null | head -1)
+if [ -z "$PDF_FILE" ]; then
+    echo "ERROR_NO_PDF"
+    exit 0
+fi
+
+pdftoppm -jpeg -r 150 "$PDF_FILE" "$CACHE/slide"
+rm -f "$CACHE"/*.pdf
+
+echo "GENERATED"
+ls -1 "$CACHE"/slide-*.jpg 2>/dev/null | sort
+"""
+
+        exec_command = ["/bin/sh", "-c", script]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            lines = [line.strip() for line in resp.strip().split("\n") if line.strip()]
+
+            if not lines:
+                raise ValueError("Empty response from PPTX conversion")
+
+            if lines[0] == "ERROR_NOT_FOUND":
+                raise ValueError(f"File not found: {pptx_path}")
+
+            if lines[0] == "ERROR_NO_PDF":
+                raise ValueError("soffice did not produce a PDF file")
+
+            cached = lines[0] == "CACHED"
+            # Skip the status line, rest are file paths
+            abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
+
+            # Convert absolute paths to session-relative paths
+            prefix = f"{session_root}/"
+            rel_paths = []
+            for p in abs_paths:
+                if p.startswith(prefix):
+                    rel_paths.append(p[len(prefix) :])
+                elif p.endswith(".jpg"):
+                    rel_paths.append(p)
+
+            return (rel_paths, cached)
+
+        except ApiException as e:
+            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+
     def sync_files(
         self,
         sandbox_id: UUID,

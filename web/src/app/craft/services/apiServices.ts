@@ -600,6 +600,43 @@ export async function exportDocx(
 }
 
 // =============================================================================
+// PPTX Preview API
+// =============================================================================
+
+export interface PptxPreviewResponse {
+  slide_count: number;
+  slide_paths: string[];
+  cached: boolean;
+}
+
+/**
+ * Fetch PPTX slide preview images.
+ * Triggers on-demand conversion (soffice → pdftoppm) with disk caching.
+ */
+export async function fetchPptxPreview(
+  sessionId: string,
+  path: string
+): Promise<PptxPreviewResponse> {
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  const res = await fetch(
+    `${API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`
+  );
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to generate PPTX preview: ${res.status}`
+    );
+  }
+
+  return res.json();
+}
+
+// =============================================================================
 // Connector Management API
 // =============================================================================
 

@@ -258,17 +258,21 @@ const InputBar = memo(
       );
 
       const handleSubmit = useCallback(() => {
-        if (
-          !message.trim() ||
-          disabled ||
-          isRunning ||
-          hasUploadingFiles ||
-          sandboxInitializing
-        )
+        if (disabled || isRunning || hasUploadingFiles || sandboxInitializing)
           return;
-        onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
-        setMessage("");
-        clearFiles();
+
+        const hasMessage = message.trim().length > 0;
+        const hasFiles = currentMessageFiles.length > 0;
+
+        if (hasMessage) {
+          onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
+          setMessage("");
+          clearFiles({ suppressRefetch: true });
+        } else if (hasFiles) {
+          // User hit Enter with only files attached: remove files from input bar
+          // (File stays in session; no way to delete from session for now)
+          clearFiles({ suppressRefetch: true });
+        }
       }, [
         message,
         disabled,
