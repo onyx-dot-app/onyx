@@ -530,6 +530,7 @@ class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoin
         Returns:
             list[Repository.Repository]: The configured repositories.
         """
+        assert self.github_client is not None  # mypy
         if self.repositories:
             if "," in self.repositories:
                 return self.get_github_repos(self.github_client)
