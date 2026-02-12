@@ -1,5 +1,21 @@
 import { APIRequestContext, expect, APIResponse } from "@playwright/test";
 
+const E2E_LLM_PROVIDER_API_KEY =
+  process.env.E2E_LLM_PROVIDER_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  "e2e-placeholder-api-key-not-used";
+
+const E2E_WEB_SEARCH_API_KEY =
+  process.env.E2E_WEB_SEARCH_API_KEY ||
+  process.env.EXA_API_KEY ||
+  process.env.SERPER_API_KEY ||
+  "e2e-placeholder-web-search-key";
+
+const E2E_IMAGE_GEN_API_KEY =
+  process.env.E2E_IMAGE_GEN_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  E2E_LLM_PROVIDER_API_KEY;
+
 /**
  * API Client for Onyx backend operations in E2E tests.
  *
@@ -394,7 +410,7 @@ export class OnyxApiClient {
         data: {
           name: providerName,
           provider: "openai",
-          api_key: "test-key",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
           default_model_name: "gpt-4o",
           is_public: false,
           groups: [groupId],
@@ -454,7 +470,7 @@ export class OnyxApiClient {
         data: {
           name: providerName,
           provider: "openai",
-          api_key: "test-key",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
           default_model_name: "gpt-4o",
           is_public: true,
           groups: [],
@@ -714,7 +730,7 @@ export class OnyxApiClient {
 
   /**
    * Create and activate a web search provider for testing.
-   * Uses a dummy API key that won't actually work, but allows the tool to be available.
+   * Uses env-backed keys when available and falls back to a placeholder key.
    *
    * @param providerType - Type of provider: "exa", "serper", "google_pse", "searxng"
    * @param name - Optional name for the provider (defaults to "Test Provider")
@@ -735,7 +751,7 @@ export class OnyxApiClient {
     const response = await this.post("/admin/web-search/search-providers", {
       name,
       provider_type: providerType,
-      api_key: "test-api-key-12345",
+      api_key: E2E_WEB_SEARCH_API_KEY,
       api_key_changed: true,
       config: Object.keys(config).length > 0 ? config : undefined,
       activate: true,
@@ -793,7 +809,7 @@ export class OnyxApiClient {
       image_provider_id: imageProviderId,
       model_name: modelName,
       provider: provider,
-      api_key: "test-api-key", // Dummy key - enables tool visibility
+      api_key: E2E_IMAGE_GEN_API_KEY,
       is_default: isDefault,
     });
 

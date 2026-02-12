@@ -5,6 +5,10 @@ import { OnyxApiClient } from "../utils/onyxApiClient";
 
 const LLM_SETUP_URL = "/admin/configuration/llm";
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+const PROVIDER_API_KEY =
+  process.env.E2E_LLM_PROVIDER_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  "e2e-placeholder-api-key-not-used";
 
 type AdminLLMProvider = {
   id: number;
@@ -33,7 +37,7 @@ async function createPublicProvider(
       data: {
         name: providerName,
         provider: "openai",
-        api_key: "test-key",
+        api_key: PROVIDER_API_KEY,
         default_model_name: "gpt-4o",
         is_public: true,
         groups: [],
@@ -132,7 +136,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     });
 
     const providerName = uniqueName("PW OpenAI Provider");
-    const apiKey = "test-openai-ui-key";
+    const apiKey = PROVIDER_API_KEY;
 
     const setupModal = await openOpenAiSetupModal(page);
     await setupModal.getByLabel("Display Name").fill(providerName);
