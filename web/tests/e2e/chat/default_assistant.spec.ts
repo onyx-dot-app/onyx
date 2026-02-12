@@ -1,5 +1,5 @@
 import { GREETING_MESSAGES } from "@/lib/chat/greetingMessages";
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
 import {
   sendMessage,
@@ -29,7 +29,7 @@ test.describe("Default Assistant Tests", () => {
     await adminPage.goto("http://localhost:3000/app");
     await adminPage.waitForLoadState("networkidle");
 
-    const apiClient = new OnyxApiClient(adminPage);
+    const apiClient = new OnyxApiClient(adminPage.request);
     try {
       imageGenConfigId = await apiClient.createImageGenerationConfig(
         `test-default-assistant-${Date.now()}`
@@ -51,7 +51,7 @@ test.describe("Default Assistant Tests", () => {
       await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
-      const apiClient = new OnyxApiClient(adminPage);
+      const apiClient = new OnyxApiClient(adminPage.request);
       await apiClient.deleteImageGenerationConfig(imageGenConfigId);
 
       await adminContext.close();
@@ -108,7 +108,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant to test non-default behavior
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page.locator('input[name="name"]').fill("Custom Test Assistant");
       await page
         .locator('textarea[name="description"]')
@@ -149,7 +151,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page.locator('input[name="name"]').fill("Custom Assistant");
       await page
         .locator('textarea[name="description"]')
@@ -197,7 +201,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant with starter messages
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page
         .locator('input[name="name"]')
         .fill("Test Assistant with Starters");
@@ -245,8 +251,10 @@ test.describe("Default Assistant Tests", () => {
       await page.getByTestId("AppSidebar/more-agents").click();
 
       // Wait for modal or assistant list to appear
-      // The selector might be in a modal or dropdown
-      await page.waitForTimeout(1000); // Give modal time to open
+      // The selector might be in a modal or dropdown.
+      await page
+        .getByTestId("AgentsPage/new-agent-button")
+        .waitFor({ state: "visible", timeout: 5000 });
 
       // Look for default assistant by name - it should NOT be there
       const assistantElements = await page.$$('[data-testid^="assistant-"]');
@@ -273,7 +281,9 @@ test.describe("Default Assistant Tests", () => {
       // Create a custom assistant
       await page.getByTestId("AppSidebar/more-agents").click();
       await page.getByTestId("AgentsPage/new-agent-button").click();
-      await page.waitForTimeout(2000);
+      await page
+        .locator('input[name="name"]')
+        .waitFor({ state: "visible", timeout: 10000 });
       await page.locator('input[name="name"]').fill("Switch Test Assistant");
       await page
         .locator('textarea[name="description"]')
@@ -307,7 +317,7 @@ test.describe("Default Assistant Tests", () => {
       await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
-      const apiClient = new OnyxApiClient(adminPage);
+      const apiClient = new OnyxApiClient(adminPage.request);
       try {
         imageGenConfigId = await apiClient.createImageGenerationConfig(
           `test-action-toggle-${Date.now()}`
@@ -329,7 +339,7 @@ test.describe("Default Assistant Tests", () => {
         await adminPage.goto("http://localhost:3000/app");
         await adminPage.waitForLoadState("networkidle");
 
-        const apiClient = new OnyxApiClient(adminPage);
+        const apiClient = new OnyxApiClient(adminPage.request);
         await apiClient.deleteImageGenerationConfig(imageGenConfigId);
 
         await adminContext.close();
@@ -352,9 +362,9 @@ test.describe("Default Assistant Tests", () => {
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await page.goto("/app");
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("domcontentloaded");
 
-      const apiClient = new OnyxApiClient(page);
+      const apiClient = new OnyxApiClient(page.request);
       let webSearchProviderId: number | null = null;
 
       try {
@@ -410,15 +420,17 @@ test.describe("Default Assistant Tests", () => {
 
       // Go back to chat
       await page.goto("/app");
-      await page.waitForLoadState("networkidle");
-      // Wait for tools to be picked up
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState("domcontentloaded");
 
       // Will NOT show the `internal-search` option since that will be excluded when there are no connectors connected.
       // (Since we removed pre-seeded docs, we will have NO connectors connected on a fresh install; therefore, `internal-search` will not be available.)
       await openActionManagement(page);
-      expect(await page.$(TOOL_IDS.webSearchOption)).toBeTruthy();
-      expect(await page.$(TOOL_IDS.imageGenerationOption)).toBeTruthy();
+      await expect(page.locator(TOOL_IDS.webSearchOption)).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(page.locator(TOOL_IDS.imageGenerationOption)).toBeVisible({
+        timeout: 10000,
+      });
 
       // Clean up web search provider only (image gen config is managed by beforeAll/afterAll)
       if (webSearchProviderId !== null) {
@@ -543,7 +555,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
     await adminPage.goto("http://localhost:3000/app");
     await adminPage.waitForLoadState("networkidle");
 
-    const apiClient = new OnyxApiClient(adminPage);
+    const apiClient = new OnyxApiClient(adminPage.request);
     try {
       imageGenConfigId = await apiClient.createImageGenerationConfig(
         `test-e2e-journey-${Date.now()}`
@@ -565,7 +577,7 @@ test.describe("End-to-End Default Assistant Flow", () => {
       await adminPage.goto("http://localhost:3000/app");
       await adminPage.waitForLoadState("networkidle");
 
-      const apiClient = new OnyxApiClient(adminPage);
+      const apiClient = new OnyxApiClient(adminPage.request);
       await apiClient.deleteImageGenerationConfig(imageGenConfigId);
 
       await adminContext.close();

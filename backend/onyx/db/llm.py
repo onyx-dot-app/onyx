@@ -231,10 +231,11 @@ def upsert_llm_provider(
         # Set to None if the dict is empty after filtering
         custom_config = custom_config or None
 
+    api_base = llm_provider_upsert_request.api_base or None
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     # EncryptedString accepts str for writes, returns SensitiveValue for reads
     existing_llm_provider.api_key = llm_provider_upsert_request.api_key  # type: ignore[assignment]
-    existing_llm_provider.api_base = llm_provider_upsert_request.api_base
+    existing_llm_provider.api_base = api_base
     existing_llm_provider.api_version = llm_provider_upsert_request.api_version
     existing_llm_provider.custom_config = custom_config
     # TODO: Remove default model name on api change
