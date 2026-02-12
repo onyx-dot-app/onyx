@@ -1,5 +1,13 @@
+import type { ComponentType } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { IconProps } from "@opal/types";
+import {
+  SvgImage,
+  SvgFileChartPie,
+  SvgFileBraces,
+  SvgFileText,
+} from "@opal/icons";
 import { ALLOWED_URL_PROTOCOLS } from "./constants";
 
 export function cn(...inputs: ClassValue[]) {
@@ -158,6 +166,82 @@ export function isImageFile(fileName: string | null | undefined): boolean {
   if (!fileName) return false;
   const lowerFileName = String(fileName).toLowerCase();
   return IMAGE_EXTENSIONS.some((ext) => lowerFileName.endsWith(`.${ext}`));
+}
+
+/**
+ * Typical code/config file extensions (lowercase, no leading dots)
+ */
+export const CODE_EXTENSIONS = [
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "py",
+  "pyw",
+  "java",
+  "kt",
+  "kts",
+  "c",
+  "h",
+  "cpp",
+  "cc",
+  "cxx",
+  "hpp",
+  "cs",
+  "go",
+  "rs",
+  "rb",
+  "php",
+  "swift",
+  "scala",
+  "r",
+  "sql",
+  "sh",
+  "bash",
+  "zsh",
+  "yaml",
+  "yml",
+  "json",
+  "xml",
+  "html",
+  "htm",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  "lua",
+  "pl",
+  "vue",
+  "svelte",
+  "m",
+  "mm",
+  "md",
+  "markdown",
+] as const;
+
+/**
+ * Checks if a filename represents a code/config file based on its extension.
+ */
+export function isCodeFile(fileName: string | null | undefined): boolean {
+  if (!fileName) return false;
+  const lowerFileName = String(fileName).toLowerCase();
+  return CODE_EXTENSIONS.some((ext) => lowerFileName.endsWith(`.${ext}`));
+}
+
+/**
+ * Returns the icon component for a file based on its name/path.
+ * Used for file tree and preview tab icons.
+ */
+export function getFileIcon(
+  fileName: string | null | undefined
+): ComponentType<IconProps> {
+  if (!fileName) return SvgFileText;
+  if (isImageFile(fileName)) return SvgImage;
+  if (/\.pptx$/i.test(fileName)) return SvgFileChartPie;
+  if (isCodeFile(fileName)) return SvgFileBraces;
+  return SvgFileText;
 }
 
 /**

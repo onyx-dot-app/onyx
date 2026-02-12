@@ -9,16 +9,16 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { fetchDirectoryListing } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
-import { cn } from "@/lib/utils";
+import { cn, getFileIcon } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgHardDrive,
   SvgFolder,
   SvgFolderOpen,
-  SvgFileText,
   SvgChevronRight,
   SvgArrowLeft,
   SvgImage,
+  SvgFileText,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { InlineFilePreview } from "@/app/craft/components/output-panel/FilePreviewContent";
@@ -405,6 +405,7 @@ function FileTreeNode({
         const isExpanded = expandedPaths.has(entry.path);
         const isLast = index === sortedEntries.length - 1;
         const childEntries = directoryCache.get(entry.path) || [];
+        const FileIcon = getFileIcon(entry.name);
 
         // Row height for sticky offset calculation
         const rowHeight = 28;
@@ -495,13 +496,8 @@ function FileTreeNode({
                     className="stroke-text-03 flex-shrink-0 mx-1"
                   />
                 )
-              ) : entry.mime_type?.startsWith("image/") ? (
-                <SvgImage
-                  size={16}
-                  className="stroke-text-03 flex-shrink-0 mx-1"
-                />
               ) : (
-                <SvgFileText
+                <FileIcon
                   size={16}
                   className="stroke-text-03 flex-shrink-0 mx-1"
                 />
