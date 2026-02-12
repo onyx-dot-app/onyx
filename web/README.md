@@ -95,7 +95,7 @@ web/output/playwright/
 
 3. Visual regression screenshots
 
-Screenshots are captured automatically during test runs.
+Screenshots are captured automatically during test runs and saved to `web/output/screenshots/`.
 To compare screenshots across CI runs, use:
 
 ```bash
