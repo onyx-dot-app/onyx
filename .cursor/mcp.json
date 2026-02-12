@@ -1,7 +1,10 @@
 {
   "mcpServers": {
     "Playwright": {
-      "command": "npx @playwright/mcp"
+      "command": "npx",
+      "args": [
+        "@playwright/mcp"
+      ]
     },
     "Linear": {
       "url": "https://mcp.linear.app/mcp"
