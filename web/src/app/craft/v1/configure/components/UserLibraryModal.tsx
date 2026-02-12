@@ -25,11 +25,13 @@ import {
   SvgPlus,
   SvgTrash,
   SvgFileText,
+  SvgFolderPlus,
 } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 /**
  * Build a hierarchical tree from a flat list of library entries.
@@ -223,34 +225,6 @@ export default function UserLibraryModal({
           />
           <Modal.Body>
             <Section flexDirection="column" gap={1} alignItems="stretch">
-              {/* Action buttons */}
-              <Section flexDirection="row" justifyContent="end" gap={0.5}>
-                <Button
-                  secondary
-                  onClick={() => setShowNewFolderModal(true)}
-                  leftIcon={SvgPlus}
-                >
-                  New Folder
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileUpload}
-                  disabled={isUploading}
-                  accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
-                />
-                <Button
-                  secondary
-                  onClick={() => handleUploadToFolder("/")}
-                  leftIcon={SvgUploadCloud}
-                  disabled={isUploading}
-                >
-                  {isUploading ? "Uploading..." : "Upload"}
-                </Button>
-              </Section>
-
               {/* Upload error */}
               {uploadError && (
                 <div className="p-2 bg-status-error-01 rounded-08">
@@ -258,8 +232,40 @@ export default function UserLibraryModal({
                 </div>
               )}
 
-              {/* File list */}
-              <div className="w-full border border-border-01 rounded-08 min-h-[200px]">
+              {/* File explorer */}
+              <Section flexDirection="column" alignItems="stretch">
+                {/* Action buttons */}
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  gap={0.5}
+                  padding={0.5}
+                >
+                  <IconButton
+                    icon={SvgFolderPlus}
+                    onClick={() => setShowNewFolderModal(true)}
+                    secondary
+                    tooltip="New Folder"
+                  />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={isUploading}
+                    accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
+                  />
+                  <IconButton
+                    icon={SvgUploadCloud}
+                    onClick={() => handleUploadToFolder("/")}
+                    disabled={isUploading}
+                    tooltip={isUploading ? "Uploading..." : "Upload"}
+                    aria-label={isUploading ? "Uploading..." : "Upload"}
+                    secondary
+                  />
+                </Section>
+
                 {isLoading ? (
                   <Section padding={2} height="fit">
                     <Text secondaryBody text03>
@@ -296,7 +302,7 @@ export default function UserLibraryModal({
                     />
                   </ShadowDiv>
                 )}
-              </div>
+              </Section>
             </Section>
           </Modal.Body>
 
