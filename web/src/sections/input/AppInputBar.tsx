@@ -701,16 +701,16 @@ const AppInputBar = React.memo(
                     />
                   )}
                   {showDeepResearch && (
-                    <OpenButton
+                    <Button
                       icon={SvgHourglass}
                       onClick={toggleDeepResearch}
                       variant="select"
                       selected={deepResearchEnabled}
-                      foldable
+                      foldable={!deepResearchEnabled}
                       disabled={disabled}
                     >
                       Deep Research
-                    </OpenButton>
+                    </Button>
                   )}
 
                   {selectedAssistant &&
@@ -723,7 +723,7 @@ const AppInputBar = React.memo(
                         return null;
                       }
                       return (
-                        <OpenButton
+                        <Button
                           key={toolId}
                           icon={getIconForAction(tool)}
                           onClick={() => {
@@ -736,7 +736,7 @@ const AppInputBar = React.memo(
                           disabled={disabled}
                         >
                           {tool.display_name}
-                        </OpenButton>
+                        </Button>
                       );
                     })}
                 </div>
