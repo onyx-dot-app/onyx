@@ -41,6 +41,7 @@ from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import SearchHit
+from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
@@ -484,6 +485,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Verifies and creates the index if necessary.
 
+        Also puts the desired cluster settings.
+
         Also puts the desired search pipeline state, creating the pipelines if
         they do not exist and updating them otherwise.
 
@@ -504,13 +507,16 @@ class OpenSearchDocumentIndex(DocumentIndex):
         expected_mappings = DocumentSchema.get_document_schema(
             embedding_dim, self._tenant_state.multitenant
         )
+        if not self._os_client.put_cluster_settings(
+            settings=OPENSEARCH_CLUSTER_SETTINGS
+        ):
+            logger.error(
+                f"Failed to put cluster settings for index {self._index_name}. If the settings have never been set before this "
+                "may cause unexpected index creation when indexing documents into an index that does not exist, or may cause "
+                "expected logs to not appear. If this is not the first time running Onyx against this instance of OpenSearch, "
+                "these settings have likely already been set. Not taking any further action..."
+            )
         if not self._os_client.index_exists():
-            if not self._os_client.set_cluster_auto_create_index_setting(enabled=False):
-                logger.error(
-                    f"Failed to disable the auto create index setting for index {self._index_name}. "
-                    "This may cause unexpected index creation when indexing documents into an index that does not exist. "
-                    "Not taking any further action..."
-                )
             if USING_AWS_MANAGED_OPENSEARCH:
                 index_settings = (
                     DocumentSchema.get_index_settings_for_aws_managed_opensearch()

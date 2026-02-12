@@ -9,6 +9,7 @@ from opensearchpy import TransportError
 from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
 from onyx.configs.app_configs import OPENSEARCH_HOST
@@ -19,6 +20,9 @@ from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+
+
+CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
 
 
 logger = setup_logger(__name__)
@@ -74,10 +78,11 @@ class OpenSearchClient:
         use_ssl: bool = True,
         verify_certs: bool = False,
         ssl_show_warn: bool = False,
+        timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
     ):
         self._index_name = index_name
         logger.debug(
-            f"Creating OpenSearch client for index {index_name} with host {host} and port {port}."
+            f"Creating OpenSearch client for index {index_name} with host {host} and port {port} and timeout {timeout} seconds."
         )
         self._client = OpenSearch(
             hosts=[{"host": host, "port": port}],
@@ -85,6 +90,13 @@ class OpenSearchClient:
             use_ssl=use_ssl,
             verify_certs=verify_certs,
             ssl_show_warn=ssl_show_warn,
+            # NOTE: This timeout applies to all requests the client makes,
+            # including bulk indexing. When exceeded, the client will raise a
+            # ConnectionTimeout and return no useful results. The OpenSearch
+            # server will log that the client cancelled the request. To get
+            # partial results from OpenSearch, pass in a timeout parameter to
+            # your request body that is less than this value.
+            timeout=timeout,
         )
         logger.debug(
             f"OpenSearch client created successfully for index {self._index_name}."
@@ -642,7 +654,18 @@ class OpenSearchClient:
         else:
             result = self._client.search(index=self._index_name, body=body)
 
-        hits = self._get_hits_from_search_result(result)
+        hits, time_took, timed_out, phase_took, profile = (
+            self._get_hits_and_profile_from_search_result(result)
+        )
+        self._log_search_result_perf(
+            time_took=time_took,
+            timed_out=timed_out,
+            phase_took=phase_took,
+            profile=profile,
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            raise_on_timeout=True,
+        )
 
         search_hits: list[SearchHit[DocumentChunk]] = []
         for hit in hits:
@@ -700,7 +723,17 @@ class OpenSearchClient:
 
         result: dict[str, Any] = self._client.search(index=self._index_name, body=body)
 
-        hits = self._get_hits_from_search_result(result)
+        hits, time_took, timed_out, phase_took, profile = (
+            self._get_hits_and_profile_from_search_result(result)
+        )
+        self._log_search_result_perf(
+            time_took=time_took,
+            timed_out=timed_out,
+            phase_took=phase_took,
+            profile=profile,
+            body=body,
+            raise_on_timeout=True,
+        )
 
         # TODO(andrei): Implement scroll/point in time for results so that we
         # can return arbitrarily-many IDs.
@@ -737,34 +770,24 @@ class OpenSearchClient:
         self._client.indices.refresh(index=self._index_name)
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
-    def set_cluster_auto_create_index_setting(self, enabled: bool) -> bool:
-        """Sets the cluster auto create index setting.
-
-        By default, when you index a document to a non-existent index,
-        OpenSearch will automatically create the index. This behavior is
-        undesirable so this function exposes the ability to disable it.
-
-        See
-        https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index/#updating-cluster-settings-using-the-api
+    def put_cluster_settings(self, settings: dict[str, Any]) -> bool:
+        """Puts cluster settings.
 
         Args:
-            enabled: Whether to enable the auto create index setting.
+            settings: The settings to put.
+
+        Raises:
+            Exception: There was an error putting the cluster settings.
 
         Returns:
-            True if the setting was updated successfully, False otherwise. Does
-                not raise.
+            True if the settings were put successfully, False otherwise.
         """
-        try:
-            body = {"persistent": {"action.auto_create_index": enabled}}
-            response = self._client.cluster.put_settings(body=body)
-            if response.get("acknowledged", False):
-                logger.info(f"Successfully set action.auto_create_index to {enabled}.")
-                return True
-            else:
-                logger.error(f"Failed to update setting: {response}.")
-                return False
-        except Exception:
-            logger.exception("Error setting auto_create_index.")
+        response = self._client.cluster.put_settings(body=settings)
+        if response.get("acknowledged", False):
+            logger.info("Successfully put cluster settings.")
+            return True
+        else:
+            logger.error(f"Failed to put cluster settings: {response}.")
             return False
 
     @log_function_time(print_only=True, debug_only=True)
@@ -788,28 +811,78 @@ class OpenSearchClient:
         """
         self._client.close()
 
-    def _get_hits_from_search_result(self, result: dict[str, Any]) -> list[Any]:
-        """Extracts the hits from a search result.
+    def _get_hits_and_profile_from_search_result(
+        self, result: dict[str, Any]
+    ) -> tuple[list[Any], int | None, bool | None, dict[str, Any], dict[str, Any]]:
+        """Extracts the hits and profiling information from a search result.
 
         Args:
             result: The search result to extract the hits from.
 
         Raises:
             Exception: There was an error extracting the hits from the search
-                result. This includes the case where the search timed out.
+                result.
 
         Returns:
-            The hits from the search result.
+            A tuple containing the hits from the search result, the time taken
+                to execute the search in milliseconds, whether the search timed
+                out, the time taken to execute each phase of the search, and the
+                profile.
         """
-        if result.get("timed_out", False):
-            raise RuntimeError(f"Search timed out for index {self._index_name}.")
+        time_took: int | None = result.get("took")
+        timed_out: bool | None = result.get("timed_out")
+        phase_took: dict[str, Any] = result.get("phase_took", {})
+        profile: dict[str, Any] = result.get("profile", {})
+
         hits_first_layer: dict[str, Any] = result.get("hits", {})
         if not hits_first_layer:
             raise RuntimeError(
                 f"Hits field missing from response when trying to search index {self._index_name}."
             )
         hits_second_layer: list[Any] = hits_first_layer.get("hits", [])
-        return hits_second_layer
+
+        return hits_second_layer, time_took, timed_out, phase_took, profile
+
+    def _log_search_result_perf(
+        self,
+        time_took: int | None,
+        timed_out: bool | None,
+        phase_took: dict[str, Any],
+        profile: dict[str, Any],
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        raise_on_timeout: bool = False,
+    ) -> None:
+        """Logs the performance of a search result.
+
+        Args:
+            time_took: The time taken to execute the search in milliseconds.
+            timed_out: Whether the search timed out.
+            phase_took: The time taken to execute each phase of the search.
+            profile: The profile for the search.
+            body: The body of the search request for logging.
+            search_pipeline_id: The ID of the search pipeline used for the
+                search, if any, for logging. Defaults to None.
+            raise_on_timeout: Whether to raise an exception if the search timed
+                out. Note that the result may still contain useful partial
+                results. Defaults to False.
+
+        Raises:
+            Exception: If raise_on_timeout is True and the search timed out.
+        """
+        if time_took and time_took > CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS:
+            logger.warning(
+                f"OpenSearch client warning: Search for index {self._index_name} took {time_took} milliseconds.\n"
+                f"Body: {body}\n"
+                f"Search pipeline ID: {search_pipeline_id}\n"
+                f"Phase took: {phase_took}\n"
+                f"Profile: {profile}\n"
+            )
+        if timed_out:
+            error_str = f"OpenSearch client error: Search timed out for index {self._index_name}."
+            logger.error(error_str)
+            if raise_on_timeout:
+                raise RuntimeError(error_str)
 
 
 def wait_for_opensearch_with_timeout(
