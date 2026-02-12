@@ -259,7 +259,7 @@ class KubernetesSandboxManager(SandboxManager):
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
-        self._skills_path = build_dir / "skills"
+        self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
             f"KubernetesSandboxManager initialized: "
@@ -1234,6 +1234,13 @@ mkdir -p {session_path}/attachments
 {files_symlink_setup}
 # Setup outputs
 {outputs_setup}
+
+# Symlink skills (baked into image at /workspace/skills/)
+if [ -d /workspace/skills ]; then
+    mkdir -p {session_path}/.opencode
+    ln -sf /workspace/skills {session_path}/.opencode/skills
+    echo "Linked skills to /workspace/skills"
+fi
 
 # Write agent instructions
 echo "Writing AGENTS.md"
