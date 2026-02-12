@@ -13,8 +13,31 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/s3"
 )
 
+const (
+	// DefaultS3Bucket is the default S3 bucket for Playwright visual regression artifacts.
+	DefaultS3Bucket = "onyx-playwright-artifacts"
+
+	// DefaultScreenshotDir is the default local directory for captured screenshots,
+	// relative to the repository root.
+	DefaultScreenshotDir = "web/output/screenshots"
+
+	// DefaultOutputDir is the default base directory for visual diff output,
+	// relative to the repository root.
+	DefaultOutputDir = "web/output/visual-diff"
+)
+
+// getS3Bucket returns the S3 bucket name, preferring the PLAYWRIGHT_S3_BUCKET
+// environment variable over the compiled-in default.
+func getS3Bucket() string {
+	if bucket := os.Getenv("PLAYWRIGHT_S3_BUCKET"); bucket != "" {
+		return bucket
+	}
+	return DefaultS3Bucket
+}
+
 // PlaywrightDiffCompareOptions holds options for the compare subcommand.
 type PlaywrightDiffCompareOptions struct {
+	Project      string
 	Baseline     string
 	Current      string
 	Output       string
@@ -24,9 +47,10 @@ type PlaywrightDiffCompareOptions struct {
 
 // PlaywrightDiffUploadOptions holds options for the upload-baselines subcommand.
 type PlaywrightDiffUploadOptions struct {
-	Dir    string
-	Dest   string
-	Delete bool
+	Project string
+	Dir     string
+	Dest    string
+	Delete  bool
 }
 
 // NewPlaywrightDiffCommand creates the playwright-diff command with subcommands.
@@ -40,16 +64,19 @@ Supports comparing local directories and downloading baselines from S3.
 The generated HTML report is self-contained (images base64-inlined) and can
 be opened locally or hosted on S3.
 
-Example usage:
+The --project flag provides sensible defaults so you don't need to specify
+every path. For example:
 
-  # Compare local directories
-  ods playwright-diff compare --baseline ./baselines --current ./screenshots
+  # Compare the "admin" project against S3 baselines (uses all defaults)
+  ods playwright-diff compare --project admin
 
-  # Compare against S3 baselines
-  ods playwright-diff compare --baseline s3://bucket/baselines/admin/ --current ./screenshots
+  # Upload new baselines for the "admin" project
+  ods playwright-diff upload-baselines --project admin
 
-  # Upload new baselines to S3
-  ods playwright-diff upload-baselines --dir ./screenshots --dest s3://bucket/baselines/admin/`,
+You can override any default with explicit flags:
+
+  # Compare with custom paths
+  ods playwright-diff compare --baseline ./my-baselines --current ./my-screenshots`,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},
@@ -68,38 +95,43 @@ func newCompareCommand() *cobra.Command {
 		Use:   "compare",
 		Short: "Compare screenshots against baselines and generate a diff report",
 		Long: `Compare current screenshots against baseline screenshots and produce
-a self-contained HTML visual diff report.
+a self-contained HTML visual diff report with a JSON summary.
 
-The --baseline flag accepts either a local directory path or an S3 URL
-(s3://bucket/prefix/). When an S3 URL is provided, baselines are downloaded
-to a temporary directory before comparison.
+When --project is specified, the following defaults are applied:
+  --baseline  → s3://<bucket>/baselines/<project>/
+  --current   → web/output/screenshots/
+  --output    → web/output/visual-diff/<project>/index.html
+
+The bucket defaults to "onyx-playwright-artifacts" and can be overridden
+with the PLAYWRIGHT_S3_BUCKET environment variable.
+
+A summary.json file is always written next to the HTML report. If there
+are no visual differences, the HTML report is skipped.
 
 Examples:
 
-  # Local comparison
-  ods playwright-diff compare \
-    --baseline ./baselines \
-    --current ./screenshots \
-    --output ./report/index.html
+  # Use project defaults (recommended)
+  ods playwright-diff compare --project admin
 
-  # Compare against S3 baselines
+  # Override specific flags
+  ods playwright-diff compare --project admin --current ./custom-dir/
+
+  # Fully manual (no project flag)
   ods playwright-diff compare \
-    --baseline s3://onyx-playwright-artifacts/baselines/admin/ \
-    --current ./web/screenshots/ \
-    --output ./visual-diff/index.html`,
+    --baseline s3://my-bucket/baselines/admin/ \
+    --current ./web/output/screenshots/ \
+    --output ./web/output/visual-diff/admin/index.html`,
 		Run: func(cmd *cobra.Command, args []string) {
 			runCompare(opts)
 		},
 	}
 
+	cmd.Flags().StringVar(&opts.Project, "project", "", "Project name (e.g. admin); sets sensible defaults for baseline, current, and output")
 	cmd.Flags().StringVar(&opts.Baseline, "baseline", "", "Baseline directory or S3 URL (s3://...)")
 	cmd.Flags().StringVar(&opts.Current, "current", "", "Current screenshots directory")
-	cmd.Flags().StringVar(&opts.Output, "output", "visual-diff/index.html", "Output path for the HTML report")
+	cmd.Flags().StringVar(&opts.Output, "output", "", "Output path for the HTML report")
 	cmd.Flags().Float64Var(&opts.Threshold, "threshold", 0.2, "Per-channel pixel difference threshold (0.0-1.0)")
 	cmd.Flags().Float64Var(&opts.MaxDiffRatio, "max-diff-ratio", 0.01, "Max diff pixel ratio before marking as changed (informational)")
-
-	_ = cmd.MarkFlagRequired("baseline")
-	_ = cmd.MarkFlagRequired("current")
 
 	return cmd
 }
@@ -114,34 +146,88 @@ func newUploadBaselinesCommand() *cobra.Command {
 baseline for future comparisons. Typically run after tests pass on the
 main branch.
 
+When --project is specified, the following defaults are applied:
+  --dir   → web/output/screenshots/
+  --dest  → s3://<bucket>/baselines/<project>/
+
 Examples:
 
-  # Upload to default location
-  ods playwright-diff upload-baselines \
-    --dir ./web/screenshots/ \
-    --dest s3://onyx-playwright-artifacts/baselines/admin/
+  # Use project defaults (recommended)
+  ods playwright-diff upload-baselines --project admin
 
-  # Upload with delete (remove old baselines not in current set)
+  # With delete (remove old baselines not in current set)
+  ods playwright-diff upload-baselines --project admin --delete
+
+  # Fully manual
   ods playwright-diff upload-baselines \
-    --dir ./web/screenshots/ \
-    --dest s3://onyx-playwright-artifacts/baselines/admin/ \
-    --delete`,
+    --dir ./web/output/screenshots/ \
+    --dest s3://onyx-playwright-artifacts/baselines/admin/`,
 		Run: func(cmd *cobra.Command, args []string) {
 			runUploadBaselines(opts)
 		},
 	}
 
+	cmd.Flags().StringVar(&opts.Project, "project", "", "Project name (e.g. admin); sets sensible defaults for dir and dest")
 	cmd.Flags().StringVar(&opts.Dir, "dir", "", "Local directory containing screenshots to upload")
 	cmd.Flags().StringVar(&opts.Dest, "dest", "", "S3 destination URL (s3://...)")
 	cmd.Flags().BoolVar(&opts.Delete, "delete", false, "Delete S3 files not present locally")
 
-	_ = cmd.MarkFlagRequired("dir")
-	_ = cmd.MarkFlagRequired("dest")
-
 	return cmd
 }
 
+// resolveCompareDefaults fills in missing flags from the --project default when set.
+func resolveCompareDefaults(opts *PlaywrightDiffCompareOptions) {
+	bucket := getS3Bucket()
+
+	if opts.Project != "" {
+		if opts.Baseline == "" {
+			opts.Baseline = fmt.Sprintf("s3://%s/baselines/%s/", bucket, opts.Project)
+		}
+		if opts.Current == "" {
+			opts.Current = DefaultScreenshotDir
+		}
+		if opts.Output == "" {
+			opts.Output = filepath.Join(DefaultOutputDir, opts.Project, "index.html")
+		}
+	}
+
+	// Fall back for output even without --project
+	if opts.Output == "" {
+		opts.Output = "visual-diff/index.html"
+	}
+}
+
+// resolveUploadDefaults fills in missing flags from the --project default when set.
+func resolveUploadDefaults(opts *PlaywrightDiffUploadOptions) {
+	bucket := getS3Bucket()
+
+	if opts.Project != "" {
+		if opts.Dir == "" {
+			opts.Dir = DefaultScreenshotDir
+		}
+		if opts.Dest == "" {
+			opts.Dest = fmt.Sprintf("s3://%s/baselines/%s/", bucket, opts.Project)
+		}
+	}
+}
+
 func runCompare(opts *PlaywrightDiffCompareOptions) {
+	resolveCompareDefaults(opts)
+
+	// Validate required fields
+	if opts.Baseline == "" {
+		log.Fatal("--baseline is required (or use --project to set defaults)")
+	}
+	if opts.Current == "" {
+		log.Fatal("--current is required (or use --project to set defaults)")
+	}
+
+	// Determine the project name for the summary (use flag or derive from path)
+	project := opts.Project
+	if project == "" {
+		project = "default"
+	}
+
 	baselineDir := opts.Baseline
 
 	// If baseline is an S3 URL, download to a temp directory
@@ -168,8 +254,28 @@ func runCompare(opts *PlaywrightDiffCompareOptions) {
 		}
 	}
 
+	// Resolve the output path
+	outputPath := opts.Output
+	if !filepath.IsAbs(outputPath) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			log.Fatalf("Failed to get working directory: %v", err)
+		}
+		outputPath = filepath.Join(cwd, outputPath)
+	}
+	summaryPath := filepath.Join(filepath.Dir(outputPath), "summary.json")
+
+	// If the current screenshots directory doesn't exist, write an empty summary and exit
 	if _, err := os.Stat(opts.Current); os.IsNotExist(err) {
-		log.Fatalf("Current screenshots directory does not exist: %s", opts.Current)
+		log.Warnf("Current screenshots directory does not exist: %s", opts.Current)
+		log.Warn("No screenshots captured for this project — writing empty summary.")
+
+		summary := imgdiff.Summary{Project: project}
+		if err := imgdiff.WriteSummary(summary, summaryPath); err != nil {
+			log.Fatalf("Failed to write summary: %v", err)
+		}
+		log.Infof("Summary written to: %s", summaryPath)
+		return
 	}
 
 	log.Infof("Comparing screenshots...")
@@ -185,25 +291,36 @@ func runCompare(opts *PlaywrightDiffCompareOptions) {
 	// Print terminal summary
 	printSummary(results)
 
-	// Generate HTML report
-	outputPath := opts.Output
-	if !filepath.IsAbs(outputPath) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			log.Fatalf("Failed to get working directory: %v", err)
+	// Build and write JSON summary (always)
+	summary := imgdiff.BuildSummary(project, results)
+	if err := imgdiff.WriteSummary(summary, summaryPath); err != nil {
+		log.Fatalf("Failed to write summary: %v", err)
+	}
+	log.Infof("Summary written to: %s", summaryPath)
+
+	// Generate HTML report only if there are differences
+	if summary.HasDifferences {
+		log.Infof("Generating report: %s", outputPath)
+		if err := imgdiff.GenerateReport(results, outputPath); err != nil {
+			log.Fatalf("Failed to generate report: %v", err)
 		}
-		outputPath = filepath.Join(cwd, outputPath)
+		log.Infof("Report generated successfully: %s", outputPath)
+	} else {
+		log.Infof("No visual differences detected — skipping report generation.")
 	}
-
-	log.Infof("Generating report: %s", outputPath)
-	if err := imgdiff.GenerateReport(results, outputPath); err != nil {
-		log.Fatalf("Failed to generate report: %v", err)
-	}
-
-	log.Infof("Report generated successfully: %s", outputPath)
 }
 
 func runUploadBaselines(opts *PlaywrightDiffUploadOptions) {
+	resolveUploadDefaults(opts)
+
+	// Validate required fields
+	if opts.Dir == "" {
+		log.Fatal("--dir is required (or use --project to set defaults)")
+	}
+	if opts.Dest == "" {
+		log.Fatal("--dest is required (or use --project to set defaults)")
+	}
+
 	if _, err := os.Stat(opts.Dir); os.IsNotExist(err) {
 		log.Fatalf("Screenshots directory does not exist: %s", opts.Dir)
 	}

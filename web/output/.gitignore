@@ -1,4 +1,0 @@
-# Output directory for tests.
-# Ignore everything except this ignore file.
-*
-!.gitignore

@@ -114,7 +114,7 @@ export async function expectScreenshot(
     }
   } else {
     // Capture-only mode — save the screenshot without asserting
-    const screenshotPath = name ? `screenshots/${name}.png` : undefined;
+    const screenshotPath = name ? `output/screenshots/${name}.png` : undefined;
     await page.screenshot({
       path: screenshotPath,
       fullPage,
