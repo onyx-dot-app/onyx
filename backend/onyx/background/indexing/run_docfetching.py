@@ -677,10 +677,6 @@ def connector_document_extraction(
                 logger.debug(f"Indexing batch of documents: {batch_description}")
                 memory_tracer.increment_and_maybe_trace()
 
-                # NOTE: RAW_BINARY processing mode is not handled here.
-                # CRAFT_FILE documents use direct S3 upload via API endpoints,
-                # bypassing the connector indexing flow entirely.
-
                 if processing_mode == ProcessingMode.FILE_SYSTEM:
                     # File system only - write directly to persistent storage,
                     # skip chunking/embedding/Vespa but still track documents in DB
@@ -815,10 +811,8 @@ def connector_document_extraction(
                 total_batches=batch_num,
             )
 
-        # Trigger file sync to user's sandbox (if running)
-        # This syncs files from S3 to any running sandbox pod
-        # NOTE: Only FILE_SYSTEM connectors trigger sync here. RAW_BINARY (User Library)
-        # bypasses the connector flow and triggers sync directly from the API endpoints.
+        # Trigger file sync to user's sandbox (if running) - only for FILE_SYSTEM mode
+        # This syncs the newly written documents from S3 to any running sandbox pod
         if processing_mode == ProcessingMode.FILE_SYSTEM:
             creator_id = index_attempt.connector_credential_pair.creator_id
             if creator_id:

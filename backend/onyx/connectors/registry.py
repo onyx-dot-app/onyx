@@ -217,8 +217,4 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.mock_connector.connector",
         class_name="MockConnector",
     ),
-    # NOTE: CRAFT_FILE intentionally NOT registered here.
-    # CRAFT_FILE uses direct S3 upload via user_library.py API endpoints,
-    # bypassing the connector indexing flow entirely. The shared cc_pair
-    # is seeded during app startup via associate_craft_file_cc_pair().
 }
