@@ -73,10 +73,10 @@ CONNECTOR_INFO: dict[str, ConnectorInfoEntry] = {
         "file_pattern": "`PAGE_TITLE.json`",
         "scan_depth": 1,
     },
-    "org_info": {
-        "summary": "Organizational structure and user identity",
-        "file_pattern": "Various JSON files",
-        "scan_depth": 0,
+    "user_library": {
+        "summary": "User-uploaded files (spreadsheets, documents, presentations, etc.)",
+        "file_pattern": "Any file format",
+        "scan_depth": 1,
     },
 }
 DEFAULT_SCAN_DEPTH = 1
