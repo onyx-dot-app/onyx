@@ -77,6 +77,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
         response.raise_for_status()
         chat_session_id = response.json()["chat_session_id"]
@@ -134,6 +135,7 @@ class ChatSessionManager:
             headers=headers,
             stream=True,
             cookies=cookies,
+            timeout=30,
         )
 
         streamed_response = ChatSessionManager.analyze_response(response)
@@ -270,6 +272,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
         response.raise_for_status()
 
@@ -306,6 +309,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
         response.raise_for_status()
 
@@ -327,6 +331,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
         return response.ok
 
@@ -349,6 +354,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
         return response.ok
 
@@ -369,6 +375,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
         return response.ok
 
@@ -389,6 +396,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
         # Chat session should return 400 if it doesn't exist
         return response.status_code == 400
@@ -411,6 +419,7 @@ class ChatSessionManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=30,
         )
 
         if response.status_code == 200:
