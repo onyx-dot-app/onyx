@@ -115,6 +115,7 @@ class ChatSessionManager:
         forced_tool_ids: list[int] | None = None,
         chat_session: DATestChatSession | None = None,
         mock_llm_response: str | None = None,
+        deep_research: bool = False,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
@@ -131,6 +132,7 @@ class ChatSessionManager:
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
             forced_tool_ids=forced_tool_ids,
+            deep_research=deep_research,
         )
 
         headers = (
@@ -187,6 +189,7 @@ class ChatSessionManager:
         use_existing_user_message: bool = False,
         forced_tool_ids: list[int] | None = None,
         mock_llm_response: str | None = None,
+        deep_research: bool = False,
     ) -> None:
         """
         Send a message and simulate client disconnect before stream completes.
@@ -223,6 +226,7 @@ class ChatSessionManager:
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
             forced_tool_ids=forced_tool_ids,
+            deep_research=deep_research,
         )
 
         headers = (

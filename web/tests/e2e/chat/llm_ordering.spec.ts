@@ -11,7 +11,7 @@ test.describe("LLM Ordering", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
 
     // Create image generation config so the checkbox appears
     try {
@@ -24,7 +24,7 @@ test.describe("LLM Ordering", () => {
   });
 
   test.afterEach(async ({ page }) => {
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
 
     if (imageGenConfigId !== null) {
       try {

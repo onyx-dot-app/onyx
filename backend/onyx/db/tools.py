@@ -55,6 +55,8 @@ def get_tools(
             # To avoid showing rows that have JSON literal `null` stored in the column to the user.
             # tools from mcp servers will not have an openapi schema but it has `null`, so we need to exclude them.
             func.jsonb_typeof(Tool.openapi_schema) == "object",
+            # Exclude built-in tools that happen to have an openapi_schema
+            Tool.in_code_tool_id.is_(None),
         )
 
     return list(db_session.scalars(query).all())

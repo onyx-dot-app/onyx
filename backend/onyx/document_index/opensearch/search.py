@@ -113,8 +113,13 @@ DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000
 # cutoff filtering during retrieval.
 ASSUMED_DOCUMENT_AGE_DAYS = 90
 
-# The default number of neighbors to consider for vector similarity search.
-DEFAULT_NUM_CANDIDATES = 1000
+# The default number of neighbors to consider for knn vector similarity search.
+# NOTE: Higher k slows down queries. Although this is a tuning question and
+# there is no correct value, a brief internet search will show that it is
+# generally accepted that k roughly equal to the number of hits you expect to
+# get is decent. I prefer to use a deterministic k rather than using num hits
+# directly which is dynamic; 50 seems reasonable.
+DEFAULT_K_NUM_CANDIDATES = 50
 
 
 class DocumentQuery:
@@ -249,7 +254,6 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
-        num_candidates: int = DEFAULT_NUM_CANDIDATES,
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
@@ -264,10 +268,6 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the hybrid search query.
             include_hidden: Whether to include hidden documents.
-            num_candidates: The number of neighbors to consider for vector
-                similarity search. Generally more candidates improves search
-                quality at the cost of performance. Defaults to
-                DEFAULT_NUM_CANDIDATES.
 
         Returns:
             A dictionary representing the final hybrid search query.
@@ -279,7 +279,7 @@ class DocumentQuery:
             )
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector, num_candidates
+            query_text, query_vector, num_candidates=DEFAULT_K_NUM_CANDIDATES
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,

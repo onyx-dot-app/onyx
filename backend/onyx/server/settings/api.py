@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.auth.users import is_user_admin
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
@@ -77,6 +78,7 @@ def fetch_settings(
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
+        vector_db_enabled=not DISABLE_VECTOR_DB,
     )
 
 

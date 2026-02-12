@@ -69,6 +69,9 @@ def test_cold_startup_default_assistant() -> None:
         assert (
             "web_search" in tool_names
         ), "Default assistant should have WebSearchTool attached"
+        assert (
+            "read_file" in tool_names
+        ), "Default assistant should have FileReaderTool attached"
 
         # Also verify by display names for clarity
         assert (
@@ -80,8 +83,11 @@ def test_cold_startup_default_assistant() -> None:
         assert (
             "Web Search" in tool_display_names
         ), "Default assistant should have Web Search tool"
-
-        # Should have exactly 4 tools
         assert (
-            len(tool_associations) == 4
-        ), f"Default assistant should have exactly 4 tools attached, got {len(tool_associations)}"
+            "File Reader" in tool_display_names
+        ), "Default assistant should have File Reader tool"
+
+        # Should have exactly 5 tools
+        assert (
+            len(tool_associations) == 5
+        ), f"Default assistant should have exactly 5 tools attached, got {len(tool_associations)}"

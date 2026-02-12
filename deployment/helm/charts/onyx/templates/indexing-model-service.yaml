@@ -1,3 +1,4 @@
+{{- if .Values.vectorDB.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -16,3 +17,4 @@ spec:
       port: {{ .Values.indexCapability.service.servicePort  }}
       targetPort: {{ .Values.indexCapability.service.targetPort }}
   type: {{ .Values.indexCapability.service.type }}
+{{- end }}

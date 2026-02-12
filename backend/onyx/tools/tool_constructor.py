@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.enums import MCPAuthenticationPerformer
@@ -30,6 +31,7 @@ from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
+from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -55,6 +57,13 @@ class SearchToolConfig(BaseModel):
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
+
+
+class FileReaderToolConfig(BaseModel):
+    # IDs from the ``user_file`` table (project / persona-attached files).
+    user_file_ids: list[UUID] = []
+    # IDs from the ``file_record`` table (chat-attached files).
+    chat_file_ids: list[UUID] = []
 
 
 class CustomToolConfig(BaseModel):
@@ -103,6 +112,7 @@ def construct_tools(
     llm: LLM,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
+    file_reader_tool_config: FileReaderToolConfig | None = None,
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
 ) -> dict[int, list[Tool]]:
@@ -236,6 +246,18 @@ def construct_tools(
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                ]
+
+            # Handle File Reader Tool
+            elif tool_cls.__name__ == FileReaderTool.__name__:
+                cfg = file_reader_tool_config or FileReaderToolConfig()
+                tool_dict[db_tool_model.id] = [
+                    FileReaderTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        user_file_ids=cfg.user_file_ids,
+                        chat_file_ids=cfg.chat_file_ids,
+                    )
                 ]
 
             # Handle KG Tool
@@ -388,6 +410,7 @@ def construct_tools(
     if (
         not added_search_tool
         and search_usage_forcing_setting == SearchToolUsage.ENABLED
+        and not DISABLE_VECTOR_DB
     ):
         # Get the database tool model for SearchTool
         search_tool_db_model = get_builtin_tool(db_session, SearchTool)

@@ -12,7 +12,7 @@ export interface ConnectorFilesResponse {
 export interface FileUploadResponse {
   file_paths: string[];
   file_names: string[];
-  zip_metadata: Record<string, unknown>;
+  zip_metadata_file_id: string | null;
 }
 
 export async function updateConnectorFiles(

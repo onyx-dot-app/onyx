@@ -18,6 +18,7 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.server.documents.models import ChunkInfo
 from onyx.server.documents.models import DocumentInfo
+from onyx.server.utils_vector_db import require_vector_db
 
 
 router = APIRouter(prefix="/document")
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/document")
 
 # Have to use a query parameter as FastAPI is interpreting the URL type document_ids
 # as a different path
-@router.get("/document-size-info")
+@router.get("/document-size-info", dependencies=[Depends(require_vector_db)])
 def get_document_info(
     document_id: str = Query(...),
     user: User = Depends(current_user),
@@ -69,7 +70,7 @@ def get_document_info(
     )
 
 
-@router.get("/chunk-info")
+@router.get("/chunk-info", dependencies=[Depends(require_vector_db)])
 def get_chunk_info(
     document_id: str = Query(...),
     chunk_id: int = Query(...),
