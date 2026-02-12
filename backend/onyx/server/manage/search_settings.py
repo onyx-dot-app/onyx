@@ -42,8 +42,8 @@ def set_new_search_settings(
     Gives an error if the same model name is used as the current or secondary index
     """
     # TODO(andrei): Re-enable.
-    # NOTE Enable external dependency tests in test_search_settings.py
-    # when this is reenabled
+    # NOTE Enable integration external dependency tests in test_search_settings.py
+    # when this is reenabled. They are currently skipped
     logger.error("Setting new search settings is temporarily disabled.")
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -71,16 +71,11 @@ def set_new_search_settings(
     #             detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
     #         )
 
-    # if (
-    #     search_settings_new.enable_contextual_rag
-    #     and
-    #     (error_message := validate_contextual_rag_model(
-    #         provider_name=search_settings_new.contextual_rag_llm_provider,
-    #         model_name=search_settings_new.contextual_rag_llm_name,
-    #         db_session=db_session,
-    #     ))
-    # ):
-    #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_message)
+    # validate_contextual_rag_model(
+    #     provider_name=search_settings_new.contextual_rag_llm_provider,
+    #     model_name=search_settings_new.contextual_rag_llm_name,
+    #     db_session=db_session,
+    # )
 
     # search_settings = get_current_search_settings(db_session)
 
@@ -244,16 +239,11 @@ def update_saved_search_settings(
             detail="Contextual RAG disabled in Onyx Cloud",
         )
 
-    if search_settings.enable_contextual_rag and (
-        error_message := validate_contextual_rag_model(
-            provider_name=search_settings.contextual_rag_llm_provider,
-            model_name=search_settings.contextual_rag_llm_name,
-            db_session=db_session,
-        )
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
-        )
+    validate_contextual_rag_model(
+        provider_name=search_settings.contextual_rag_llm_provider,
+        model_name=search_settings.contextual_rag_llm_name,
+        db_session=db_session,
+    )
 
     update_current_search_settings(
         search_settings=search_settings, db_session=db_session
@@ -284,6 +274,19 @@ def delete_unstructured_api_key_endpoint(
 
 
 def validate_contextual_rag_model(
+    provider_name: str | None,
+    model_name: str | None,
+    db_session: Session,
+) -> None:
+    if error_msg := _validate_contextual_rag_model(
+        provider_name=provider_name,
+        model_name=model_name,
+        db_session=db_session,
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+
+def _validate_contextual_rag_model(
     provider_name: str | None,
     model_name: str | None,
     db_session: Session,

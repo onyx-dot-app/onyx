@@ -1,3 +1,4 @@
+import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -40,6 +41,44 @@ def _update_inference_settings(user: DATestUser, settings: dict) -> None:
     response = requests.post(
         f"{SEARCH_SETTINGS_URL}/update-inference-settings",
         json=settings,
+        headers=user.headers,
+    )
+    response.raise_for_status()
+
+
+def _set_new_search_settings(
+    user: DATestUser,
+    current_settings: dict,
+    enable_contextual_rag: bool = False,
+    contextual_rag_llm_name: str | None = None,
+    contextual_rag_llm_provider: str | None = None,
+) -> requests.Response:
+    """POST to set-new-search-settings, deriving the payload from current settings."""
+    payload = {
+        "model_name": current_settings["model_name"],
+        "model_dim": current_settings["model_dim"],
+        "normalize": current_settings["normalize"],
+        "query_prefix": current_settings.get("query_prefix") or "",
+        "passage_prefix": current_settings.get("passage_prefix") or "",
+        "provider_type": current_settings.get("provider_type"),
+        "index_name": None,
+        "multipass_indexing": current_settings.get("multipass_indexing", False),
+        "embedding_precision": current_settings["embedding_precision"],
+        "reduced_dimension": current_settings.get("reduced_dimension"),
+        "enable_contextual_rag": enable_contextual_rag,
+        "contextual_rag_llm_name": contextual_rag_llm_name,
+        "contextual_rag_llm_provider": contextual_rag_llm_provider,
+    }
+    return requests.post(
+        f"{SEARCH_SETTINGS_URL}/set-new-search-settings",
+        json=payload,
+        headers=user.headers,
+    )
+
+
+def _cancel_new_embedding(user: DATestUser) -> None:
+    response = requests.post(
+        f"{SEARCH_SETTINGS_URL}/cancel-new-embedding",
         headers=user.headers,
     )
     response.raise_for_status()
@@ -324,3 +363,136 @@ def test_update_contextual_rag_missing_model_name(
     )
     assert response.status_code == 400
     assert "Provider name and model name are required" in response.json()["detail"]
+
+
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+def test_set_new_search_settings_with_contextual_rag(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+) -> None:
+    """Create new search settings with contextual RAG enabled and verify the
+    secondary settings contain the correct provider and model."""
+    current = _get_current_search_settings(admin_user)
+
+    response = _set_new_search_settings(
+        user=admin_user,
+        current_settings=current,
+        enable_contextual_rag=True,
+        contextual_rag_llm_name=llm_provider.default_model_name,
+        contextual_rag_llm_provider=llm_provider.name,
+    )
+    response.raise_for_status()
+    assert "id" in response.json()
+
+    secondary = _get_secondary_search_settings(admin_user)
+    assert secondary is not None
+    assert secondary["enable_contextual_rag"] is True
+    assert secondary["contextual_rag_llm_name"] == llm_provider.default_model_name
+    assert secondary["contextual_rag_llm_provider"] == llm_provider.name
+
+    _cancel_new_embedding(admin_user)
+
+
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+def test_set_new_search_settings_without_contextual_rag(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    """Create new search settings with contextual RAG disabled and verify
+    the secondary settings have no RAG provider."""
+    current = _get_current_search_settings(admin_user)
+
+    response = _set_new_search_settings(
+        user=admin_user,
+        current_settings=current,
+        enable_contextual_rag=False,
+    )
+    response.raise_for_status()
+
+    secondary = _get_secondary_search_settings(admin_user)
+    assert secondary is not None
+    assert secondary["enable_contextual_rag"] is False
+    assert secondary["contextual_rag_llm_name"] is None
+    assert secondary["contextual_rag_llm_provider"] is None
+
+    _cancel_new_embedding(admin_user)
+
+
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+def test_set_new_then_update_inference_settings(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+) -> None:
+    """Create new secondary settings, then update the current (primary) settings
+    with contextual RAG and verify both are visible through get-all."""
+    current = _get_current_search_settings(admin_user)
+
+    # Create secondary settings without contextual RAG
+    response = _set_new_search_settings(
+        user=admin_user,
+        current_settings=current,
+        enable_contextual_rag=False,
+    )
+    response.raise_for_status()
+
+    # Update the *current* (primary) settings with a contextual RAG provider
+    current["enable_contextual_rag"] = True
+    current["contextual_rag_llm_name"] = llm_provider.default_model_name
+    current["contextual_rag_llm_provider"] = llm_provider.name
+    _update_inference_settings(admin_user, current)
+
+    all_settings = _get_all_search_settings(admin_user)
+
+    primary = all_settings["current_settings"]
+    assert primary["contextual_rag_llm_name"] == llm_provider.default_model_name
+    assert primary["contextual_rag_llm_provider"] == llm_provider.name
+
+    secondary = all_settings["secondary_settings"]
+    assert secondary is not None
+    assert secondary["contextual_rag_llm_name"] is None
+    assert secondary["contextual_rag_llm_provider"] is None
+
+    _cancel_new_embedding(admin_user)
+
+
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+def test_set_new_search_settings_replaces_previous_secondary(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+) -> None:
+    """Calling set-new-search-settings twice should retire the first secondary
+    and replace it with the second."""
+    current = _get_current_search_settings(admin_user)
+
+    # First: no contextual RAG
+    resp1 = _set_new_search_settings(
+        user=admin_user,
+        current_settings=current,
+        enable_contextual_rag=False,
+    )
+    resp1.raise_for_status()
+    first_id = resp1.json()["id"]
+
+    # Second: with contextual RAG
+    resp2 = _set_new_search_settings(
+        user=admin_user,
+        current_settings=current,
+        enable_contextual_rag=True,
+        contextual_rag_llm_name=llm_provider.default_model_name,
+        contextual_rag_llm_provider=llm_provider.name,
+    )
+    resp2.raise_for_status()
+    second_id = resp2.json()["id"]
+
+    assert second_id != first_id
+
+    secondary = _get_secondary_search_settings(admin_user)
+    assert secondary is not None
+    assert secondary["enable_contextual_rag"] is True
+    assert secondary["contextual_rag_llm_name"] == llm_provider.default_model_name
+    assert secondary["contextual_rag_llm_provider"] == llm_provider.name
+
+    _cancel_new_embedding(admin_user)
