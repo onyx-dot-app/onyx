@@ -42,7 +42,7 @@ def set_new_search_settings(
     Gives an error if the same model name is used as the current or secondary index
     """
     # TODO(andrei): Re-enable.
-    # NOTE Enable integration tests and external dependency tests in test_search_settings.py
+    # NOTE Enable external dependency tests in test_search_settings.py
     # when this is reenabled
     logger.error("Setting new search settings is temporarily disabled.")
     raise HTTPException(

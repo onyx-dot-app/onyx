@@ -243,3 +243,84 @@ def test_contextual_rag_settings_reflected_in_get_all(
     current = all_settings["current_settings"]
     assert current["contextual_rag_llm_name"] == llm_provider.default_model_name
     assert current["contextual_rag_llm_provider"] == llm_provider.name
+
+
+def test_update_contextual_rag_nonexistent_provider(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    """Updating with a provider that does not exist should return 400."""
+    settings = _get_current_search_settings(admin_user)
+    settings["enable_contextual_rag"] = True
+    settings["contextual_rag_llm_name"] = "some-model"
+    settings["contextual_rag_llm_provider"] = "nonexistent-provider"
+
+    response = requests.post(
+        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
+        json=settings,
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 400
+    assert "Provider nonexistent-provider not found" in response.json()["detail"]
+
+
+def test_update_contextual_rag_nonexistent_model(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+) -> None:
+    """Updating with a valid provider but a model not in that provider should return 400."""
+    settings = _get_current_search_settings(admin_user)
+    settings["enable_contextual_rag"] = True
+    settings["contextual_rag_llm_name"] = "nonexistent-model"
+    settings["contextual_rag_llm_provider"] = llm_provider.name
+
+    response = requests.post(
+        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
+        json=settings,
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 400
+    assert (
+        f"Model nonexistent-model not found in provider {llm_provider.name}"
+        in response.json()["detail"]
+    )
+
+
+def test_update_contextual_rag_missing_provider_name(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    """Providing a model name without a provider name should return 400."""
+    settings = _get_current_search_settings(admin_user)
+    settings["enable_contextual_rag"] = True
+    settings["contextual_rag_llm_name"] = "some-model"
+    settings["contextual_rag_llm_provider"] = None
+
+    response = requests.post(
+        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
+        json=settings,
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 400
+    assert "Provider name and model name are required" in response.json()["detail"]
+
+
+def test_update_contextual_rag_missing_model_name(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,
+) -> None:
+    """Providing a provider name without a model name should return 400."""
+    settings = _get_current_search_settings(admin_user)
+    settings["enable_contextual_rag"] = True
+    settings["contextual_rag_llm_name"] = None
+    settings["contextual_rag_llm_provider"] = llm_provider.name
+
+    response = requests.post(
+        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
+        json=settings,
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 400
+    assert "Provider name and model name are required" in response.json()["detail"]

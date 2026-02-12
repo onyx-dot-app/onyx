@@ -2,6 +2,7 @@
 to the indexing pipeline's LLM configuration."""
 
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -12,10 +13,14 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import create_search_settings
+from onyx.db.search_settings import get_secondary_search_settings
+from onyx.db.search_settings import update_search_settings_status
 from onyx.indexing.indexing_pipeline import IndexingPipelineResult
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.search_settings import set_new_search_settings
+from onyx.server.manage.search_settings import update_saved_search_settings
 
 
 TEST_CONTEXTUAL_RAG_LLM_NAME = "test-contextual-model"
@@ -133,117 +138,116 @@ def baseline_search_settings(
     )
 
 
-# @patch("onyx.server.manage.search_settings.get_default_document_index")
-# @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
-# @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
-# def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
-#     mock_index_handler: MagicMock,
-#     mock_get_llm: MagicMock,
-#     mock_get_doc_index: MagicMock,
-#     baseline_search_settings: None,
-#     db_session: Session,
-# ) -> None:
-#     """After creating search settings via set_new_search_settings with
-#     contextual RAG enabled, run_indexing_pipeline should call
-#     get_llm_for_contextual_rag with the LLM names from those settings."""
-#     _create_llm_provider_and_model(
-#         db_session=db_session,
-#         provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-#         model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
-#     )
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@patch("onyx.server.manage.search_settings.get_default_document_index")
+@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
+def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
+    mock_index_handler: MagicMock,
+    mock_get_llm: MagicMock,
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """After creating search settings via set_new_search_settings with
+    contextual RAG enabled, run_indexing_pipeline should call
+    get_llm_for_contextual_rag with the LLM names from those settings."""
+    _create_llm_provider_and_model(
+        db_session=db_session,
+        provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
+        model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
+    )
 
-#     set_new_search_settings(
-#         search_settings_new=_make_creation_request(),
-#         _=MagicMock(),
-#         db_session=db_session,
-#     )
+    set_new_search_settings(
+        search_settings_new=_make_creation_request(),
+        _=MagicMock(),
+        db_session=db_session,
+    )
 
-#     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
+    _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
-#     mock_get_llm.assert_called_once_with(
-#         TEST_CONTEXTUAL_RAG_LLM_NAME,
-#         TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-#     )
-
-
-# @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
-# @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
-# def test_indexing_pipeline_uses_updated_contextual_rag_settings(
-#     mock_index_handler: MagicMock,
-#     mock_get_llm: MagicMock,
-#     tenant_context: None,
-#     db_session: Session,
-# ) -> None:
-#     """After updating search settings via update_saved_search_settings,
-#     run_indexing_pipeline should use the updated LLM names."""
-#     _create_llm_provider_and_model(
-#         db_session=db_session,
-#         provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-#         model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
-#     )
-#     _create_llm_provider_and_model(
-#         db_session=db_session,
-#         provider_name=UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
-#         model_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
-#     )
-
-#     # Create baseline PRESENT settings with contextual RAG already enabled
-#     create_search_settings(
-#         search_settings=_make_saved_search_settings(),
-#         db_session=db_session,
-#         status=IndexModelStatus.PRESENT,
-#     )
-
-#     # Retire any FUTURE settings left over from other tests so the
-#     # pipeline uses the PRESENT (primary) settings we just created.
-#     secondary = get_secondary_search_settings(db_session)
-#     if secondary:
-#         update_search_settings_status(
-#             secondary, IndexModelStatus.PAST, db_session
-#         )
-
-#     # Update LLM names via the endpoint function
-#     update_saved_search_settings(
-#         search_settings=_make_saved_search_settings(
-#             llm_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
-#             llm_provider=UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
-#         ),
-#         _=MagicMock(),
-#         db_session=db_session,
-#     )
-
-#     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
-
-#     mock_get_llm.assert_called_once_with(
-#         UPDATED_CONTEXTUAL_RAG_LLM_NAME,
-#         UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
-#     )
+    mock_get_llm.assert_called_once_with(
+        TEST_CONTEXTUAL_RAG_LLM_NAME,
+        TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
+    )
 
 
-# @patch("onyx.server.manage.search_settings.get_default_document_index")
-# @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
-# @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
-# def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
-#     mock_index_handler: MagicMock,
-#     mock_get_llm: MagicMock,
-#     mock_get_doc_index: MagicMock,
-#     baseline_search_settings: None,
-#     db_session: Session,
-# ) -> None:
-#     """When contextual RAG is disabled in search settings,
-#     get_llm_for_contextual_rag should not be called."""
-#     _create_llm_provider_and_model(
-#         db_session=db_session,
-#         provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
-#         model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
-#     )
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
+def test_indexing_pipeline_uses_updated_contextual_rag_settings(
+    mock_index_handler: MagicMock,
+    mock_get_llm: MagicMock,
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """After updating search settings via update_saved_search_settings,
+    run_indexing_pipeline should use the updated LLM names."""
+    _create_llm_provider_and_model(
+        db_session=db_session,
+        provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
+        model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
+    )
+    _create_llm_provider_and_model(
+        db_session=db_session,
+        provider_name=UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
+        model_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
+    )
 
-#     set_new_search_settings(
-#         search_settings_new=_make_creation_request(enable_contextual_rag=False),
-#         _=MagicMock(),
-#         db_session=db_session,
-#     )
+    # Create baseline PRESENT settings with contextual RAG already enabled
+    create_search_settings(
+        search_settings=_make_saved_search_settings(),
+        db_session=db_session,
+        status=IndexModelStatus.PRESENT,
+    )
 
-#     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
+    # Retire any FUTURE settings left over from other tests so the
+    # pipeline uses the PRESENT (primary) settings we just created.
+    secondary = get_secondary_search_settings(db_session)
+    if secondary:
+        update_search_settings_status(secondary, IndexModelStatus.PAST, db_session)
 
-#     mock_get_llm.assert_not_called()
+    # Update LLM names via the endpoint function
+    update_saved_search_settings(
+        search_settings=_make_saved_search_settings(
+            llm_name=UPDATED_CONTEXTUAL_RAG_LLM_NAME,
+            llm_provider=UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
+        ),
+        _=MagicMock(),
+        db_session=db_session,
+    )
+
+    _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
+
+    mock_get_llm.assert_called_once_with(
+        UPDATED_CONTEXTUAL_RAG_LLM_NAME,
+        UPDATED_CONTEXTUAL_RAG_LLM_PROVIDER,
+    )
+
+
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@patch("onyx.server.manage.search_settings.get_default_document_index")
+@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
+def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
+    mock_index_handler: MagicMock,
+    mock_get_llm: MagicMock,
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """When contextual RAG is disabled in search settings,
+    get_llm_for_contextual_rag should not be called."""
+    _create_llm_provider_and_model(
+        db_session=db_session,
+        provider_name=TEST_CONTEXTUAL_RAG_LLM_PROVIDER,
+        model_name=TEST_CONTEXTUAL_RAG_LLM_NAME,
+    )
+
+    set_new_search_settings(
+        search_settings_new=_make_creation_request(enable_contextual_rag=False),
+        _=MagicMock(),
+        db_session=db_session,
+    )
+
+    _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
+
+    mock_get_llm.assert_not_called()
