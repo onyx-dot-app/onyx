@@ -244,6 +244,9 @@ class ChatMessageSimple(BaseModel):
     # represents the end of the cacheable prefix
     # used for prompt caching
     should_cache: bool = False
+    # When this message represents an injected text file, this is the file's ID.
+    # Used to detect which file messages survive context-window truncation.
+    file_id: str | None = None
 
 
 class ProjectFileMetadata(BaseModel):
@@ -252,6 +255,33 @@ class ProjectFileMetadata(BaseModel):
     file_id: str
     filename: str
     file_content: str
+
+
+class FileToolMetadata(BaseModel):
+    """Lightweight metadata for exposing files to the FileReaderTool.
+
+    Used when files cannot be loaded directly into context (project too large
+    or persona-attached user_files without direct-load path). The LLM receives
+    a listing of these so it knows which files it can read via ``read_file``.
+    """
+
+    file_id: str
+    filename: str
+    approx_char_count: int
+
+
+class ChatHistoryResult(BaseModel):
+    """Result of converting chat history to simple format.
+
+    Bundles the simple messages with metadata for every text file that was
+    injected into the history. After context-window truncation drops older
+    messages, callers compare surviving ``file_id`` tags against this map
+    to discover "forgotten" files whose metadata should be provided to the
+    FileReaderTool.
+    """
+
+    simple_messages: list[ChatMessageSimple]
+    all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
 class ExtractedProjectFiles(BaseModel):
@@ -263,6 +293,9 @@ class ExtractedProjectFiles(BaseModel):
     project_file_metadata: list[ProjectFileMetadata]
     # None if not a project
     project_uncapped_token_count: int | None
+    # Lightweight metadata for files exposed via FileReaderTool
+    # (populated when files don't fit in context and vector DB is disabled)
+    file_metadata_for_tool: list[FileToolMetadata] = []
 
 
 class LlmStepResult(BaseModel):

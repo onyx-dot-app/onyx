@@ -56,7 +56,7 @@ jobs:
         id: set-matrix
         run: |
           # Find all leaf-level directories in both test directories
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
@@ -448,6 +448,139 @@ jobs:
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
+  no-vectordb-tests:
+    needs: [build-backend-image, build-integration-image]
+    runs-on:
+      [
+        runs-on,
+        runner=4cpu-linux-arm64,
+        "run-id=${{ github.run_id }}-no-vectordb-tests",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 45
+
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Create .env file for no-vectordb Docker Compose
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          LICENSE_ENFORCEMENT_ENABLED=false
+          AUTH_TYPE=basic
+          POSTGRES_POOL_PRE_PING=true
+          POSTGRES_USE_NULL_POOL=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          DISABLE_VECTOR_DB=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
+          INTEGRATION_TESTS_MODE=true
+          USE_LIGHTWEIGHT_BACKGROUND_WORKER=true
+          EOF
+
+      # Start only the services needed for no-vectordb mode (no Vespa, no model servers)
+      - name: Start Docker containers (no-vectordb)
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml up \
+            relational_db \
+            cache \
+            minio \
+            api_server \
+            background \
+            -d
+        id: start_docker_no_vectordb
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Starting wait-for-service script (no-vectordb)..."
+          start_time=$(date +%s)
+          timeout=300
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. Service did not become ready in $timeout seconds."
+              exit 1
+            fi
+            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
+            if [ "$response" = "200" ]; then
+              echo "API server is ready!"
+              break
+            elif [ "$response" = "curl_error" ]; then
+              echo "Curl encountered an error; retrying..."
+            else
+              echo "Service not ready yet (HTTP $response). Retrying in 5 seconds..."
+            fi
+            sleep 5
+          done
+
+      - name: Run No-VectorDB Integration Tests
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            echo "Running no-vectordb integration tests..."
+            docker run --rm --network onyx_default \
+              --name test-runner \
+              -e POSTGRES_HOST=relational_db \
+              -e POSTGRES_USER=postgres \
+              -e POSTGRES_PASSWORD=password \
+              -e POSTGRES_DB=postgres \
+              -e DB_READONLY_USER=db_readonly_user \
+              -e DB_READONLY_PASSWORD=password \
+              -e POSTGRES_POOL_PRE_PING=true \
+              -e POSTGRES_USE_NULL_POOL=true \
+              -e REDIS_HOST=cache \
+              -e API_SERVER_HOST=api_server \
+              -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e TEST_WEB_HOSTNAME=test-runner \
+              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
+              /app/tests/integration/tests/no_vectordb
+
+      - name: Dump API server logs (no-vectordb)
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml \
+            logs --no-color api_server > $GITHUB_WORKSPACE/api_server_no_vectordb.log || true
+
+      - name: Dump all-container logs (no-vectordb)
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml \
+            logs --no-color > $GITHUB_WORKSPACE/docker-compose-no-vectordb.log || true
+
+      - name: Upload logs (no-vectordb)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: docker-all-logs-no-vectordb
+          path: ${{ github.workspace }}/docker-compose-no-vectordb.log
+
+      - name: Stop Docker containers (no-vectordb)
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.no-vectordb.yml -f docker-compose.dev.yml down -v
+
   multitenant-tests:
     needs:
       [build-backend-image, build-model-server-image, build-integration-image]
@@ -587,7 +720,7 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 45
-    needs: [integration-tests, multitenant-tests]
+    needs: [integration-tests, no-vectordb-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
       - name: Check job status

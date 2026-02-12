@@ -82,6 +82,10 @@ export function useTimelineHeader(
       return { headerText: "Generating images", hasPackets, userStopped };
     }
 
+    if (packetType === PacketType.FILE_READER_START) {
+      return { headerText: "Reading file", hasPackets, userStopped };
+    }
+
     if (packetType === PacketType.CUSTOM_TOOL_START) {
       const toolName = (firstPacket.obj as CustomToolStart).tool_name;
       return {

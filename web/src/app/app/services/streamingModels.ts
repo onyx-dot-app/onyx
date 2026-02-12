@@ -31,6 +31,10 @@ export enum PacketType {
   CUSTOM_TOOL_START = "custom_tool_start",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
+  // File reader tool packets
+  FILE_READER_START = "file_reader_start",
+  FILE_READER_RESULT = "file_reader_result",
+
   // Reasoning packets
   REASONING_START = "reasoning_start",
   REASONING_DELTA = "reasoning_delta",
@@ -169,6 +173,22 @@ export interface CustomToolDelta extends BaseObj {
   file_ids?: string[] | null;
 }
 
+// File Reader Packets
+export interface FileReaderStart extends BaseObj {
+  type: "file_reader_start";
+}
+
+export interface FileReaderResult extends BaseObj {
+  type: "file_reader_result";
+  file_name: string;
+  file_id: string;
+  start_char: number;
+  end_char: number;
+  total_chars: number;
+  preview_start: string;
+  preview_end: string;
+}
+
 // Reasoning Packets
 export interface ReasoningStart extends BaseObj {
   type: "reasoning_start";
@@ -267,12 +287,18 @@ export type CustomToolObj =
   | CustomToolDelta
   | SectionEnd
   | PacketError;
+export type FileReaderToolObj =
+  | FileReaderStart
+  | FileReaderResult
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
   | PythonToolObj
   | FetchToolObj
-  | CustomToolObj;
+  | CustomToolObj
+  | FileReaderToolObj;
 
 export type ReasoningObj =
   | ReasoningStart
@@ -365,6 +391,11 @@ export interface FetchToolPacket {
 export interface CustomToolPacket {
   placement: Placement;
   obj: CustomToolObj;
+}
+
+export interface FileReaderToolPacket {
+  placement: Placement;
+  obj: FileReaderToolObj;
 }
 
 export interface ReasoningPacket {

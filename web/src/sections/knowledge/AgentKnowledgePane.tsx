@@ -59,6 +59,7 @@ interface KnowledgeSidebarProps {
   onNavigateToRecent: () => void;
   onNavigateToDocumentSets: () => void;
   onNavigateToSource: (source: ValidSources) => void;
+  vectorDbEnabled: boolean;
 }
 
 function KnowledgeSidebar({
@@ -72,6 +73,7 @@ function KnowledgeSidebar({
   onNavigateToRecent,
   onNavigateToDocumentSets,
   onNavigateToSource,
+  vectorDbEnabled,
 }: KnowledgeSidebarProps) {
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
@@ -92,56 +94,62 @@ function KnowledgeSidebar({
         Your Files
       </LineItem>
 
-      <LineItem
-        icon={SvgFolder}
-        description="(deprecated)"
-        onClick={onNavigateToDocumentSets}
-        selected={activeView === "document-sets"}
-        emphasized={
-          activeView === "document-sets" || selectedDocumentSetIds.length > 0
-        }
-        aria-label="knowledge-sidebar-document-sets"
-        rightChildren={
-          selectedDocumentSetIds.length > 0 ? (
-            <Text mainUiAction className="text-action-link-05">
-              {selectedDocumentSetIds.length}
-            </Text>
-          ) : undefined
-        }
-      >
-        Document Set
-      </LineItem>
-
-      <Separator noPadding />
-
-      {connectedSources.map((connectedSource) => {
-        const sourceMetadata = getSourceMetadata(connectedSource.source);
-        const isSelected = selectedSources.includes(connectedSource.source);
-        const isActive =
-          activeView === "sources" && activeSource === connectedSource.source;
-        const selectionCount =
-          sourceSelectionCounts.get(connectedSource.source) ?? 0;
-
-        return (
+      {vectorDbEnabled && (
+        <>
           <LineItem
-            key={connectedSource.source}
-            icon={sourceMetadata.icon}
-            onClick={() => onNavigateToSource(connectedSource.source)}
-            selected={isActive}
-            emphasized={isActive || isSelected || selectionCount > 0}
-            aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
+            icon={SvgFolder}
+            description="(deprecated)"
+            onClick={onNavigateToDocumentSets}
+            selected={activeView === "document-sets"}
+            emphasized={
+              activeView === "document-sets" ||
+              selectedDocumentSetIds.length > 0
+            }
+            aria-label="knowledge-sidebar-document-sets"
             rightChildren={
-              selectionCount > 0 ? (
+              selectedDocumentSetIds.length > 0 ? (
                 <Text mainUiAction className="text-action-link-05">
-                  {selectionCount}
+                  {selectedDocumentSetIds.length}
                 </Text>
               ) : undefined
             }
           >
-            {sourceMetadata.displayName}
+            Document Set
           </LineItem>
-        );
-      })}
+
+          <Separator noPadding />
+
+          {connectedSources.map((connectedSource) => {
+            const sourceMetadata = getSourceMetadata(connectedSource.source);
+            const isSelected = selectedSources.includes(connectedSource.source);
+            const isActive =
+              activeView === "sources" &&
+              activeSource === connectedSource.source;
+            const selectionCount =
+              sourceSelectionCounts.get(connectedSource.source) ?? 0;
+
+            return (
+              <LineItem
+                key={connectedSource.source}
+                icon={sourceMetadata.icon}
+                onClick={() => onNavigateToSource(connectedSource.source)}
+                selected={isActive}
+                emphasized={isActive || isSelected || selectionCount > 0}
+                aria-label={`knowledge-sidebar-source-${connectedSource.source}`}
+                rightChildren={
+                  selectionCount > 0 ? (
+                    <Text mainUiAction className="text-action-link-05">
+                      {selectionCount}
+                    </Text>
+                  ) : undefined
+                }
+              >
+                {sourceMetadata.displayName}
+              </LineItem>
+            );
+          })}
+        </>
+      )}
     </TableLayouts.SidebarLayout>
   );
 }
@@ -534,6 +542,7 @@ interface KnowledgeTwoColumnViewProps {
   hasProcessingFiles: boolean;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   onSelectionCountChange: (source: ValidSources, count: number) => void;
+  vectorDbEnabled: boolean;
 }
 
 const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
@@ -564,6 +573,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   hasProcessingFiles,
   initialAttachedDocuments,
   onSelectionCountChange,
+  vectorDbEnabled,
 }: KnowledgeTwoColumnViewProps) {
   return (
     <TableLayouts.TwoColumnLayout minHeight={18.75}>
@@ -578,6 +588,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
         onNavigateToRecent={onNavigateToRecent}
         onNavigateToDocumentSets={onNavigateToDocumentSets}
         onNavigateToSource={onNavigateToSource}
+        vectorDbEnabled={vectorDbEnabled}
       />
 
       <TableLayouts.ContentColumn>
@@ -630,6 +641,7 @@ interface KnowledgeAddViewProps {
   selectedFileIds: string[];
   selectedSources: ValidSources[];
   sourceSelectionCounts: Map<ValidSources, number>;
+  vectorDbEnabled: boolean;
 }
 
 const KnowledgeAddView = memo(function KnowledgeAddView({
@@ -641,6 +653,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
   selectedFileIds,
   selectedSources,
   sourceSelectionCounts,
+  vectorDbEnabled,
 }: KnowledgeAddViewProps) {
   return (
     <GeneralLayouts.Section
@@ -656,22 +669,24 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
         height="auto"
         wrap
       >
-        <LineItem
-          icon={SvgFolder}
-          description="(deprecated)"
-          onClick={onNavigateToDocumentSets}
-          emphasized={selectedDocumentSetIds.length > 0}
-          aria-label="knowledge-add-document-sets"
-          rightChildren={
-            selectedDocumentSetIds.length > 0 ? (
-              <Text mainUiAction className="text-action-link-05">
-                {selectedDocumentSetIds.length}
-              </Text>
-            ) : undefined
-          }
-        >
-          Document Sets
-        </LineItem>
+        {vectorDbEnabled && (
+          <LineItem
+            icon={SvgFolder}
+            description="(deprecated)"
+            onClick={onNavigateToDocumentSets}
+            emphasized={selectedDocumentSetIds.length > 0}
+            aria-label="knowledge-add-document-sets"
+            rightChildren={
+              selectedDocumentSetIds.length > 0 ? (
+                <Text mainUiAction className="text-action-link-05">
+                  {selectedDocumentSetIds.length}
+                </Text>
+              ) : undefined
+            }
+          >
+            Document Sets
+          </LineItem>
+        )}
 
         <LineItem
           icon={SvgFiles}
@@ -691,7 +706,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
         </LineItem>
       </GeneralLayouts.Section>
 
-      {connectedSources.length > 0 && (
+      {vectorDbEnabled && connectedSources.length > 0 && (
         <>
           <Text as="p" text03 secondaryBody>
             Connected Sources
@@ -837,6 +852,9 @@ interface AgentKnowledgePaneProps {
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   // Initial hierarchy nodes for existing agents (to calculate per-source counts)
   initialHierarchyNodes?: HierarchyNodeSnapshot[];
+  // When false, hides document sets, connected sources, and hierarchy nodes
+  // (these require a vector DB). User files are still shown.
+  vectorDbEnabled?: boolean;
 }
 
 export default function AgentKnowledgePane({
@@ -859,6 +877,7 @@ export default function AgentKnowledgePane({
   hasProcessingFiles,
   initialAttachedDocuments,
   initialHierarchyNodes,
+  vectorDbEnabled = true,
 }: AgentKnowledgePaneProps) {
   // View state
   const [view, setView] = useState<KnowledgeView>("main");
@@ -1039,6 +1058,7 @@ export default function AgentKnowledgePane({
             selectedFileIds={selectedFileIds}
             selectedSources={selectedSources}
             sourceSelectionCounts={sourceSelectionCounts}
+            vectorDbEnabled={vectorDbEnabled}
           />
         );
 
@@ -1074,6 +1094,7 @@ export default function AgentKnowledgePane({
             hasProcessingFiles={hasProcessingFiles}
             initialAttachedDocuments={initialAttachedDocuments}
             onSelectionCountChange={handleSelectionCountChange}
+            vectorDbEnabled={vectorDbEnabled}
           />
         );
 
@@ -1095,6 +1116,7 @@ export default function AgentKnowledgePane({
     connectedSources,
     hasProcessingFiles,
     initialAttachedDocuments,
+    vectorDbEnabled,
     onFileClick,
     onUploadChange,
     onDocumentIdsChange,

@@ -17,6 +17,7 @@ from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
@@ -109,6 +110,7 @@ def generate_final_report(
     user_identity: LLMUserIdentity | None,
     saved_reasoning: str | None = None,
     pre_answer_processing_time: float | None = None,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
 ) -> bool:
     """Generate the final research report.
 
@@ -139,6 +141,7 @@ def generate_final_report(
             reminder_message=reminder_message,
             project_files=None,
             available_tokens=llm.config.max_input_tokens,
+            all_injected_file_metadata=all_injected_file_metadata,
         )
 
         citation_processor = DynamicCitationProcessor()
@@ -194,6 +197,7 @@ def run_deep_research_llm_loop(
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
 ) -> None:
     with trace(
         "run_deep_research_llm_loop",
@@ -256,6 +260,7 @@ def run_deep_research_llm_loop(
                     project_files=None,
                     available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
+                    all_injected_file_metadata=all_injected_file_metadata,
                 )
 
                 # Calculate tool processing duration for clarification step
@@ -317,6 +322,7 @@ def run_deep_research_llm_loop(
                 project_files=None,
                 available_tokens=available_tokens,
                 last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT + 1,
+                all_injected_file_metadata=all_injected_file_metadata,
             )
 
             research_plan_generator = run_llm_step_pkt_generator(
@@ -442,6 +448,7 @@ def run_deep_research_llm_loop(
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                         pre_answer_processing_time=elapsed_seconds,
+                        all_injected_file_metadata=all_injected_file_metadata,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -481,6 +488,7 @@ def run_deep_research_llm_loop(
                     project_files=None,
                     available_tokens=available_tokens - first_cycle_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
+                    all_injected_file_metadata=all_injected_file_metadata,
                 )
 
                 if first_cycle_reminder_message is not None:
@@ -549,6 +557,7 @@ def run_deep_research_llm_loop(
                         user_identity=user_identity,
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
+                        all_injected_file_metadata=all_injected_file_metadata,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -572,6 +581,7 @@ def run_deep_research_llm_loop(
                         saved_reasoning=most_recent_reasoning,
                         pre_answer_processing_time=time.monotonic()
                         - processing_start_time,
+                        all_injected_file_metadata=all_injected_file_metadata,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -644,6 +654,7 @@ def run_deep_research_llm_loop(
                             user_identity=user_identity,
                             pre_answer_processing_time=time.monotonic()
                             - processing_start_time,
+                            all_injected_file_metadata=all_injected_file_metadata,
                         )
                         final_turn_index = report_turn_index + (
                             1 if report_reasoned else 0

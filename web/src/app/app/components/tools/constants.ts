@@ -14,6 +14,7 @@ export const IMAGE_GENERATION_TOOL_ID = "ImageGenerationTool";
 export const WEB_SEARCH_TOOL_ID = "WebSearchTool";
 export const PYTHON_TOOL_ID = "PythonTool";
 export const OPEN_URL_TOOL_ID = "OpenURLTool";
+export const FILE_READER_TOOL_ID = "FileReaderTool";
 
 // Icon mappings for system tools
 export const SYSTEM_TOOL_ICONS: Record<

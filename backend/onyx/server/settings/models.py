@@ -87,3 +87,7 @@ class UserSettings(Settings):
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA
     # Feature flag for Onyx Craft (Build Mode) - used for server-side redirects
     onyx_craft_enabled: bool = False
+    # True when a vector database (Vespa/OpenSearch) is available.
+    # False when DISABLE_VECTOR_DB is set — connectors, RAG search, and
+    # document sets are unavailable.
+    vector_db_enabled: bool = True
