@@ -170,9 +170,9 @@ const htmlTemplate = `<!DOCTYPE html>
   .tab-content { display: none; padding: 20px; }
   .tab-content.active { display: block; }
   .slider-container { position: relative; overflow: hidden; cursor: ew-resize; user-select: none; border: 1px solid #eee; border-radius: 4px; }
-  .slider-container img { display: block; max-width: 100%; height: auto; }
-  .slider-baseline { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
-  .slider-baseline img { display: block; max-width: none; height: auto; }
+  .slider-container > img { display: block; width: 100%; height: auto; }
+  .slider-baseline { position: absolute; top: 0; left: 0; width: 100%; height: 100%; clip-path: inset(0 50% 0 0); }
+  .slider-baseline img { display: block; width: 100%; height: auto; }
   .slider-divider { position: absolute; top: 0; width: 3px; height: 100%; background: #e65100; z-index: 10; cursor: ew-resize; }
   .slider-divider::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 32px; height: 32px; background: #e65100; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
   .slider-divider::after { content: "\2194"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 16px; z-index: 1; }
@@ -230,7 +230,7 @@ const htmlTemplate = `<!DOCTYPE html>
   <div class="tab-content active" data-tab="slider">
     <div class="slider-container" onmousedown="startSlider(event, this)" onmousemove="moveSlider(event, this)" ontouchstart="startSlider(event, this)" ontouchmove="moveSlider(event, this)">
       <img src="{{.CurrentDataURI}}" alt="Current" draggable="false">
-      <div class="slider-baseline" style="width: 50%;">
+      <div class="slider-baseline">
         <img src="{{.BaselineDataURI}}" alt="Baseline" draggable="false">
       </div>
       <div class="slider-divider" style="left: calc(50% - 1.5px);"></div>
@@ -329,7 +329,8 @@ function moveSlider(e, container) {
   let x = clientX - rect.left;
   x = Math.max(0, Math.min(x, rect.width));
   const percent = (x / rect.width) * 100;
-  container.querySelector('.slider-baseline').style.width = percent + '%';
+  const clipRight = 100 - percent;
+  container.querySelector('.slider-baseline').style.clipPath = 'inset(0 ' + clipRight + '% 0 0)';
   container.querySelector('.slider-divider').style.left = 'calc(' + percent + '% - 1.5px)';
 }
 
