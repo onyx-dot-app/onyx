@@ -233,6 +233,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
     task_logger.info(
         f"OpenSearch chunk migration task pausing (time limit reached). "
         f"Total chunks migrated this task: {total_chunks_migrated_this_task}. "
+        f"Total chunks errored this task: {total_chunks_errored_this_task}. "
         f"Elapsed: {time.monotonic() - task_start_time:.3f}s. "
         "Will resume from continuation token on next invocation."
     )
