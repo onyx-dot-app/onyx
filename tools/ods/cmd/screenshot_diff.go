@@ -21,9 +21,9 @@ const (
 	// relative to the repository root.
 	DefaultScreenshotDir = "web/output/screenshots"
 
-	// DefaultOutputDir is the default base directory for visual diff output,
+	// DefaultOutputDir is the default base directory for screenshot diff output,
 	// relative to the repository root.
-	DefaultOutputDir = "web/output/visual-diff"
+	DefaultOutputDir = "web/output/screenshot-diff"
 )
 
 // getS3Bucket returns the S3 bucket name, preferring the PLAYWRIGHT_S3_BUCKET
@@ -35,8 +35,8 @@ func getS3Bucket() string {
 	return DefaultS3Bucket
 }
 
-// PlaywrightDiffCompareOptions holds options for the compare subcommand.
-type PlaywrightDiffCompareOptions struct {
+// ScreenshotDiffCompareOptions holds options for the compare subcommand.
+type ScreenshotDiffCompareOptions struct {
 	Project      string
 	Baseline     string
 	Current      string
@@ -45,18 +45,18 @@ type PlaywrightDiffCompareOptions struct {
 	MaxDiffRatio float64
 }
 
-// PlaywrightDiffUploadOptions holds options for the upload-baselines subcommand.
-type PlaywrightDiffUploadOptions struct {
+// ScreenshotDiffUploadOptions holds options for the upload-baselines subcommand.
+type ScreenshotDiffUploadOptions struct {
 	Project string
 	Dir     string
 	Dest    string
 	Delete  bool
 }
 
-// NewPlaywrightDiffCommand creates the playwright-diff command with subcommands.
-func NewPlaywrightDiffCommand() *cobra.Command {
+// NewScreenshotDiffCommand creates the screenshot-diff command with subcommands.
+func NewScreenshotDiffCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "playwright-diff",
+		Use:   "screenshot-diff",
 		Short: "Visual regression testing for Playwright screenshots",
 		Long: `Compare Playwright screenshots against baselines and generate visual diff reports.
 
@@ -68,15 +68,15 @@ The --project flag provides sensible defaults so you don't need to specify
 every path. For example:
 
   # Compare the "admin" project against S3 baselines (uses all defaults)
-  ods playwright-diff compare --project admin
+  ods screenshot-diff compare --project admin
 
   # Upload new baselines for the "admin" project
-  ods playwright-diff upload-baselines --project admin
+  ods screenshot-diff upload-baselines --project admin
 
 You can override any default with explicit flags:
 
   # Compare with custom paths
-  ods playwright-diff compare --baseline ./my-baselines --current ./my-screenshots`,
+  ods screenshot-diff compare --baseline ./my-baselines --current ./my-screenshots`,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},
@@ -89,7 +89,7 @@ You can override any default with explicit flags:
 }
 
 func newCompareCommand() *cobra.Command {
-	opts := &PlaywrightDiffCompareOptions{}
+	opts := &ScreenshotDiffCompareOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "compare",
@@ -111,13 +111,13 @@ are no visual differences, the HTML report is skipped.
 Examples:
 
   # Use project defaults (recommended)
-  ods playwright-diff compare --project admin
+  ods screenshot-diff compare --project admin
 
   # Override specific flags
-  ods playwright-diff compare --project admin --current ./custom-dir/
+  ods screenshot-diff compare --project admin --current ./custom-dir/
 
   # Fully manual (no project flag)
-  ods playwright-diff compare \
+  ods screenshot-diff compare \
     --baseline s3://my-bucket/baselines/admin/ \
     --current ./web/output/screenshots/ \
     --output ./web/output/visual-diff/admin/index.html`,
@@ -137,7 +137,7 @@ Examples:
 }
 
 func newUploadBaselinesCommand() *cobra.Command {
-	opts := &PlaywrightDiffUploadOptions{}
+	opts := &ScreenshotDiffUploadOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "upload-baselines",
@@ -153,13 +153,13 @@ When --project is specified, the following defaults are applied:
 Examples:
 
   # Use project defaults (recommended)
-  ods playwright-diff upload-baselines --project admin
+  ods screenshot-diff upload-baselines --project admin
 
   # With delete (remove old baselines not in current set)
-  ods playwright-diff upload-baselines --project admin --delete
+  ods screenshot-diff upload-baselines --project admin --delete
 
   # Fully manual
-  ods playwright-diff upload-baselines \
+  ods screenshot-diff upload-baselines \
     --dir ./web/output/screenshots/ \
     --dest s3://onyx-playwright-artifacts/baselines/admin/`,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -176,7 +176,7 @@ Examples:
 }
 
 // resolveCompareDefaults fills in missing flags from the --project default when set.
-func resolveCompareDefaults(opts *PlaywrightDiffCompareOptions) {
+func resolveCompareDefaults(opts *ScreenshotDiffCompareOptions) {
 	bucket := getS3Bucket()
 
 	if opts.Project != "" {
@@ -198,7 +198,7 @@ func resolveCompareDefaults(opts *PlaywrightDiffCompareOptions) {
 }
 
 // resolveUploadDefaults fills in missing flags from the --project default when set.
-func resolveUploadDefaults(opts *PlaywrightDiffUploadOptions) {
+func resolveUploadDefaults(opts *ScreenshotDiffUploadOptions) {
 	bucket := getS3Bucket()
 
 	if opts.Project != "" {
@@ -211,7 +211,7 @@ func resolveUploadDefaults(opts *PlaywrightDiffUploadOptions) {
 	}
 }
 
-func runCompare(opts *PlaywrightDiffCompareOptions) {
+func runCompare(opts *ScreenshotDiffCompareOptions) {
 	resolveCompareDefaults(opts)
 
 	// Validate required fields
@@ -232,7 +232,7 @@ func runCompare(opts *PlaywrightDiffCompareOptions) {
 
 	// If baseline is an S3 URL, download to a temp directory
 	if strings.HasPrefix(opts.Baseline, "s3://") {
-		tmpDir, err := os.MkdirTemp("", "playwright-baselines-*")
+		tmpDir, err := os.MkdirTemp("", "screenshot-baselines-*")
 		if err != nil {
 			log.Fatalf("Failed to create temp directory: %v", err)
 		}
@@ -310,7 +310,7 @@ func runCompare(opts *PlaywrightDiffCompareOptions) {
 	}
 }
 
-func runUploadBaselines(opts *PlaywrightDiffUploadOptions) {
+func runUploadBaselines(opts *ScreenshotDiffUploadOptions) {
 	resolveUploadDefaults(opts)
 
 	// Validate required fields

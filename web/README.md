@@ -90,7 +90,7 @@ npx playwright test --headed
 By default, playwright.config.ts is configured to output the results to:
 
 ```bash
-web/test-results
+web/output/playwright/
 ```
 
 4. Visual regression screenshots
@@ -102,5 +102,5 @@ Baselines are stored in `web/tests/e2e/__screenshots__/` and can be updated with
 To compare screenshots across CI runs, use:
 
 ```bash
-ods playwright-diff compare --run-id <CI_RUN_ID>
+ods screenshot-diff compare --project admin
 ```

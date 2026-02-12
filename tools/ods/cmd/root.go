@@ -49,7 +49,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewLogsCommand())
 	cmd.AddCommand(NewPullCommand())
 	cmd.AddCommand(NewRunCICommand())
-	cmd.AddCommand(NewPlaywrightDiffCommand())
+	cmd.AddCommand(NewScreenshotDiffCommand())
 
 	return cmd
 }

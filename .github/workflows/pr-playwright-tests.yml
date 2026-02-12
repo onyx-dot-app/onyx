@@ -466,7 +466,7 @@ jobs:
           PROJECT: ${{ matrix.project }}
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
         run: |
-          uv run --no-sync --with onyx-devtools ods playwright-diff compare \
+          uv run --no-sync --with onyx-devtools ods screenshot-diff compare \
             --project "${PROJECT}"
 
       - name: Upload visual diff report to S3
@@ -476,7 +476,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          SUMMARY_FILE="web/output/visual-diff/${PROJECT}/summary.json"
+          SUMMARY_FILE="web/output/screenshot-diff/${PROJECT}/summary.json"
           if [ ! -f "${SUMMARY_FILE}" ]; then
             echo "No summary file found — skipping S3 upload."
             exit 0
@@ -488,15 +488,15 @@ jobs:
             exit 0
           fi
 
-          aws s3 sync "web/output/visual-diff/${PROJECT}/" \
+          aws s3 sync "web/output/screenshot-diff/${PROJECT}/" \
             "s3://${PLAYWRIGHT_S3_BUCKET}/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
 
       - name: Upload visual diff summary
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: visual-diff-summary-${{ matrix.project }}
-          path: ./web/output/visual-diff/${{ matrix.project }}/summary.json
+          name: screenshot-diff-summary-${{ matrix.project }}
+          path: ./web/output/screenshot-diff/${{ matrix.project }}/summary.json
           if-no-files-found: ignore
           retention-days: 5
 
@@ -504,8 +504,8 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: visual-diff-report-${{ matrix.project }}-${{ github.run_id }}
-          path: ./web/output/visual-diff/${{ matrix.project }}/
+          name: screenshot-diff-report-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/output/screenshot-diff/${{ matrix.project }}/
           if-no-files-found: ignore
           retention-days: 30
 
@@ -550,7 +550,7 @@ jobs:
       - name: Download visual diff summaries
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # ratchet:actions/download-artifact@v4
         with:
-          pattern: visual-diff-summary-*
+          pattern: screenshot-diff-summary-*
           path: summaries/
 
       - name: Post combined PR comment
@@ -569,7 +569,7 @@ jobs:
           TABLE_ROWS=""
           HAS_ANY_SUMMARY=false
 
-          for SUMMARY_DIR in summaries/visual-diff-summary-*/; do
+          for SUMMARY_DIR in summaries/screenshot-diff-summary-*/; do
             SUMMARY_FILE="${SUMMARY_DIR}summary.json"
             if [ ! -f "${SUMMARY_FILE}" ]; then
               continue

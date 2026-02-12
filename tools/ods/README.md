@@ -29,6 +29,10 @@ Some commands require external tools to be installed and configured:
   - Install from [cli.github.com](https://cli.github.com/)
   - Authenticate with `gh auth login`
 
+- **AWS CLI** - Required for `screenshot-diff` commands (S3 baseline sync)
+  - Install from [aws.amazon.com/cli](https://aws.amazon.com/cli/)
+  - Authenticate with `aws sso login` or `aws configure`
+
 ### Autocomplete
 
 `ods` provides autocomplete for `bash`, `fish`, `powershell` and `zsh` shells.
@@ -238,6 +242,75 @@ ods cherry-pick abc123 --release 2.5 --release 2.6
 # Cherry-pick multiple commits
 ods cherry-pick abc123 def456 ghi789 --release 2.5
 ```
+
+### `screenshot-diff` - Visual Regression Testing
+
+Compare Playwright screenshots against baselines and generate visual diff reports.
+Baselines are stored in S3 and compared against locally captured screenshots.
+
+```shell
+ods screenshot-diff <subcommand>
+```
+
+**Subcommands:**
+
+- `compare` - Compare screenshots against baselines and generate a diff report
+- `upload-baselines` - Upload screenshots to S3 as new baselines
+
+The `--project` flag provides sensible defaults so you don't need to specify every path.
+When set, the following defaults are applied:
+
+| Flag | Default |
+|------|---------|
+| `--baseline` | `s3://onyx-playwright-artifacts/baselines/<project>/` |
+| `--current` | `web/output/screenshots/` |
+| `--output` | `web/output/screenshot-diff/<project>/index.html` |
+
+The S3 bucket defaults to `onyx-playwright-artifacts` and can be overridden with the
+`PLAYWRIGHT_S3_BUCKET` environment variable.
+
+**`compare` Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--project` | | Project name (e.g. `admin`); sets sensible defaults |
+| `--baseline` | | Baseline directory or S3 URL (`s3://...`) |
+| `--current` | | Current screenshots directory |
+| `--output` | `screenshot-diff/index.html` | Output path for the HTML report |
+| `--threshold` | `0.2` | Per-channel pixel difference threshold (0.0–1.0) |
+| `--max-diff-ratio` | `0.01` | Max diff pixel ratio before marking as changed |
+
+**`upload-baselines` Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--project` | | Project name (e.g. `admin`); sets sensible defaults |
+| `--dir` | | Local directory containing screenshots to upload |
+| `--dest` | | S3 destination URL (`s3://...`) |
+| `--delete` | `false` | Delete S3 files not present locally |
+
+**Examples:**
+
+```shell
+# Compare the "admin" project against S3 baselines (uses all defaults)
+ods screenshot-diff compare --project admin
+
+# Compare with explicit paths
+ods screenshot-diff compare \
+  --baseline ./baselines \
+  --current ./web/output/screenshots/ \
+  --output ./report/index.html
+
+# Upload new baselines for the "admin" project
+ods screenshot-diff upload-baselines --project admin
+
+# Upload with delete (remove old baselines not in current set)
+ods screenshot-diff upload-baselines --project admin --delete
+```
+
+The `compare` subcommand writes a `summary.json` alongside the report with aggregate
+counts (changed, added, removed, unchanged). The HTML report is only generated when
+visual differences are detected.
 
 ### Testing Changes Locally (Dry Run)
 
