@@ -34,6 +34,10 @@ export enum PacketType {
   // File reader tool packets
   FILE_READER_START = "file_reader_start",
   FILE_READER_RESULT = "file_reader_result",
+  // Memory tool packets
+  MEMORY_TOOL_START = "memory_tool_start",
+  MEMORY_TOOL_DELTA = "memory_tool_delta",
+  MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access",
 
   // Reasoning packets
   REASONING_START = "reasoning_start",
@@ -188,6 +192,22 @@ export interface FileReaderResult extends BaseObj {
   preview_start: string;
   preview_end: string;
 }
+// Memory Tool Packets
+export interface MemoryToolStart extends BaseObj {
+  type: "memory_tool_start";
+}
+
+export interface MemoryToolDelta extends BaseObj {
+  type: "memory_tool_delta";
+  memory_text: string;
+  operation: "add" | "update";
+  memory_id: number | null;
+  index: number | null;
+}
+
+export interface MemoryToolNoAccess extends BaseObj {
+  type: "memory_tool_no_access";
+}
 
 // Reasoning Packets
 export interface ReasoningStart extends BaseObj {
@@ -292,13 +312,20 @@ export type FileReaderToolObj =
   | FileReaderResult
   | SectionEnd
   | PacketError;
+export type MemoryToolObj =
+  | MemoryToolStart
+  | MemoryToolDelta
+  | MemoryToolNoAccess
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
   | PythonToolObj
   | FetchToolObj
   | CustomToolObj
-  | FileReaderToolObj;
+  | FileReaderToolObj
+  | MemoryToolObj;
 
 export type ReasoningObj =
   | ReasoningStart
@@ -396,6 +423,10 @@ export interface CustomToolPacket {
 export interface FileReaderToolPacket {
   placement: Placement;
   obj: FileReaderToolObj;
+}
+export interface MemoryToolPacket {
+  placement: Placement;
+  obj: MemoryToolObj;
 }
 
 export interface ReasoningPacket {

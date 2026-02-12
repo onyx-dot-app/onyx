@@ -257,6 +257,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
     use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enable_memory_tool: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     user_preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
@@ -1040,6 +1043,12 @@ class OpenSearchTenantMigrationRecord(Base):
         Text, nullable=True
     )
     total_chunks_migrated: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    total_chunks_errored: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    total_chunks_in_vespa: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
     )
     created_at: Mapped[datetime.datetime] = mapped_column(

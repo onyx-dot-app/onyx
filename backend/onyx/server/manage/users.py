@@ -857,6 +857,11 @@ def update_user_personalization_api(
         if request.use_memories is not None
         else current_use_memories
     )
+    new_enable_memory_tool = (
+        request.enable_memory_tool
+        if request.enable_memory_tool is not None
+        else user.enable_memory_tool
+    )
     existing_memories = [
         MemoryItem(id=memory.id, content=memory.memory_text) for memory in user.memories
     ]
@@ -874,6 +879,7 @@ def update_user_personalization_api(
         personal_name=new_name,
         personal_role=new_role,
         use_memories=new_use_memories,
+        enable_memory_tool=new_enable_memory_tool,
         memories=new_memories,
         user_preferences=new_user_preferences,
         db_session=db_session,

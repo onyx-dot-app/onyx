@@ -95,6 +95,13 @@ export function useTimelineHeader(
       };
     }
 
+    if (
+      packetType === PacketType.MEMORY_TOOL_START ||
+      packetType === PacketType.MEMORY_TOOL_NO_ACCESS
+    ) {
+      return { headerText: "Updating memory...", hasPackets, userStopped };
+    }
+
     if (packetType === PacketType.REASONING_START) {
       return { headerText: "Thinking", hasPackets, userStopped };
     }

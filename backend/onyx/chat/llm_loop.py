@@ -1,5 +1,7 @@
+import json
 import time
 from collections.abc import Callable
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +30,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import add_memory
+from onyx.db.memory import update_memory_at_index
 from onyx.db.memory import UserMemoryContext
 from onyx.db.models import Persona
 from onyx.llm.constants import LlmProviderNames
@@ -45,12 +49,14 @@ from onyx.server.query_and_chat.streaming_models import TopLevelBranching
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
 from onyx.tools.interface import Tool
+from onyx.tools.models import MemoryToolResponseSnapshot
 from onyx.tools.models import ToolCallInfo
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -522,6 +528,7 @@ def run_llm_loop(
     chat_session_id: str | None = None,
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    inject_memories_in_prompt: bool = True,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -629,10 +636,13 @@ def run_llm_loop(
                         llm.config.model_name
                     )
 
+                    prompt_memory_context = (
+                        user_memory_context if inject_memories_in_prompt else None
+                    )
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
                         datetime_aware=persona.datetime_aware if persona else True,
-                        user_memory_context=user_memory_context,
+                        user_memory_context=prompt_memory_context,
                         tools=tools,
                         should_cite_documents=should_cite_documents
                         or always_cite_documents,
@@ -795,6 +805,7 @@ def run_llm_loop(
                 max_concurrent_tools=None,
                 skip_search_query_expansion=has_called_search_tool,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
+                inject_memories_in_prompt=inject_memories_in_prompt,
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -859,11 +870,44 @@ def run_llm_loop(
                 ):
                     generated_images = tool_response.rich_response.generated_images
 
-                saved_response = (
-                    tool_response.rich_response
-                    if isinstance(tool_response.rich_response, str)
-                    else tool_response.llm_facing_response
-                )
+                # Persist memory if this is a memory tool response
+                memory_snapshot: MemoryToolResponseSnapshot | None = None
+                if isinstance(tool_response.rich_response, MemoryToolResponse):
+                    persisted_memory_id: int | None = None
+                    if user_memory_context and user_memory_context.user_id:
+                        if tool_response.rich_response.index_to_replace is not None:
+                            memory = update_memory_at_index(
+                                user_id=user_memory_context.user_id,
+                                index=tool_response.rich_response.index_to_replace,
+                                new_text=tool_response.rich_response.memory_text,
+                                db_session=db_session,
+                            )
+                            persisted_memory_id = memory.id if memory else None
+                        else:
+                            memory = add_memory(
+                                user_id=user_memory_context.user_id,
+                                memory_text=tool_response.rich_response.memory_text,
+                                db_session=db_session,
+                            )
+                            persisted_memory_id = memory.id
+                    operation: Literal["add", "update"] = (
+                        "update"
+                        if tool_response.rich_response.index_to_replace is not None
+                        else "add"
+                    )
+                    memory_snapshot = MemoryToolResponseSnapshot(
+                        memory_text=tool_response.rich_response.memory_text,
+                        operation=operation,
+                        memory_id=persisted_memory_id,
+                        index=tool_response.rich_response.index_to_replace,
+                    )
+
+                if memory_snapshot:
+                    saved_response = json.dumps(memory_snapshot.model_dump())
+                elif isinstance(tool_response.rich_response, str):
+                    saved_response = tool_response.rich_response
+                else:
+                    saved_response = tool_response.llm_facing_response
 
                 tool_call_info = ToolCallInfo(
                     parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message

@@ -71,7 +71,6 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
           memories={memories}
           onSaveMemories={onSaveMemories}
           initialTargetMemoryId={targetMemoryId}
-          onTargetHandled={() => setTargetMemoryId(null)}
         />
       </memoriesModal.Provider>
     </>

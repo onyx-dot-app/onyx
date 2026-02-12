@@ -154,7 +154,9 @@ def cancel_new_embedding(
 
         # remove the old index from the vector db
         primary_search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(primary_search_settings, None)
+        document_index = get_default_document_index(
+            primary_search_settings, None, db_session
+        )
         document_index.ensure_indices_exist(
             primary_embedding_dim=primary_search_settings.final_embedding_dim,
             primary_embedding_precision=primary_search_settings.embedding_precision,

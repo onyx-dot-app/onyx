@@ -16,6 +16,7 @@ from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import ThemePreference
+from onyx.db.memory import MAX_MEMORIES_PER_USER
 from onyx.db.models import AllowedAnswerFilters
 from onyx.db.models import ChannelConfig
 from onyx.db.models import SlackBot as SlackAppModel
@@ -85,6 +86,7 @@ class UserPersonalization(BaseModel):
     name: str = ""
     role: str = ""
     use_memories: bool = True
+    enable_memory_tool: bool = True
     memories: list[MemoryItem] = Field(default_factory=list)
     user_preferences: str = ""
 
@@ -168,6 +170,7 @@ class UserInfo(BaseModel):
                 name=user.personal_name or "",
                 role=user.personal_role or "",
                 use_memories=user.use_memories,
+                enable_memory_tool=user.enable_memory_tool,
                 memories=[
                     MemoryItem(id=memory.id, content=memory.memory_text)
                     for memory in (user.memories or [])
@@ -225,13 +228,11 @@ class ChatBackgroundRequest(BaseModel):
     chat_background: str | None
 
 
-MAX_MEMORY_COUNT = 10
-
-
 class PersonalizationUpdateRequest(BaseModel):
     name: str | None = None
     role: str | None = None
     use_memories: bool | None = None
+    enable_memory_tool: bool | None = None
     memories: list[MemoryItem] | None = None
     user_preferences: str | None = Field(default=None, max_length=500)
 
@@ -240,8 +241,8 @@ class PersonalizationUpdateRequest(BaseModel):
     def validate_memory_count(
         cls, value: list[MemoryItem] | None
     ) -> list[MemoryItem] | None:
-        if value is not None and len(value) > MAX_MEMORY_COUNT:
-            raise ValueError(f"Maximum of {MAX_MEMORY_COUNT} memories allowed")
+        if value is not None and len(value) > MAX_MEMORIES_PER_USER:
+            raise ValueError(f"Maximum of {MAX_MEMORIES_PER_USER} memories allowed")
         return value
 
 

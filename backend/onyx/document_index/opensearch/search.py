@@ -10,11 +10,8 @@ from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import SEARCH_CONTENT_KEYWORD_WEIGHT
-from onyx.document_index.opensearch.constants import SEARCH_CONTENT_PHRASE_WEIGHT
-from onyx.document_index.opensearch.constants import SEARCH_CONTENT_VECTOR_WEIGHT
-from onyx.document_index.opensearch.constants import SEARCH_TITLE_KEYWORD_WEIGHT
-from onyx.document_index.opensearch.constants import SEARCH_TITLE_VECTOR_WEIGHT
+from onyx.document_index.opensearch.constants import DEFAULT_K_NUM_CANDIDATES
+from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_WEIGHTS
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
 from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
@@ -50,15 +47,7 @@ MIN_MAX_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
                 "normalization": {"technique": "min_max"},
                 "combination": {
                     "technique": "arithmetic_mean",
-                    "parameters": {
-                        "weights": [
-                            SEARCH_TITLE_VECTOR_WEIGHT,
-                            SEARCH_CONTENT_VECTOR_WEIGHT,
-                            SEARCH_TITLE_KEYWORD_WEIGHT,
-                            SEARCH_CONTENT_KEYWORD_WEIGHT,
-                            SEARCH_CONTENT_PHRASE_WEIGHT,
-                        ]
-                    },
+                    "parameters": {"weights": HYBRID_SEARCH_NORMALIZATION_WEIGHTS},
                 },
             }
         }
@@ -75,33 +64,12 @@ ZSCORE_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
                 "normalization": {"technique": "z_score"},
                 "combination": {
                     "technique": "arithmetic_mean",
-                    "parameters": {
-                        "weights": [
-                            SEARCH_TITLE_VECTOR_WEIGHT,
-                            SEARCH_CONTENT_VECTOR_WEIGHT,
-                            SEARCH_TITLE_KEYWORD_WEIGHT,
-                            SEARCH_CONTENT_KEYWORD_WEIGHT,
-                            SEARCH_CONTENT_PHRASE_WEIGHT,
-                        ]
-                    },
+                    "parameters": {"weights": HYBRID_SEARCH_NORMALIZATION_WEIGHTS},
                 },
             }
         }
     ],
 }
-
-assert (
-    sum(
-        [
-            SEARCH_TITLE_VECTOR_WEIGHT,
-            SEARCH_CONTENT_VECTOR_WEIGHT,
-            SEARCH_TITLE_KEYWORD_WEIGHT,
-            SEARCH_CONTENT_KEYWORD_WEIGHT,
-            SEARCH_CONTENT_PHRASE_WEIGHT,
-        ]
-    )
-    == 1.0
-)
 
 
 # By default OpenSearch will only return a maximum of this many results in a
@@ -112,14 +80,6 @@ DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000
 # that the document was last updated this many days ago for the purpose of time
 # cutoff filtering during retrieval.
 ASSUMED_DOCUMENT_AGE_DAYS = 90
-
-# The default number of neighbors to consider for knn vector similarity search.
-# NOTE: Higher k slows down queries. Although this is a tuning question and
-# there is no correct value, a brief internet search will show that it is
-# generally accepted that k roughly equal to the number of hits you expect to
-# get is decent. I prefer to use a deterministic k rather than using num hits
-# directly which is dynamic; 50 seems reasonable.
-DEFAULT_K_NUM_CANDIDATES = 50
 
 
 class DocumentQuery:
@@ -393,10 +353,9 @@ class DocumentQuery:
 
         Matches:
           - Title vector
-          - Content vector
           - Title keyword
-          - Content keyword
-          - Content phrase
+          - Content vector
+          - Content keyword + phrase
 
         Normalization is not performed here.
         The weights of each of these subqueries should be configured in a search
@@ -406,51 +365,103 @@ class DocumentQuery:
         in a single hybrid query. Source:
         https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
 
+        NOTE: Each query is independent during the search phase, there is no backfilling of scores for missing query components.
+        What this means is that if a document was a good vector match but did not show up for keyword, it gets a score of 0 for
+        the keyword component of the hybrid scoring. This is not as bad as just disregarding a score though as there is
+        normalization applied after. So really it is "increasing" the missing score compared to if it was included and the range
+        was renormalized. This does however mean that between docs that have high scores for say the vector field, the keyword
+        scores between them are completely ignored unless they also showed up in the keyword query as a reasonably high match.
+        TLDR, this is a bit of unique funky behavior but it seems ok.
+
+        NOTE: Options considered and rejected:
+        - minimum_should_match: Since it's hybrid search and users often provide semantic queries, there is often a lot of terms,
+          and very low number of meaningful keywords (and a low ratio of keywords).
+        - fuzziness AUTO: typo tolerance (0/1/2 edit distance by term length). This is reasonable but in reality seeing the
+          user usage patterns, this is not very common and people tend to not be confused when a miss happens for this reason.
+          In testing datasets, this makes recall slightly worse.
+
         Args:
             query_text: The text of the query to search for.
             query_vector: The vector embedding of the query to search for.
             num_candidates: The number of candidates to consider for vector
                 similarity search.
         """
+        # Build sub-queries for hybrid search. Order must match normalization
+        # pipeline weights: title vector, title keyword, content vector,
+        # content keyword.
         hybrid_search_queries: list[dict[str, Any]] = [
+            # 1. Title vector search
             {
                 "knn": {
-                    # Match on semantic similarity of the title.
                     TITLE_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
                         "k": num_candidates,
                     }
                 }
             },
+            # 2. Title keyword + phrase search.
+            {
+                "bool": {
+                    "should": [
+                        {
+                            "match": {
+                                TITLE_FIELD_NAME: {
+                                    "query": query_text,
+                                    # operator "or" = match doc if any query term matches (default, explicit for clarity).
+                                    "operator": "or",
+                                }
+                            }
+                        },
+                        {
+                            "match_phrase": {
+                                TITLE_FIELD_NAME: {
+                                    "query": query_text,
+                                    # Slop = 1 allows one extra word or transposition in phrase match.
+                                    "slop": 1,
+                                    # Boost phrase over bag-of-words; exact phrase is a stronger signal.
+                                    "boost": 1.5,
+                                }
+                            }
+                        },
+                    ]
+                }
+            },
+            # 3. Content vector search
             {
                 "knn": {
-                    # Match on semantic similarity of the content.
                     CONTENT_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
                         "k": num_candidates,
                     }
                 }
             },
+            # 4. Content keyword + phrase search.
             {
-                "multi_match": {
-                    "query": query_text,
-                    # Either fuzzy match on the analyzed title (boosted 2x), or
-                    # exact match on exact title keywords (no OpenSearch
-                    # analysis done on the title). See
-                    # https://docs.opensearch.org/latest/mappings/supported-field-types/keyword/
-                    "fields": [f"{TITLE_FIELD_NAME}^2", f"{TITLE_FIELD_NAME}.keyword"],
-                    # Returns the score of the best match of the fields above.
-                    # See
-                    # https://docs.opensearch.org/latest/query-dsl/full-text/multi-match/
-                    "type": "best_fields",
+                "bool": {
+                    "should": [
+                        {
+                            "match": {
+                                CONTENT_FIELD_NAME: {
+                                    "query": query_text,
+                                    # operator "or" = match doc if any query term matches (default, explicit for clarity).
+                                    "operator": "or",
+                                }
+                            }
+                        },
+                        {
+                            "match_phrase": {
+                                CONTENT_FIELD_NAME: {
+                                    "query": query_text,
+                                    # Slop = 1 allows one extra word or transposition in phrase match.
+                                    "slop": 1,
+                                    # Boost phrase over bag-of-words; exact phrase is a stronger signal.
+                                    "boost": 1.5,
+                                }
+                            }
+                        },
+                    ]
                 }
             },
-            # Fuzzy match on the OpenSearch-analyzed content. See
-            # https://docs.opensearch.org/latest/query-dsl/full-text/match/
-            {"match": {CONTENT_FIELD_NAME: {"query": query_text}}},
-            # Exact match on the OpenSearch-analyzed content. See
-            # https://docs.opensearch.org/latest/query-dsl/full-text/match-phrase/
-            {"match_phrase": {CONTENT_FIELD_NAME: {"query": query_text, "boost": 1.5}}},
         ]
 
         return hybrid_search_queries

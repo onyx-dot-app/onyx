@@ -36,6 +36,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OpenURLTool,
 )
@@ -135,7 +136,7 @@ def construct_tools(
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None)
+    document_index = get_default_document_index(search_settings, None, db_session)
 
     added_search_tool = False
     for db_tool_model in persona.tools:
@@ -435,6 +436,23 @@ def construct_tools(
         )
 
         tool_dict[search_tool_db_model.id] = [search_tool]
+
+    # Always inject MemoryTool when the user has the memory tool enabled,
+    # bypassing persona tool associations and allowed_tool_ids filtering
+    if user.enable_memory_tool:
+        try:
+            memory_tool_db_model = get_builtin_tool(db_session, MemoryTool)
+            memory_tool = MemoryTool(
+                tool_id=memory_tool_db_model.id,
+                emitter=emitter,
+                llm=llm,
+            )
+            tool_dict[memory_tool_db_model.id] = [memory_tool]
+        except RuntimeError:
+            logger.warning(
+                "MemoryTool not found in the database. "
+                "Run the latest alembic migration to seed it."
+            )
 
     tools: list[Tool] = []
     for tool_list in tool_dict.values():

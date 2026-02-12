@@ -8,6 +8,7 @@ memories that exist for the user.
 
 from typing import Any
 from typing import cast
+from typing import Literal
 
 from pydantic import BaseModel
 from typing_extensions import override
@@ -16,10 +17,14 @@ from onyx.chat.emitter import Emitter
 from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
+from onyx.server.query_and_chat.streaming_models import MemoryToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.utils.logger import setup_logger
 
 
@@ -98,8 +103,7 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
 
     @override
     def emit_start(self, placement: Placement) -> None:
-        # TODO
-        pass
+        self.emitter.emit(Packet(placement=placement, obj=MemoryToolStart()))
 
     @override
     def run(
@@ -133,13 +137,27 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
             user_role=override_kwargs.user_role,
         )
 
-        # TODO: the data should be return and processed outside of the tool
-        # Persisted to the db for future conversations
-        # The actual persistence of the memory will be handled by the caller
-        # This tool just returns the memory to be saved
         logger.info(f"New memory to be added: {memory_text}")
 
+        operation: Literal["add", "update"] = (
+            "update" if index_to_replace is not None else "add"
+        )
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=MemoryToolDelta(
+                    memory_text=memory_text,
+                    operation=operation,
+                    memory_id=None,
+                    index=index_to_replace,
+                ),
+            )
+        )
+
         return ToolResponse(
-            rich_response=memory_text,
+            rich_response=MemoryToolResponse(
+                memory_text=memory_text,
+                index_to_replace=index_to_replace,
+            ),
             llm_facing_response=f"New memory added: {memory_text}",
         )
