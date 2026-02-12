@@ -95,12 +95,11 @@ web/output/playwright/
 
 3. Visual regression screenshots
 
-Screenshots are captured automatically during test runs when `VISUAL_REGRESSION=true` is set.
-Baselines are stored in `web/tests/e2e/__screenshots__/` and can be updated with
-`npx playwright test --update-snapshots`.
-
+Screenshots are captured automatically during test runs.
 To compare screenshots across CI runs, use:
 
 ```bash
 ods screenshot-diff compare --project admin
 ```
+
+For more information, see [tools/ods/README.md](https://github.com/onyx-dot-app/onyx/blob/main/tools/ods/README.md#screenshot-diff---visual-regression-testing).
