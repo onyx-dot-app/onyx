@@ -11,7 +11,6 @@ Usage:
     python preview.py /path/to/file.pptx /path/to/cache_dir
 """
 
-import glob
 import os
 import subprocess
 import sys
@@ -23,6 +22,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from office.soffice import run_soffice
 
 CONVERSION_DPI = 150
+
+
+def _find_slides(directory: Path) -> list[str]:
+    """Find slide-*.jpg files in directory, sorted by page number."""
+    slides = list(directory.glob("slide-*.jpg"))
+    slides.sort(key=lambda p: int(p.stem.split("-")[-1]))
+    return [str(s) for s in slides]
 
 
 def main() -> None:
@@ -38,7 +44,7 @@ def main() -> None:
         return
 
     # Check cache: if slides exist and are at least as new as the PPTX, reuse them
-    cached_slides = sorted(glob.glob(str(cache_dir / "slide-*.jpg")))
+    cached_slides = _find_slides(cache_dir)
     if cached_slides:
         pptx_mtime = os.path.getmtime(pptx_path)
         oldest_slide_mtime = min(os.path.getmtime(s) for s in cached_slides)
@@ -98,7 +104,7 @@ def main() -> None:
     # Clean up PDF
     pdf_file.unlink(missing_ok=True)
 
-    slides = sorted(glob.glob(str(cache_dir / "slide-*.jpg")))
+    slides = _find_slides(cache_dir)
     print("GENERATED")
     for slide in slides:
         print(slide)
