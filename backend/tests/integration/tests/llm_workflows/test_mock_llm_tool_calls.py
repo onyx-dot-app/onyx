@@ -93,3 +93,33 @@ def test_mock_llm_response_parallel_tool_call_debug(admin_user: DATestUser) -> N
         {"queries": ["alpha"]},
         {"queries": ["beta"]},
     ]
+
+
+def test_mock_llm_response_reasoning_fallback_tool_call_debug(
+    admin_user: DATestUser,
+) -> None:
+    _assert_integration_mode_enabled()
+    _seed_connector_for_search_tool(admin_user)
+
+    LLMProviderManager.create(
+        user_performing_action=admin_user,
+        api_key=_DUMMY_OPENAI_API_KEY,
+    )
+    chat_session = ChatSessionManager.create(user_performing_action=admin_user)
+    search_tool_id = _get_internal_search_tool_id(admin_user)
+
+    # In deep_research mode with REQUIRED tool choice, streamed content is treated as
+    # reasoning first. This validates fallback extraction from reasoning text.
+    response = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="use the search tool",
+        user_performing_action=admin_user,
+        forced_tool_ids=[search_tool_id],
+        mock_llm_response='{"name":"internal_search","arguments":{"queries":["gamma"]}}',
+        deep_research=True,
+    )
+
+    assert response.error is None, f"Unexpected stream error: {response.error}"
+    assert len(response.tool_call_debug) == 1
+    assert response.tool_call_debug[0].tool_name == "internal_search"
+    assert response.tool_call_debug[0].tool_args == {"queries": ["gamma"]}
