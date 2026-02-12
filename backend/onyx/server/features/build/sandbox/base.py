@@ -415,6 +415,36 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def generate_pptx_preview(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        pptx_path: str,
+        cache_dir: str,
+    ) -> tuple[list[str], bool]:
+        """Convert PPTX to slide JPEG images for preview, with caching.
+
+        Checks if cache_dir already has slides. If the PPTX is newer than the
+        cached images (or no cache exists), runs soffice -> pdftoppm pipeline.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            pptx_path: Relative path to the PPTX file within the session workspace
+            cache_dir: Relative path for the cache directory
+                       (e.g., "outputs/.pptx-preview/abc123")
+
+        Returns:
+            Tuple of (slide_paths, cached) where slide_paths is a list of
+            relative paths to slide JPEG images (within session workspace)
+            and cached indicates whether the result was served from cache.
+
+        Raises:
+            ValueError: If file not found or conversion fails
+        """
+        ...
+
+    @abstractmethod
     def sync_files(
         self,
         sandbox_id: UUID,

@@ -167,7 +167,6 @@ export default function InputNumber({
             onClick={handleReset}
             disabled={!canReset || isDisabled}
             prominence="tertiary"
-            size="sm"
           />
         )}
         <div className="flex flex-col">

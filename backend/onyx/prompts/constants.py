@@ -1,15 +1,17 @@
-GENERAL_SEP_PAT = "--------------"  # Same length as Langchain's separator
 CODE_BLOCK_PAT = "```\n{}\n```"
 TRIPLE_BACKTICK = "```"
-QUESTION_PAT = "Query:"
-FINAL_QUERY_PAT = "Final Query:"
-THOUGHT_PAT = "Thought:"
-ANSWER_PAT = "Answer:"
-ANSWERABLE_PAT = "Answerable:"
-FINAL_ANSWER_PAT = "Final Answer:"
-QUOTE_PAT = "Quote:"
-QUOTES_PAT_PLURAL = "Quotes:"
-INVALID_PAT = "Invalid:"
-SOURCES_KEY = "sources"
+SYSTEM_REMINDER_TAG_OPEN = "<system-reminder>"
+SYSTEM_REMINDER_TAG_CLOSE = "</system-reminder>"
 
-DEFAULT_IGNORE_STATEMENT = " Ignore any context documents that are not relevant."
+# Tags format inspired by Anthropic and OpenCode
+REMINDER_TAG_NO_HEADER = f"""
+User messages may include {SYSTEM_REMINDER_TAG_OPEN} and {SYSTEM_REMINDER_TAG_CLOSE} tags.
+These {SYSTEM_REMINDER_TAG_OPEN} tags contain useful information and reminders. \
+They are automatically added by the system and are not actual user inputs.
+Behave in accordance to these instructions if relevant, and continue normally if they are not.
+""".strip()
+
+REMINDER_TAG_DESCRIPTION = f"""
+# System Reminders
+{REMINDER_TAG_NO_HEADER}
+""".strip()

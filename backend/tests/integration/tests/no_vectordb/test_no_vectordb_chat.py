@@ -151,6 +151,8 @@ def test_persona_with_user_files_chat(
     persona = PersonaManager.create(
         name="no-vectordb-persona-test",
         description="Test persona for no-vectordb mode",
+        system_prompt="You are a helpful assistant. Answer questions using the available tools and files.",
+        task_prompt="",
         user_file_ids=[user_file_id],
         tool_ids=[file_reader_tool.id],
         user_performing_action=admin_user,

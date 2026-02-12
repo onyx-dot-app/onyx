@@ -99,9 +99,11 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
   const { user } = useUser();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 
-  // Calculate minimum required seats based on current users
-  const acceptedUsers = usersData?.accepted?.length ?? 0;
-  const slackUsers = usersData?.slack_users?.length ?? 0;
+  // Calculate minimum required seats based on current active users
+  const acceptedUsers =
+    usersData?.accepted?.filter((u) => u.is_active).length ?? 0;
+  const slackUsers =
+    usersData?.slack_users?.filter((u) => u.is_active).length ?? 0;
   const minRequiredSeats = Math.max(1, acceptedUsers + slackUsers);
 
   const [billingPeriod, setBillingPeriod] = useState<PlanType>("annual");

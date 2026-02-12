@@ -699,7 +699,7 @@ def run_llm_loop(
                 ChatMessageSimple(
                     message=reminder_message_text,
                     token_count=token_counter(reminder_message_text),
-                    message_type=MessageType.USER,
+                    message_type=MessageType.USER_REMINDER,
                 )
                 if reminder_message_text
                 else None

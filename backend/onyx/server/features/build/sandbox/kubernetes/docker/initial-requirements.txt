@@ -1,4 +1,7 @@
+defusedxml>=0.7.1
 google-genai>=1.0.0
+lxml>=5.0.0
+markitdown>=0.1.2
 matplotlib==3.9.1
 matplotlib-inline>=0.1.7
 matplotlib-venn>=1.1.2

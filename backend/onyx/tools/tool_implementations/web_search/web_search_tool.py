@@ -27,6 +27,9 @@ from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
+from onyx.tools.tool_implementations.web_search.providers import (
+    provider_requires_api_key,
+)
 from onyx.tools.tool_implementations.web_search.utils import (
     filter_web_search_results_with_no_title_or_snippet,
 )
@@ -76,9 +79,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             )
             config = provider_model.config
 
-        # TODO - This should just be enforced at the DB level
-        if api_key is None:
-            raise RuntimeError("No API key configured for web search provider.")
+        if provider_requires_api_key(provider_type) and api_key is None:
+            raise RuntimeError(
+                f"No API key configured for {provider_type.value} web search provider."
+            )
 
         self._provider = build_search_provider_from_config(
             provider_type=provider_type,
