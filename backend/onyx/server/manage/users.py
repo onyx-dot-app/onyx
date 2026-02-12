@@ -36,6 +36,7 @@ from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
+from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
@@ -93,6 +94,7 @@ from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
+from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -369,6 +371,16 @@ def bulk_invite_users(
     """emails are string validated. If any email fails validation, no emails are
     invited and an exception is raised."""
     tenant_id = get_current_tenant_id()
+
+    # Limit bulk invites for trial tenants to prevent email spam
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        current_invited = len(get_invited_users())
+        if current_invited + len(emails) > NUM_FREE_TRIAL_USER_INVITES:
+            raise HTTPException(
+                status_code=403,
+                detail="You have hit your invite limit. "
+                "Please upgrade for unlimited invites.",
+            )
 
     new_invited_emails = []
     email: str
