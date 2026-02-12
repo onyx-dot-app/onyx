@@ -25,7 +25,9 @@ def _headers(user: DATestUser) -> dict[str, str]:
 # ------------------------------------------------------------------
 
 
-def test_admin_search_returns_501(admin_user: DATestUser) -> None:
+def test_admin_search_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/admin/search",
         json={"query": "test", "filters": {}},
@@ -34,7 +36,9 @@ def test_admin_search_returns_501(admin_user: DATestUser) -> None:
     assert resp.status_code == 501, f"Expected 501, got {resp.status_code}"
 
 
-def test_document_size_info_returns_501(admin_user: DATestUser) -> None:
+def test_document_size_info_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/document/document-size-info",
         params={"document_id": "fake-doc"},
@@ -43,7 +47,9 @@ def test_document_size_info_returns_501(admin_user: DATestUser) -> None:
     assert resp.status_code == 501
 
 
-def test_document_chunk_info_returns_501(admin_user: DATestUser) -> None:
+def test_document_chunk_info_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/document/chunk-info",
         params={"document_id": "fake-doc"},
@@ -52,7 +58,9 @@ def test_document_chunk_info_returns_501(admin_user: DATestUser) -> None:
     assert resp.status_code == 501
 
 
-def test_set_new_search_settings_returns_501(admin_user: DATestUser) -> None:
+def test_set_new_search_settings_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/search-settings/set-new-search-settings",
         json={},
@@ -61,7 +69,9 @@ def test_set_new_search_settings_returns_501(admin_user: DATestUser) -> None:
     assert resp.status_code == 501
 
 
-def test_cancel_new_embedding_returns_501(admin_user: DATestUser) -> None:
+def test_cancel_new_embedding_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/search-settings/cancel-new-embedding",
         headers=_headers(admin_user),
@@ -69,7 +79,9 @@ def test_cancel_new_embedding_returns_501(admin_user: DATestUser) -> None:
     assert resp.status_code == 501
 
 
-def test_connector_router_returns_501(admin_user: DATestUser) -> None:
+def test_connector_router_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     """The entire /manage router is gated — any connector endpoint should 501."""
     resp = requests.get(
         f"{API_SERVER_URL}/manage/connector",
@@ -78,7 +90,9 @@ def test_connector_router_returns_501(admin_user: DATestUser) -> None:
     assert resp.status_code == 501
 
 
-def test_ingestion_post_returns_501(admin_user: DATestUser) -> None:
+def test_ingestion_post_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.post(
         f"{API_SERVER_URL}/onyx-api/ingestion",
         json={"document": {}},
@@ -87,7 +101,9 @@ def test_ingestion_post_returns_501(admin_user: DATestUser) -> None:
     assert resp.status_code == 501
 
 
-def test_ingestion_delete_returns_501(admin_user: DATestUser) -> None:
+def test_ingestion_delete_returns_501(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.delete(
         f"{API_SERVER_URL}/onyx-api/ingestion/fake-doc-id",
         headers=_headers(admin_user),
@@ -100,7 +116,9 @@ def test_ingestion_delete_returns_501(admin_user: DATestUser) -> None:
 # ------------------------------------------------------------------
 
 
-def test_settings_endpoint_works(admin_user: DATestUser) -> None:
+def test_settings_endpoint_works(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/settings",
         headers=_headers(admin_user),
@@ -110,7 +128,9 @@ def test_settings_endpoint_works(admin_user: DATestUser) -> None:
     assert data["vector_db_enabled"] is False
 
 
-def test_document_set_list_works(admin_user: DATestUser) -> None:
+def test_document_set_list_works(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/manage/document-set",
         headers=_headers(admin_user),
@@ -118,7 +138,9 @@ def test_document_set_list_works(admin_user: DATestUser) -> None:
     assert resp.status_code == 200
 
 
-def test_persona_list_works(admin_user: DATestUser) -> None:
+def test_persona_list_works(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/admin/persona",
         headers=_headers(admin_user),
@@ -126,7 +148,7 @@ def test_persona_list_works(admin_user: DATestUser) -> None:
     assert resp.status_code == 200
 
 
-def test_tool_list_works(admin_user: DATestUser) -> None:
+def test_tool_list_works(reset: None, admin_user: DATestUser) -> None:  # noqa: ARG001
     resp = requests.get(
         f"{API_SERVER_URL}/tool",
         headers=_headers(admin_user),
