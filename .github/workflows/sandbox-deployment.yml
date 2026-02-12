@@ -5,9 +5,8 @@ on:
     tags:
       - "experimental-cc4a.*"
 
-permissions:
-  id-token: write
-  contents: write
+# Restrictive defaults; jobs declare what they need.
+permissions: {}
 
 jobs:
   check-sandbox-changes:
@@ -93,6 +92,8 @@ jobs:
       - extras=ecr-cache
     timeout-minutes: 90
     environment: release
+    permissions:
+      id-token: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -160,6 +161,8 @@ jobs:
       - extras=ecr-cache
     timeout-minutes: 90
     environment: release
+    permissions:
+      id-token: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
@@ -229,6 +232,8 @@ jobs:
       - extras=ecr-cache
     timeout-minutes: 30
     environment: release
+    permissions:
+      id-token: write
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
@@ -279,53 +284,3 @@ jobs:
           docker buildx imagetools create \
             $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
-
-  update-version:
-    needs:
-      - check-sandbox-changes
-      - merge-sandbox
-    runs-on: ubuntu-slim
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
-        with:
-          fetch-depth: 0
-          persist-credentials: true # zizmor: ignore[artipacked]
-
-      - name: Resolve branch from tagged commit
-        id: resolve-branch
-        run: |
-          # Find the remote branch that contains the tagged commit
-          BRANCH=$(git branch -r --contains "$GITHUB_SHA" | grep -v HEAD | head -n 1 | sed 's|origin/||' | xargs)
-          if [ -z "$BRANCH" ]; then
-            echo "Could not determine branch for commit $GITHUB_SHA"
-            exit 1
-          fi
-          echo "Resolved branch: $BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout target branch
-        run: git checkout ${{ steps.resolve-branch.outputs.branch }}
-
-      - name: Update sandbox version in configs.py
-        env:
-          NEW_VERSION: ${{ needs.check-sandbox-changes.outputs.new-version }}
-        run: |
-          sed -i "s|onyxdotapp/sandbox:v[0-9]\+\.[0-9]\+\.[0-9]\+|onyxdotapp/sandbox:v${NEW_VERSION}|g" \
-            backend/onyx/server/features/build/configs.py
-
-          echo "Updated configs.py to sandbox:v${NEW_VERSION}"
-          grep "SANDBOX_CONTAINER_IMAGE" backend/onyx/server/features/build/configs.py
-
-      - name: Commit and push version bump
-        env:
-          NEW_VERSION: ${{ needs.check-sandbox-changes.outputs.new-version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add backend/onyx/server/features/build/configs.py
-          git commit -m "chore: bump sandbox image to v${NEW_VERSION}"
-          git push origin ${{ steps.resolve-branch.outputs.branch }}
