@@ -6,7 +6,17 @@ interface TagsResponse {
   tags: Tag[];
 }
 
-export function useTags() {
+/**
+ * Fetches the set of valid tags from the server.
+ *
+ * Tags are deduplicated for 60 s and not re-fetched on window focus.
+ *
+ * @returns tags - The array of available {@link Tag} objects (empty while loading).
+ * @returns isLoading - `true` until the first successful fetch or an error.
+ * @returns error - The error object if the request failed.
+ * @returns refresh - SWR mutate function to manually re-fetch.
+ */
+export default function useTags() {
   const { data, error, mutate } = useSWR<TagsResponse>(
     "/api/query/valid-tags",
     errorHandlingFetcher,

@@ -19,6 +19,8 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useAppMode } from "@/providers/AppModeProvider";
+import useAppFocus from "@/hooks/useAppFocus";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString, cn } from "@/lib/utils";
 import { Disabled } from "@/refresh-components/Disabled";
@@ -44,11 +46,14 @@ import {
   SvgHourglass,
   SvgPlus,
   SvgPlusCircle,
+  SvgSearch,
   SvgStop,
   SvgX,
 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, OpenButton } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 const LINE_HEIGHT = 24;
 const MIN_INPUT_HEIGHT = 44;
@@ -93,12 +98,12 @@ export function SourceChip({
   );
 }
 
-export interface ChatInputBarHandle {
+export interface AppInputBarHandle {
   reset: () => void;
   focus: () => void;
 }
 
-export interface ChatInputBarProps {
+export interface AppInputBarProps {
   removeDocs: () => void;
   selectedDocuments: OnyxDocument[];
   initialMessage?: string;
@@ -120,10 +125,10 @@ export interface ChatInputBarProps {
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   disabled: boolean;
-  ref?: React.Ref<ChatInputBarHandle>;
+  ref?: React.Ref<AppInputBarHandle>;
 }
 
-const ChatInputBar = React.memo(
+const AppInputBar = React.memo(
   ({
     retrievalEnabled,
     removeDocs,
@@ -146,12 +151,13 @@ const ChatInputBar = React.memo(
     setPresentingDocument,
     disabled,
     ref,
-  }: ChatInputBarProps) => {
+  }: AppInputBarProps) => {
     // Internal message state - kept local to avoid parent re-renders on every keystroke
     const [message, setMessage] = useState(initialMessage);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { user } = useUser();
+    const { isClassifying, classification } = useQueryController();
 
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
@@ -162,6 +168,12 @@ const ChatInputBar = React.memo(
         textAreaRef.current?.focus();
       },
     }));
+    const { appMode } = useAppMode();
+    const appFocus = useAppFocus();
+    const isSearchMode =
+      (appFocus.isNewSession() && appMode === "search") ||
+      classification === "search";
+
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
@@ -210,6 +222,7 @@ const ChatInputBar = React.memo(
 
     // Auto-resize textarea based on content
     useEffect(() => {
+      if (isSearchMode) return;
       const textarea = textAreaRef.current;
       if (textarea) {
         const prevLineCount = (prevMessageRef.current.match(/\n/g) || [])
@@ -237,7 +250,7 @@ const ChatInputBar = React.memo(
           )}px`;
         }
       }
-    }, [message]);
+    }, [message, isSearchMode]);
 
     useEffect(() => {
       if (initialMessage) {
@@ -423,20 +436,17 @@ const ChatInputBar = React.memo(
           ref={containerRef}
           id="onyx-chat-input"
           className={cn(
-            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16",
+            "w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
             // # Note (from @raunakab):
             //
             // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
             // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
             // shadows that exceed the container bounds are clipped.
             //
-            // `mb-[14px]` adds breathing room so the shadow renders fully without
-            // being cut off by the overflow boundary.
-            //
-            // There is a corresponding note inside `app-layouts.tsx` (Footer) that
-            // explains why the Footer removes its top padding during chat to
-            // compensate for this extra space.
-            "mb-[14px]"
+            // The 14px breathing room is now applied externally via animated spacer
+            // divs in `AppPage.tsx` (above and below the AppInputBar) so that the
+            // spacing can transition smoothly when switching between search and chat
+            // modes. See the corresponding note there for details.
           )}
         >
           {/* Attached Files */}
@@ -456,93 +466,139 @@ const ChatInputBar = React.memo(
           )}
 
           {/* Input area */}
-          <Popover
-            open={user?.preferences?.shortcut_enabled && showPrompts}
-            onOpenChange={setShowPrompts}
+          <div
+            className={cn(
+              "flex flex-row items-center w-full",
+              isSearchMode && "p-1"
+            )}
           >
-            <Popover.Anchor asChild>
-              <textarea
-                onPaste={handlePaste}
-                onKeyDownCapture={handleKeyDown}
-                onChange={handleInputChange}
-                ref={textAreaRef}
-                id="onyx-chat-input-textarea"
-                className={cn(
-                  "w-full",
-                  "h-[44px]", // Fixed initial height to prevent flash - useEffect will adjust as needed
-                  "outline-none",
-                  "bg-transparent",
-                  "resize-none",
-                  "placeholder:text-text-03",
-                  "whitespace-pre-wrap",
-                  "break-word",
-                  "overscroll-contain",
-                  "overflow-y-auto",
-                  "px-3",
-                  "pb-2",
-                  "pt-3"
+            <Popover
+              open={user?.preferences?.shortcut_enabled && showPrompts}
+              onOpenChange={setShowPrompts}
+            >
+              <Popover.Anchor asChild>
+                <textarea
+                  onPaste={handlePaste}
+                  onKeyDownCapture={handleKeyDown}
+                  onChange={handleInputChange}
+                  ref={textAreaRef}
+                  id="onyx-chat-input-textarea"
+                  className={cn(
+                    "w-full",
+                    "outline-none",
+                    "bg-transparent",
+                    "resize-none",
+                    "placeholder:text-text-03",
+                    "whitespace-pre-wrap",
+                    "break-word",
+                    "overscroll-contain",
+                    "px-3",
+                    isSearchMode
+                      ? "h-[40px] py-2.5 overflow-hidden"
+                      : [
+                          "h-[44px]", // Fixed initial height to prevent flash - useEffect will adjust as needed
+                          "overflow-y-auto",
+                          "pb-2",
+                          "pt-3",
+                        ]
+                  )}
+                  autoFocus
+                  style={{ scrollbarWidth: "thin" }}
+                  role="textarea"
+                  aria-multiline
+                  placeholder="How can I help you today"
+                  value={message}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !showPrompts &&
+                      !event.shiftKey &&
+                      !(event.nativeEvent as any).isComposing
+                    ) {
+                      event.preventDefault();
+                      if (
+                        message &&
+                        !disabled &&
+                        !isClassifying &&
+                        !hasUploadingFiles
+                      ) {
+                        onSubmit(message);
+                      }
+                    }
+                  }}
+                  suppressContentEditableWarning={true}
+                  disabled={disabled}
+                />
+              </Popover.Anchor>
+
+              <Popover.Content
+                side="top"
+                align="start"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                width="xl"
+              >
+                <Popover.Menu>
+                  {[
+                    ...sortedFilteredPrompts.map((prompt, index) => (
+                      <LineItem
+                        key={prompt.id}
+                        selected={tabbingIconIndex === index}
+                        emphasized={tabbingIconIndex === index}
+                        description={prompt.content?.trim()}
+                        onClick={() => updateInputPrompt(prompt)}
+                      >
+                        {prompt.prompt}
+                      </LineItem>
+                    )),
+                    sortedFilteredPrompts.length > 0 ? null : undefined,
+                    <LineItem
+                      key="create-new"
+                      href="/app/settings/chat-preferences"
+                      icon={SvgPlus}
+                      selected={
+                        tabbingIconIndex === sortedFilteredPrompts.length
+                      }
+                      emphasized={
+                        tabbingIconIndex === sortedFilteredPrompts.length
+                      }
+                    >
+                      Create New Prompt
+                    </LineItem>,
+                  ]}
+                </Popover.Menu>
+              </Popover.Content>
+            </Popover>
+
+            {isSearchMode && (
+              <>
+                {message && (
+                  <Button
+                    icon={SvgX}
+                    disabled={!message || isClassifying}
+                    onClick={() => setMessage("")}
+                    prominence="tertiary"
+                    size="sm"
+                  />
                 )}
-                autoFocus
-                style={{ scrollbarWidth: "thin" }}
-                role="textarea"
-                aria-multiline
-                placeholder="How can I help you today"
-                value={message}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    !showPrompts &&
-                    !event.shiftKey &&
-                    !(event.nativeEvent as any).isComposing
-                  ) {
-                    event.preventDefault();
-                    if (message) {
+                <Button
+                  id="onyx-chat-input-send-button"
+                  icon={isClassifying ? SimpleLoader : SvgSearch}
+                  disabled={!message || isClassifying || hasUploadingFiles}
+                  onClick={() => {
+                    if (chatState == "streaming") {
+                      stopGenerating();
+                    } else if (message) {
                       onSubmit(message);
                     }
-                  }
-                }}
-                suppressContentEditableWarning={true}
-                disabled={disabled}
-              />
-            </Popover.Anchor>
+                  }}
+                  prominence="tertiary"
+                  size="sm"
+                />
+              </>
+            )}
+          </div>
 
-            <Popover.Content
-              side="top"
-              align="start"
-              onOpenAutoFocus={(e) => e.preventDefault()}
-              width="xl"
-            >
-              <Popover.Menu>
-                {[
-                  ...sortedFilteredPrompts.map((prompt, index) => (
-                    <LineItem
-                      key={prompt.id}
-                      selected={tabbingIconIndex === index}
-                      emphasized={tabbingIconIndex === index}
-                      description={prompt.content?.trim()}
-                      onClick={() => updateInputPrompt(prompt)}
-                    >
-                      {prompt.prompt}
-                    </LineItem>
-                  )),
-                  sortedFilteredPrompts.length > 0 ? null : undefined,
-                  <LineItem
-                    key="create-new"
-                    href="/app/settings/chat-preferences"
-                    icon={SvgPlus}
-                    selected={tabbingIconIndex === sortedFilteredPrompts.length}
-                    emphasized={
-                      tabbingIconIndex === sortedFilteredPrompts.length
-                    }
-                  >
-                    Create New Prompt
-                  </LineItem>,
-                ]}
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>
-
-          {/* Input area */}
+          {/* Source chips */}
           {(selectedDocuments.length > 0 ||
             filterManager.timeRange ||
             filterManager.selectedDocumentSets.length > 0) && (
@@ -592,118 +648,128 @@ const ChatInputBar = React.memo(
             </div>
           )}
 
-          <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
-            {/* Bottom left controls */}
-            <div className="flex flex-row items-center">
-              {/* (+) button - always visible */}
-              <FilePickerPopover
-                onFileClick={handleFileClick}
-                onPickRecent={(file: ProjectFile) => {
-                  // Check if file with same ID already exists
-                  if (
-                    !currentMessageFiles.some(
-                      (existingFile) => existingFile.file_id === file.file_id
-                    )
-                  ) {
-                    setCurrentMessageFiles((prev) => [...prev, file]);
-                  }
-                }}
-                onUnpickRecent={(file: ProjectFile) => {
-                  setCurrentMessageFiles((prev) =>
-                    prev.filter(
-                      (existingFile) => existingFile.file_id !== file.file_id
-                    )
-                  );
-                }}
-                handleUploadChange={handleUploadChange}
-                trigger={(open) => (
-                  <Button
-                    icon={SvgPlusCircle}
-                    tooltip="Attach Files"
-                    transient={open}
-                    disabled={disabled}
-                    prominence="tertiary"
-                  />
-                )}
-                selectedFileIds={currentMessageFiles.map((f) => f.id)}
-              />
-
-              {/* Controls that load in when data is ready */}
-              <div
-                className={cn(
-                  "flex flex-row items-center",
-                  controlsLoading && "invisible"
-                )}
-              >
-                {selectedAssistant && selectedAssistant.tools.length > 0 && (
-                  <ActionsPopover
-                    selectedAssistant={selectedAssistant}
-                    filterManager={filterManager}
-                    availableSources={memoizedAvailableSources}
-                    disabled={disabled}
-                  />
-                )}
-                {showDeepResearch && (
-                  <Button
-                    icon={SvgHourglass}
-                    onClick={toggleDeepResearch}
-                    variant="select"
-                    selected={deepResearchEnabled}
-                    disabled={disabled}
-                    foldable={!deepResearchEnabled}
-                  >
-                    Deep Research
-                  </Button>
-                )}
-                {selectedAssistant &&
-                  forcedToolIds.length > 0 &&
-                  forcedToolIds.map((toolId) => {
-                    const tool = selectedAssistant.tools.find(
-                      (tool) => tool.id === toolId
-                    );
-                    if (!tool) {
-                      return null;
+          {!isSearchMode && (
+            <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
+              {/* Bottom left controls */}
+              <div className="flex flex-row items-center">
+                {/* (+) button - always visible */}
+                <FilePickerPopover
+                  onFileClick={handleFileClick}
+                  onPickRecent={(file: ProjectFile) => {
+                    // Check if file with same ID already exists
+                    if (
+                      !currentMessageFiles.some(
+                        (existingFile) => existingFile.file_id === file.file_id
+                      )
+                    ) {
+                      setCurrentMessageFiles((prev) => [...prev, file]);
                     }
-                    return (
-                      <Button
-                        key={toolId}
-                        icon={getIconForAction(tool)}
-                        onClick={() => {
-                          setForcedToolIds(
-                            forcedToolIds.filter((id) => id !== toolId)
-                          );
-                        }}
-                        variant="select"
-                        selected
-                        disabled={disabled}
-                      >
-                        {tool.display_name}
-                      </Button>
+                  }}
+                  onUnpickRecent={(file: ProjectFile) => {
+                    setCurrentMessageFiles((prev) =>
+                      prev.filter(
+                        (existingFile) => existingFile.file_id !== file.file_id
+                      )
                     );
-                  })}
-              </div>
-            </div>
-
-            {/* Bottom right controls */}
-            <div className="flex flex-row items-center gap-1">
-              {/* LLM popover - loads when ready */}
-              <div
-                data-testid="ChatInputBar/llm-popover-trigger"
-                className={cn(controlsLoading && "invisible")}
-              >
-                <LLMPopover
-                  llmManager={llmManager}
-                  requiresImageGeneration={false}
-                  disabled={disabled}
+                  }}
+                  handleUploadChange={handleUploadChange}
+                  trigger={(open) => (
+                    <Button
+                      icon={SvgPlusCircle}
+                      tooltip="Attach Files"
+                      transient={open}
+                      disabled={disabled}
+                      prominence="tertiary"
+                    />
+                  )}
+                  selectedFileIds={currentMessageFiles.map((f) => f.id)}
                 />
+
+                {/* Controls that load in when data is ready */}
+                <div
+                  className={cn(
+                    "flex flex-row items-center",
+                    controlsLoading && "invisible"
+                  )}
+                >
+                  {selectedAssistant && selectedAssistant.tools.length > 0 && (
+                    <ActionsPopover
+                      selectedAssistant={selectedAssistant}
+                      filterManager={filterManager}
+                      availableSources={memoizedAvailableSources}
+                      disabled={disabled}
+                    />
+                  )}
+                  {showDeepResearch && (
+                    <Button
+                      icon={SvgHourglass}
+                      onClick={toggleDeepResearch}
+                      variant="select"
+                      selected={deepResearchEnabled}
+                      foldable={!deepResearchEnabled}
+                      disabled={disabled}
+                    >
+                      Deep Research
+                    </Button>
+                  )}
+
+                  {selectedAssistant &&
+                    forcedToolIds.length > 0 &&
+                    forcedToolIds.map((toolId) => {
+                      const tool = selectedAssistant.tools.find(
+                        (tool) => tool.id === toolId
+                      );
+                      if (!tool) {
+                        return null;
+                      }
+                      return (
+                        <Button
+                          key={toolId}
+                          icon={getIconForAction(tool)}
+                          onClick={() => {
+                            setForcedToolIds(
+                              forcedToolIds.filter((id) => id !== toolId)
+                            );
+                          }}
+                          variant="select"
+                          selected
+                          disabled={disabled}
+                        >
+                          {tool.display_name}
+                        </Button>
+                      );
+                    })}
+                </div>
               </div>
 
-              {/* Submit button - always visible */}
-              <div id="onyx-chat-input-send-button">
+              {/* Bottom right controls */}
+              <div className="flex flex-row items-center gap-1">
+                {/* LLM popover - loads when ready */}
+                <div
+                  data-testid="AppInputBar/llm-popover-trigger"
+                  className={cn(controlsLoading && "invisible")}
+                >
+                  <LLMPopover
+                    llmManager={llmManager}
+                    requiresImageGeneration={false}
+                    disabled={disabled}
+                  />
+                </div>
+
+                {/* Submit button */}
                 <Button
-                  icon={chatState === "input" ? SvgArrowUp : SvgStop}
+                  id="onyx-chat-input-send-button"
+                  icon={
+                    isClassifying
+                      ? SimpleLoader
+                      : chatState === "input"
+                        ? SvgArrowUp
+                        : SvgStop
+                  }
                   disabled={
-                    (chatState === "input" && !message) || hasUploadingFiles
+                    (chatState === "input" && !message) ||
+                    hasUploadingFiles ||
+                    isClassifying
                   }
                   onClick={() => {
                     if (chatState == "streaming") {
@@ -715,12 +781,12 @@ const ChatInputBar = React.memo(
                 />
               </div>
             </div>
-          </div>
+          )}
         </div>
       </Disabled>
     );
   }
 );
-ChatInputBar.displayName = "ChatInputBar";
+AppInputBar.displayName = "AppInputBar";
 
-export default ChatInputBar;
+export default AppInputBar;

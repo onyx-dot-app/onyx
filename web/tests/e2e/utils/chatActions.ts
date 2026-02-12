@@ -57,13 +57,13 @@ export async function sendMessage(page: Page, message: string) {
 
 export async function verifyCurrentModel(page: Page, modelName: string) {
   const text = await page
-    .getByTestId("ChatInputBar/llm-popover-trigger")
+    .getByTestId("AppInputBar/llm-popover-trigger")
     .textContent();
   expect(text).toContain(modelName);
 }
 
 export async function switchModel(page: Page, modelName: string) {
-  await page.getByTestId("ChatInputBar/llm-popover-trigger").click();
+  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
 
   // Wait for the popover to open
   await page.waitForSelector('[role="dialog"]', { state: "visible" });

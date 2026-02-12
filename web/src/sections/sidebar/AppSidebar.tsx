@@ -2,7 +2,7 @@
 
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -79,6 +79,8 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
+import { useAppMode } from "@/providers/AppModeProvider";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -151,6 +153,8 @@ const MemoizedAppSidebarInner = memo(
     const { popup, setPopup } = usePopup();
     const posthog = usePostHog();
     const { newTenantInfo, invitationInfo } = useModalContext();
+    const { setAppMode } = useAppMode();
+    const { reset } = useQueryController();
 
     // Use SWR hooks for data fetching
     const {
@@ -422,9 +426,13 @@ const MemoizedAppSidebarInner = memo(
       ]
     );
 
-    const { isAdmin, isCurator } = useUser();
+    const { isAdmin, isCurator, user } = useUser();
     const activeSidebarTab = useAppFocus();
     const createProjectModal = useCreateModal();
+    const defaultAppMode =
+      (user?.preferences?.default_app_mode?.toLowerCase() as
+        | "chat"
+        | "search") ?? "chat";
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
@@ -437,12 +445,23 @@ const MemoizedAppSidebarInner = memo(
             folded={folded}
             href={href}
             transient={activeSidebarTab.isNewSession()}
+            onClick={() => {
+              if (!activeSidebarTab.isNewSession()) return;
+              setAppMode(defaultAppMode);
+              reset();
+            }}
           >
             New Session
           </SidebarTab>
         </div>
       );
-    }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+    }, [
+      folded,
+      activeSidebarTab,
+      combinedSettings,
+      currentAgent,
+      defaultAppMode,
+    ]);
 
     const buildButton = useMemo(
       () => (

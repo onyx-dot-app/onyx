@@ -1,8 +1,8 @@
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
 
 interface PaginationProps {
   currentPage: number;
@@ -16,7 +16,7 @@ export default function Pagination({
   onPageChange,
 }: PaginationProps) {
   // Generate page numbers to display
-  const getPageNumbers = () => {
+  function getPageNumbers() {
     const pages: (number | string)[] = [];
     const maxPagesToShow = 7;
 
@@ -60,14 +60,14 @@ export default function Pagination({
     }
 
     return pages;
-  };
+  }
 
   const pageNumbers = getPageNumbers();
 
   return (
-    <div className={cn("flex items-center justify-center gap-1 mt-4")}>
+    <Section flexDirection="row" gap={0.25}>
       {/* Previous button */}
-      <OpalButton
+      <Button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
         prominence="tertiary"
@@ -75,44 +75,42 @@ export default function Pagination({
       />
 
       {/* Page numbers */}
-      {pageNumbers.map((page, index) => {
-        if (page === "...") {
+      <Section flexDirection="row" gap={0} width="fit">
+        {pageNumbers.map((page, index) => {
+          if (page === "...") {
+            return (
+              <Text key={`ellipsis-${index}`} secondaryBody text03>
+                ...
+              </Text>
+            );
+          }
+
+          const pageNum = page as number;
+          const isActive = pageNum === currentPage;
+
           return (
-            <Text
-              key={`ellipsis-${index}`}
-              secondaryBody
-              text03
-              className={cn("px-3 py-2")}
-            >
-              ...
-            </Text>
+            <Button
+              key={pageNum}
+              onClick={() => onPageChange(pageNum)}
+              prominence="tertiary"
+              transient={isActive}
+              icon={({ className }) => (
+                <div className={cn(className, "flex flex-col justify-center")}>
+                  <Text>{pageNum}</Text>
+                </div>
+              )}
+            />
           );
-        }
-
-        const pageNum = page as number;
-        const isActive = pageNum === currentPage;
-
-        return (
-          <Button
-            key={pageNum}
-            onClick={() => onPageChange(pageNum)}
-            main
-            tertiary
-            transient={isActive}
-            className={cn("min-w-[40px]")}
-          >
-            {pageNum}
-          </Button>
-        );
-      })}
+        })}
+      </Section>
 
       {/* Next button */}
-      <OpalButton
+      <Button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
         prominence="tertiary"
         icon={SvgChevronRight}
       />
-    </div>
+    </Section>
   );
 }

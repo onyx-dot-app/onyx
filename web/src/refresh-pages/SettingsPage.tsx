@@ -61,6 +61,7 @@ import {
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { Interactive } from "@opal/core";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 interface PAT {
   id: number;
@@ -770,7 +771,9 @@ function ChatPreferencesSettings() {
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserDefaultModel,
+    updateUserDefaultAppMode,
   } = useUser();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const llmManager = useLlmManager();
 
   const { popup, setPopup } = usePopup();
@@ -826,6 +829,27 @@ function ChatPreferencesSettings() {
               }}
             />
           </InputLayouts.Horizontal>
+
+          {isPaidEnterpriseFeaturesEnabled && (
+            <InputLayouts.Horizontal
+              title="Default App Mode"
+              description="Choose whether new sessions start in Search or Chat mode."
+              center
+            >
+              <InputSelect
+                value={user?.preferences.default_app_mode ?? "CHAT"}
+                onValueChange={(value) => {
+                  void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                }}
+              >
+                <InputSelect.Trigger />
+                <InputSelect.Content>
+                  <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
+                  <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </InputLayouts.Horizontal>
+          )}
         </Card>
       </Section>
 

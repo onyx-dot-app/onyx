@@ -44,21 +44,29 @@ import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import { PopoverMenu } from "@/refresh-components/Popover";
+import Popover, { PopoverMenu } from "@/refresh-components/Popover";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
+import { Interactive } from "@opal/core";
+import { OpenButton } from "@opal/components";
+import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
+  SvgBubbleText,
   SvgFolderIn,
   SvgMoreHorizontal,
+  SvgSearchMenu,
   SvgShare,
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useQueryController } from "@/providers/QueryControllerProvider";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 /**
  * App Header Component
@@ -75,6 +83,8 @@ import useAppFocus from "@/hooks/useAppFocus";
  * - App-Mode toggle (EE gated)
  */
 function Header() {
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const { appMode, setAppMode } = useAppMode();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
   const { setFolded } = useAppSidebarContext();
@@ -89,6 +99,7 @@ function Header() {
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const [modePopoverOpen, setModePopoverOpen] = useState(false);
   const {
     projects,
     fetchProjects,
@@ -98,9 +109,13 @@ function Header() {
   const { currentChatSession, refreshChatSessions } = useChatSessions();
   const { popup, setPopup } = usePopup();
   const router = useRouter();
+  const appFocus = useAppFocus();
+  const { classification } = useQueryController();
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
+
+  const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -288,19 +303,70 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row justify-center items-center py-3 px-4 h-16">
+      <div
+        className={cn(
+          "w-full flex flex-row justify-center items-center px-4 h-[3.3rem]",
+          // # Note (@raunakab):
+          //
+          // We add an additional top margin to align this header with the `LogoSection` inside of the App-Sidebar.
+          // For more information, check out `SidebarWrapper.tsx`.
+          "mt-2"
+        )}
+      >
         {/*
           Left:
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-        <div className="flex-1">
-          <IconButton
-            icon={SvgSidebar}
-            onClick={() => setFolded(false)}
-            className={cn(!isMobile && "invisible")}
-            internal
-          />
+        <div className="flex-1 flex flex-row items-center gap-2">
+          {isMobile && (
+            <IconButton
+              icon={SvgSidebar}
+              onClick={() => setFolded(false)}
+              internal
+            />
+          )}
+          {isPaidEnterpriseFeaturesEnabled &&
+            appFocus.isNewSession() &&
+            !classification && (
+              <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+                <Popover.Trigger asChild>
+                  <OpenButton
+                    icon={
+                      effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
+                    }
+                  >
+                    {effectiveMode === "search" ? "Search" : "Chat"}
+                  </OpenButton>
+                </Popover.Trigger>
+                <Popover.Content align="start" width="lg">
+                  <Popover.Menu>
+                    <LineItem
+                      icon={SvgSearchMenu}
+                      selected={effectiveMode === "search"}
+                      description="Quick search for documents"
+                      onClick={noProp(() => {
+                        setAppMode("search");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Search
+                    </LineItem>
+                    <LineItem
+                      icon={SvgBubbleText}
+                      selected={effectiveMode === "chat"}
+                      description="Conversation and research"
+                      onClick={noProp(() => {
+                        setAppMode("chat");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Chat
+                    </LineItem>
+                  </Popover.Menu>
+                </Popover.Content>
+              </Popover>
+            )}
         </div>
 
         {/*
@@ -319,7 +385,7 @@ function Header() {
           - more-options buttons
         */}
         <div className="flex flex-1 justify-end">
-          {currentChatSession && (
+          {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
                 leftIcon={SvgShare}
@@ -397,16 +463,17 @@ function Footer() {
         // # Note (from @raunakab):
         //
         // The conditional rendering of vertical padding based on the current page is intentional.
-        // The `ChatInputBar` has `shadow-01` applied, which extends ~14px below it.
+        // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
         // Because the content area in `Root` uses `overflow-auto`, the shadow would be
         // clipped at the container boundary — causing a visible rendering artefact.
         //
-        // To fix this, `ChatInputBar` has `mb-[14px]` to give the shadow breathing room.
-        // However, that extra margin adds visible space between the input and the Footer.
-        // To compensate, we remove the Footer's top padding when `appFocus.isChat()`.
+        // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
+        // give the shadow breathing room. However, that extra space adds visible gap
+        // between the input and the Footer. To compensate, we remove the Footer's top
+        // padding when `appFocus.isChat()`.
         //
-        // There is a corresponding note inside `ChatInputBar.tsx` explaining the `mb-[14px]`.
-        // Please refer to that note as well.
+        // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
+        // explaining this. Please refer to those notes as well.
         appFocus.isChat() ? "pb-2" : "py-2"
       )}
     >

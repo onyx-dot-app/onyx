@@ -6,9 +6,7 @@ import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
-import ChatInputBar, {
-  ChatInputBarHandle,
-} from "@/app/app/components/input/ChatInputBar";
+import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -30,8 +28,8 @@ import {
   useChatSessionStore,
   useDocumentSidebarVisible,
 } from "@/app/app/stores/useChatSessionStore";
-import MessageList from "@/components/chat/MessageList";
-import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
+import ChatUI from "@/sections/chat/ChatUI";
+import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
@@ -163,7 +161,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Refs
   const inputRef = useRef<HTMLDivElement>(null);
-  const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
+  const chatInputBarRef = useRef<AppInputBarHandle | null>(null);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
   // Access chat state from store
@@ -255,7 +253,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [handleMessageSpecificFileUpload]
   );
 
-  // Handle submit from ChatInputBar
+  // Handle submit from AppInputBar
   const handleChatInputSubmit = useCallback(
     (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
@@ -367,7 +365,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
                 >
-                  <MessageList
+                  <ChatUI
                     liveAssistant={resolvedAssistant}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
@@ -391,12 +389,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
-            {/* ChatInputBar container - in normal flex flow like AppPage */}
+            {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
               className="w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4"
             >
-              <ChatInputBar
+              <AppInputBar
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}

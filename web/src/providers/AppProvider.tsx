@@ -67,6 +67,7 @@ import { AuthTypeMetadata } from "@/lib/userSS";
 import { AppSidebarProvider } from "@/providers/AppSidebarProvider";
 import { AppModeProvider } from "@/providers/AppModeProvider";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
+import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -94,7 +95,9 @@ export default function AppProvider({
           <ProviderContextProvider>
             <ModalProvider user={user}>
               <AppSidebarProvider folded={!!folded}>
-                <AppModeProvider>{children}</AppModeProvider>
+                <AppModeProvider>
+                  <QueryControllerProvider>{children}</QueryControllerProvider>
+                </AppModeProvider>
               </AppSidebarProvider>
             </ModalProvider>
           </ProviderContextProvider>

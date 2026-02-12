@@ -67,19 +67,16 @@ export default function FilterButton({
   className,
   ...props
 }: FilterButtonProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const state = active ? "active" : "inactive";
 
   return (
     <button
       className={cn(
-        "p-2 h-fit rounded-12 group/FilterButton flex flex-row items-center justify-center gap-1",
+        "p-2 h-fit rounded-12 group/FilterButton flex flex-row items-center justify-center gap-1 w-fit",
         buttonClasses(transient)[state],
         className
       )}
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       {...props}
     >
       <div className="pr-0.5">
