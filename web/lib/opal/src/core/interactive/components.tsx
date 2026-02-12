@@ -303,27 +303,16 @@ function InteractiveBase({
  * Extends standard `<div>` attributes (minus `className` and `style`).
  */
 interface InteractiveContainerProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+  extends WithoutStyles<React.HTMLAttributes<HTMLButtonElement>> {
   /**
-   * Ref forwarded to the underlying element.
+   * Ref forwarded to the underlying `<button>` element.
    */
-  ref?: React.Ref<HTMLElement>;
+  ref?: React.Ref<HTMLButtonElement>;
 
   /**
-   * HTML button type (e.g. `"submit"`, `"button"`, `"reset"`).
+   * HTML button type.
    *
-   * When provided, renders a `<button>` element instead of a `<div>`.
-   * This keeps all styling (background, rounding, height) on a single
-   * element — unlike a wrapper approach which would split them.
-   *
-   * @example
-   * ```tsx
-   * <Interactive.Base>
-   *   <Interactive.Container type="submit">
-   *     <span>Submit</span>
-   *   </Interactive.Container>
-   * </Interactive.Base>
-   * ```
+   * @default "button"
    */
   type?: "submit" | "button" | "reset";
 
@@ -364,7 +353,7 @@ interface InteractiveContainerProps
 /**
  * Structural container for use inside `Interactive.Base`.
  *
- * Provides a `<div>` with design-system-controlled border, padding, rounding,
+ * Renders a `<button>` with design-system-controlled border, padding, rounding,
  * and height. Use this when you need a consistent container shape for
  * interactive content.
  *
@@ -393,7 +382,7 @@ interface InteractiveContainerProps
  */
 function InteractiveContainer({
   ref,
-  type,
+  type = "button",
   border,
   roundingVariant = "default",
   heightVariant = "lg",
@@ -423,23 +412,15 @@ function InteractiveContainer({
     style: slotStyle,
   };
 
-  if (type) {
-    // When Interactive.Base is disabled it injects aria-disabled via Slot.
-    // Map that to the native disabled attribute so a <button type="submit">
-    // cannot trigger form submission in the disabled state.
-    const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
-    const nativeDisabled =
-      ariaDisabled === true || ariaDisabled === "true" || undefined;
-    return (
-      <button
-        ref={ref as React.Ref<HTMLButtonElement>}
-        type={type}
-        disabled={nativeDisabled}
-        {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
-      />
-    );
-  }
-  return <div ref={ref as React.Ref<HTMLDivElement>} {...sharedProps} />;
+  // When Interactive.Base is disabled it injects aria-disabled via Slot.
+  // Map that to the native disabled attribute so the <button> cannot
+  // trigger form submission in the disabled state.
+  const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
+  const nativeDisabled =
+    ariaDisabled === true || ariaDisabled === "true" || undefined;
+  return (
+    <button ref={ref} type={type} disabled={nativeDisabled} {...sharedProps} />
+  );
 }
 
 // ---------------------------------------------------------------------------
