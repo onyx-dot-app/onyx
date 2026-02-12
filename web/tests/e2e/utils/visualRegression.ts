@@ -118,6 +118,7 @@ export async function expectScreenshot(
     await page.screenshot({
       path: screenshotPath,
       fullPage,
+      mask: maskLocators.length > 0 ? maskLocators : undefined,
       ...options.screenshotOptions,
     });
   }
