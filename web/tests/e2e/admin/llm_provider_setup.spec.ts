@@ -92,7 +92,7 @@ async function openProviderEditModal(
   return modal;
 }
 
-test.describe("LLM Provider Setup", () => {
+test.describe("LLM Provider Setup @exclusive", () => {
   let providersToCleanup: number[] = [];
 
   test.beforeEach(async ({ page }) => {
@@ -190,6 +190,9 @@ test.describe("LLM Provider Setup", () => {
     page,
   }) => {
     const apiClient = new OnyxApiClient(page.request);
+    const initialDefaultProvider = (await listAdminLLMProviders(page)).find(
+      (provider) => provider.is_default_provider
+    );
     const firstProviderName = uniqueName("PW Baseline Provider");
     const secondProviderName = uniqueName("PW Target Provider");
 
@@ -200,33 +203,50 @@ test.describe("LLM Provider Setup", () => {
     );
     providersToCleanup.push(firstProviderId, secondProviderId);
 
-    await apiClient.setProviderAsDefault(firstProviderId);
+    try {
+      await apiClient.setProviderAsDefault(firstProviderId);
 
-    await page.reload();
-    await page.waitForLoadState("networkidle");
+      await page.reload();
+      await page.waitForLoadState("networkidle");
 
-    const secondProviderCard = await findProviderCard(page, secondProviderName);
-    await expect(secondProviderCard).toBeVisible({ timeout: 10000 });
-    await secondProviderCard.getByText("Set as default").click();
+      const secondProviderCard = await findProviderCard(
+        page,
+        secondProviderName
+      );
+      await expect(secondProviderCard).toBeVisible({ timeout: 10000 });
+      await secondProviderCard.getByText("Set as default").click();
 
-    await expect(secondProviderCard.getByText("Default")).toBeVisible({
-      timeout: 10000,
-    });
+      await expect(secondProviderCard.getByText("Default")).toBeVisible({
+        timeout: 10000,
+      });
 
-    await expect
-      .poll(
-        async () =>
-          (await getProviderByName(page, secondProviderName))
-            ?.is_default_provider
-      )
-      .toBeTruthy();
+      await expect
+        .poll(
+          async () =>
+            (await getProviderByName(page, secondProviderName))
+              ?.is_default_provider
+        )
+        .toBeTruthy();
 
-    await expect
-      .poll(
-        async () =>
-          (await getProviderByName(page, firstProviderName))
-            ?.is_default_provider
-      )
-      .toBeFalsy();
+      await expect
+        .poll(
+          async () =>
+            (await getProviderByName(page, firstProviderName))
+              ?.is_default_provider
+        )
+        .toBeFalsy();
+    } finally {
+      if (initialDefaultProvider) {
+        try {
+          await apiClient.setProviderAsDefault(initialDefaultProvider.id);
+        } catch (error) {
+          console.warn(
+            `Failed to restore initial default provider ${
+              initialDefaultProvider.id
+            }: ${String(error)}`
+          );
+        }
+      }
+    }
   });
 });

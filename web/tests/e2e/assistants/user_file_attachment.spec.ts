@@ -73,12 +73,22 @@ async function uploadTestFile(
       await addFileButton.click();
       const fileChooser = await fileChooserPromise;
 
+      // Wait for upload API completion to avoid racing the UI refresh.
+      const uploadResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/user/projects/file/upload") &&
+          response.request().method() === "POST",
+        { timeout: 15000 }
+      );
+
       // Upload the file
       await fileChooser.setFiles({
         name: fileName,
         mimeType: "text/plain",
         buffer: buffer,
       });
+      const uploadResponse = await uploadResponsePromise;
+      expect(uploadResponse.ok()).toBeTruthy();
 
       // Wait for network to settle after upload
       await page.waitForLoadState("networkidle", { timeout: 10000 });
@@ -86,10 +96,12 @@ async function uploadTestFile(
       // Wait a moment for the UI to update
       await page.waitForTimeout(500);
 
-      // Wait for the file to appear in the table (look for partial match)
-      const fileNameWithoutExt = fileName.replace(".txt", "");
-      const fileElement = page.locator(`text=${fileNameWithoutExt}`).first();
-      await expect(fileElement).toBeVisible({ timeout: 10000 });
+      // Wait for the uploaded file row to appear.
+      const fileRow = page
+        .locator('[aria-label^="user-file-row-"]')
+        .filter({ hasText: fileName })
+        .first();
+      await expect(fileRow).toBeVisible({ timeout: 10000 });
 
       console.log(`[test] Successfully uploaded ${fileName}`);
 
