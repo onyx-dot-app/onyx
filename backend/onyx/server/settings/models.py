@@ -80,6 +80,9 @@ class Settings(BaseModel):
     # Default Assistant settings
     disable_default_assistant: bool | None = False
 
+    # OpenSearch migration
+    opensearch_indexing_enabled: bool = False
+
 
 class UserSettings(Settings):
     notifications: list[Notification]
