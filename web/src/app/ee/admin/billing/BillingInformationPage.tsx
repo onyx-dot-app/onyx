@@ -49,11 +49,12 @@ export default function BillingInformationPage() {
   useEffect(() => {
     if (
       !isLoading &&
+      !error &&
       (!billingInformation || !hasActiveSubscription(billingInformation))
     ) {
       router.replace("/admin/billing");
     }
-  }, [isLoading, billingInformation, router]);
+  }, [isLoading, error, billingInformation, router]);
 
   if (isLoading) {
     return <div className="text-center py-8">Loading...</div>;
