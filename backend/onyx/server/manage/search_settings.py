@@ -309,3 +309,16 @@ def _validate_contextual_rag_model(
         return f"Model {model_name} not found in provider {provider_name}"
 
     return None
+
+
+def add_model_to_flow_and_update_default(
+    provider_name: str,
+    model_name: str,
+    db_session: Session,
+) -> None:
+    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+
+    if provider:
+        _model_config = next(
+            (mc for mc in provider.model_configurations if mc.name == model_name), None
+        )
