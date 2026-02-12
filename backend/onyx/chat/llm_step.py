@@ -36,6 +36,8 @@ from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -509,6 +511,7 @@ def translate_history_to_llm_format(
         if PROMPT_CACHE_CHAT_HISTORY and msg.message_type in [
             MessageType.SYSTEM,
             MessageType.USER,
+            MessageType.USER_REMINDER,
             MessageType.ASSISTANT,
             MessageType.TOOL_CALL_RESPONSE,
         ]:
@@ -569,6 +572,16 @@ def translate_history_to_llm_format(
                     content=msg.message,
                 )
                 messages.append(user_msg_text)
+
+        elif msg.message_type == MessageType.USER_REMINDER:
+            # User reminder messages are wrapped with system-reminder tags
+            # and converted to UserMessage (LLM APIs don't have a native reminder type)
+            wrapped_content = f"{SYSTEM_REMINDER_TAG_OPEN}\n{msg.message}\n{SYSTEM_REMINDER_TAG_CLOSE}"
+            reminder_msg = UserMessage(
+                role="user",
+                content=wrapped_content,
+            )
+            messages.append(reminder_msg)
 
         elif msg.message_type == MessageType.ASSISTANT:
             tool_calls_list: list[ToolCall] | None = None

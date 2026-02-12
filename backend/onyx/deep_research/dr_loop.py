@@ -132,7 +132,7 @@ def generate_final_report(
         reminder_message = ChatMessageSimple(
             message=final_reminder,
             token_count=token_counter(final_reminder),
-            message_type=MessageType.USER,
+            message_type=MessageType.USER_REMINDER,
         )
         final_report_history = construct_message_history(
             system_prompt=system_prompt,
@@ -309,6 +309,8 @@ def run_deep_research_llm_loop(
                 token_count=300,
                 message_type=MessageType.SYSTEM,
             )
+            # Note this is fine to use a USER message type here as it can just be interpretered as a
+            # user's message directly to the LLM.
             reminder_message = ChatMessageSimple(
                 message=RESEARCH_PLAN_REMINDER,
                 token_count=100,
@@ -457,11 +459,9 @@ def run_deep_research_llm_loop(
                     first_cycle_reminder_message = ChatMessageSimple(
                         message=FIRST_CYCLE_REMINDER,
                         token_count=FIRST_CYCLE_REMINDER_TOKENS,
-                        message_type=MessageType.USER,
+                        message_type=MessageType.USER_REMINDER,
                     )
-                    first_cycle_tokens = FIRST_CYCLE_REMINDER_TOKENS
                 else:
-                    first_cycle_tokens = 0
                     first_cycle_reminder_message = None
 
                 research_agent_calls: list[ToolCallKickoff] = []
@@ -484,15 +484,12 @@ def run_deep_research_llm_loop(
                     system_prompt=system_prompt,
                     custom_agent_prompt=None,
                     simple_chat_history=simple_chat_history,
-                    reminder_message=None,
+                    reminder_message=first_cycle_reminder_message,
                     project_files=None,
-                    available_tokens=available_tokens - first_cycle_tokens,
+                    available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
                     all_injected_file_metadata=all_injected_file_metadata,
                 )
-
-                if first_cycle_reminder_message is not None:
-                    truncated_message_history.append(first_cycle_reminder_message)
 
                 # Use think tool processor for non-reasoning models to convert
                 # think_tool calls to reasoning content

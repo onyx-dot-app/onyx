@@ -311,6 +311,7 @@ class MessageType(str, Enum):
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
     TOOL_CALL_RESPONSE = "tool_call_response"
+    USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
 
 
 class ChatMessageSimpleType(str, Enum):
