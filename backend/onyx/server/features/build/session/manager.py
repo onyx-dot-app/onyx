@@ -83,7 +83,7 @@ from onyx.server.features.build.session.prompts import (
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_span_output
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -838,10 +838,8 @@ class SessionManager:
                     response = llm.invoke(
                         prompt_messages, reasoning_effort=ReasoningEffort.OFF
                     )
+                    record_llm_response(span_generation, response)
                     generated_name = llm_response_to_string(response).strip().strip('"')
-                    record_llm_span_output(
-                        span_generation, generated_name, response.usage
-                    )
 
             # Ensure the name isn't too long (max 50 chars)
             if len(generated_name) > 50:
@@ -898,8 +896,8 @@ class SessionManager:
                         reasoning_effort=ReasoningEffort.OFF,
                         max_tokens=500,
                     )
+                    record_llm_response(span_generation, response)
                     raw_output = llm_response_to_string(response).strip()
-                    record_llm_span_output(span_generation, raw_output, response.usage)
 
             return self._parse_suggestions(raw_output)
         except Exception as e:

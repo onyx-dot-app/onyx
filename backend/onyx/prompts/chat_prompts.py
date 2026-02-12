@@ -1,5 +1,8 @@
 # ruff: noqa: E501, W605 start
 
+from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
+
+
 DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
 CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
 ALT_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
@@ -22,6 +25,8 @@ You use proper Markdown and LaTeX to format your responses for math, scientific,
 For code you prefer to use Markdown and specify the language.
 You can use horizontal rules (---) to separate sections of your responses.
 You can use Markdown tables to format your responses for data, lists, and other structured information.
+
+{REMINDER_TAG_DESCRIPTION}
 """.lstrip()
 
 
