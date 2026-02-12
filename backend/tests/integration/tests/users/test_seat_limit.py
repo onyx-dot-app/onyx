@@ -26,7 +26,7 @@ from tests.integration.common_utils.managers.user import UserManager
 _LICENSE_REDIS_KEY = "public:license:metadata"
 
 
-def _seed_license(r: redis.Redis, seats: int) -> None:  # type: ignore[type-arg]
+def _seed_license(r: redis.Redis, seats: int) -> None:
     """Write a LicenseMetadata entry into Redis with the given seat cap."""
     now = datetime.utcnow()
     metadata = LicenseMetadata(
@@ -43,11 +43,11 @@ def _seed_license(r: redis.Redis, seats: int) -> None:  # type: ignore[type-arg]
     r.set(_LICENSE_REDIS_KEY, metadata.model_dump_json(), ex=300)
 
 
-def _clear_license(r: redis.Redis) -> None:  # type: ignore[type-arg]
+def _clear_license(r: redis.Redis) -> None:
     r.delete(_LICENSE_REDIS_KEY)
 
 
-def _redis() -> redis.Redis:  # type: ignore[type-arg]
+def _redis() -> redis.Redis:
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB_NUMBER)
 
 
