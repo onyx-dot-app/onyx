@@ -3,16 +3,21 @@
 import pytest
 
 from onyx.chat.llm_loop import _should_keep_bedrock_tool_definitions
+from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import FileToolMetadata
+from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.models import ToolCallKickoff
 
 
 class _StubConfig:
@@ -906,3 +911,130 @@ class TestBedrockToolConfigGuard:
         ]
 
         assert _should_keep_bedrock_tool_definitions(llm, history) is False
+
+
+class TestFallbackToolExtraction:
+    def _tool_defs(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "internal_search",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "queries": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            }
+                        },
+                        "required": ["queries"],
+                    },
+                },
+            }
+        ]
+
+    def test_noop_if_fallback_was_already_attempted(self) -> None:
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+            tool_calls=None,
+        )
+
+        result, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            fallback_extraction_attempted=True,
+            tool_defs=self._tool_defs(),
+            turn_index=0,
+        )
+
+        assert result is llm_step_result
+        assert attempted is False
+
+    def test_extracts_from_answer_when_required_and_no_tool_calls(self) -> None:
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+            tool_calls=None,
+        )
+
+        result, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            fallback_extraction_attempted=False,
+            tool_defs=self._tool_defs(),
+            turn_index=3,
+        )
+
+        assert attempted is True
+        assert result.tool_calls is not None
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].tool_name == "internal_search"
+        assert result.tool_calls[0].tool_args == {"queries": ["alpha"]}
+        assert result.tool_calls[0].placement == Placement(turn_index=3)
+
+    def test_falls_back_to_reasoning_when_answer_has_no_tool_calls(self) -> None:
+        llm_step_result = LlmStepResult(
+            reasoning='{"name":"internal_search","arguments":{"queries":["beta"]}}',
+            answer="I should search first.",
+            tool_calls=None,
+        )
+
+        result, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            fallback_extraction_attempted=False,
+            tool_defs=self._tool_defs(),
+            turn_index=5,
+        )
+
+        assert attempted is True
+        assert result.tool_calls is not None
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].tool_name == "internal_search"
+        assert result.tool_calls[0].tool_args == {"queries": ["beta"]}
+        assert result.tool_calls[0].placement == Placement(turn_index=5)
+
+    def test_returns_unchanged_when_required_but_nothing_extractable(self) -> None:
+        llm_step_result = LlmStepResult(
+            reasoning="Need more info.",
+            answer="Let me think.",
+            tool_calls=None,
+        )
+
+        result, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            fallback_extraction_attempted=False,
+            tool_defs=self._tool_defs(),
+            turn_index=1,
+        )
+
+        assert result is llm_step_result
+        assert attempted is True
+        assert result.tool_calls is None
+
+    def test_noop_when_tool_calls_already_present(self) -> None:
+        existing_call = ToolCallKickoff(
+            tool_call_id="call_existing",
+            tool_name="internal_search",
+            tool_args={"queries": ["already-set"]},
+            placement=Placement(turn_index=0),
+        )
+        llm_step_result = LlmStepResult(
+            reasoning=None,
+            answer='{"name":"internal_search","arguments":{"queries":["alpha"]}}',
+            tool_calls=[existing_call],
+        )
+
+        result, attempted = _try_fallback_tool_extraction(
+            llm_step_result=llm_step_result,
+            tool_choice=ToolChoiceOptions.REQUIRED,
+            fallback_extraction_attempted=False,
+            tool_defs=self._tool_defs(),
+            turn_index=0,
+        )
+
+        assert result is llm_step_result
+        assert attempted is False
