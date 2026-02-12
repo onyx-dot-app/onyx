@@ -12,6 +12,7 @@ import { SvgMoreHorizontal, SvgPlug, SvgSettings, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 export type ConnectorStatus =
   | "not_connected"
