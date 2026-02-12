@@ -15,8 +15,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
-  pull-requests: write # Required for posting visual diff PR comments
 
 env:
   # Test Environment Variables
@@ -244,6 +242,9 @@ jobs:
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
     name: Playwright Tests (${{ matrix.project }})
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
+      contents: read
     runs-on:
       - runs-on
       - runner=8cpu-linux-arm64
