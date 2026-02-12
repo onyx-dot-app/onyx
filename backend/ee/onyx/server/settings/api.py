@@ -4,6 +4,7 @@ from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
+from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Settings
 from onyx.utils.logger import setup_logger
@@ -89,7 +90,11 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                 # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
                 settings.ee_features_enabled = True
         else:
-            # No license = community edition, disable EE features
+            # No license found.
+            if ENTERPRISE_EDITION_ENABLED:
+                # Legacy EE flag is set → prior EE usage (e.g. permission
+                # syncing) means indexed data may need protection.
+                settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
     except RedisError as e:
         logger.warning(f"Failed to check license metadata for settings: {e}")
