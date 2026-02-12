@@ -242,6 +242,7 @@ jobs:
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
     name: Playwright Tests (${{ matrix.project }})
+    environment: ci-protected
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
       contents: read
@@ -459,13 +460,6 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
-        env:
-          # The runs-on EC2 runner has an instance profile whose credentials
-          # are discoverable via IMDS. This version of configure-aws-credentials
-          # treats them as "IAM user credentials" and attempts role-chaining
-          # (sts:AssumeRole) instead of OIDC (sts:AssumeRoleWithWebIdentity).
-          # Disabling IMDS forces the action to fall through to the OIDC path.
-          AWS_EC2_METADATA_DISABLED: true
 
       - name: Install the latest version of uv
         if: always()
