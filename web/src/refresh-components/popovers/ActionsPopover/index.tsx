@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FILE_READER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
@@ -439,6 +440,14 @@ export default function ActionsPopover({
       hasNoConnectors &&
       !isAdmin &&
       !isCurator
+    ) {
+      return false;
+    }
+
+    // Hide File Reader entirely when it's not available (i.e. DISABLE_VECTOR_DB is off)
+    if (
+      tool.in_code_tool_id === FILE_READER_TOOL_ID &&
+      !availableToolIdSet.has(tool.id)
     ) {
       return false;
     }
