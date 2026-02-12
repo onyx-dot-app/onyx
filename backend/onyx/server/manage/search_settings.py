@@ -6,26 +6,41 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
+from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.index_attempt import expire_index_attempts
+from onyx.db.llm import add_model_to_flow
+from onyx.db.llm import fetch_default_contextual_rag_model
+from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import update_default_contextual_rag_provider
+from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
+from onyx.db.models import SearchSettings
 from onyx.db.models import User
+from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import delete_search_settings
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.search_settings import get_embedding_provider_from_provider_type
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
+from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import update_unstructured_api_key
+from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
 from onyx.server.models import IdReturn
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MULTI_TENANT
 
 router = APIRouter(prefix="/search-settings")
@@ -43,95 +58,95 @@ def set_new_search_settings(
     """
     # TODO(andrei): Re-enable.
     logger.error("Setting new search settings is temporarily disabled.")
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Setting new search settings is temporarily disabled.",
+    # raise HTTPException(
+    #     status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    #     detail="Setting new search settings is temporarily disabled.",
+    # )
+    if search_settings_new.index_name:
+        logger.warning("Index name was specified by request, this is not suggested")
+
+    # Disallow contextual RAG for cloud deployments
+    if MULTI_TENANT and search_settings_new.enable_contextual_rag:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contextual RAG disabled in Onyx Cloud",
+        )
+
+    # Validate cloud provider exists or create new LiteLLM provider
+    if search_settings_new.provider_type is not None:
+        cloud_provider = get_embedding_provider_from_provider_type(
+            db_session, provider_type=search_settings_new.provider_type
+        )
+
+        if cloud_provider is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
+            )
+
+    search_settings = get_current_search_settings(db_session)
+
+    if search_settings_new.index_name is None:
+        # We define index name here
+        index_name = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
+        if (
+            search_settings_new.model_name == search_settings.model_name
+            and not search_settings.index_name.endswith(ALT_INDEX_SUFFIX)
+        ):
+            index_name += ALT_INDEX_SUFFIX
+        search_values = search_settings_new.model_dump()
+        search_values["index_name"] = index_name
+        new_search_settings_request = SavedSearchSettings(**search_values)
+    else:
+        new_search_settings_request = SavedSearchSettings(
+            **search_settings_new.model_dump()
+        )
+
+    secondary_search_settings = get_secondary_search_settings(db_session)
+
+    if secondary_search_settings:
+        # Cancel any background indexing jobs
+        expire_index_attempts(
+            search_settings_id=secondary_search_settings.id, db_session=db_session
+        )
+
+        # Mark previous model as a past model directly
+        update_search_settings_status(
+            search_settings=secondary_search_settings,
+            new_status=IndexModelStatus.PAST,
+            db_session=db_session,
+        )
+
+    new_search_settings = create_new_search_settings(
+        search_settings_request=new_search_settings_request, db_session=db_session
     )
-    # if search_settings_new.index_name:
-    #     logger.warning("Index name was specified by request, this is not suggested")
 
-    # # Disallow contextual RAG for cloud deployments
-    # if MULTI_TENANT and search_settings_new.enable_contextual_rag:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail="Contextual RAG disabled in Onyx Cloud",
-    #     )
+    # Ensure Vespa has the new index immediately
+    get_multipass_config(search_settings)
+    get_multipass_config(new_search_settings)
+    document_index = get_default_document_index(search_settings, new_search_settings)
 
-    # # Validate cloud provider exists or create new LiteLLM provider
-    # if search_settings_new.provider_type is not None:
-    #     cloud_provider = get_embedding_provider_from_provider_type(
-    #         db_session, provider_type=search_settings_new.provider_type
-    #     )
+    document_index.ensure_indices_exist(
+        primary_embedding_dim=search_settings.final_embedding_dim,
+        primary_embedding_precision=search_settings.embedding_precision,
+        secondary_index_embedding_dim=new_search_settings.final_embedding_dim,
+        secondary_index_embedding_precision=new_search_settings.embedding_precision,
+    )
 
-    #     if cloud_provider is None:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_400_BAD_REQUEST,
-    #             detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
-    #         )
+    # Pause index attempts for the currently in use index to preserve resources
+    if DISABLE_INDEX_UPDATE_ON_SWAP:
+        expire_index_attempts(
+            search_settings_id=search_settings.id, db_session=db_session
+        )
+        for cc_pair in get_connector_credential_pairs(db_session):
+            resync_cc_pair(
+                cc_pair=cc_pair,
+                search_settings_id=new_search_settings.id,
+                db_session=db_session,
+            )
 
-    # search_settings = get_current_search_settings(db_session)
-
-    # if search_settings_new.index_name is None:
-    #     # We define index name here
-    #     index_name = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
-    #     if (
-    #         search_settings_new.model_name == search_settings.model_name
-    #         and not search_settings.index_name.endswith(ALT_INDEX_SUFFIX)
-    #     ):
-    #         index_name += ALT_INDEX_SUFFIX
-    #     search_values = search_settings_new.model_dump()
-    #     search_values["index_name"] = index_name
-    #     new_search_settings_request = SavedSearchSettings(**search_values)
-    # else:
-    #     new_search_settings_request = SavedSearchSettings(
-    #         **search_settings_new.model_dump()
-    #     )
-
-    # secondary_search_settings = get_secondary_search_settings(db_session)
-
-    # if secondary_search_settings:
-    #     # Cancel any background indexing jobs
-    #     expire_index_attempts(
-    #         search_settings_id=secondary_search_settings.id, db_session=db_session
-    #     )
-
-    #     # Mark previous model as a past model directly
-    #     update_search_settings_status(
-    #         search_settings=secondary_search_settings,
-    #         new_status=IndexModelStatus.PAST,
-    #         db_session=db_session,
-    #     )
-
-    # new_search_settings = create_search_settings(
-    #     search_settings=new_search_settings_request, db_session=db_session
-    # )
-
-    # # Ensure Vespa has the new index immediately
-    # get_multipass_config(search_settings)
-    # get_multipass_config(new_search_settings)
-    # document_index = get_default_document_index(search_settings, new_search_settings)
-
-    # document_index.ensure_indices_exist(
-    #     primary_embedding_dim=search_settings.final_embedding_dim,
-    #     primary_embedding_precision=search_settings.embedding_precision,
-    #     secondary_index_embedding_dim=new_search_settings.final_embedding_dim,
-    #     secondary_index_embedding_precision=new_search_settings.embedding_precision,
-    # )
-
-    # # Pause index attempts for the currently in use index to preserve resources
-    # if DISABLE_INDEX_UPDATE_ON_SWAP:
-    #     expire_index_attempts(
-    #         search_settings_id=search_settings.id, db_session=db_session
-    #     )
-    #     for cc_pair in get_connector_credential_pairs(db_session):
-    #         resync_cc_pair(
-    #             cc_pair=cc_pair,
-    #             search_settings_id=new_search_settings.id,
-    #             db_session=db_session,
-    #         )
-
-    # db_session.commit()
-    # return IdReturn(id=new_search_settings.id)
+    db_session.commit()
+    return IdReturn(id=new_search_settings.id)
 
 
 @router.post("/cancel-new-embedding", dependencies=[Depends(require_vector_db)])
@@ -187,7 +202,10 @@ def get_current_search_settings_endpoint(
     db_session: Session = Depends(get_session),
 ) -> SavedSearchSettings:
     current_search_settings = get_current_search_settings(db_session)
-    return SavedSearchSettings.from_db_model(current_search_settings)
+    default_contextual_model = fetch_default_contextual_rag_model(db_session)
+    return SavedSearchSettings.from_db_model(
+        current_search_settings, contextual_model=default_contextual_model
+    )
 
 
 @router.get("/get-secondary-search-settings")
@@ -199,7 +217,10 @@ def get_secondary_search_settings_endpoint(
     if not secondary_search_settings:
         return None
 
-    return SavedSearchSettings.from_db_model(secondary_search_settings)
+    default_contextual_model = fetch_default_contextual_rag_model(db_session)
+    return SavedSearchSettings.from_db_model(
+        secondary_search_settings, contextual_model=default_contextual_model
+    )
 
 
 @router.get("/get-all-search-settings")
@@ -209,10 +230,15 @@ def get_all_search_settings(
 ) -> FullModelVersionResponse:
     current_search_settings = get_current_search_settings(db_session)
     secondary_search_settings = get_secondary_search_settings(db_session)
+    default_contextual_model = fetch_default_contextual_rag_model(db_session)
     return FullModelVersionResponse(
-        current_settings=SavedSearchSettings.from_db_model(current_search_settings),
+        current_settings=SavedSearchSettings.from_db_model(
+            current_search_settings, contextual_model=default_contextual_model
+        ),
         secondary_settings=(
-            SavedSearchSettings.from_db_model(secondary_search_settings)
+            SavedSearchSettings.from_db_model(
+                secondary_search_settings, contextual_model=default_contextual_model
+            )
             if secondary_search_settings
             else None
         ),
@@ -237,6 +263,19 @@ def update_saved_search_settings(
         search_settings=search_settings, db_session=db_session
     )
 
+    if search_settings.enable_contextual_rag:
+        if (
+            search_settings.contextual_rag_llm_name
+            and search_settings.contextual_rag_llm_provider
+        ):
+            add_model_to_flow_and_update_default(
+                provider_name=search_settings.contextual_rag_llm_provider,
+                model_name=search_settings.contextual_rag_llm_name,
+                db_session=db_session,
+            )
+    else:
+        update_no_default_contextual_rag_provider(db_session=db_session)
+
 
 @router.get("/unstructured-api-key-set")
 def unstructured_api_key_set(
@@ -259,3 +298,55 @@ def delete_unstructured_api_key_endpoint(
     _: User = Depends(current_admin_user),
 ) -> None:
     delete_unstructured_api_key()
+
+
+def create_new_search_settings(
+    search_settings_request: SavedSearchSettings,
+    db_session: Session,
+) -> SearchSettings:
+    search_settings = create_search_settings(
+        search_settings=search_settings_request, db_session=db_session
+    )
+
+    enable_contextual_rag = search_settings.enable_contextual_rag
+
+    if enable_contextual_rag:
+        if (
+            search_settings_request.contextual_rag_llm_name
+            and search_settings_request.contextual_rag_llm_provider
+        ):
+            add_model_to_flow_and_update_default(
+                provider_name=search_settings_request.contextual_rag_llm_provider,
+                model_name=search_settings_request.contextual_rag_llm_name,
+                db_session=db_session,
+            )
+    else:
+        update_no_default_contextual_rag_provider(
+            db_session=db_session,
+        )
+
+    return search_settings
+
+
+def add_model_to_flow_and_update_default(
+    provider_name: str,
+    model_name: str,
+    db_session: Session,
+) -> None:
+    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    if provider:
+        model_config = next(
+            (mc for mc in provider.model_configurations if mc.name == model_name), None
+        )
+        if model_config:
+            add_model_to_flow(
+                db_session=db_session,
+                model_configuration_id=model_config.id,
+                flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
+            )
+
+            update_default_contextual_rag_provider(
+                db_session=db_session,
+                provider_id=provider.id,
+                model_name=model_name,
+            )

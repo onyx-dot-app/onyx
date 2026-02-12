@@ -23,6 +23,7 @@ from onyx.db.document import check_docs_exist
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.index_attempt import cancel_indexing_attempts_past_model
 from onyx.db.index_attempt import expire_index_attempts
+from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
@@ -287,7 +288,10 @@ def update_default_multipass_indexing(db_session: Session) -> None:
         current_settings = get_current_search_settings(db_session)
 
         logger.notice(f"Updating multipass indexing setting to: {gpu_available}")
-        updated_settings = SavedSearchSettings.from_db_model(current_settings)
+        default_contextual_model = fetch_default_contextual_rag_model(db_session)
+        updated_settings = SavedSearchSettings.from_db_model(
+            current_settings, contextual_model=default_contextual_model
+        )
         # Enable multipass indexing if GPU is available or if using a cloud provider
         updated_settings.multipass_indexing = (
             gpu_available or current_settings.cloud_provider is not None
