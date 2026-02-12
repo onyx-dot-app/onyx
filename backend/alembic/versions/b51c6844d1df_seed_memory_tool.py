@@ -1,7 +1,7 @@
 """seed_memory_tool and add enable_memory_tool to user
 
 Revision ID: b51c6844d1df
-Revises: feead2911109
+Revises: d3fd499c829c
 Create Date: 2026-02-11 00:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "b51c6844d1df"
-down_revision = "feead2911109"
+down_revision = "d3fd499c829c"
 branch_labels = None
 depends_on = None
 
