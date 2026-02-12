@@ -19,7 +19,7 @@ import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
 import Button from "@/refresh-components/buttons/Button";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { SvgSettings, SvgTrash } from "@opal/icons";
 const numToDisplay = 50;
 
@@ -123,7 +123,7 @@ export default function SlackChannelConfigsTable({
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <IconButton
+                        <OpalButton
                           onClick={async (e) => {
                             e.stopPropagation();
                             const response = await deleteSlackChannelConfig(
@@ -144,7 +144,8 @@ export default function SlackChannelConfigsTable({
                             refresh();
                           }}
                           icon={SvgTrash}
-                          internal
+                          prominence="tertiary"
+                          size="sm"
                         />
                       </TableCell>
                     </TableRow>

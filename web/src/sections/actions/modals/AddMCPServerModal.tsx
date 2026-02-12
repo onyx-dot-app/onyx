@@ -16,7 +16,7 @@ import {
 } from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
@@ -224,9 +224,9 @@ export default function AddMCPServerModal({
                         alignItems="center"
                         width="fit"
                       >
-                        <IconButton
+                        <OpalButton
                           icon={SvgUnplug}
-                          tertiary
+                          prominence="tertiary"
                           type="button"
                           tooltip="Disconnect Server"
                           onClick={handleDisconnectClick}

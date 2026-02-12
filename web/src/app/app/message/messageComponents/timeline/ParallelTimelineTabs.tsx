@@ -16,7 +16,7 @@ import {
 } from "./TimelineRendererComponent";
 import Tabs from "@/refresh-components/Tabs";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 import { TimelineTopSpacer } from "@/app/app/message/messageComponents/timeline/primitives/TimelineTopSpacer";
@@ -134,8 +134,9 @@ export function ParallelTimelineTabs({
                   "transition-colors duration-200"
                 )}
                 rightContent={
-                  <IconButton
-                    internal
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
                     onClick={handleToggle}
                     icon={isExpanded ? SvgFold : SvgExpand}
                   />

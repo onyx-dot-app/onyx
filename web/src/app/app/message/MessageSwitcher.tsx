@@ -1,4 +1,4 @@
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 const DISABLED_MESSAGE = "Wait for agent message to complete";
@@ -32,10 +32,10 @@ export default function MessageSwitcher({
       className="flex flex-row items-center gap-1"
       data-testid="MessageSwitcher/container"
     >
-      <IconButton
+      <Button
         icon={SvgChevronLeft}
         onClick={previous}
-        tertiary
+        prominence="tertiary"
         disabled={disableForStreaming}
         tooltip={disableForStreaming ? DISABLED_MESSAGE : "Previous"}
       />
@@ -52,10 +52,10 @@ export default function MessageSwitcher({
         </Text>
       </div>
 
-      <IconButton
+      <Button
         icon={SvgChevronRight}
         onClick={next}
-        tertiary
+        prominence="tertiary"
         disabled={disableForStreaming}
         tooltip={disableForStreaming ? DISABLED_MESSAGE : "Next"}
       />

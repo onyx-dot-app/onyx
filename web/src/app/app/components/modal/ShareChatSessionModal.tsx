@@ -125,7 +125,10 @@ export default function ShareChatSessionModal({
 
             <div className="flex items-center mt-2">
               {/* <CopyButton content={shareLink} /> */}
-              <CopyIconButton getCopyText={() => shareLink} secondary />
+              <CopyIconButton
+                getCopyText={() => shareLink}
+                prominence="secondary"
+              />
               <a
                 href={shareLink}
                 target="_blank"

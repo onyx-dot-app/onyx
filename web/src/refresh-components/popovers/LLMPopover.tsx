@@ -10,7 +10,6 @@ import {
 } from "@/app/admin/configuration/llm/utils";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
-import SelectButton from "@/refresh-components/buttons/SelectButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";
@@ -29,6 +28,7 @@ import {
 } from "@opal/icons";
 import { IconProps } from "@/components/icons/icons";
 import { Section } from "@/layouts/general-layouts";
+import { OpenButton } from "@opal/components";
 
 interface LLMOption {
   name: string;
@@ -366,10 +366,10 @@ export default function LLMPopover({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild disabled={disabled}>
-        <div data-testid="llm-popover-trigger">
-          <SelectButton
-            leftIcon={
+      <div data-testid="llm-popover-trigger">
+        <Popover.Trigger asChild disabled={disabled}>
+          <OpenButton
+            icon={
               folded
                 ? SvgRefreshCw
                 : getProviderIcon(
@@ -377,17 +377,14 @@ export default function LLMPopover({
                     llmManager.currentLlm.modelName
                   )
             }
-            onClick={() => setOpen(true)}
-            transient={open}
-            folded={folded}
-            rightChevronIcon
+            foldable={folded}
             disabled={disabled}
-            className={disabled ? "bg-transparent" : ""}
           >
             {currentLlmDisplayName}
-          </SelectButton>
-        </div>
-      </Popover.Trigger>
+          </OpenButton>
+        </Popover.Trigger>
+      </div>
+
       <Popover.Content side="top" align="end" width="xl">
         <Section gap={0.5}>
           {/* Search Input */}

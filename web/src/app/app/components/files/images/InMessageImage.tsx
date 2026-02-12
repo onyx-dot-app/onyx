@@ -3,7 +3,7 @@ import { FiDownload } from "react-icons/fi";
 import { ImageShape } from "@/app/app/services/streamingModels";
 import { FullImageModal } from "@/app/app/components/files/images/FullImageModal";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_SHAPE: ImageShape = "square";
@@ -93,7 +93,7 @@ export function InMessageImage({
             "absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 z-10"
           )}
         >
-          <IconButton
+          <Button
             icon={FiDownload}
             tooltip="Download"
             onClick={handleDownload}

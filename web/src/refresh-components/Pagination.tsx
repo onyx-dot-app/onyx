@@ -1,5 +1,5 @@
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
@@ -67,11 +67,10 @@ export default function Pagination({
   return (
     <div className={cn("flex items-center justify-center gap-1 mt-4")}>
       {/* Previous button */}
-      <IconButton
+      <OpalButton
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        main
-        tertiary
+        prominence="tertiary"
         icon={SvgChevronLeft}
       />
 
@@ -108,10 +107,10 @@ export default function Pagination({
       })}
 
       {/* Next button */}
-      <IconButton
+      <OpalButton
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        tertiary
+        prominence="tertiary"
         icon={SvgChevronRight}
       />
     </div>

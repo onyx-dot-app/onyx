@@ -24,6 +24,7 @@ import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
+import { Button } from "@opal/components";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import {
   SvgArrowUp,
@@ -368,10 +369,10 @@ const InputBar = memo(
               {/* Bottom left controls */}
               <div className="flex flex-row items-center gap-1">
                 {/* (+) button for file upload */}
-                <IconButton
+                <Button
                   icon={SvgPaperclip}
                   tooltip="Attach Files"
-                  tertiary
+                  prominence="tertiary"
                   disabled={disabled}
                   onClick={() => fileInputRef.current?.click()}
                 />

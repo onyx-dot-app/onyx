@@ -30,10 +30,8 @@ import {
   ProjectFile,
   UserFileStatus,
 } from "@/app/app/projects/projectsService";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
-import SelectButton from "@/refresh-components/buttons/SelectButton";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -49,6 +47,7 @@ import {
   SvgStop,
   SvgX,
 } from "@opal/icons";
+import { Button } from "@opal/components";
 import Popover from "@/refresh-components/Popover";
 
 const LINE_HEIGHT = 24;
@@ -618,12 +617,12 @@ const ChatInputBar = React.memo(
                 }}
                 handleUploadChange={handleUploadChange}
                 trigger={(open) => (
-                  <IconButton
+                  <Button
                     icon={SvgPlusCircle}
                     tooltip="Attach Files"
-                    tertiary
                     transient={open}
                     disabled={disabled}
+                    prominence="tertiary"
                   />
                 )}
                 selectedFileIds={currentMessageFiles.map((f) => f.id)}
@@ -645,19 +644,17 @@ const ChatInputBar = React.memo(
                   />
                 )}
                 {showDeepResearch && (
-                  <SelectButton
-                    leftIcon={SvgHourglass}
+                  <Button
+                    icon={SvgHourglass}
                     onClick={toggleDeepResearch}
-                    engaged={deepResearchEnabled}
-                    action
-                    folded
+                    variant="select"
+                    selected={deepResearchEnabled}
                     disabled={disabled}
-                    className="bg-transparent"
+                    foldable={!deepResearchEnabled}
                   >
                     Deep Research
-                  </SelectButton>
+                  </Button>
                 )}
-
                 {selectedAssistant &&
                   forcedToolIds.length > 0 &&
                   forcedToolIds.map((toolId) => {
@@ -668,21 +665,20 @@ const ChatInputBar = React.memo(
                       return null;
                     }
                     return (
-                      <SelectButton
+                      <Button
                         key={toolId}
-                        leftIcon={getIconForAction(tool)}
+                        icon={getIconForAction(tool)}
                         onClick={() => {
                           setForcedToolIds(
                             forcedToolIds.filter((id) => id !== toolId)
                           );
                         }}
-                        engaged
-                        action
+                        variant="select"
+                        selected
                         disabled={disabled}
-                        className="bg-transparent"
                       >
                         {tool.display_name}
-                      </SelectButton>
+                      </Button>
                     );
                   })}
               </div>
@@ -703,20 +699,21 @@ const ChatInputBar = React.memo(
               </div>
 
               {/* Submit button - always visible */}
-              <IconButton
-                id="onyx-chat-input-send-button"
-                icon={chatState === "input" ? SvgArrowUp : SvgStop}
-                disabled={
-                  (chatState === "input" && !message) || hasUploadingFiles
-                }
-                onClick={() => {
-                  if (chatState == "streaming") {
-                    stopGenerating();
-                  } else if (message) {
-                    onSubmit(message);
+              <div id="onyx-chat-input-send-button">
+                <Button
+                  icon={chatState === "input" ? SvgArrowUp : SvgStop}
+                  disabled={
+                    (chatState === "input" && !message) || hasUploadingFiles
                   }
-                }}
-              />
+                  onClick={() => {
+                    if (chatState == "streaming") {
+                      stopGenerating();
+                    } else if (message) {
+                      onSubmit(message);
+                    }
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>

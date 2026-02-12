@@ -39,7 +39,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
@@ -720,10 +720,10 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <IconButton
+                  <OpalButton
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
-                    tertiary
+                    prominence="tertiary"
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
                     aria-label="Remove shortcut"
                     tooltip={
@@ -1327,10 +1327,11 @@ function AccountsAccessSettings() {
                             description={pat.token_display}
                             middleText={middleText}
                             rightChildren={
-                              <IconButton
+                              <OpalButton
                                 icon={SvgTrash}
                                 onClick={() => setTokenToDelete(pat)}
-                                internal
+                                prominence="tertiary"
+                                size="sm"
                                 aria-label={`Delete token ${pat.name}`}
                               />
                             }
@@ -1453,9 +1454,10 @@ function FederatedConnectorCard({
           }
           rightChildren={
             connector.has_oauth_token ? (
-              <IconButton
+              <OpalButton
                 icon={SvgUnplug}
-                internal
+                prominence="tertiary"
+                size="sm"
                 onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}
               />

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { PopoverMenu } from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -59,9 +59,10 @@ export default function SwitchList({
     <PopoverMenu footer={footer}>
       {[
         <div className="flex items-center gap-1" key="search">
-          <IconButton
+          <Button
             icon={SvgChevronLeft}
-            internal
+            prominence="tertiary"
+            size="sm"
             aria-label="Back"
             onClick={() => {
               setSearchTerm("");

@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { cn } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import { SvgSidebar } from "@opal/icons";
 
@@ -16,9 +16,9 @@ function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
   );
   const closeButton = useCallback(
     (shouldFold: boolean) => (
-      <IconButton
+      <Button
         icon={SvgSidebar}
-        tertiary
+        prominence="tertiary"
         tooltip="Close Sidebar"
         onClick={onFoldClick}
       />

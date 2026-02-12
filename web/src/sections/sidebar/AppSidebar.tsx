@@ -42,7 +42,7 @@ import { removeChatSessionFromProject } from "@/app/app/projects/projectsService
 import type { Project } from "@/app/app/projects/projectsService";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
   DRAG_TYPES,
@@ -668,9 +668,10 @@ const MemoizedAppSidebarInner = memo(
                   <SidebarSection
                     title="Projects"
                     action={
-                      <IconButton
+                      <OpalButton
                         icon={SvgFolderPlus}
-                        internal
+                        prominence="tertiary"
+                        size="sm"
                         tooltip="New Project"
                         onClick={() => createProjectModal.toggle(true)}
                       />

@@ -7,7 +7,7 @@ import {
 } from "@/refresh-components/onboarding/types";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
 import { LineItemLayout, Section } from "@/layouts/general-layouts";
@@ -62,7 +62,12 @@ const OnboardingHeader = React.memo(
                 </Button>
               </Section>
             ) : (
-              <IconButton internal icon={SvgX} onClick={handleHideOnboarding} />
+              <OpalButton
+                prominence="tertiary"
+                size="sm"
+                icon={SvgX}
+                onClick={handleHideOnboarding}
+              />
             )
           }
           variant="tertiary-muted"

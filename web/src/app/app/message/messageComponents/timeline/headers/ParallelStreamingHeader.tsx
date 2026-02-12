@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Tabs from "@/refresh-components/Tabs";
+import { Button } from "@opal/components";
 import { TurnGroup } from "../transformers";
 import {
   getToolIcon,
@@ -47,8 +47,8 @@ export const ParallelStreamingHeader = React.memo(
           enableScrollArrows
           rightContent={
             collapsible ? (
-              <IconButton
-                tertiary
+              <Button
+                prominence="tertiary"
                 onClick={onToggle}
                 icon={isExpanded ? SvgFold : SvgExpand}
                 aria-label={

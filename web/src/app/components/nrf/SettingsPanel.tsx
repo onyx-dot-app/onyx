@@ -3,8 +3,8 @@
 import Switch from "@/refresh-components/inputs/Switch";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
+import { Button } from "@opal/components";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
@@ -146,16 +146,16 @@ export const SettingsPanel = ({
             </div>
             <div className="flex items-center gap-3">
               {/* Theme Toggle */}
-              <IconButton
+              <Button
                 icon={isDark ? SvgMoon : SvgSun}
                 onClick={toggleTheme}
-                tertiary
+                prominence="tertiary"
                 tooltip={`Switch to ${isDark ? "light" : "dark"} theme`}
               />
-              <IconButton
+              <Button
                 icon={SvgX}
                 onClick={toggleSettings}
-                tertiary
+                prominence="tertiary"
                 tooltip="Close settings"
               />
             </div>

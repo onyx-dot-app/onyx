@@ -47,7 +47,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { WithoutStyles } from "@/types";
@@ -208,9 +208,10 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
               </Text>
             )}
           </div>
-          <IconButton
+          <Button
             icon={open ? SvgFold : SvgExpand}
-            internal
+            prominence="tertiary"
+            size="sm"
             transient={inside}
             tooltip={open ? "Fold" : "Expand"}
           />

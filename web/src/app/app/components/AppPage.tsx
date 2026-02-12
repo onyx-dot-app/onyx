@@ -70,7 +70,7 @@ import { OnboardingStep } from "@/refresh-components/onboarding/types";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Spacer from "@/refresh-components/Spacer";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -691,11 +691,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* Scroll to bottom button - positioned absolutely above ChatInputBar */}
                 {showScrollButton && (
                   <div className="absolute top-[-3.5rem] self-center">
-                    <IconButton
+                    <OpalButton
                       icon={SvgChevronDown}
                       onClick={handleScrollToBottom}
                       aria-label="Scroll to bottom"
-                      secondary
+                      prominence="secondary"
                     />
                   </div>
                 )}
