@@ -242,7 +242,6 @@ jobs:
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
     name: Playwright Tests (${{ matrix.project }})
-    environment: ci-protected
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
       contents: read
