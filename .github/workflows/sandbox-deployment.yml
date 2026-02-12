@@ -58,23 +58,27 @@ jobs:
         id: version
         if: steps.check.outputs.sandbox-changed == 'true'
         run: |
-          # Read current version from configs.py
-          CURRENT_VERSION=$(grep -oP 'onyxdotapp/sandbox:v\K[0-9]+\.[0-9]+\.[0-9]+' \
-            backend/onyx/server/features/build/configs.py)
+          # Query Docker Hub for the latest versioned tag
+          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
+            | jq -r '.results[].name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -n 1)
 
-          if [ -z "$CURRENT_VERSION" ]; then
-            echo "Could not parse current sandbox version from configs.py"
-            exit 1
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing version tags found on Docker Hub, starting at 0.1.1"
+            NEW_VERSION="0.1.1"
+          else
+            CURRENT_VERSION="${LATEST_TAG#v}"
+            echo "Latest version on Docker Hub: $CURRENT_VERSION"
+
+            # Increment patch version
+            MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
           fi
-
-          echo "Current version: $CURRENT_VERSION"
-
-          # Increment patch version
-          MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
-          MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-          PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
           echo "New version: $NEW_VERSION"
           echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
