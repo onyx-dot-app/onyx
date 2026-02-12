@@ -15,8 +15,8 @@ on:
 
 permissions:
   contents: read
-  id-token: write       # Required for OIDC-based AWS credential exchange (S3 access)
-  pull-requests: write  # Required for posting visual diff PR comments
+  id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
+  pull-requests: write # Required for posting visual diff PR comments
 
 env:
   # Test Environment Variables
@@ -456,23 +456,19 @@ jobs:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
-      - name: Setup Go
+      - name: Install the latest version of uv
         if: always()
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # ratchet:actions/setup-go@v5
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
         with:
-          go-version-file: tools/ods/go.mod
-          cache-dependency-path: tools/ods/go.sum
-
-      - name: Build ods
-        if: always()
-        run: cd tools/ods && go build -o "${GITHUB_WORKSPACE}/ods-bin" . && chmod +x "${GITHUB_WORKSPACE}/ods-bin"
+          enable-cache: false
+          version: "0.9.9"
 
       - name: Generate visual diff report
         if: always()
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          "${GITHUB_WORKSPACE}/ods-bin" playwright-diff compare \
+          uv run --no-sync --with onyx-devtools ods playwright-diff compare \
             --baseline "s3://onyx-internal-tools/playwright-baselines/${PROJECT}/" \
             --current ./web/screenshots/ \
             --output ./web/output/visual-diff/index.html
@@ -537,7 +533,8 @@ jobs:
           fi
 
       - name: Update S3 baselines
-        if: github.ref == 'refs/heads/main' && success()
+        # XXX
+        # if: github.ref == 'refs/heads/main' && success()
         env:
           PROJECT: ${{ matrix.project }}
         run: |
