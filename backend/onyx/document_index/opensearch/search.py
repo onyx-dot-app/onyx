@@ -11,10 +11,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_K_NUM_CANDIDATES
-from onyx.document_index.opensearch.constants import SEARCH_CONTENT_KEYWORD_WEIGHT
-from onyx.document_index.opensearch.constants import SEARCH_CONTENT_VECTOR_WEIGHT
-from onyx.document_index.opensearch.constants import SEARCH_TITLE_KEYWORD_WEIGHT
-from onyx.document_index.opensearch.constants import SEARCH_TITLE_VECTOR_WEIGHT
+from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_WEIGHTS
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
 from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
@@ -50,14 +47,7 @@ MIN_MAX_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
                 "normalization": {"technique": "min_max"},
                 "combination": {
                     "technique": "arithmetic_mean",
-                    "parameters": {
-                        "weights": [
-                            SEARCH_TITLE_VECTOR_WEIGHT,
-                            SEARCH_TITLE_KEYWORD_WEIGHT,
-                            SEARCH_CONTENT_VECTOR_WEIGHT,
-                            SEARCH_CONTENT_KEYWORD_WEIGHT,
-                        ]
-                    },
+                    "parameters": {"weights": HYBRID_SEARCH_NORMALIZATION_WEIGHTS},
                 },
             }
         }
@@ -74,31 +64,12 @@ ZSCORE_NORMALIZATION_PIPELINE_CONFIG: dict[str, Any] = {
                 "normalization": {"technique": "z_score"},
                 "combination": {
                     "technique": "arithmetic_mean",
-                    "parameters": {
-                        "weights": [
-                            SEARCH_TITLE_VECTOR_WEIGHT,
-                            SEARCH_TITLE_KEYWORD_WEIGHT,
-                            SEARCH_CONTENT_VECTOR_WEIGHT,
-                            SEARCH_CONTENT_KEYWORD_WEIGHT,
-                        ]
-                    },
+                    "parameters": {"weights": HYBRID_SEARCH_NORMALIZATION_WEIGHTS},
                 },
             }
         }
     ],
 }
-
-assert (
-    sum(
-        [
-            SEARCH_TITLE_VECTOR_WEIGHT,
-            SEARCH_TITLE_KEYWORD_WEIGHT,
-            SEARCH_CONTENT_VECTOR_WEIGHT,
-            SEARCH_CONTENT_KEYWORD_WEIGHT,
-        ]
-    )
-    == 1.0
-)
 
 
 # By default OpenSearch will only return a maximum of this many results in a

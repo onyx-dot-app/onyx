@@ -829,7 +829,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             include_hidden=False,
         )
-        # NOTE: Using z-score normalization here because from a theoretical standpoint.
+        # NOTE: Using z-score normalization here because it's better for hybrid search from a theoretical standpoint.
         # Empirically on a small dataset of up to 10K docs, it's not very different. Likely more impactful at scale.
         # https://opensearch.org/blog/introducing-the-z-score-normalization-technique-for-hybrid-search/
         search_hits: list[SearchHit[DocumentChunk]] = self._os_client.search(
