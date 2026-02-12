@@ -112,6 +112,7 @@ class ChatSessionManager:
         prompt_override: PromptOverride | None = None,
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
+        allowed_tool_ids: list[int] | None = None,
         forced_tool_ids: list[int] | None = None,
         chat_session: DATestChatSession | None = None,
         mock_llm_response: str | None = None,
@@ -131,6 +132,7 @@ class ChatSessionManager:
             prompt_override=prompt_override,
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
+            allowed_tool_ids=allowed_tool_ids,
             forced_tool_ids=forced_tool_ids,
             deep_research=deep_research,
         )
@@ -187,6 +189,7 @@ class ChatSessionManager:
         prompt_override: PromptOverride | None = None,
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
+        allowed_tool_ids: list[int] | None = None,
         forced_tool_ids: list[int] | None = None,
         mock_llm_response: str | None = None,
         deep_research: bool = False,
@@ -225,6 +228,7 @@ class ChatSessionManager:
             prompt_override=prompt_override,
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
+            allowed_tool_ids=allowed_tool_ids,
             forced_tool_ids=forced_tool_ids,
             deep_research=deep_research,
         )
