@@ -526,8 +526,7 @@ jobs:
           fi
 
       - name: Update S3 baselines
-        # XXX
-        # if: github.ref == 'refs/heads/main' && success()
+        if: github.ref == 'refs/heads/main' && success()
         env:
           PROJECT: ${{ matrix.project }}
         run: |
