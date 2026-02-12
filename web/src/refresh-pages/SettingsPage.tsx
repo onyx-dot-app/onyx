@@ -387,7 +387,7 @@ function GeneralSettings() {
                   const currentBackgroundId =
                     user?.preferences?.chat_background ?? "none";
                   const isSelected = currentBackgroundId === bg.id;
-                  const isNone = bg.url === CHAT_BACKGROUND_NONE;
+                  const isNone = bg.src === CHAT_BACKGROUND_NONE;
 
                   return (
                     <button
