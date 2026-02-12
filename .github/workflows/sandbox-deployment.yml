@@ -12,6 +12,8 @@ jobs:
   check-sandbox-changes:
     runs-on: ubuntu-slim
     timeout-minutes: 10
+    permissions:
+      contents: read
     outputs:
       sandbox-changed: ${{ steps.check.outputs.sandbox-changed }}
       new-version: ${{ steps.version.outputs.new-version }}
@@ -93,6 +95,7 @@ jobs:
     timeout-minutes: 90
     environment: release
     permissions:
+      contents: read
       id-token: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
@@ -162,6 +165,7 @@ jobs:
     timeout-minutes: 90
     environment: release
     permissions:
+      contents: read
       id-token: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
