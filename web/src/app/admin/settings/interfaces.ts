@@ -47,6 +47,9 @@ export interface Settings {
   // True when user has a valid license, False for community edition
   ee_features_enabled?: boolean;
 
+  // OpenSearch migration
+  opensearch_indexing_enabled?: boolean;
+
   // Vector DB availability flag - false when DISABLE_VECTOR_DB is set.
   // When false, connectors, RAG search, document sets, and related features
   // are unavailable.

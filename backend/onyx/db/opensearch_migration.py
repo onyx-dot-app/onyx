@@ -264,6 +264,7 @@ def update_vespa_visit_progress_with_commit(
     db_session: Session,
     continuation_token: str | None,
     chunks_processed: int,
+    chunks_errored: int,
 ) -> None:
     """Updates the Vespa migration progress and commits.
 
@@ -275,12 +276,15 @@ def update_vespa_visit_progress_with_commit(
             is complete.
         chunks_processed: Number of chunks processed in this batch (added to
             the running total).
+        chunks_errored: Number of chunks errored in this batch (added to the
+            running errored total).
     """
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
         raise RuntimeError("OpenSearchTenantMigrationRecord not found.")
     record.vespa_visit_continuation_token = continuation_token
     record.total_chunks_migrated += chunks_processed
+    record.total_chunks_errored += chunks_errored
     db_session.commit()
 
 
@@ -344,3 +348,56 @@ def build_sanitized_to_original_doc_id_mapping(
         )
 
     return result
+
+
+def get_opensearch_migration_state(
+    db_session: Session,
+) -> tuple[int, datetime | None, datetime | None]:
+    """Returns the state of the Vespa to OpenSearch migration.
+
+    If the tenant migration record is not found, returns defaults of 0, None,
+    None.
+
+    Args:
+        db_session: SQLAlchemy session.
+
+    Returns:
+        Tuple of (total_chunks_migrated, created_at, migration_completed_at).
+    """
+    record = db_session.query(OpenSearchTenantMigrationRecord).first()
+    if record is None:
+        return 0, None, None
+    return (
+        record.total_chunks_migrated,
+        record.created_at,
+        record.migration_completed_at,
+    )
+
+
+def get_opensearch_retrieval_state(
+    db_session: Session,
+) -> bool:
+    """Returns the state of the OpenSearch retrieval.
+
+    If the tenant migration record is not found, defaults to False.
+    """
+    record = db_session.query(OpenSearchTenantMigrationRecord).first()
+    if record is None:
+        return False
+    return record.enable_opensearch_retrieval
+
+
+def set_enable_opensearch_retrieval_with_commit(
+    db_session: Session,
+    enable: bool,
+) -> None:
+    """Sets the enable_opensearch_retrieval flag on the singleton record.
+
+    Creates the record if it doesn't exist yet.
+    """
+    try_insert_opensearch_tenant_migration_record_with_commit(db_session)
+    record = db_session.query(OpenSearchTenantMigrationRecord).first()
+    if record is None:
+        raise RuntimeError("OpenSearchTenantMigrationRecord not found.")
+    record.enable_opensearch_retrieval = enable
+    db_session.commit()
