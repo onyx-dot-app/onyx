@@ -156,7 +156,7 @@ class DocumentQuery:
             # return size.
             "size": DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
             "_source": get_full_document,
-            "timeout": DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
         if not OPENSEARCH_PROFILING_DISABLED:
             final_get_ids_query["profile"] = True
@@ -207,7 +207,7 @@ class DocumentQuery:
         )
         final_delete_query: dict[str, Any] = {
             "query": {"bool": {"filter": filter_clauses}},
-            "timeout": DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
         if not OPENSEARCH_PROFILING_DISABLED:
             final_delete_query["profile"] = True
@@ -290,7 +290,7 @@ class DocumentQuery:
             "query": hybrid_search_query,
             "size": num_hits,
             "highlight": match_highlights_configuration,
-            "timeout": DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
         if not OPENSEARCH_PROFILING_DISABLED:
             final_hybrid_search_body["profile"] = True
@@ -346,7 +346,7 @@ class DocumentQuery:
                 }
             },
             "size": num_to_retrieve,
-            "timeout": DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
         if not OPENSEARCH_PROFILING_DISABLED:
             final_random_search_query["profile"] = True
