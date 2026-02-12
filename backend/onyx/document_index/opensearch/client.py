@@ -850,7 +850,7 @@ class OpenSearchClient:
         phase_took: dict[str, Any],
         profile: dict[str, Any],
         body: dict[str, Any],
-        search_pipeline_id: str | None,
+        search_pipeline_id: str | None = None,
         raise_on_timeout: bool = False,
     ) -> None:
         """Logs the performance of a search result.
