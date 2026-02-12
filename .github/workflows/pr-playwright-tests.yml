@@ -473,6 +473,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
+      - name: Verify AWS identity
+        if: always()
+        run: |
+          aws sts get-caller-identity
+
       - name: Install the latest version of uv
         if: always()
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
