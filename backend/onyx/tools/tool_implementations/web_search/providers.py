@@ -36,7 +36,10 @@ logger = setup_logger()
 
 
 def provider_requires_api_key(provider_type: WebSearchProviderType) -> bool:
-    """Return True if the given provider type requires an API key."""
+    """Return True if the given provider type requires an API key.
+    This list is most likely just going to contain SEARXNG. The way it works is that it uses public search engines that do not
+    require an API key. You can also set it up in a way which requires a key but SearXNG itself does not require a key.
+    """
     return provider_type != WebSearchProviderType.SEARXNG
 
 
