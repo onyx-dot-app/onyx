@@ -561,7 +561,6 @@ jobs:
           S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
         run: |
           MARKER="<!-- visual-regression-report -->"
-          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
 
           # Build the markdown table from all summary files
           TABLE_HEADER="| Project | Changed | Added | Removed | Unchanged | Report |"
@@ -607,11 +606,7 @@ jobs:
             "" \
             "${TABLE_HEADER}" \
             "${TABLE_DIVIDER}" \
-            "$(printf '%b' "${TABLE_ROWS}")" \
-            "" \
-            "**Run:** [#${RUN_ID}](${RUN_URL})" \
-            "" \
-            "_This report is informational only and does not block the PR._")
+            "$(printf '%b' "${TABLE_ROWS}")")
 
           # Upsert: find existing comment with the marker, or create a new one
           EXISTING_COMMENT_ID=$(gh api \
