@@ -67,4 +67,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    pass
+    op.execute(
+        """
+        DELETE FROM llm_model_flow
+        WHERE llm_model_flow_type = 'CONTEXTUAL_RAG'
+        """
+    )
