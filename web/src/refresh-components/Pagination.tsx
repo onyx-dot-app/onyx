@@ -80,7 +80,7 @@ export default function Pagination({
         {pageNumbers.map((page, index) => {
           if (page === "...") {
             return (
-              <Text key={index} secondaryBody text03>
+              <Text key={`ellipsis-${index}`} secondaryBody text03>
                 ...
               </Text>
             );

@@ -583,7 +583,7 @@ const AppInputBar = React.memo(
                 <IconButton
                   id="onyx-chat-input-send-button"
                   icon={isClassifying ? SimpleLoader : SvgSearch}
-                  disabled={!message || isClassifying}
+                  disabled={!message || isClassifying || hasUploadingFiles}
                   onClick={() => {
                     if (chatState == "streaming") {
                       stopGenerating();
