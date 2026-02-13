@@ -508,11 +508,10 @@ class WebConnector(LoadConnector, SlimConnector):
             yield [SlimDocument(id=self.to_visit_list[0])]
             return
 
-        # SITEMAP mode: parse sitemap XML (already lightweight)
+        # SITEMAP mode: URLs were already parsed from sitemap in __init__
         if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value:
-            urls = extract_urls_from_sitemap(self.to_visit_list[0])
             slim_doc_batch: list[SlimDocument] = []
-            for url in urls:
+            for url in self.to_visit_list:
                 slim_doc_batch.append(SlimDocument(id=url))
                 if len(slim_doc_batch) >= self.batch_size:
                     yield slim_doc_batch
@@ -523,7 +522,7 @@ class WebConnector(LoadConnector, SlimConnector):
 
         # UPLOAD mode: URLs already loaded from file in __init__
         if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD.value:
-            slim_doc_batch = []
+            slim_doc_batch: list[SlimDocument] = []
             for url in self.to_visit_list:
                 slim_doc_batch.append(SlimDocument(id=url))
                 if len(slim_doc_batch) >= self.batch_size:
@@ -537,7 +536,7 @@ class WebConnector(LoadConnector, SlimConnector):
         base_url = self.to_visit_list[0]
         to_visit = list(self.to_visit_list)
         visited: set[str] = set()
-        slim_doc_batch = []
+        slim_doc_batch: list[SlimDocument] = []
 
         while to_visit:
             url = to_visit.pop()
