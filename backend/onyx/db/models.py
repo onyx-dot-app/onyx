@@ -4907,7 +4907,7 @@ class ScimToken(Base):
         Boolean, server_default=text("true"), nullable=False
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
