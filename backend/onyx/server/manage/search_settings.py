@@ -178,9 +178,6 @@ def cancel_new_embedding(
             secondary_index_embedding_precision=None,
         )
 
-        # FUTURE is gone, fall back to PRESENT for contextual RAG default
-        _sync_default_contextual_model(db_session)
-
 
 @router.delete("/delete-search-settings")
 def delete_search_settings_endpoint(
@@ -195,9 +192,6 @@ def delete_search_settings_endpoint(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    # Re-sync in case the deleted settings were the FUTURE driving the default
-    _sync_default_contextual_model(db_session)
 
 
 @router.get("/get-current-search-settings")
