@@ -115,9 +115,9 @@ def is_captcha_v2_enabled() -> bool:
     return AUTH_TYPE == AuthType.CLOUD and bool(RECAPTCHA_V2_SECRET_KEY)
 
 
-def verify_captcha_v2_token(token: str) -> None:
+async def verify_captcha_v2_token(token: str) -> None:
     """
-    Verify a reCAPTCHA v2 token with Google's API (sync version).
+    Verify a reCAPTCHA v2 token with Google's API.
 
     Args:
         token: The reCAPTCHA response token from the client
@@ -132,8 +132,8 @@ def verify_captcha_v2_token(token: str) -> None:
         raise CaptchaVerificationError("Captcha token is required")
 
     try:
-        with httpx.Client() as client:
-            response = client.post(
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
                 RECAPTCHA_VERIFY_URL,
                 data={
                     "secret": RECAPTCHA_V2_SECRET_KEY,

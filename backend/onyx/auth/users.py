@@ -356,7 +356,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     detail={"reason": "CAPTCHA verification required"},
                 )
             try:
-                verify_captcha_v2_token(captcha_v2_token)
+                await verify_captcha_v2_token(captcha_v2_token)
             except CaptchaVerificationError as e:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
