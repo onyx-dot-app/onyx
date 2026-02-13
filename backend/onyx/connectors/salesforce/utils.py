@@ -41,6 +41,28 @@ def get_sqlite_db_path(directory: str) -> str:
     return os.path.join(directory, "salesforce_db.sqlite")
 
 
+def remove_sqlite_db_files(db_path: str) -> None:
+    """Remove SQLite database and all associated files (WAL, SHM).
+
+    SQLite in WAL mode creates additional files:
+    - .sqlite-wal: Write-ahead log
+    - .sqlite-shm: Shared memory file
+
+    If these files become stale (e.g., after a crash), they can cause
+    'disk I/O error' when trying to open the database. This function
+    ensures all related files are removed.
+    """
+    files_to_remove = [
+        db_path,
+        f"{db_path}-wal",
+        f"{db_path}-shm",
+    ]
+    for file_path in files_to_remove:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
+# NOTE: only used with shelves, deprecated at this point
 def get_object_type_path(object_type: str) -> str:
     """Get the directory path for a specific object type."""
     type_dir = os.path.join(BASE_DATA_PATH, object_type)

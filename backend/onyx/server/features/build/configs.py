@@ -1,4 +1,3 @@
-import json
 import os
 from enum import Enum
 from pathlib import Path
@@ -28,7 +27,7 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
 
 # Demo Data Path
 # Local: Source tree path (relative to this file)
-# Kubernetes: Baked into container image at /workspace/demo-data
+# Kubernetes: Baked into container image at /workspace/demo_data
 _THIS_FILE = Path(__file__)
 DEMO_DATA_PATH = str(
     _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "demo_data"
@@ -87,9 +86,9 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 # Container image for sandbox pods
-# Should include Next.js template and opencode CLI
+# Should include Next.js template, opencode CLI, and demo_data zip
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.0"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.5"
 )
 
 # S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)
@@ -111,20 +110,52 @@ SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
 # ============================================================================
+# SSE Streaming Configuration
+# ============================================================================
+
+# SSE keepalive interval in seconds - send keepalive comment if no events
+SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
+
+# ============================================================================
+# ACP (Agent Communication Protocol) Configuration
+# ============================================================================
+
+# Timeout for ACP message processing in seconds
+# This is the maximum time to wait for a complete response from the agent
+ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
+
+# ============================================================================
 # Rate Limiting Configuration
 # ============================================================================
 
 # Base rate limit for paid/subscribed users (messages per week)
 # Free users always get 5 messages total (not configurable)
+# Per-user overrides are managed via PostHog feature flag "craft-has-usage-limits"
 CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
 
-# Per-user rate limit overrides (JSON map of email -> limit)
-# Example: {"admin@example.com": 100, "power-user@example.com": 50}
-# Users in this map get their specified limit instead of the default
-_user_limit_overrides_str = os.environ.get("CRAFT_USER_RATE_LIMIT_OVERRIDES", "{}")
-try:
-    CRAFT_USER_RATE_LIMIT_OVERRIDES: dict[str, int] = json.loads(
-        _user_limit_overrides_str
-    )
-except json.JSONDecodeError:
-    CRAFT_USER_RATE_LIMIT_OVERRIDES = {}
+# ============================================================================
+# User Library Configuration
+# For user-uploaded raw files (xlsx, pptx, docx, etc.) in Craft
+# ============================================================================
+
+# Maximum size per file in MB (default 500MB)
+USER_LIBRARY_MAX_FILE_SIZE_MB = int(
+    os.environ.get("USER_LIBRARY_MAX_FILE_SIZE_MB", "500")
+)
+USER_LIBRARY_MAX_FILE_SIZE_BYTES = USER_LIBRARY_MAX_FILE_SIZE_MB * 1024 * 1024
+
+# Maximum total storage per user in GB (default 10GB)
+USER_LIBRARY_MAX_TOTAL_SIZE_GB = int(
+    os.environ.get("USER_LIBRARY_MAX_TOTAL_SIZE_GB", "10")
+)
+USER_LIBRARY_MAX_TOTAL_SIZE_BYTES = USER_LIBRARY_MAX_TOTAL_SIZE_GB * 1024 * 1024 * 1024
+
+# Maximum files per single upload request (default 100)
+USER_LIBRARY_MAX_FILES_PER_UPLOAD = int(
+    os.environ.get("USER_LIBRARY_MAX_FILES_PER_UPLOAD", "100")
+)
+
+# String constants for User Library entities
+USER_LIBRARY_CONNECTOR_NAME = "User Library"
+USER_LIBRARY_CREDENTIAL_NAME = "User Library Credential"
+USER_LIBRARY_SOURCE_DIR = "user_library"

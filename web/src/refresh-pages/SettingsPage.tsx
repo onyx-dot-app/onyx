@@ -26,9 +26,9 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Button from "@/refresh-components/buttons/Button";
 import Switch from "@/refresh-components/inputs/Switch";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
-import { ThemePreference } from "@/lib/types";
+import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
@@ -39,7 +39,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
@@ -47,10 +47,12 @@ import Separator from "@/refresh-components/Separator";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Code from "@/refresh-components/Code";
+import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
 import EmptyMessage from "@/refresh-components/EmptyMessage";
+import Memories from "@/sections/settings/Memories";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import {
   CHAT_BACKGROUND_OPTIONS,
@@ -58,7 +60,8 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/core";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 interface PAT {
   id: number;
@@ -384,7 +387,7 @@ function GeneralSettings() {
                   const currentBackgroundId =
                     user?.preferences?.chat_background ?? "none";
                   const isSelected = currentBackgroundId === bg.id;
-                  const isNone = bg.url === CHAT_BACKGROUND_NONE;
+                  const isNone = bg.src === CHAT_BACKGROUND_NONE;
 
                   return (
                     <button
@@ -718,10 +721,10 @@ function PromptShortcuts() {
                   }
                 />
                 <Section>
-                  <IconButton
+                  <OpalButton
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
-                    tertiary
+                    prominence="tertiary"
                     disabled={(shortcut.isNew && isEmpty) || shortcut.is_public}
                     aria-label="Remove shortcut"
                     tooltip={
@@ -761,179 +764,6 @@ function PromptShortcuts() {
   );
 }
 
-interface Memory {
-  id: number;
-  content: string;
-}
-
-interface LocalMemory extends Memory {
-  isNew: boolean;
-}
-
-interface MemoriesProps {
-  memories: string[];
-  onSaveMemories: (memories: string[]) => Promise<boolean>;
-}
-
-function Memories({ memories, onSaveMemories }: MemoriesProps) {
-  const { popup, setPopup } = usePopup();
-  const [localMemories, setLocalMemories] = useState<LocalMemory[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const initialMemoriesRef = useRef<string[]>([]);
-
-  // Initialize local memories from props
-  useEffect(() => {
-    // Convert string[] to LocalMemory[] with isNew: false for existing items
-    const existingMemories: LocalMemory[] = memories.map((content, index) => ({
-      id: index + 1,
-      content,
-      isNew: false,
-    }));
-
-    // Always ensure there's at least one empty row
-    setLocalMemories([
-      ...existingMemories,
-      { id: Date.now(), content: "", isNew: true },
-    ]);
-    initialMemoriesRef.current = memories;
-    setIsInitialLoad(false);
-  }, [memories]);
-
-  // Auto-add empty row when user starts typing in the last row
-  useEffect(() => {
-    if (isInitialLoad) return;
-
-    // Only manage new/unsaved rows (isNew: true)
-    const newMemories = localMemories.filter((m) => m.isNew);
-    const emptyNewRows = newMemories.filter((m) => !m.content.trim());
-    const emptyNewRowsCount = emptyNewRows.length;
-
-    // If we have no empty new rows, add one
-    if (emptyNewRowsCount === 0) {
-      setLocalMemories((prev) => [
-        ...prev,
-        { id: Date.now(), content: "", isNew: true },
-      ]);
-    }
-    // If we have more than one empty new row, keep only one
-    else if (emptyNewRowsCount > 1) {
-      setLocalMemories((prev) => {
-        const existingMemories = prev.filter((m) => !m.isNew);
-        const filledNewMemories = prev.filter(
-          (m) => m.isNew && m.content.trim()
-        );
-        return [
-          ...existingMemories,
-          ...filledNewMemories,
-          { id: Date.now(), content: "", isNew: true },
-        ];
-      });
-    }
-  }, [localMemories, isInitialLoad]);
-
-  const handleUpdateMemory = useCallback((index: number, value: string) => {
-    setLocalMemories((prev) =>
-      prev.map((memory, i) =>
-        i === index ? { ...memory, content: value } : memory
-      )
-    );
-  }, []);
-
-  const handleRemoveMemory = useCallback(
-    async (index: number) => {
-      const memory = localMemories[index];
-      if (!memory) return;
-
-      // If it's a new memory (isNew: true), just remove from state
-      if (memory.isNew) {
-        setLocalMemories((prev) => prev.filter((_, i) => i !== index));
-        return;
-      }
-
-      // For existing memories, remove and save
-      const newMemories = localMemories
-        .filter((_, i) => i !== index)
-        .filter((m) => !m.isNew || m.content.trim())
-        .map((m) => m.content);
-
-      const success = await onSaveMemories(newMemories);
-      if (success) {
-        setPopup({ message: "Memory deleted", type: "success" });
-      } else {
-        setPopup({ message: "Failed to delete memory", type: "error" });
-      }
-    },
-    [localMemories, onSaveMemories, setPopup]
-  );
-
-  const handleBlurMemory = useCallback(
-    async (index: number) => {
-      const memory = localMemories[index];
-      if (!memory || !memory.content.trim()) return;
-
-      // Build the new memories array from current state
-      const newMemories = localMemories
-        .filter((m) => m.content.trim())
-        .map((m) => m.content);
-
-      // Check if anything actually changed
-      const memoriesChanged =
-        JSON.stringify(newMemories) !==
-        JSON.stringify(initialMemoriesRef.current);
-
-      if (!memoriesChanged) return;
-
-      const success = await onSaveMemories(newMemories);
-      if (success) {
-        initialMemoriesRef.current = newMemories;
-        setPopup({ message: "Memory saved", type: "success" });
-      } else {
-        setPopup({ message: "Failed to save memory", type: "error" });
-      }
-    },
-    [localMemories, onSaveMemories, setPopup]
-  );
-
-  return (
-    <>
-      {popup}
-
-      {localMemories.length > 0 && (
-        <Section gap={0.5}>
-          {localMemories.map((memory, index) => {
-            const isEmpty = !memory.content.trim();
-            const isExisting = !memory.isNew;
-
-            return (
-              <Section
-                key={memory.id}
-                flexDirection="row"
-                alignItems="start"
-                gap={0.5}
-              >
-                <InputTextArea
-                  placeholder="Type or paste in a personal note or memory"
-                  value={memory.content}
-                  onChange={(e) => handleUpdateMemory(index, e.target.value)}
-                  onBlur={() => void handleBlurMemory(index)}
-                  rows={2}
-                />
-                <IconButton
-                  icon={SvgMinusCircle}
-                  onClick={() => void handleRemoveMemory(index)}
-                  tertiary
-                  disabled={isEmpty && !isExisting}
-                  aria-label="Remove memory"
-                />
-              </Section>
-            );
-          })}
-        </Section>
-      )}
-    </>
-  );
-}
-
 function ChatPreferencesSettings() {
   const {
     user,
@@ -941,19 +771,33 @@ function ChatPreferencesSettings() {
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserDefaultModel,
+    updateUserDefaultAppMode,
   } = useUser();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const llmManager = useLlmManager();
+
+  const { popup, setPopup } = usePopup();
 
   const {
     personalizationValues,
     toggleUseMemories,
+    toggleEnableMemoryTool,
+    updateUserPreferences,
     handleSavePersonalization,
-  } = useUserPersonalization(user, updateUserPersonalization, {});
+  } = useUserPersonalization(user, updateUserPersonalization, {
+    onSuccess: () =>
+      setPopup({ message: "Preferences saved", type: "success" }),
+    onError: () =>
+      setPopup({ message: "Failed to save preferences", type: "error" }),
+  });
 
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
-    async (newMemories: string[]): Promise<boolean> => {
-      const result = await handleSavePersonalization({ memories: newMemories });
+    async (newMemories: MemoryItem[]): Promise<boolean> => {
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
       return !!result;
     },
     [handleSavePersonalization]
@@ -961,6 +805,7 @@ function ChatPreferencesSettings() {
 
   return (
     <Section gap={2}>
+      {popup}
       <Section gap={0.75}>
         <InputLayouts.Title title="Chats" />
         <Card>
@@ -987,6 +832,87 @@ function ChatPreferencesSettings() {
               }}
             />
           </InputLayouts.Horizontal>
+
+          {isPaidEnterpriseFeaturesEnabled && (
+            <InputLayouts.Horizontal
+              title="Default App Mode"
+              description="Choose whether new sessions start in Search or Chat mode."
+              center
+            >
+              <InputSelect
+                value={user?.preferences.default_app_mode ?? "CHAT"}
+                onValueChange={(value) => {
+                  void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                }}
+              >
+                <InputSelect.Trigger />
+                <InputSelect.Content>
+                  <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
+                  <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </InputLayouts.Horizontal>
+          )}
+        </Card>
+      </Section>
+
+      <Section gap={0.75}>
+        <InputLayouts.Vertical
+          title="Personal Preferences"
+          description="Provide your custom preferences in natural language."
+        >
+          <InputTextArea
+            placeholder="Describe how you want the system to behave and the tone it should use."
+            value={personalizationValues.user_preferences}
+            onChange={(e) => updateUserPreferences(e.target.value)}
+            onBlur={() => void handleSavePersonalization()}
+            rows={4}
+            maxRows={10}
+            autoResize
+            maxLength={500}
+          />
+          <CharacterCount
+            value={personalizationValues.user_preferences || ""}
+            limit={500}
+          />
+        </InputLayouts.Vertical>
+        <InputLayouts.Title title="Memory" />
+        <Card>
+          <InputLayouts.Horizontal
+            title="Reference Stored Memories"
+            description="Let Onyx reference stored memories in chats."
+          >
+            <Switch
+              checked={personalizationValues.use_memories}
+              onCheckedChange={(checked) => {
+                toggleUseMemories(checked);
+                void handleSavePersonalization({ use_memories: checked });
+              }}
+            />
+          </InputLayouts.Horizontal>
+          <InputLayouts.Horizontal
+            title="Update Memories"
+            description="Let Onyx generate and update stored memories."
+          >
+            <Switch
+              checked={personalizationValues.enable_memory_tool}
+              onCheckedChange={(checked) => {
+                toggleEnableMemoryTool(checked);
+                void handleSavePersonalization({
+                  enable_memory_tool: checked,
+                });
+              }}
+            />
+          </InputLayouts.Horizontal>
+
+          {(personalizationValues.use_memories ||
+            personalizationValues.enable_memory_tool ||
+            personalizationValues.memories.length > 0) && (
+            <Memories
+              memories={personalizationValues.memories}
+              onSaveMemories={handleSaveMemories}
+            />
+          )}
         </Card>
       </Section>
 
@@ -1006,31 +932,6 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           {user?.preferences?.shortcut_enabled && <PromptShortcuts />}
-        </Card>
-      </Section>
-
-      <Section gap={0.75}>
-        <InputLayouts.Title title="Personalization" />
-        <Card>
-          <InputLayouts.Horizontal
-            title="Reference Stored Memories"
-            description="Let Onyx reference stored memories in chats."
-          >
-            <Switch
-              checked={personalizationValues.use_memories}
-              onCheckedChange={(checked) => {
-                toggleUseMemories(checked);
-                void handleSavePersonalization({ use_memories: checked });
-              }}
-            />
-          </InputLayouts.Horizontal>
-
-          {personalizationValues.use_memories && (
-            <Memories
-              memories={personalizationValues.memories}
-              onSaveMemories={handleSaveMemories}
-            />
-          )}
         </Card>
       </Section>
     </Section>
@@ -1446,29 +1347,25 @@ function AccountsAccessSettings() {
                     } ago - ${expiryText}`;
 
                     return (
-                      <Hoverable
-                        key={pat.id}
-                        asChild
-                        nonInteractive
-                        variant="secondary"
-                      >
-                        <HoverableContainer rounded="rounded-12" padding={0}>
+                      <Interactive.Container key={pat.id} heightVariant="fit">
+                        <div className="w-full bg-background-tint-01">
                           <AttachmentItemLayout
                             icon={SvgKey}
                             title={pat.name}
                             description={pat.token_display}
                             middleText={middleText}
                             rightChildren={
-                              <IconButton
+                              <OpalButton
                                 icon={SvgTrash}
                                 onClick={() => setTokenToDelete(pat)}
-                                internal
+                                prominence="tertiary"
+                                size="sm"
                                 aria-label={`Delete token ${pat.name}`}
                               />
                             }
                           />
-                        </HoverableContainer>
-                      </Hoverable>
+                        </div>
+                      </Interactive.Container>
                     );
                   })}
                 </Section>
@@ -1585,9 +1482,10 @@ function FederatedConnectorCard({
           }
           rightChildren={
             connector.has_oauth_token ? (
-              <IconButton
+              <OpalButton
                 icon={SvgUnplug}
-                internal
+                prominence="tertiary"
+                size="sm"
                 onClick={() => setShowDisconnectConfirmation(true)}
                 disabled={isDisconnecting}
               />

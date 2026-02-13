@@ -8,11 +8,14 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import BuildMessage
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
@@ -20,6 +23,8 @@ from onyx.server.features.build.api.models import DetailedSessionResponse
 from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import GenerateSuggestionsRequest
 from onyx.server.features.build.api.models import GenerateSuggestionsResponse
+from onyx.server.features.build.api.models import PptxPreviewResponse
+from onyx.server.features.build.api.models import PreProvisionedCheckResponse
 from onyx.server.features.build.api.models import SessionCreateRequest
 from onyx.server.features.build.api.models import SessionListResponse
 from onyx.server.features.build.api.models import SessionNameGenerateResponse
@@ -29,6 +34,8 @@ from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
+from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
@@ -71,6 +78,10 @@ def list_sessions(
     )
 
 
+# Lock timeout for session creation (should be longer than max provision time)
+SESSION_CREATE_LOCK_TIMEOUT_SECONDS = 300
+
+
 @router.post("", response_model=DetailedSessionResponse)
 def create_session(
     request: SessionCreateRequest,
@@ -85,12 +96,31 @@ def create_session(
 
     This endpoint is atomic - if sandbox provisioning fails, no database
     records are created (transaction is rolled back).
+
+    Uses Redis lock to prevent race conditions when multiple requests try to
+    create/provision a session for the same user concurrently.
     """
-    session_manager = SessionManager(db_session)
+    tenant_id = get_current_tenant_id()
+    redis_client = get_redis_client(tenant_id=tenant_id)
+
+    # Lock on user_id to prevent concurrent session creation for the same user
+    # This prevents race conditions where two requests both see sandbox as SLEEPING
+    # and both try to provision, with one deleting the other's work
+    lock_key = f"session_create:{user.id}"
+    lock = redis_client.lock(lock_key, timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS)
+
+    # blocking=True means wait if another create is in progress
+    acquired = lock.acquire(
+        blocking=True, blocking_timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS
+    )
+    if not acquired:
+        raise HTTPException(
+            status_code=503,
+            detail="Session creation timed out waiting for lock",
+        )
 
     try:
-        # Only pass user_work_area and user_level if demo data is enabled
-        # This prevents org_info directory creation when demo data is disabled
+        session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
             user_work_area=(
@@ -102,27 +132,23 @@ def create_session(
             demo_data_enabled=request.demo_data_enabled,
         )
         db_session.commit()
+
+        sandbox = get_sandbox_by_user_id(db_session, user.id)
+        base_response = SessionResponse.from_model(build_session, sandbox)
+        return DetailedSessionResponse.from_session_response(
+            base_response, session_loaded_in_sandbox=True
+        )
     except ValueError as e:
-        # Max concurrent sandboxes reached or other validation error
-        logger.exception("Sandbox provisioning failed")
+        logger.exception("Session creation failed")
         db_session.rollback()
         raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
-        # Sandbox provisioning failed - rollback to remove any uncommitted records
         db_session.rollback()
-        logger.error(f"Sandbox provisioning failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Sandbox provisioning failed: {e}",
-        )
-
-    # Get the user's sandbox to include in response
-    sandbox = get_sandbox_by_user_id(db_session, user.id)
-    base_response = SessionResponse.from_model(build_session, sandbox)
-    # Session was just created, so it's loaded in the sandbox
-    return DetailedSessionResponse.from_session_response(
-        base_response, session_loaded_in_sandbox=True
-    )
+        logger.error(f"Session creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
+    finally:
+        if lock.owned():
+            lock.release()
 
 
 @router.get("/{session_id}", response_model=DetailedSessionResponse)
@@ -159,6 +185,41 @@ def get_session_details(
     return DetailedSessionResponse.from_session_response(
         base_response, session_loaded_in_sandbox=session_loaded
     )
+
+
+@router.get(
+    "/{session_id}/pre-provisioned-check", response_model=PreProvisionedCheckResponse
+)
+def check_pre_provisioned_session(
+    session_id: UUID,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> PreProvisionedCheckResponse:
+    """
+    Check if a pre-provisioned session is still valid (empty).
+
+    Used by the frontend to poll and detect when another tab has used
+    the session. A session is considered valid if it has no messages yet.
+
+    Returns:
+        - valid=True, session_id=<id> if the session is still empty
+        - valid=False, session_id=None if the session has messages or doesn't exist
+    """
+    session = get_build_session(session_id, user.id, db_session)
+
+    if session is None:
+        return PreProvisionedCheckResponse(valid=False, session_id=None)
+
+    # Check if session is still empty (no messages = pre-provisioned)
+    has_messages = db_session.query(
+        exists().where(BuildMessage.session_id == session_id)
+    ).scalar()
+
+    if not has_messages:
+        return PreProvisionedCheckResponse(valid=True, session_id=str(session_id))
+
+    # Session has messages - it's no longer a valid pre-provisioned session
+    return PreProvisionedCheckResponse(valid=False, session_id=None)
 
 
 @router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)
@@ -305,14 +366,13 @@ def restore_session(
     lock_key = f"sandbox_restore:{sandbox.id}"
     lock = redis_client.lock(lock_key, timeout=RESTORE_LOCK_TIMEOUT_SECONDS)
 
-    # blocking=True means wait if another restore is in progress
-    acquired = lock.acquire(
-        blocking=True, blocking_timeout=RESTORE_LOCK_TIMEOUT_SECONDS
-    )
+    # Non-blocking: if another restore is already running, return 409 immediately
+    # instead of making the user wait. The frontend will retry.
+    acquired = lock.acquire(blocking=False)
     if not acquired:
         raise HTTPException(
-            status_code=503,
-            detail="Restore operation timed out waiting for lock",
+            status_code=409,
+            detail="Restore already in progress",
         )
 
     try:
@@ -322,15 +382,11 @@ def restore_session(
         # Also re-check if session workspace exists (another request may have
         # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
-            # Verify pod is healthy before proceeding
             is_healthy = sandbox_manager.health_check(sandbox.id, timeout=10.0)
             if is_healthy and sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             ):
-                logger.info(
-                    f"Session {session_id} workspace was restored by another request"
-                )
-                # Update heartbeat to mark sandbox as active
+                session.status = BuildSessionStatus.ACTIVE
                 update_sandbox_heartbeat(db_session, sandbox.id)
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
@@ -353,69 +409,82 @@ def restore_session(
                 # Fall through to TERMINATED handling below
 
         session_manager = SessionManager(db_session)
+        llm_config = session_manager._get_llm_config(None, None)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            # 1. Re-provision the pod
-            logger.info(f"Re-provisioning {sandbox.status.value} sandbox {sandbox.id}")
-            llm_config = session_manager._get_llm_config(None, None)
+            # Mark as PROVISIONING before the long-running provision() call
+            # so other requests know work is in progress
+            update_sandbox_status__no_commit(
+                db_session, sandbox.id, SandboxStatus.PROVISIONING
+            )
+            db_session.commit()
+
             sandbox_manager.provision(
                 sandbox_id=sandbox.id,
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
             )
+
+            # Mark as RUNNING after successful provision
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.RUNNING
             )
             db_session.commit()
-            db_session.refresh(sandbox)
 
         # 2. Check if session workspace needs to be loaded
         if sandbox.status == SandboxStatus.RUNNING:
-            if not sandbox_manager.session_workspace_exists(sandbox.id, session_id):
-                # Get latest snapshot and restore it
-                snapshot = get_latest_snapshot_for_session(db_session, session_id)
-                if snapshot:
-                    # Allocate a new port for the restored session
-                    new_port = allocate_nextjs_port(db_session)
-                    session.nextjs_port = new_port
+            workspace_exists = sandbox_manager.session_workspace_exists(
+                sandbox.id, session_id
+            )
+
+            if not workspace_exists:
+                # Allocate port if not already set (needed for both snapshot restore and fresh setup)
+                if not session.nextjs_port:
+                    session.nextjs_port = allocate_nextjs_port(db_session)
+                    # Commit port allocation before long-running operations
                     db_session.commit()
 
-                    logger.info(
-                        f"Restoring snapshot for session {session_id} "
-                        f"from {snapshot.storage_path} with port {new_port}"
-                    )
+                # Only Kubernetes backend supports snapshot restoration
+                snapshot = None
+                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
+                    snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
+                if snapshot:
                     try:
                         sandbox_manager.restore_snapshot(
                             sandbox_id=sandbox.id,
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
                             tenant_id=tenant_id,
-                            nextjs_port=new_port,
+                            nextjs_port=session.nextjs_port,
+                            llm_config=llm_config,
+                            use_demo_data=session.demo_data_enabled,
                         )
+                        session.status = BuildSessionStatus.ACTIVE
+                        db_session.commit()
                     except Exception as e:
-                        # Clear the port allocation on failure so it can be reused
                         logger.error(
-                            f"Failed to restore session {session_id}, "
-                            f"clearing port {new_port}: {e}"
+                            f"Snapshot restore failed for session {session_id}: {e}"
                         )
                         session.nextjs_port = None
                         db_session.commit()
                         raise
                 else:
                     # No snapshot - set up fresh workspace
-                    logger.info(
-                        f"No snapshot found for session {session_id}, "
-                        f"setting up fresh workspace"
-                    )
-                    llm_config = session_manager._get_llm_config(None, None)
                     sandbox_manager.setup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
-                        nextjs_port=session.nextjs_port or 3010,
+                        nextjs_port=session.nextjs_port,
                     )
+                    session.status = BuildSessionStatus.ACTIVE
+                    db_session.commit()
+        else:
+            logger.warning(
+                f"Sandbox {sandbox.id} status is {sandbox.status} after "
+                f"re-provision, expected RUNNING"
+            )
 
     except Exception as e:
         logger.error(f"Failed to restore session {session_id}: {e}", exc_info=True)
@@ -590,6 +659,33 @@ def export_docx(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": content_disposition},
     )
+
+
+@router.get("/{session_id}/pptx-preview/{path:path}")
+def get_pptx_preview(
+    session_id: UUID,
+    path: str,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> PptxPreviewResponse:
+    """Generate slide image previews for a PPTX file."""
+    session_manager = SessionManager(db_session)
+
+    try:
+        result = session_manager.get_pptx_preview(session_id, user.id, path)
+    except ValueError as e:
+        error_message = str(e)
+        if (
+            "path traversal" in error_message.lower()
+            or "access denied" in error_message.lower()
+        ):
+            raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=400, detail=error_message)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return PptxPreviewResponse(**result)
 
 
 @router.get("/{session_id}/webapp-info", response_model=WebappInfo)

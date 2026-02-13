@@ -40,6 +40,9 @@ interface ChatSessionData {
   isLoaded: boolean;
   description?: string;
   personaId?: number;
+
+  // Streaming duration tracking
+  streamingStartTime?: number;
 }
 
 interface ChatSessionStore {
@@ -125,6 +128,10 @@ interface ChatSessionStore {
   setUncaughtError: (sessionId: string, error: string | null) => void;
   setLoadingError: (sessionId: string, error: string | null) => void;
   setIsReady: (sessionId: string, ready: boolean) => void;
+
+  // Actions - Streaming Duration
+  setStreamingStartTime: (sessionId: string, time: number | null) => void;
+  getStreamingStartTime: (sessionId: string) => number | undefined;
 
   // Actions - Abort Controllers
   setAbortController: (sessionId: string, controller: AbortController) => void;
@@ -461,6 +468,17 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { isReady });
   },
 
+  // Streaming Duration Actions
+  setStreamingStartTime: (sessionId: string, time: number | null) => {
+    get().updateSessionData(sessionId, {
+      streamingStartTime: time ?? undefined,
+    });
+  },
+
+  getStreamingStartTime: (sessionId: string) => {
+    return get().sessions.get(sessionId)?.streamingStartTime;
+  },
+
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
     get().updateSessionData(sessionId, { abortController: controller });
@@ -616,4 +634,13 @@ export const useHasSentLocalUserMessage = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.hasSentLocalUserMessage || false;
+  });
+
+export const useStreamingStartTime = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.streamingStartTime;
   });

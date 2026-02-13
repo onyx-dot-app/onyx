@@ -1,6 +1,17 @@
+import type { ComponentType } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { IconProps } from "@opal/types";
+import {
+  SvgImage,
+  SvgFileChartPie,
+  SvgFileBraces,
+  SvgFileText,
+} from "@opal/icons";
 import { ALLOWED_URL_PROTOCOLS } from "./constants";
+
+const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+const BARE_EMAIL_REGEX = /^[^\s@/]+@[^\s@/:]+\.[^\s@/:]+$/;
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -12,24 +23,35 @@ export const truncateString = (str: string, maxLength: number) => {
 
 /**
  * Ensures an href has a protocol, adding https:// only to bare domains.
- * Preserves existing protocols, relative paths, anchors, mailto:, and tel: links.
+ * Converts bare email addresses to mailto: links.
+ * Preserves existing protocols, relative paths, and anchors.
  */
 export function ensureHrefProtocol(
   href: string | undefined
 ): string | undefined {
   if (!href) return href;
+  const trimmedHref = href.trim();
+  if (!trimmedHref) return href;
+
   const needsProtocol =
-    !href.includes("://") &&
-    !href.startsWith("/") &&
-    !href.startsWith("#") &&
-    !href.startsWith("mailto:") &&
-    !href.startsWith("tel:");
-  return needsProtocol ? `https://${href}` : href;
+    !URI_SCHEME_REGEX.test(trimmedHref) &&
+    !trimmedHref.startsWith("/") &&
+    !trimmedHref.startsWith("#");
+  if (!needsProtocol) {
+    return trimmedHref;
+  }
+
+  if (BARE_EMAIL_REGEX.test(trimmedHref)) {
+    return `mailto:${trimmedHref}`;
+  }
+
+  return `https://${trimmedHref}`;
 }
 
 /**
  * Custom URL transformer function for ReactMarkdown.
  * Only allows a small, safe set of protocols and strips everything else.
+ * Bare email addresses are normalized to mailto: links.
  * Returning null removes the href attribute entirely.
  */
 export function transformLinkUri(href: string): string | null {
@@ -48,8 +70,12 @@ export function transformLinkUri(href: string): string | null {
 
     return null;
   } catch {
+    if (BARE_EMAIL_REGEX.test(trimmedHref)) {
+      return `mailto:${trimmedHref}`;
+    }
+
     // Allow relative URLs, but drop anything that looks like a protocol-prefixed link
-    if (/^[a-zA-Z][a-zA-Z\d+.-]*:\S*/.test(trimmedHref)) {
+    if (URI_SCHEME_REGEX.test(trimmedHref)) {
       return null;
     }
 
@@ -158,6 +184,83 @@ export function isImageFile(fileName: string | null | undefined): boolean {
   if (!fileName) return false;
   const lowerFileName = String(fileName).toLowerCase();
   return IMAGE_EXTENSIONS.some((ext) => lowerFileName.endsWith(`.${ext}`));
+}
+
+/**
+ * Typical code/config file extensions (lowercase, no leading dots)
+ */
+export const CODE_EXTENSIONS = [
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "py",
+  "pyw",
+  "java",
+  "kt",
+  "kts",
+  "c",
+  "h",
+  "cpp",
+  "cc",
+  "cxx",
+  "hpp",
+  "cs",
+  "go",
+  "rs",
+  "rb",
+  "php",
+  "swift",
+  "scala",
+  "r",
+  "sql",
+  "sh",
+  "bash",
+  "zsh",
+  "yaml",
+  "yml",
+  "json",
+  "xml",
+  "html",
+  "htm",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  "lua",
+  "pl",
+  "vue",
+  "svelte",
+  "m",
+  "mm",
+  "md",
+  "markdown",
+] as const;
+
+/**
+ * Checks if a filename represents a code/config file based on its extension.
+ */
+export function isCodeFile(fileName: string | null | undefined): boolean {
+  if (!fileName) return false;
+  const lowerFileName = String(fileName).toLowerCase();
+  return CODE_EXTENSIONS.some((ext) => lowerFileName.endsWith(`.${ext}`));
+}
+
+/**
+ * Returns the icon component for a file based on its name/path.
+ * Used for file tree and preview tab icons.
+ */
+export function getFileIcon(
+  fileName: string | null | undefined
+): ComponentType<IconProps> {
+  if (!fileName) return SvgFileText;
+  if (isImageFile(fileName)) return SvgImage;
+  if (/\.pptx$/i.test(fileName)) return SvgFileChartPie;
+  if (/\.pdf$/i.test(fileName)) return SvgFileText;
+  if (isCodeFile(fileName)) return SvgFileBraces;
+  return SvgFileText;
 }
 
 /**

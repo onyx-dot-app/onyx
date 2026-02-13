@@ -9,7 +9,7 @@ import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
 import { AdminPageTitle } from "@/components/admin/Title";
 import useUsers from "@/hooks/useUsers";
 
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SvgUsers } from "@opal/icons";
 const Main = () => {

@@ -7,7 +7,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Settings } from "./interfaces";
 import { useRouter } from "next/navigation";
 import React, { useContext, useState, useEffect } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import Modal from "@/refresh-components/Modal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -284,7 +284,7 @@ export function SettingsForm() {
 
       <Checkbox
         label="Deep Research"
-        sublabel="Deep Research is in Alpha. Not recommended to be turned on. Use at your own risk."
+        sublabel="Enables a button to run deep research - a more complex and time intensive flow. Note: this costs >10x more in tokens to normal questions."
         checked={settings.deep_research_enabled ?? true}
         onChange={(e) =>
           handleToggleSettingsField("deep_research_enabled", e.target.checked)

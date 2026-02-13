@@ -193,6 +193,10 @@ class DocumentBase(BaseModel):
     # If None, document's hierarchy position is unknown or connector doesn't support hierarchy
     parent_hierarchy_raw_node_id: str | None = None
 
+    # Resolved database ID of the parent hierarchy node
+    # Set during docfetching after hierarchy nodes are cached
+    parent_hierarchy_node_id: int | None = None
+
     def get_title_for_document_index(
         self,
     ) -> str | None:
@@ -399,9 +403,11 @@ class HierarchyNode(BaseModel):
     # What kind of structural node this is (folder, space, page, etc.)
     node_type: HierarchyNodeType
 
-    # Optional: if this hierarchy node represents a document (e.g., Confluence page),
-    # this is the document ID. Set by the connector when the node IS a document.
-    document_id: str | None = None
+    # If this hierarchy node represents a document (e.g., Confluence page),
+    # The db model stores that doc's document_id. This gets set during docprocessing
+    # after the document row is created. Matching is done by raw_node_id matching document.id.
+    # so, we don't allow connectors to specify this as it would be unused
+    # document_id: str | None = None
 
     # External access information for the node
     external_access: ExternalAccess | None = None
@@ -468,8 +474,9 @@ class ConnectorStopSignal(Exception):
 
 
 class OnyxMetadata(BaseModel):
-    # Note that doc_id cannot be overriden here as it may cause issues
-    # with the display functionalities in the UI. Ask @chris if clarification is needed.
+    # Careful overriding the document_id, may cause visual issues in the UI.
+    # Kept here for API based use cases mostly
+    document_id: str | None = None
     source_type: DocumentSource | None = None
     link: str | None = None
     file_display_name: str | None = None

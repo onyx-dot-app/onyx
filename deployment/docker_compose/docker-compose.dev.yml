@@ -26,6 +26,14 @@ services:
     ports:
       - "19071:19071"
       - "8081:8081"
+    healthcheck:
+      # We use 19071 because the application server at 8010 is not ready until
+      # it is activated/configured by the application.
+      test: ["CMD-SHELL", "curl -sf http://localhost:19071/state/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   inference_model_server:
     ports:

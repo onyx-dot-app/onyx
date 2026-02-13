@@ -125,6 +125,7 @@ class SandboxManager(ABC):
         user_work_area: str | None = None,
         user_level: str | None = None,
         use_demo_data: bool = False,
+        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -149,6 +150,9 @@ class SandboxManager(ABC):
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
             use_demo_data: If True, symlink files/ to demo data; else to user files
+            excluded_user_library_paths: List of paths within user_library to exclude
+                from the sandbox (e.g., ["/data/file.xlsx"]). Only applies when
+                use_demo_data=False. Files at these paths won't be accessible.
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -183,13 +187,14 @@ class SandboxManager(ABC):
         session_id: UUID,
         tenant_id: str,
     ) -> SnapshotResult | None:
-        """Create a snapshot of a session's outputs directory.
+        """Create a snapshot of a session's outputs and attachments directories.
 
-        Captures only the session-specific outputs:
-        sessions/$session_id/outputs/
+        Captures session-specific user data:
+        - sessions/$session_id/outputs/ (generated artifacts, web apps)
+        - sessions/$session_id/attachments/ (user uploaded files)
 
-        Does NOT include: venv, skills, AGENTS.md, opencode.json, attachments
-        Does NOT include: shared files/ directory
+        Does NOT include: venv, skills, AGENTS.md, opencode.json, files symlink
+        (these are regenerated during restore)
 
         Args:
             sandbox_id: The sandbox ID
@@ -197,11 +202,42 @@ class SandboxManager(ABC):
             tenant_id: Tenant identifier for storage path
 
         Returns:
-            SnapshotResult with storage path and size, or None if
-            snapshots are disabled for this backend
+            SnapshotResult with storage path and size, or None if:
+            - Snapshots are disabled for this backend
+            - No outputs directory exists (nothing to snapshot)
 
         Raises:
             RuntimeError: If snapshot creation fails
+        """
+        ...
+
+    @abstractmethod
+    def restore_snapshot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        snapshot_storage_path: str,
+        tenant_id: str,
+        nextjs_port: int,
+        llm_config: LLMProviderConfig,
+        use_demo_data: bool = False,
+    ) -> None:
+        """Restore a session workspace from a snapshot.
+
+        For Kubernetes: Downloads and extracts the snapshot, regenerates config files.
+        For Local: No-op since workspaces persist on disk (no snapshots).
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID to restore
+            snapshot_storage_path: Path to the snapshot in storage
+            tenant_id: Tenant identifier for storage access
+            nextjs_port: Port number for the NextJS dev server
+            llm_config: LLM provider configuration for opencode.json
+            use_demo_data: If True, symlink files/ to demo data
+
+        Raises:
+            RuntimeError: If snapshot restoration fails
         """
         ...
 
@@ -222,36 +258,6 @@ class SandboxManager(ABC):
 
         Returns:
             True if the session workspace exists, False otherwise
-        """
-        ...
-
-    @abstractmethod
-    def restore_snapshot(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        snapshot_storage_path: str,
-        tenant_id: str,
-        nextjs_port: int,
-    ) -> None:
-        """Restore a snapshot into a session's workspace directory.
-
-        Downloads the snapshot from storage, extracts it into
-        sessions/$session_id/outputs/, and starts the NextJS server.
-
-        For Kubernetes backend, this downloads from S3 and streams
-        into the pod via kubectl exec (since the pod has no S3 access).
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to restore
-            snapshot_storage_path: Path to the snapshot in storage
-            tenant_id: Tenant identifier for storage access
-            nextjs_port: Port number for the NextJS dev server
-
-        Raises:
-            RuntimeError: If snapshot restoration fails
-            FileNotFoundError: If snapshot does not exist
         """
         ...
 
@@ -409,23 +415,59 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def generate_pptx_preview(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        pptx_path: str,
+        cache_dir: str,
+    ) -> tuple[list[str], bool]:
+        """Convert PPTX to slide JPEG images for preview, with caching.
+
+        Checks if cache_dir already has slides. If the PPTX is newer than the
+        cached images (or no cache exists), runs soffice -> pdftoppm pipeline.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            pptx_path: Relative path to the PPTX file within the session workspace
+            cache_dir: Relative path for the cache directory
+                       (e.g., "outputs/.pptx-preview/abc123")
+
+        Returns:
+            Tuple of (slide_paths, cached) where slide_paths is a list of
+            relative paths to slide JPEG images (within session workspace)
+            and cached indicates whether the result was served from cache.
+
+        Raises:
+            ValueError: If file not found or conversion fails
+        """
+        ...
+
+    @abstractmethod
     def sync_files(
         self,
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
+        source: str | None = None,
     ) -> bool:
         """Sync files from S3 to the sandbox's /workspace/files directory.
 
-        For Kubernetes backend: Executes `aws s3 sync` in the file-sync sidecar container.
+        For Kubernetes backend: Executes `s5cmd sync` in the file-sync sidecar container.
         For Local backend: No-op since files are directly accessible via symlink.
 
-        This is idempotent - only downloads changed files.
+        This is idempotent - only downloads changed files. File visibility in
+        sessions is controlled via filtered symlinks in setup_session_workspace(),
+        not at the sync level.
 
         Args:
             sandbox_id: The sandbox UUID
             user_id: The user ID (for S3 path construction)
             tenant_id: The tenant ID (for S3 path construction)
+            source: Optional source type (e.g., "gmail", "google_drive").
+                    If None, syncs all sources. If specified, only syncs
+                    that source's directory.
 
         Returns:
             True if sync was successful, False otherwise.

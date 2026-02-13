@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FILE_READER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
@@ -18,8 +19,8 @@ import {
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAssistantPreferences } from "@/app/app/hooks/useAssistantPreferences";
-import { useUser } from "@/components/user/UserProvider";
+import useAgentPreferences from "@/hooks/useAgentPreferences";
+import { useUser } from "@/providers/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { listSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
@@ -28,7 +29,6 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -37,8 +37,9 @@ import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionL
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
+import { Button } from "@opal/components";
 
 const UNAVAILABLE_TOOL_TOOLTIP_FALLBACK =
   "This action is not configured yet. Ask an admin to enable it.";
@@ -176,7 +177,7 @@ export default function ActionsPopover({
 
   const isDefaultAgent = selectedAssistant.id === 0;
 
-  // Get sources the agent has access to via document sets
+  // Get sources the agent has access to via document sets, hierarchy nodes, and attached documents
   // Default agent has access to all sources
   const agentAccessibleSources = useMemo(() => {
     if (isDefaultAgent) {
@@ -185,6 +186,7 @@ export default function ActionsPopover({
 
     const sourceSet = new Set<string>();
 
+    // Add sources from document sets
     selectedAssistant.document_sets.forEach((docSet) => {
       // Check cc_pair_summaries (regular connectors)
       docSet.cc_pair_summaries?.forEach((ccPair) => {
@@ -201,12 +203,29 @@ export default function ActionsPopover({
       });
     });
 
-    return sourceSet;
-  }, [isDefaultAgent, selectedAssistant.document_sets]);
+    // Add sources from hierarchy nodes and attached documents (via knowledge_sources)
+    selectedAssistant.knowledge_sources?.forEach((source) => {
+      // Normalize by removing federated_ prefix
+      const normalized = source.replace("federated_", "");
+      sourceSet.add(normalized);
+    });
 
-  // Check if non-default agent has no document sets (Internal Search should be disabled)
-  const hasNoDocumentSets =
-    !isDefaultAgent && selectedAssistant.document_sets.length === 0;
+    return sourceSet;
+  }, [
+    isDefaultAgent,
+    selectedAssistant.document_sets,
+    selectedAssistant.knowledge_sources,
+  ]);
+
+  // Check if non-default agent has no knowledge sources (Internal Search should be disabled)
+  // Knowledge sources include document sets and hierarchy nodes (folders, spaces, channels)
+  // Check if non-default agent has no knowledge sources (Internal Search should be disabled)
+  // Knowledge sources include document sets, hierarchy nodes, and attached documents
+  const hasNoKnowledgeSources =
+    !isDefaultAgent &&
+    selectedAssistant.document_sets.length === 0 &&
+    (selectedAssistant.hierarchy_node_count ?? 0) === 0 &&
+    (selectedAssistant.attached_document_count ?? 0) === 0;
 
   // Store MCP server auth/loading state (tools are part of selectedAssistant.tools)
   const [mcpServerData, setMcpServerData] = useState<{
@@ -235,7 +254,7 @@ export default function ActionsPopover({
 
   // Get the assistant preference for this assistant
   const { assistantPreferences, setSpecificAssistantPreferences } =
-    useAssistantPreferences();
+    useAgentPreferences();
   const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
   // Reset state when assistant changes
@@ -421,6 +440,14 @@ export default function ActionsPopover({
       hasNoConnectors &&
       !isAdmin &&
       !isCurator
+    ) {
+      return false;
+    }
+
+    // Hide File Reader entirely when it's not available (i.e. DISABLE_VECTOR_DB is off)
+    if (
+      tool.in_code_tool_id === FILE_READER_TOOL_ID &&
+      !availableToolIdSet.has(tool.id)
     ) {
       return false;
     }
@@ -712,7 +739,9 @@ export default function ActionsPopover({
     <LineItem
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SimpleLoader : SvgKey}
-      rightChildren={<IconButton icon={SvgChevronRight} internal />}
+      rightChildren={
+        <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
+      }
     >
       Re-Authenticate
     </LineItem>
@@ -876,7 +905,7 @@ export default function ActionsPopover({
                   setSecondaryView({ type: "sources" })
                 }
                 hasNoConnectors={hasNoConnectors}
-                hasNoDocumentSets={hasNoDocumentSets}
+                hasNoKnowledgeSources={hasNoKnowledgeSources}
                 toolAuthStatus={getToolAuthStatus(tool)}
                 onOAuthAuthenticate={() => authenticateTool(tool)}
                 onClose={() => setOpen(false)}
@@ -971,10 +1000,10 @@ export default function ActionsPopover({
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
           <div data-testid="action-management-toggle">
-            <IconButton
+            <Button
               icon={SvgSliders}
               transient={open}
-              tertiary
+              prominence="tertiary"
               tooltip="Manage Actions"
               disabled={disabled}
             />

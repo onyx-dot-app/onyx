@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { usePostHog } from "posthog-js/react";
-import { SvgArrowRight, SvgArrowLeft, SvgX, SvgLoader } from "@opal/icons";
+import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -76,15 +76,17 @@ function getStepsForMode(
 ): OnboardingStep[] {
   switch (mode.type) {
     case "initial-onboarding":
-      // Full flow: user-info (if needed) → llm-setup (if admin + not all configured) → page1 → page2
-      const steps: OnboardingStep[] = [];
-      if (!hasUserInfo) {
-        steps.push("user-info");
-      }
+      // Full flow: page1 → llm-setup (if admin + not all configured) → user-info
+      const steps: OnboardingStep[] = ["page1"];
+
       if (isAdmin && !allProvidersConfigured) {
         steps.push("llm-setup");
       }
-      steps.push("page1", "page2");
+
+      if (!hasUserInfo) {
+        steps.push("user-info");
+      }
+
       return steps;
 
     case "edit-persona":
@@ -184,43 +186,9 @@ export default function BuildOnboardingModal({
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Timeout state for informational pages (page1 and page2)
-  // Track which pages have already been seen (timer completed)
-  const [seenInfoPages, setSeenInfoPages] = useState<Set<OnboardingStep>>(
-    new Set()
-  );
-  const [canContinueInfoPage, setCanContinueInfoPage] = useState(false);
-
-  // Set up timeout when entering page1 or page2 (only if not seen before)
-  useEffect(() => {
-    if (
-      (currentStep === "page1" || currentStep === "page2") &&
-      !seenInfoPages.has(currentStep)
-    ) {
-      setCanContinueInfoPage(false);
-
-      // page1: 1s, page2: 3s
-      const timeoutDuration = currentStep === "page1" ? 1000 : 3000;
-
-      const timeout = setTimeout(() => {
-        setCanContinueInfoPage(true);
-        setSeenInfoPages((prev) => new Set(prev).add(currentStep));
-      }, timeoutDuration);
-
-      return () => clearTimeout(timeout);
-    } else if (
-      (currentStep === "page1" || currentStep === "page2") &&
-      seenInfoPages.has(currentStep)
-    ) {
-      // If already seen, allow immediate continuation
-      setCanContinueInfoPage(true);
-    }
-  }, [currentStep, seenInfoPages]);
-
   const requiresLevel =
     workArea !== undefined && WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
-  const isUserInfoValid =
-    firstName.trim() && workArea && (!requiresLevel || level);
+  const isUserInfoValid = workArea && (!requiresLevel || level);
 
   const currentProviderConfig = PROVIDERS.find(
     (p) => p.key === selectedProvider
@@ -457,15 +425,6 @@ export default function BuildOnboardingModal({
             />
           )}
 
-          {/* Page 2 - Let's get started */}
-          {currentStep === "page2" && (
-            <OnboardingInfoPages
-              step="page2"
-              workArea={workArea}
-              level={level}
-            />
-          )}
-
           {/* Navigation buttons */}
           <div className="relative flex justify-between items-center pt-2">
             {/* Back button */}
@@ -537,7 +496,7 @@ export default function BuildOnboardingModal({
                   {isLastStep
                     ? isSubmitting
                       ? "Saving..."
-                      : "Save"
+                      : "Get Started!"
                     : "Continue"}
                 </Text>
                 {!isLastStep && (
@@ -557,53 +516,12 @@ export default function BuildOnboardingModal({
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!canContinueInfoPage}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                  canContinueInfoPage
-                    ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
-                    : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
-                )}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
               >
-                {!canContinueInfoPage ? (
-                  <SvgLoader className="w-4 h-4 animate-spin text-text-02" />
-                ) : (
-                  <>
-                    <Text mainUiAction className="text-white dark:text-black">
-                      Continue
-                    </Text>
-                    <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
-                  </>
-                )}
-              </button>
-            )}
-
-            {currentStep === "page2" && (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!canContinueInfoPage || isSubmitting}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                  canContinueInfoPage && !isSubmitting
-                    ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
-                    : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
-                )}
-              >
-                {isSubmitting ? (
-                  <>
-                    <SvgLoader className="w-4 h-4 animate-spin text-text-02" />
-                    <Text mainUiAction className="text-text-02">
-                      Saving...
-                    </Text>
-                  </>
-                ) : !canContinueInfoPage ? (
-                  <SvgLoader className="w-4 h-4 animate-spin text-text-02" />
-                ) : (
-                  <Text mainUiAction className="text-white dark:text-black">
-                    Get Started!
-                  </Text>
-                )}
+                <Text mainUiAction className="text-white dark:text-black">
+                  Continue
+                </Text>
+                <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
               </button>
             )}
 

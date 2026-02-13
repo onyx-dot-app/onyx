@@ -1,7 +1,6 @@
 """Database operations for Build Mode sessions."""
 
 from datetime import datetime
-from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -19,7 +18,6 @@ from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
@@ -81,15 +79,19 @@ def get_user_build_sessions(
     db_session: Session,
     limit: int = 100,
 ) -> list[BuildSession]:
-    """Get all build sessions for a user that have at least 1 message.
+    """Get all build sessions for a user that have at least one message.
 
     Excludes empty (pre-provisioned) sessions from the listing.
     """
+    # Subquery to check if session has any messages
+    has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
+
     return (
         db_session.query(BuildSession)
-        .join(BuildMessage)  # Inner join excludes empty sessions
-        .filter(BuildSession.user_id == user_id)
-        .group_by(BuildSession.id)
+        .filter(
+            BuildSession.user_id == user_id,
+            has_messages,  # Only sessions with messages
+        )
         .order_by(desc(BuildSession.created_at))
         .limit(limit)
         .all()
@@ -99,27 +101,24 @@ def get_user_build_sessions(
 def get_empty_session_for_user(
     user_id: UUID,
     db_session: Session,
-    max_age_minutes: int = 30,
     demo_data_enabled: bool | None = None,
 ) -> BuildSession | None:
-    """Get the user's empty session (0 messages) if one exists and is recent.
+    """Get an empty (pre-provisioned) session for the user if one exists.
+
+    Returns a session with no messages, or None if all sessions have messages.
 
     Args:
         user_id: The user ID
         db_session: Database session
-        max_age_minutes: Maximum age of session to consider (default 30)
         demo_data_enabled: Match sessions with this demo_data setting.
-                          This ensures pre-provisioned sessions match the user's current
-                          preferences. If None, matches any session regardless of setting.
-                          Note: None is only used internally for operations that need to
-                          match any session (e.g., deletion).
+                          If None, matches any session regardless of setting.
     """
-    cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+    # Subquery to check if session has any messages
+    has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
     query = db_session.query(BuildSession).filter(
         BuildSession.user_id == user_id,
-        BuildSession.created_at > cutoff,
-        ~exists().where(BuildMessage.session_id == BuildSession.id),
+        ~has_messages,  # Sessions with no messages only
     )
 
     if demo_data_enabled is not None:
@@ -267,27 +266,6 @@ def update_artifact(
         artifact.updated_at = datetime.utcnow()
         db_session.commit()
         logger.info(f"Updated artifact {artifact_id}")
-
-
-# Snapshot operations
-def create_snapshot(
-    session_id: UUID,
-    storage_path: str,
-    size_bytes: int,
-    db_session: Session,
-) -> Snapshot:
-    """Create a new snapshot record."""
-    snapshot = Snapshot(
-        session_id=session_id,
-        storage_path=storage_path,
-        size_bytes=size_bytes,
-    )
-    db_session.add(snapshot)
-    db_session.commit()
-    db_session.refresh(snapshot)
-
-    logger.info(f"Created snapshot {snapshot.id} for session {session_id}")
-    return snapshot
 
 
 # Message operations
@@ -499,6 +477,32 @@ def allocate_nextjs_port(db_session: Session) -> int:
     raise RuntimeError(
         f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
     )
+
+
+def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> int:
+    """Mark all ACTIVE sessions for a user as IDLE.
+
+    Called when a sandbox goes to sleep so the frontend knows these sessions
+    need restoration before they can be used again.
+
+    Args:
+        db_session: Database session
+        user_id: The user whose sessions should be marked idle
+
+    Returns:
+        Number of sessions updated
+    """
+    result = (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            BuildSession.status == BuildSessionStatus.ACTIVE,
+        )
+        .update({BuildSession.status: BuildSessionStatus.IDLE})
+    )
+    db_session.flush()
+    logger.info(f"Marked {result} sessions as IDLE for user {user_id}")
+    return result
 
 
 def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:

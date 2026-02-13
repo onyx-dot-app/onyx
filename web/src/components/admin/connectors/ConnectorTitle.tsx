@@ -85,6 +85,9 @@ export const ConnectorTitle = ({
     if (typedConnector.connector_specific_config.channel_regex_enabled) {
       additionalMetadata.set("Channel Regex Enabled", "True");
     }
+    if (typedConnector.connector_specific_config.include_bot_messages) {
+      additionalMetadata.set("Include Bot Messages", "True");
+    }
   } else if (connector.source === "zulip") {
     const typedConnector = connector as Connector<ZulipConfig>;
     additionalMetadata.set(

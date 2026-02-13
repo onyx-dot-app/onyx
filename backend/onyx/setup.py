@@ -3,11 +3,11 @@ import time
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.configs.constants import KV_SEARCH_SETTINGS
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import GEN_AI_API_KEY
@@ -23,14 +23,12 @@ from onyx.db.document import check_docs_exist
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.index_attempt import cancel_indexing_attempts_past_model
 from onyx.db.index_attempt import expire_index_attempts
-from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
-from onyx.db.search_settings import update_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces import DocumentIndex
@@ -58,7 +56,7 @@ logger = setup_logger()
 
 
 def setup_onyx(
-    db_session: Session, tenant_id: str, cohere_enabled: bool = False
+    db_session: Session, tenant_id: str, cohere_enabled: bool = False  # noqa: ARG001
 ) -> None:
     """
     Setup Onyx for a particular tenant. In the Single Tenant case, it will set it up for the default schema
@@ -111,94 +109,55 @@ def setup_onyx(
     # setup Postgres with default credential, llm providers, etc.
     setup_postgres(db_session)
 
-    translate_saved_search_settings(db_session)
-
     # Does the user need to trigger a reindexing to bring the document index
     # into a good state, marked in the kv store
     if not MULTI_TENANT:
         mark_reindex_flag(db_session)
 
-    # Ensure Vespa is setup correctly, this step is relatively near the end because Vespa
-    # takes a bit of time to start up
-    logger.notice("Verifying Document Index(s) is/are available.")
-    # This flow is for setting up the document index so we get all indices here.
-    document_indices = get_all_document_indices(
-        search_settings,
-        secondary_search_settings,
-        None,
-    )
-
-    success = setup_document_indices(
-        document_indices,
-        IndexingSetting.from_db_model(search_settings),
-        (
-            IndexingSetting.from_db_model(secondary_search_settings)
-            if secondary_search_settings
-            else None
-        ),
-    )
-    if not success:
-        raise RuntimeError(
-            "Could not connect to a document index within the specified timeout."
+    if DISABLE_VECTOR_DB:
+        logger.notice(
+            "DISABLE_VECTOR_DB is set — skipping document index setup and "
+            "embedding model warm-up."
+        )
+    else:
+        # Ensure Vespa is setup correctly, this step is relatively near the end
+        # because Vespa takes a bit of time to start up
+        logger.notice("Verifying Document Index(s) is/are available.")
+        # This flow is for setting up the document index so we get all indices here.
+        document_indices = get_all_document_indices(
+            search_settings,
+            secondary_search_settings,
+            None,
         )
 
-    logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
-    if search_settings.provider_type is None:
-        # In integration tests, do not block API startup on warm-up
-        warm_up_bi_encoder(
-            embedding_model=EmbeddingModel.from_db_model(
-                search_settings=search_settings,
-                server_host=MODEL_SERVER_HOST,
-                server_port=MODEL_SERVER_PORT,
+        success = setup_document_indices(
+            document_indices,
+            IndexingSetting.from_db_model(search_settings),
+            (
+                IndexingSetting.from_db_model(secondary_search_settings)
+                if secondary_search_settings
+                else None
             ),
-            non_blocking=INTEGRATION_TESTS_MODE,
         )
+        if not success:
+            raise RuntimeError(
+                "Could not connect to a document index within the specified timeout."
+            )
 
-    # update multipass indexing setting based on GPU availability
-    update_default_multipass_indexing(db_session)
+        logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
+        if search_settings.provider_type is None:
+            # In integration tests, do not block API startup on warm-up
+            warm_up_bi_encoder(
+                embedding_model=EmbeddingModel.from_db_model(
+                    search_settings=search_settings,
+                    server_host=MODEL_SERVER_HOST,
+                    server_port=MODEL_SERVER_PORT,
+                ),
+                non_blocking=INTEGRATION_TESTS_MODE,
+            )
 
-
-def translate_saved_search_settings(db_session: Session) -> None:
-    kv_store = get_kv_store()
-
-    try:
-        search_settings_dict = kv_store.load(KV_SEARCH_SETTINGS)
-        if isinstance(search_settings_dict, dict):
-            # Update current search settings
-            current_settings = get_current_search_settings(db_session)
-
-            # Update non-preserved fields
-            if current_settings:
-                current_settings_dict = SavedSearchSettings.from_db_model(
-                    current_settings
-                ).dict()
-
-                new_current_settings = SavedSearchSettings(
-                    **{**current_settings_dict, **search_settings_dict}
-                )
-                update_current_search_settings(db_session, new_current_settings)
-
-            # Update secondary search settings
-            secondary_settings = get_secondary_search_settings(db_session)
-            if secondary_settings:
-                secondary_settings_dict = SavedSearchSettings.from_db_model(
-                    secondary_settings
-                ).dict()
-
-                new_secondary_settings = SavedSearchSettings(
-                    **{**secondary_settings_dict, **search_settings_dict}
-                )
-                update_secondary_search_settings(
-                    db_session,
-                    new_secondary_settings,
-                )
-            # Delete the KV store entry after successful update
-            kv_store.delete(KV_SEARCH_SETTINGS)
-            logger.notice("Search settings updated and KV store entry deleted.")
-        else:
-            logger.notice("KV store search settings is empty.")
-    except KvKeyNotFoundError:
-        logger.notice("No search config found in KV store.")
+        # update multipass indexing setting based on GPU availability
+        update_default_multipass_indexing(db_session)
 
 
 def mark_reindex_flag(db_session: Session) -> None:
@@ -286,7 +245,7 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    if GEN_AI_API_KEY and fetch_default_provider(db_session) is None:
+    if GEN_AI_API_KEY and fetch_default_llm_model(db_session) is None:
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 
@@ -348,6 +307,10 @@ def update_default_multipass_indexing(db_session: Session) -> None:
 
 
 def setup_multitenant_onyx() -> None:
+    if DISABLE_VECTOR_DB:
+        logger.notice("DISABLE_VECTOR_DB is set — skipping multitenant Vespa setup.")
+        return
+
     # For Managed Vespa, the schema is sent over via the Vespa Console manually.
     if not MANAGED_VESPA:
         setup_vespa_multitenant(SUPPORTED_EMBEDDING_MODELS)

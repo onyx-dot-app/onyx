@@ -87,7 +87,7 @@ def blob_connector(request: pytest.FixtureRequest) -> BlobStorageConnector:
     "blob_connector", [(BlobType.S3, "onyx-connector-tests")], indirect=True
 )
 def test_blob_s3_connector(
-    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector  # noqa: ARG001
 ) -> None:
     """
     Plain and document file types should be fully indexed.
@@ -129,7 +129,7 @@ def test_blob_s3_connector(
     "blob_connector", [(BlobType.S3, "s3-role-connector-test")], indirect=True
 )
 def test_blob_s3_cross_region_and_citation_link(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     blob_connector: BlobStorageConnector,
 ) -> None:
     """Buckets in a different region should be accessible and links should reflect the correct region.
@@ -183,7 +183,7 @@ def test_blob_s3_cross_region_and_citation_link(
     "blob_connector", [(BlobType.R2, "asia-pacific-bucket")], indirect=True
 )
 def test_blob_r2_connector(
-    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector  # noqa: ARG001
 ) -> None:
     """Validate basic R2 connector creation and document loading"""
 
@@ -208,7 +208,7 @@ def test_blob_r2_connector(
     indirect=True,
 )
 def test_blob_r2_eu_residency_connector(
-    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector  # noqa: ARG001
 ) -> None:
     """Validate R2 connector with European residency setting"""
 
@@ -231,7 +231,7 @@ def test_blob_r2_eu_residency_connector(
     "blob_connector", [(BlobType.GOOGLE_CLOUD_STORAGE, "onyx-test-1")], indirect=True
 )
 def test_blob_gcs_connector(
-    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector
+    mock_get_api_key: MagicMock, blob_connector: BlobStorageConnector  # noqa: ARG001
 ) -> None:
     all_docs: list[Document] = []
     for doc_batch in blob_connector.load_from_state():

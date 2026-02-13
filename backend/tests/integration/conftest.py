@@ -3,6 +3,9 @@ from collections.abc import Callable
 
 import pytest
 
+# Integration tests rely on this mode to enable mock_llm_response paths.
+os.environ["INTEGRATION_TESTS_MODE"] = "true"
+
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -52,7 +55,8 @@ def load_env_vars(env_file: str = ".env") -> None:
                 line = line.strip()
                 if line and not line.startswith("#"):
                     key, value = line.split("=", 1)
-                    os.environ[key] = value.strip()
+                    # Preserve explicitly pre-set vars (e.g. INTEGRATION_TESTS_MODE).
+                    os.environ.setdefault(key, value.strip())
         print("Successfully loaded environment variables")
     except FileNotFoundError:
         print(f"File {env_file} not found")
@@ -84,7 +88,7 @@ def reset() -> None:
 
 
 @pytest.fixture
-def new_admin_user(reset: None) -> DATestUser | None:
+def new_admin_user(reset: None) -> DATestUser | None:  # noqa: ARG001
     try:
         return UserManager.create(name=ADMIN_USER_NAME)
     except Exception:
@@ -132,7 +136,7 @@ def admin_user() -> DATestUser:
 def basic_user(
     # make sure the admin user exists first to ensure this new user
     # gets the BASIC role
-    admin_user: DATestUser,
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> DATestUser:
     try:
         user = UserManager.create(name=BASIC_USER_NAME)
@@ -221,11 +225,13 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
     return _document_builder
 
 
-def pytest_runtest_logstart(nodeid: str, location: tuple[str, int | None, str]) -> None:
+def pytest_runtest_logstart(
+    nodeid: str, location: tuple[str, int | None, str]  # noqa: ARG001
+) -> None:
     print(f"\nTest start: {nodeid}")
 
 
 def pytest_runtest_logfinish(
-    nodeid: str, location: tuple[str, int | None, str]
+    nodeid: str, location: tuple[str, int | None, str]  # noqa: ARG001
 ) -> None:
     print(f"\nTest end: {nodeid}")

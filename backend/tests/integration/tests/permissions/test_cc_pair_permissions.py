@@ -22,7 +22,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Curator and User Group tests are enterprise only",
 )
-def test_cc_pair_permissions(reset: None) -> None:
+def test_cc_pair_permissions(reset: None) -> None:  # noqa: ARG001
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
 

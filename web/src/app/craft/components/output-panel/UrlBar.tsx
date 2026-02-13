@@ -10,6 +10,7 @@ import {
   SvgArrowLeft,
   SvgArrowRight,
   SvgExternalLink,
+  SvgRevert,
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -29,10 +30,14 @@ export interface UrlBarProps {
   previewUrl?: string | null;
   /** Optional callback to download the raw file — shows a cloud-download icon inside the URL pill */
   onDownloadRaw?: () => void;
+  /** Tooltip text for the raw download button */
+  downloadRawTooltip?: string;
   /** Optional download callback — shows an export button in the URL bar when provided */
   onDownload?: () => void;
   /** Whether a download/export is currently in progress */
   isDownloading?: boolean;
+  /** Optional refresh callback — shows a refresh icon at the right edge of the URL pill */
+  onRefresh?: () => void;
 }
 
 /**
@@ -51,8 +56,10 @@ export default function UrlBar({
   onForward,
   previewUrl,
   onDownloadRaw,
+  downloadRawTooltip = "Download file",
   onDownload,
   isDownloading = false,
+  onRefresh,
 }: UrlBarProps) {
   const handleOpenInNewTab = () => {
     if (previewUrl) {
@@ -63,7 +70,7 @@ export default function UrlBar({
   return (
     <div className="px-3 pb-2">
       <div className="flex items-center gap-1">
-        {/* Navigation buttons */}
+        {/* Navigation buttons + refresh */}
         {showNavigation && (
           <div className="flex items-center gap-0.5">
             <button
@@ -92,17 +99,26 @@ export default function UrlBar({
             >
               <SvgArrowRight size={16} />
             </button>
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                className="p-1.5 rounded-full transition-colors hover:bg-background-tint-03 text-text-03"
+                aria-label="Refresh"
+              >
+                <SvgRevert size={14} className="-scale-x-100" />
+              </button>
+            )}
           </div>
         )}
         {/* URL display */}
-        <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2">
-          {/* Download raw MD file button */}
+        <div className="flex-1 flex items-center px-3 py-1.5 bg-background-tint-02 rounded-full gap-2 min-h-[2.25rem]">
+          {/* Download raw file button */}
           {onDownloadRaw && (
-            <SimpleTooltip tooltip="Download MD file" delayDuration={200}>
+            <SimpleTooltip tooltip={downloadRawTooltip} delayDuration={200}>
               <button
                 onClick={onDownloadRaw}
                 className="flex-shrink-0 p-0.5 rounded transition-colors hover:bg-background-tint-03 text-text-03"
-                aria-label="Download MD file"
+                aria-label={downloadRawTooltip}
               >
                 <SvgDownloadCloud size={14} />
               </button>

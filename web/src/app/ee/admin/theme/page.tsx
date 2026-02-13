@@ -8,7 +8,7 @@ import {
   AppearanceThemeSettingsRef,
 } from "./AppearanceThemeSettings";
 import { useContext, useRef, useState } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";

@@ -91,7 +91,7 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
 
 
 @worker_process_init.connect
-def init_worker(**kwargs: Any) -> None:
+def init_worker(**kwargs: Any) -> None:  # noqa: ARG001
     SqlEngine.reset_engine()
 
 
@@ -107,7 +107,9 @@ for bootstep in base_bootsteps:
     celery_app.steps["worker"].add(bootstep)
 
 celery_app.autodiscover_tasks(
-    [
-        "onyx.background.celery.tasks.user_file_processing",
-    ]
+    app_base.filter_task_modules(
+        [
+            "onyx.background.celery.tasks.user_file_processing",
+        ]
+    )
 )

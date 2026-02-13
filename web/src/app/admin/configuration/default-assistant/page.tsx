@@ -14,7 +14,7 @@ import { useAgents } from "@/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
@@ -233,6 +233,13 @@ function DefaultAssistantConfig() {
                           found from search tools. This is not included if no
                           search tools are called.
                         </div>
+                        <div>
+                          <span className="font-mono font-semibold">
+                            {"{{REMINDER_TAG_DESCRIPTION}}"}
+                          </span>{" "}
+                          - Injects instructions for how the Agent should handle
+                          system reminder tags.
+                        </div>
                       </div>
                     }
                     direction="bottom"
@@ -280,6 +287,9 @@ function DefaultAssistantConfig() {
                 mcpServers={mcpServersResponse?.mcp_servers}
                 enabledToolsMap={values.enabled_tools_map}
                 setFieldValue={setFieldValue}
+                hideSearchTool={
+                  combinedSettings?.settings.vector_db_enabled === false
+                }
               />
 
               <div className="flex justify-end pt-4">
@@ -300,13 +310,7 @@ export default function Page() {
     <>
       <AdminPageTitle
         title="Default Assistant"
-        icon={
-          <SvgOnyxLogo
-            width={32}
-            height={32}
-            className="my-auto stroke-text-04"
-          />
-        }
+        icon={<SvgOnyxLogo size={32} className="my-auto stroke-text-04" />}
       />
       <DefaultAssistantConfig />
     </>

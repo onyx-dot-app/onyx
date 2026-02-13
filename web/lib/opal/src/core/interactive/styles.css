@@ -1,0 +1,421 @@
+/* Interactive — base (structural only, no color changes) */
+.interactive {
+  @apply cursor-pointer select-none transition-all;
+}
+.interactive[data-disabled] {
+  @apply cursor-not-allowed;
+}
+
+/* Interactive — container */
+.interactive-container {
+  @apply flex self-stretch items-center justify-center overflow-clip;
+}
+.interactive-container[data-border="true"] {
+  @apply border;
+}
+
+/* Utility class — descendants opt in to parent-controlled foreground color */
+.interactive-foreground {
+  @apply transition-all duration-150 ease-in-out;
+  color: var(--interactive-foreground);
+}
+
+/* Icon foreground — falls back to --interactive-foreground when the icon
+   variable is unset (or reset to `initial`).  Variants that need a distinct
+   icon color at rest (e.g. select) set --interactive-foreground-icon; all
+   other states leave it unset so icons track the text color automatically. */
+.interactive-foreground-icon {
+  @apply transition-all duration-150 ease-in-out;
+  color: var(--interactive-foreground-icon, var(--interactive-foreground));
+}
+
+/* ============================================================================
+   Variant + Prominence combinations (12 + select)
+
+   Each combination sets:
+     - background-color (via @apply)
+     - --interactive-foreground (CSS custom property for descendant text color)
+
+   Descendants opt in to text color via: color: var(--interactive-foreground);
+
+============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   Default + Primary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="primary"] {
+  @apply bg-[var(--theme-primary-05)];
+  --interactive-foreground: var(--text-inverted-05);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="primary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="primary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--theme-primary-04)];
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="primary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--theme-primary-06)];
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="primary"][data-disabled] {
+  @apply bg-background-neutral-04;
+  --interactive-foreground: var(--text-inverted-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Default + Secondary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="secondary"] {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--text-03);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="secondary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="secondary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="secondary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="secondary"][data-disabled] {
+  @apply bg-background-neutral-03;
+  --interactive-foreground: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Default + Tertiary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="tertiary"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-03);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="tertiary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="tertiary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+  --interactive-foreground: var(--text-04);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="tertiary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="tertiary"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Default + Internal
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="internal"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-03);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="internal"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="internal"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-04);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="internal"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+  --interactive-foreground: var(--text-05);
+}
+.interactive[data-interactive-base-variant="default"][data-interactive-base-prominence="internal"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Primary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="primary"] {
+  @apply bg-[var(--action-link-05)];
+  --interactive-foreground: var(--text-light-05);
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="primary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="primary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-link-04)];
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="primary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-link-06)];
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="primary"][data-disabled] {
+  @apply bg-[var(--action-link-02)];
+  --interactive-foreground: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Secondary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="secondary"] {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-link-05);
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="secondary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="secondary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="secondary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="secondary"][data-disabled] {
+  @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-link-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Tertiary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="tertiary"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-link-05);
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="tertiary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="tertiary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="tertiary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="tertiary"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-link-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Action + Internal
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="internal"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-link-05);
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="internal"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="internal"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="internal"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="action"][data-interactive-base-prominence="internal"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-link-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Primary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="primary"] {
+  @apply bg-[var(--action-danger-05)];
+  --interactive-foreground: var(--text-light-05);
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="primary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="primary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-danger-04)];
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="primary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-danger-06)];
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="primary"][data-disabled] {
+  @apply bg-[var(--action-danger-02)];
+  --interactive-foreground: var(--text-01);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Secondary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="secondary"] {
+  @apply bg-background-tint-01;
+  --interactive-foreground: var(--action-text-danger-05);
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="secondary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="secondary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="secondary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="secondary"][data-disabled] {
+  @apply bg-background-neutral-02;
+  --interactive-foreground: var(--action-danger-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Tertiary
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="tertiary"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-danger-05);
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="tertiary"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="tertiary"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="tertiary"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="tertiary"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-danger-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Danger + Internal
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="internal"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--action-text-danger-05);
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="internal"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="internal"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="internal"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}
+.interactive[data-interactive-base-variant="danger"][data-interactive-base-prominence="internal"][data-disabled] {
+  @apply bg-transparent opacity-50;
+  --interactive-foreground: var(--action-danger-03);
+}
+
+/* ---------------------------------------------------------------------------
+   Select (optional "heavy" prominence)
+
+   Foreground is a 2D state machine: interaction × selected.
+   When not selected, text darkens on :active. When selected, foreground
+   switches to the action-link colour family and stays constant.
+
+   `data-transient` forces the hover background (same as all other variants).
+   `data-selected` switches the foreground to action-link colours.
+
+   The "heavy" prominence overrides the selected background to action-link-01
+   (instead of transparent). All other states are identical.
+   --------------------------------------------------------------------------- */
+.interactive[data-interactive-base-variant="select"] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-04);
+}
+/* Icon color at rest (not hovered/transient/active/selected/disabled).
+   Uses a single negated selector so no other state rules need updating. */
+.interactive[data-interactive-base-variant="select"]:not(:hover):not(
+    [data-transient="true"]
+  ):not(:active):not([data-selected="true"]):not([data-disabled]) {
+  --interactive-foreground-icon: var(--text-03);
+}
+.interactive[data-interactive-base-variant="select"]:hover:not([data-disabled]),
+.interactive[data-interactive-base-variant="select"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:not(
+    [data-disabled]
+  ) {
+  --interactive-foreground: var(--action-link-05);
+}
+.interactive[data-interactive-base-variant="select"]:active:not(
+    [data-disabled]
+  ):not([data-selected="true"]) {
+  @apply bg-background-neutral-00;
+  --interactive-foreground: var(--text-05);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-neutral-00;
+}
+.interactive[data-interactive-base-variant="select"][data-disabled] {
+  @apply bg-transparent;
+  --interactive-foreground: var(--text-02);
+}
+.interactive[data-interactive-base-variant="select"][data-selected="true"][data-disabled] {
+  --interactive-foreground: var(--action-link-03);
+}
+
+/* Heavy — selected background overrides */
+.interactive[data-interactive-base-variant="select"][data-interactive-base-prominence="heavy"][data-selected="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-[var(--action-link-01)];
+}
+.interactive[data-interactive-base-variant="select"][data-interactive-base-prominence="heavy"][data-selected="true"]:hover:not(
+    [data-disabled]
+  ),
+.interactive[data-interactive-base-variant="select"][data-interactive-base-prominence="heavy"][data-selected="true"][data-transient="true"]:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-02;
+}
+.interactive[data-interactive-base-variant="select"][data-interactive-base-prominence="heavy"][data-selected="true"]:active:not(
+    [data-disabled]
+  ) {
+  @apply bg-background-tint-00;
+}

@@ -1,25 +1,34 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_ADMIN_CREDENTIALS,
   TEST_USER_CREDENTIALS,
 } from "../constants";
-import { logPageState } from "./pageStateLogger";
 
-// Basic function which logs in a user (either admin or regular user) to the application
-// It handles both successful login attempts and potential timeouts, with a retry mechanism
+/**
+ * Log in via the API and set cookies on the page's browser context.
+ * Much faster than navigating through the login UI.
+ */
+export async function apiLogin(
+  page: Page,
+  email: string,
+  password: string
+): Promise<void> {
+  const res = await page.request.post("/api/auth/login", {
+    form: { username: email, password },
+  });
+  if (!res.ok()) {
+    const body = await res.text();
+    throw new Error(`API login failed for ${email}: ${res.status()} ${body}`);
+  }
+}
+
+// Logs in a known test user (admin, user, or admin2) via the API.
+// Users must already be provisioned (see global-setup.ts).
 export async function loginAs(
   page: Page,
   userType: "admin" | "user" | "admin2"
-) {
-  // Skip authentication if SKIP_AUTH environment variable is set
-  if (process.env.SKIP_AUTH === "true") {
-    console.log(
-      `[loginAs] Skipping authentication for ${userType} (SKIP_AUTH=true)`
-    );
-    return;
-  }
-
+): Promise<void> {
   const { email, password } =
     userType === "admin"
       ? TEST_ADMIN_CREDENTIALS
@@ -27,112 +36,10 @@ export async function loginAs(
         ? TEST_ADMIN2_CREDENTIALS
         : TEST_USER_CREDENTIALS;
 
-  const waitForVisible = async (
-    locator: Locator,
-    debugContext: string,
-    timeoutMs = 30000
-  ) => {
-    try {
-      await locator.waitFor({ state: "visible", timeout: timeoutMs });
-    } catch (error) {
-      await logPageState(page, debugContext, "[login-debug]");
-      throw error;
-    }
-  };
-
-  const fillCredentials = async (contextLabel: string) => {
-    const emailInput = page.getByTestId("email");
-    const passwordInput = page.getByTestId("password");
-    await waitForVisible(emailInput, `${contextLabel}: email input`);
-    await waitForVisible(passwordInput, `${contextLabel}: password input`);
-    await emailInput.fill(email);
-    await passwordInput.fill(password);
-  };
-
-  console.log(`[loginAs] Navigating to /auth/login as ${userType}`);
-  await page.goto("/auth/login");
-
-  // Wait for navigation to settle (login page may redirect to signup if no users exist)
-  await page.waitForLoadState("networkidle");
-
-  const currentUrl = page.url();
-  const isOnSignup = currentUrl.includes("/auth/signup");
-  console.log(
-    `[loginAs] After navigation, landed on: ${currentUrl} (isOnSignup: ${isOnSignup})`
-  );
-
-  await fillCredentials(
-    isOnSignup ? "loginAs signup form" : "loginAs login form"
-  );
-
-  // Click the submit button
-  await page.click('button[type="submit"]');
-  // Log any console errors during login
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      console.log(`[page:console:error] ${msg.text()}`);
-    }
-  });
-
-  try {
-    await page.waitForURL(/\/app.*/, { timeout: 10000 });
-    console.log(
-      `[loginAs] Redirected to /app for ${userType}. URL: ${page.url()}`
-    );
-  } catch {
-    console.log(`[loginAs] Timeout to /app. Current URL: ${page.url()}`);
-
-    // If redirect to /app doesn't happen and we were on login, try signup as fallback
-    if (!isOnSignup) {
-      console.log(`[loginAs] Navigating to /auth/signup as fallback`);
-      await page.goto("/auth/signup");
-      await logPageState(
-        page,
-        `[loginAs] Landed on /auth/signup fallback (${userType})`,
-        "[login-debug]"
-      );
-
-      await fillCredentials("loginAs fallback form");
-
-      // Click the submit button
-      await page.click('button[type="submit"]');
-
-      try {
-        await page.waitForURL(/\/app.*/, { timeout: 10000 });
-        console.log(
-          `[loginAs] Fallback redirected to /app for ${userType}. URL: ${page.url()}`
-        );
-      } catch {
-        console.log(
-          `[loginAs] Fallback timeout again. Current URL: ${page.url()}`
-        );
-      }
-    }
-  }
-
-  try {
-    // Try to fetch current user info from the page context
-    const me = await page.evaluate(async () => {
-      try {
-        const res = await fetch("/api/me", { credentials: "include" });
-        return {
-          ok: res.ok,
-          status: res.status,
-          url: res.url,
-          body: await res.text(),
-        };
-      } catch (e) {
-        return { ok: false, status: 0, url: "", body: `error: ${String(e)}` };
-      }
-    });
-    console.log(
-      `[loginAs] /api/me => ok=${me.ok} status=${me.status} url=${me.url}`
-    );
-  } catch (e) {
-    console.log(`[loginAs] Failed to query /api/me: ${String(e)}`);
-  }
+  await apiLogin(page, email, password);
 }
-// Function to generate a random email and password
+
+// Generate a random email and password for throwaway test users.
 const generateRandomCredentials = () => {
   const randomString = Math.random().toString(36).substring(2, 10);
   const specialChars = "!@#$%^&*()_+{}[]|:;<>,.?~";
@@ -149,117 +56,28 @@ const generateRandomCredentials = () => {
   };
 };
 
-// Function to sign up a new random user
-export async function loginAsRandomUser(page: Page) {
-  // Skip authentication if SKIP_AUTH environment variable is set
-  if (process.env.SKIP_AUTH === "true") {
-    console.log("[loginAsRandomUser] Skipping authentication (SKIP_AUTH=true)");
-    return { email: "skipped@local.test", password: "skipped" };
-  }
-
+// Register and log in as a new random user via the API.
+export async function loginAsRandomUser(page: Page): Promise<{
+  email: string;
+  password: string;
+}> {
   const { email, password } = generateRandomCredentials();
 
-  await page.goto("/auth/signup");
-
-  const emailInput = page.getByTestId("email");
-  const passwordInput = page.getByTestId("password");
-  await emailInput.waitFor({ state: "visible", timeout: 30000 });
-  await emailInput.fill(email);
-  await passwordInput.fill(password);
-
-  // Click the signup button
-  await page.click('button[type="submit"]');
-  try {
-    // Wait for 2 seconds to ensure the signup process completes
-    await page.waitForTimeout(3000);
-    // Refresh the page to ensure everything is loaded properly
-    // await page.reload();
-
-    await page.waitForURL("/app?new_team=true");
-    // Wait for the page to be fully loaded after refresh
-    await page.waitForLoadState("networkidle");
-  } catch {
-    console.log(`Timeout occurred. Current URL: ${page.url()}`);
-    throw new Error("Failed to sign up and redirect to app page");
-  }
-
-  return { email, password };
-}
-
-export async function inviteAdmin2AsAdmin1(page: Page) {
-  await page.goto("/admin/users");
-  // Wait for 400ms to ensure the page has loaded completely
-  await page.waitForTimeout(400);
-
-  // Log all currently visible test ids
-  const testIds = await page.evaluate(() => {
-    return Array.from(document.querySelectorAll("[data-testid]")).map((el) =>
-      el.getAttribute("data-testid")
-    );
+  const registerRes = await page.request.post("/api/auth/register", {
+    data: { email, username: email, password },
   });
-  console.log("Currently visible test ids:", testIds);
-
-  try {
-    // Wait for the dropdown trigger to be visible and click it
-    await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
-      .waitFor({ state: "visible", timeout: 5000 });
-    await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
-      .click();
-
-    // Wait for the admin option to be visible
-    await page
-      .getByTestId("user-role-dropdown-admin")
-      .waitFor({ state: "visible", timeout: 5000 });
-
-    // Click the admin option
-    await page.getByTestId("user-role-dropdown-admin").click();
-
-    // Wait for any potential loading or update to complete
-    await page.waitForTimeout(1000);
-
-    // Verify that the change was successful (you may need to adjust this based on your UI)
-    const newRole = await page
-      .getByTestId("user-role-dropdown-trigger-admin2_user@example.com")
-      .textContent();
-    if (newRole?.toLowerCase().includes("admin")) {
-      console.log("Successfully invited admin2 as admin");
-    } else {
-      throw new Error("Failed to update user role to admin");
-    }
-  } catch (error: unknown) {
-    console.error("Error inviting admin2 as admin:", error);
-    throw error;
-  }
-}
-
-export async function loginWithCredentials(
-  page: Page,
-  email: string,
-  password: string
-) {
-  if (process.env.SKIP_AUTH === "true") {
-    console.log("[loginWithCredentials] Skipping authentication");
-    return;
+  if (!registerRes.ok()) {
+    const body = await registerRes.text();
+    throw new Error(
+      `Failed to register random user ${email}: ${registerRes.status()} ${body}`
+    );
   }
 
-  await page.goto("/auth/login");
+  await apiLogin(page, email, password);
 
-  // Wait for navigation to settle (login page may redirect to signup if no users exist)
+  // Navigate to the app so the page is ready for test interactions
+  await page.goto("/app?new_team=true");
   await page.waitForLoadState("networkidle");
 
-  const currentUrl = page.url();
-  const isOnSignup = currentUrl.includes("/auth/signup");
-  console.log(
-    `[loginWithCredentials] After navigation, landed on: ${currentUrl} (isOnSignup: ${isOnSignup})`
-  );
-
-  const emailInput = page.getByTestId("email");
-  const passwordInput = page.getByTestId("password");
-  await emailInput.waitFor({ state: "visible", timeout: 30000 });
-  await emailInput.fill(email);
-  await passwordInput.fill(password);
-  await page.click('button[type="submit"]');
-  await page.waitForURL(/\/app.*/, { timeout: 15000 });
+  return { email, password };
 }

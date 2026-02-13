@@ -215,6 +215,19 @@ class ChatLoadedFile(InMemoryChatFile):
     token_count: int
 
 
+class ToolCallSimple(BaseModel):
+    """Tool call for ChatMessageSimple representation (mirrors OpenAI format).
+
+    Used when an ASSISTANT message contains one or more tool calls.
+    Each tool call has an ID, name, arguments, and token count for tracking.
+    """
+
+    tool_call_id: str
+    tool_name: str
+    tool_arguments: dict[str, Any]
+    token_count: int = 0
+
+
 class ChatMessageSimple(BaseModel):
     message: str
     token_count: int
@@ -223,12 +236,17 @@ class ChatMessageSimple(BaseModel):
     image_files: list[ChatLoadedFile] | None = None
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
+    # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)
+    tool_calls: list[ToolCallSimple] | None = None
     # The last message for which this is true
     # AND is true for all previous messages
     # (counting from the start of the history)
     # represents the end of the cacheable prefix
     # used for prompt caching
     should_cache: bool = False
+    # When this message represents an injected text file, this is the file's ID.
+    # Used to detect which file messages survive context-window truncation.
+    file_id: str | None = None
 
 
 class ProjectFileMetadata(BaseModel):
@@ -237,6 +255,33 @@ class ProjectFileMetadata(BaseModel):
     file_id: str
     filename: str
     file_content: str
+
+
+class FileToolMetadata(BaseModel):
+    """Lightweight metadata for exposing files to the FileReaderTool.
+
+    Used when files cannot be loaded directly into context (project too large
+    or persona-attached user_files without direct-load path). The LLM receives
+    a listing of these so it knows which files it can read via ``read_file``.
+    """
+
+    file_id: str
+    filename: str
+    approx_char_count: int
+
+
+class ChatHistoryResult(BaseModel):
+    """Result of converting chat history to simple format.
+
+    Bundles the simple messages with metadata for every text file that was
+    injected into the history. After context-window truncation drops older
+    messages, callers compare surviving ``file_id`` tags against this map
+    to discover "forgotten" files whose metadata should be provided to the
+    FileReaderTool.
+    """
+
+    simple_messages: list[ChatMessageSimple]
+    all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
 class ExtractedProjectFiles(BaseModel):
@@ -248,6 +293,9 @@ class ExtractedProjectFiles(BaseModel):
     project_file_metadata: list[ProjectFileMetadata]
     # None if not a project
     project_uncapped_token_count: int | None
+    # Lightweight metadata for files exposed via FileReaderTool
+    # (populated when files don't fit in context and vector DB is disabled)
+    file_metadata_for_tool: list[FileToolMetadata] = []
 
 
 class LlmStepResult(BaseModel):

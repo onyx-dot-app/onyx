@@ -26,7 +26,7 @@ logger = setup_logger()
     trail=False,
 )
 def eval_run_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     *,
     configuration_dict: dict[str, Any],
 ) -> None:
@@ -48,7 +48,7 @@ def eval_run_task(
     bind=True,
     trail=False,
 )
-def scheduled_eval_task(self: Task, **kwargs: Any) -> None:
+def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
     """
     Scheduled task to run evaluations on configured datasets.
     Runs weekly on Sunday at midnight UTC.

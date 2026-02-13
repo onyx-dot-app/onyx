@@ -24,8 +24,8 @@ from tests.external_dependency_unit.conftest import create_test_user
 @pytest.mark.skip(reason="Temporarily disabled")
 def test_stream_chat_message_objects_without_web_search(
     db_session: Session,
-    full_deployment_setup: None,
-    mock_external_deps: None,
+    full_deployment_setup: None,  # noqa: ARG001
+    mock_external_deps: None,  # noqa: ARG001
 ) -> None:
     """
     Test that when web search is requested but the persona has no web search tool,
@@ -37,8 +37,8 @@ def test_stream_chat_message_objects_without_web_search(
     def mock_post(
         url: str,
         json: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        **kwargs: Any,
+        headers: dict[str, str] | None = None,  # noqa: ARG001
+        **kwargs: Any,  # noqa: ARG001
     ) -> MagicMock:
         """Mock requests.post for model server embedding calls"""
         mock_response = MagicMock()

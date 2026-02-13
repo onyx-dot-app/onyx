@@ -1,9 +1,11 @@
 # ruff: noqa: E501, W605 start
 
+from onyx.prompts.constants import REMINDER_TAG_NO_HEADER
+
+
 DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
 CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
-ALT_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
-ALT_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
+REMINDER_TAG_REPLACEMENT_PAT = "{{REMINDER_TAG_DESCRIPTION}}"
 
 
 # Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
@@ -22,11 +24,10 @@ You use proper Markdown and LaTeX to format your responses for math, scientific,
 For code you prefer to use Markdown and specify the language.
 You can use horizontal rules (---) to separate sections of your responses.
 You can use Markdown tables to format your responses for data, lists, and other structured information.
+
+{REMINDER_TAG_REPLACEMENT_PAT}
 """.lstrip()
 
-
-# Section for information about the user if provided such as their name, role, memories, etc.
-USER_INFO_HEADER = "\n\n# User Information\n"
 
 COMPANY_NAME_BLOCK = """
 The user is at an organization called `{company_name}`.
@@ -47,8 +48,6 @@ DO NOT provide any links following the citations. Cite inline as opposed to leav
 # Reminder message if any search tool has been run anytime in the chat turn
 CITATION_REMINDER = """
 Remember to provide inline citations in the format [1], [2], [3], etc. based on the "document" field of the documents.
-
-Do not acknowledge this hint in your response.
 """.strip()
 
 LAST_CYCLE_CITATION_REMINDER = """
@@ -62,15 +61,11 @@ Remember that after using web_search, you are encouraged to open some pages to g
 Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs. Open as many as you want.
 
 If you do have enough to answer, remember to provide INLINE citations using the "document" field in the format [1], [2], [3], etc.
-
-Do not acknowledge this hint in your response.
 """.strip()
 
 
 IMAGE_GEN_REMINDER = """
 Very briefly describe the image(s) generated. Do not include any links or attachments.
-
-Do not acknowledge this hint/message in your response.
 """.strip()
 
 
@@ -94,9 +89,11 @@ This tool call completed but the results are no longer accessible.
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
 
-CHAT_NAMING_SYSTEM_PROMPT = """
+CHAT_NAMING_SYSTEM_PROMPT = f"""
 Given the conversation history, provide a SHORT name for the conversation. Focus the name on the important keywords to convey the topic of the conversation. \
 Make sure the name is in the same language as the user's first message.
+
+{REMINDER_TAG_NO_HEADER}
 
 IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()

@@ -4,14 +4,15 @@ import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
 import Popover from "@/refresh-components/Popover";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import { ValidSources } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
 import { SvgMoreHorizontal, SvgPlug, SvgSettings, SvgTrash } from "@opal/icons";
+import { Button } from "@opal/components";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import IconButton from "@/refresh-components/buttons/IconButton";
 
 export type ConnectorStatus =
   | "not_connected"
@@ -105,12 +106,20 @@ export default function ConnectorCard({
   const sourceMetadata = getSourceMetadata(connectorType);
   const status: ConnectorStatus = config?.status || "not_connected";
   const isConnected = status !== "not_connected" && status !== "deleting";
-
   const isDeleting = status === "deleting";
+
+  // Check if this connector type is always available (doesn't need connection setup)
+  const isAlwaysConnected = sourceMetadata.alwaysConnected ?? false;
+  const customDescription = sourceMetadata.customDescription;
 
   const handleCardClick = () => {
     if (isDeleting) {
       return; // No action while deleting
+    }
+    // Always-connected connectors always go to onConfigure
+    if (isAlwaysConnected) {
+      onConfigure();
+      return;
     }
     if (isConnected) {
       setPopoverOpen(true);
@@ -119,13 +128,16 @@ export default function ConnectorCard({
     }
   };
 
-  const rightContent = isDeleting ? null : isConnected ? (
+  // Always-connected connectors show a settings icon
+  // Regular connectors show popover menu when connected, plug icon when not
+  const rightContent = isDeleting ? null : isAlwaysConnected ? (
+    <IconButton icon={SvgSettings} internal />
+  ) : isConnected ? (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <Popover.Trigger asChild>
-        <IconButton
+        <Button
           icon={SvgMoreHorizontal}
-          tertiary
-          internal
+          prominence="tertiary"
           onClick={(e) => {
             e.stopPropagation();
             setPopoverOpen(!popoverOpen);
@@ -161,7 +173,23 @@ export default function ConnectorCard({
       </Popover.Content>
     </Popover>
   ) : (
-    <IconButton icon={SvgPlug} internal />
+    <Button icon={SvgPlug} prominence="tertiary" size="sm" />
+  );
+
+  // Always-connected connectors show as "primary" variant
+  const cardVariant =
+    isAlwaysConnected || isConnected ? "primary" : "secondary";
+
+  // Use custom description if provided, otherwise show status
+  const descriptionContent = customDescription ? (
+    <Text secondaryBody text03>
+      {customDescription}
+    </Text>
+  ) : (
+    <StatusDescription
+      status={status}
+      docsIndexed={config?.docs_indexed || 0}
+    />
   );
 
   return (
@@ -169,16 +197,11 @@ export default function ConnectorCard({
       className={cn(!isDeleting && "cursor-pointer")}
       onClick={handleCardClick}
     >
-      <Card variant={isConnected ? "primary" : "secondary"}>
+      <Card variant={cardVariant}>
         <LineItemLayout
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
-          description={
-            <StatusDescription
-              status={status}
-              docsIndexed={config?.docs_indexed || 0}
-            />
-          }
+          description={descriptionContent}
           rightChildren={rightContent}
           center
         />

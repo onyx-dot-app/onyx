@@ -94,7 +94,7 @@ def mock_discord_guild() -> MagicMock:
 
 
 @pytest.fixture
-def mock_discord_message(mock_bot_user: MagicMock) -> MagicMock:
+def mock_discord_message(mock_bot_user: MagicMock) -> MagicMock:  # noqa: ARG001
     """Mock Discord message for testing."""
     msg = MagicMock(spec=discord.Message)
     msg.id = 555555555
@@ -141,7 +141,7 @@ def mock_thread_with_messages(mock_bot_user: MagicMock) -> MagicMock:
     ]
 
     # Setup async iterator for history
-    def history(**kwargs: Any) -> AsyncIteratorMock:
+    def history(**kwargs: Any) -> AsyncIteratorMock:  # noqa: ARG001
         return AsyncIteratorMock(messages)
 
     thread.history = history

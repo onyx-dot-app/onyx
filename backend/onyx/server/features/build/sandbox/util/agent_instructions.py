@@ -73,10 +73,10 @@ CONNECTOR_INFO: dict[str, ConnectorInfoEntry] = {
         "file_pattern": "`PAGE_TITLE.json`",
         "scan_depth": 1,
     },
-    "org_info": {
-        "summary": "Organizational structure and user identity",
-        "file_pattern": "Various JSON files",
-        "scan_depth": 0,
+    "user_library": {
+        "summary": "User-uploaded files (spreadsheets, documents, presentations, etc.)",
+        "file_pattern": "Any file format",
+        "scan_depth": 1,
     },
 }
 DEFAULT_SCAN_DEPTH = 1
@@ -130,7 +130,6 @@ The `org_info/` directory contains information about the organization and user c
 
 
 # Content for the attachments section when user has uploaded files
-# NOTE: This is duplicated in agent_instructions.py to avoid circular imports
 ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
 
 The `attachments/` directory contains files that the user has explicitly
@@ -163,29 +162,6 @@ should be treated as high-priority context.
 contain exactly what you need to complete the task successfully."""
 
 
-def build_attachments_section(attachments_path: Path | None) -> str:
-    """Build the attachments section for AGENTS.md.
-
-    Only includes the section when user-uploaded files are present
-    in the attachments directory.
-
-    Args:
-        attachments_path: Path to the attachments directory
-
-    Returns:
-        Formatted attachments section string, or empty string if no files
-    """
-    if not attachments_path or not attachments_path.exists():
-        return ""
-
-    try:
-        if any(attachments_path.iterdir()):
-            return ATTACHMENTS_SECTION_CONTENT
-    except Exception:
-        pass
-    return ""
-
-
 def build_org_info_section(include_org_info: bool) -> str:
     """Build the organization info section for AGENTS.md.
 
@@ -206,22 +182,41 @@ def build_org_info_section(include_org_info: bool) -> str:
 def extract_skill_description(skill_md_path: Path) -> str:
     """Extract a brief description from a SKILL.md file.
 
-    Looks for the first paragraph or heading content.
+    If the file has YAML frontmatter (delimited by ---), uses the
+    ``description`` field. Otherwise falls back to the first paragraph.
 
     Args:
         skill_md_path: Path to the SKILL.md file
 
     Returns:
-        Brief description (truncated to ~100 chars)
+        Brief description (truncated to ~120 chars)
     """
     try:
         content = skill_md_path.read_text()
         lines = content.strip().split("\n")
 
-        # Skip empty lines and the first heading
+        # Try YAML frontmatter first
+        if lines and lines[0].strip() == "---":
+            for line in lines[1:]:
+                if line.strip() == "---":
+                    break
+                if line.startswith("description:"):
+                    desc = line.split(":", 1)[1].strip().strip('"').strip("'")
+                    if desc:
+                        if len(desc) > 120:
+                            desc = desc[:117] + "..."
+                        return desc
+
+        # Fallback: first non-heading paragraph after frontmatter
+        in_frontmatter = lines[0].strip() == "---" if lines else False
         description_lines: list[str] = []
-        for line in lines:
+        for line in lines[1:] if in_frontmatter else lines:
             stripped = line.strip()
+            # Skip until end of frontmatter
+            if in_frontmatter:
+                if stripped == "---":
+                    in_frontmatter = False
+                continue
             if not stripped:
                 if description_lines:
                     break
@@ -437,7 +432,6 @@ def generate_agent_instructions(
     template_path: Path,
     skills_path: Path,
     files_path: Path | None = None,
-    attachments_path: Path | None = None,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
@@ -453,7 +447,6 @@ def generate_agent_instructions(
         template_path: Path to the AGENTS.template.md file
         skills_path: Path to the skills directory
         files_path: Path to the files directory (symlink to knowledge sources)
-        attachments_path: Path to the attachments directory (user-uploaded files)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
@@ -490,11 +483,6 @@ def generate_agent_instructions(
     # Build org info section (only included when demo data is enabled)
     org_info_section = build_org_info_section(include_org_info)
 
-    # Build attachments section (only included when files are present)
-    attachments_section = (
-        build_attachments_section(attachments_path) if attachments_path else ""
-    )
-
     # Replace placeholders
     content = template_content
     content = content.replace("{{USER_CONTEXT}}", user_context)
@@ -506,7 +494,6 @@ def generate_agent_instructions(
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
     content = content.replace("{{ORG_INFO_SECTION}}", org_info_section)
-    content = content.replace("{{ATTACHMENTS_SECTION}}", attachments_section)
 
     # Only replace file-related placeholders if files_path is provided.
     # When files_path is None (e.g., Kubernetes), leave placeholders intact

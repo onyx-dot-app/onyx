@@ -1,4 +1,20 @@
-import { Page, expect, APIResponse } from "@playwright/test";
+import { APIRequestContext, expect, APIResponse } from "@playwright/test";
+
+const E2E_LLM_PROVIDER_API_KEY =
+  process.env.E2E_LLM_PROVIDER_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  "e2e-placeholder-api-key-not-used";
+
+const E2E_WEB_SEARCH_API_KEY =
+  process.env.E2E_WEB_SEARCH_API_KEY ||
+  process.env.EXA_API_KEY ||
+  process.env.SERPER_API_KEY ||
+  "e2e-placeholder-web-search-key";
+
+const E2E_IMAGE_GEN_API_KEY =
+  process.env.E2E_IMAGE_GEN_API_KEY ||
+  process.env.OPENAI_API_KEY ||
+  E2E_LLM_PROVIDER_API_KEY;
 
 /**
  * API Client for Onyx backend operations in E2E tests.
@@ -18,7 +34,10 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `deleteDocumentSet(id)` - Deletes a document set (with polling until complete)
  *
  * **LLM Providers:**
+ * - `listLlmProviders()` - Lists LLM providers (admin endpoint, includes is_public)
+ * - `ensurePublicProvider(name?)` - Idempotently creates a public default LLM provider
  * - `createRestrictedProvider(name, groupId)` - Creates a restricted LLM provider assigned to a group
+ * - `setProviderAsDefault(id)` - Sets an LLM provider as the default for chat
  * - `deleteProvider(id)` - Deletes an LLM provider
  *
  * **User Groups:**
@@ -31,21 +50,43 @@ import { Page, expect, APIResponse } from "@playwright/test";
  * - `createImageGenerationConfig(id, model, provider, isDefault)` - Creates an image generation config (enables image gen tool)
  * - `deleteImageGenerationConfig(id)` - Deletes an image generation config
  *
+ * **Chat Sessions:**
+ * - `createChatSession(description, personaId?)` - Creates a chat session with a description
+ * - `deleteChatSession(chatId)` - Deletes a chat session
+ *
+ * **Projects:**
+ * - `createProject(name)` - Creates a project with a name
+ * - `deleteProject(projectId)` - Deletes a project
+ *
  * **Usage Example:**
  * ```typescript
- * const client = new OnyxApiClient(page);
- * const { ccPairId } = await client.createFileConnector("Test Connector");
- * const docSetId = await client.createDocumentSet("Test Set", [ccPairId]);
- * await client.deleteDocumentSet(docSetId);
- * await client.deleteCCPair(ccPairId);
+ * // From a test with a Page:
+ * const client = new OnyxApiClient(page.request);
+ *
+ * // From global-setup with a standalone context (pass baseURL explicitly):
+ * const ctx = await request.newContext({ baseURL, storageState: "admin_auth.json" });
+ * const client = new OnyxApiClient(ctx, baseURL);
  * ```
  *
- * @param page - Playwright Page instance with authenticated session
+ * @param request - Playwright APIRequestContext with authenticated session
+ *                  (e.g. `page.request`, `context.request`, or `request.newContext()`)
+ * @param baseUrl - Optional base URL override (e.g. `http://localhost:3000`).
+ *                  Defaults to `process.env.BASE_URL` or `http://localhost:3000`.
+ *                  Pass this when the Playwright-configured baseURL differs from
+ *                  the env var (e.g. in `global-setup.ts` where the config value
+ *                  is authoritative).
  */
 export class OnyxApiClient {
-  private baseUrl = `${process.env.BASE_URL || "http://localhost:3000"}/api`;
+  private baseUrl: string;
 
-  constructor(private page: Page) {}
+  constructor(
+    private request: APIRequestContext,
+    baseUrl?: string
+  ) {
+    this.baseUrl = `${
+      baseUrl ?? process.env.BASE_URL ?? "http://localhost:3000"
+    }/api`;
+  }
 
   /**
    * Generic GET request to the API.
@@ -54,7 +95,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async get(endpoint: string): Promise<APIResponse> {
-    return await this.page.request.get(`${this.baseUrl}${endpoint}`);
+    return await this.request.get(`${this.baseUrl}${endpoint}`);
   }
 
   /**
@@ -65,7 +106,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async post(endpoint: string, data?: any): Promise<APIResponse> {
-    return await this.page.request.post(`${this.baseUrl}${endpoint}`, {
+    return await this.request.post(`${this.baseUrl}${endpoint}`, {
       data,
     });
   }
@@ -77,7 +118,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async delete(endpoint: string): Promise<APIResponse> {
-    return await this.page.request.delete(`${this.baseUrl}${endpoint}`);
+    return await this.request.delete(`${this.baseUrl}${endpoint}`);
   }
 
   /**
@@ -88,7 +129,7 @@ export class OnyxApiClient {
    * @returns The API response
    */
   private async put(endpoint: string, data?: any): Promise<APIResponse> {
-    return await this.page.request.put(`${this.baseUrl}${endpoint}`, {
+    return await this.request.put(`${this.baseUrl}${endpoint}`, {
       data,
     });
   }
@@ -363,13 +404,13 @@ export class OnyxApiClient {
     providerName: string,
     groupId: number
   ): Promise<number> {
-    const response = await this.page.request.put(
+    const response = await this.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
         data: {
           name: providerName,
           provider: "openai",
-          api_key: "test-key",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
           default_model_name: "gpt-4o",
           is_public: false,
           groups: [groupId],
@@ -389,24 +430,47 @@ export class OnyxApiClient {
     return responseData.id;
   }
 
+  /**
+   * Lists LLM providers visible to the admin (includes `is_public`).
+   *
+   * @returns Array of LLM providers with id and is_public fields
+   */
   async listLlmProviders(): Promise<
     Array<{
       id: number;
       is_public?: boolean;
     }>
   > {
-    const response = await this.get("/llm/provider");
+    const response = await this.get("/admin/llm/provider");
     return await this.handleResponse(response, "Failed to list LLM providers");
   }
 
-  async createPublicProvider(providerName: string): Promise<number> {
-    const response = await this.page.request.put(
+  /**
+   * Ensure at least one public LLM provider exists and is set as default.
+   *
+   * Idempotent — returns `null` if a public provider already exists,
+   * or the new provider ID if one was created.
+   *
+   * @param providerName - Name for the provider (default: "PW Default Provider")
+   * @returns The provider ID if one was created, or `null` if already present
+   */
+  async ensurePublicProvider(
+    providerName: string = "PW Default Provider"
+  ): Promise<number | null> {
+    const providers = await this.listLlmProviders();
+    const hasPublic = providers.some((p) => p.is_public);
+
+    if (hasPublic) {
+      return null;
+    }
+
+    const response = await this.request.put(
       `${this.baseUrl}/admin/llm/provider?is_creation=true`,
       {
         data: {
           name: providerName,
           provider: "openai",
-          api_key: "test-key",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
           default_model_name: "gpt-4o",
           is_public: true,
           groups: [],
@@ -420,10 +484,31 @@ export class OnyxApiClient {
       "Failed to create public provider"
     );
 
+    // Set as default so get_default_llm() works (needed for tokenization, etc.)
+    await this.setProviderAsDefault(responseData.id);
+
     this.log(
       `Created public LLM provider: ${providerName} (ID: ${responseData.id})`
     );
     return responseData.id;
+  }
+
+  /**
+   * Sets an LLM provider as the default for chat.
+   *
+   * @param providerId - The provider ID to set as default
+   */
+  async setProviderAsDefault(providerId: number): Promise<void> {
+    const response = await this.post(
+      `/admin/llm/provider/${providerId}/default`
+    );
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to set provider ${providerId} as default`
+    );
+
+    this.log(`Set LLM provider ${providerId} as default`);
   }
 
   /**
@@ -489,7 +574,7 @@ export class OnyxApiClient {
     role: "admin" | "curator" | "global_curator" | "basic",
     explicitOverride = false
   ): Promise<void> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/set-user-role`,
       {
         data: {
@@ -504,7 +589,7 @@ export class OnyxApiClient {
   }
 
   async deleteMcpServer(serverId: number): Promise<boolean> {
-    const response = await this.page.request.delete(
+    const response = await this.request.delete(
       `${this.baseUrl}/admin/mcp/server/${serverId}`
     );
     const success = await this.handleResponseSoft(
@@ -517,8 +602,36 @@ export class OnyxApiClient {
     return success;
   }
 
+  async deleteCustomTool(toolId: number): Promise<boolean> {
+    const response = await this.request.delete(
+      `${this.baseUrl}/admin/tool/custom/${toolId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete custom tool ${toolId}`
+    );
+    if (success) {
+      this.log(`Deleted custom tool ${toolId}`);
+    }
+    return success;
+  }
+
+  async listOpenApiTools(): Promise<
+    Array<{ id: number; name: string; description: string }>
+  > {
+    const response = await this.get("/tool/openapi");
+    return await this.handleResponse(response, "Failed to list OpenAPI tools");
+  }
+
+  async findToolByName(
+    name: string
+  ): Promise<{ id: number; name: string; description: string } | null> {
+    const tools = await this.listOpenApiTools();
+    return tools.find((tool) => tool.name === name) ?? null;
+  }
+
   async deleteAssistant(assistantId: number): Promise<boolean> {
-    const response = await this.page.request.delete(
+    const response = await this.request.delete(
       `${this.baseUrl}/persona/${assistantId}`
     );
     const success = await this.handleResponseSoft(
@@ -581,16 +694,13 @@ export class OnyxApiClient {
   }
 
   async registerUser(email: string, password: string): Promise<{ id: string }> {
-    const response = await this.page.request.post(
-      `${this.baseUrl}/auth/register`,
-      {
-        data: {
-          email,
-          username: email,
-          password,
-        },
-      }
-    );
+    const response = await this.request.post(`${this.baseUrl}/auth/register`, {
+      data: {
+        email,
+        username: email,
+        password,
+      },
+    });
     const data = await this.handleResponse<{ id: string }>(
       response,
       `Failed to register user ${email}`
@@ -603,7 +713,7 @@ export class OnyxApiClient {
     email: string;
     role: string;
   } | null> {
-    const response = await this.page.request.get(
+    const response = await this.request.get(
       `${this.baseUrl}/manage/users/accepted`,
       {
         params: {
@@ -631,7 +741,7 @@ export class OnyxApiClient {
     userId: string,
     isCurator: boolean = true
   ): Promise<void> {
-    const response = await this.page.request.post(
+    const response = await this.request.post(
       `${this.baseUrl}/manage/admin/user-group/${userGroupId}/set-curator`,
       {
         data: {
@@ -648,7 +758,7 @@ export class OnyxApiClient {
 
   /**
    * Create and activate a web search provider for testing.
-   * Uses a dummy API key that won't actually work, but allows the tool to be available.
+   * Uses env-backed keys when available and falls back to a placeholder key.
    *
    * @param providerType - Type of provider: "exa", "serper", "google_pse", "searxng"
    * @param name - Optional name for the provider (defaults to "Test Provider")
@@ -669,7 +779,7 @@ export class OnyxApiClient {
     const response = await this.post("/admin/web-search/search-providers", {
       name,
       provider_type: providerType,
-      api_key: "test-api-key-12345",
+      api_key: E2E_WEB_SEARCH_API_KEY,
       api_key_changed: true,
       config: Object.keys(config).length > 0 ? config : undefined,
       activate: true,
@@ -727,7 +837,7 @@ export class OnyxApiClient {
       image_provider_id: imageProviderId,
       model_name: modelName,
       provider: provider,
-      api_key: "test-api-key", // Dummy key - enables tool visibility
+      api_key: E2E_IMAGE_GEN_API_KEY,
       is_default: isDefault,
     });
 
@@ -843,7 +953,7 @@ export class OnyxApiClient {
     guild_name: string | null;
     enabled: boolean;
   }> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildId}`,
       { data: updates }
     );
@@ -918,7 +1028,7 @@ export class OnyxApiClient {
     channel_name: string;
     enabled: boolean;
   }> {
-    const response = await this.page.request.patch(
+    const response = await this.request.patch(
       `${this.baseUrl}/manage/admin/discord-bot/guilds/${guildConfigId}/channels/${channelConfigId}`,
       { data: updates }
     );
@@ -926,5 +1036,82 @@ export class OnyxApiClient {
       response,
       `Failed to update channel ${channelConfigId}`
     );
+  }
+
+  // === Chat Session Methods ===
+
+  /**
+   * Creates a chat session with a specific description.
+   *
+   * @param description - The description/title for the chat session
+   * @param personaId - The persona/assistant ID to use (defaults to 0)
+   * @returns The chat session ID
+   * @throws Error if the chat session creation fails
+   */
+  async createChatSession(
+    description: string,
+    personaId: number = 0
+  ): Promise<string> {
+    const response = await this.post("/chat/create-chat-session", {
+      persona_id: personaId,
+      description,
+    });
+    const data = await this.handleResponse<{ chat_session_id: string }>(
+      response,
+      "Failed to create chat session"
+    );
+    this.log(
+      `Created chat session: ${description} (ID: ${data.chat_session_id})`
+    );
+    return data.chat_session_id;
+  }
+
+  /**
+   * Deletes a chat session.
+   *
+   * @param chatId - The chat session ID to delete
+   */
+  async deleteChatSession(chatId: string): Promise<void> {
+    const response = await this.delete(`/chat/delete-chat-session/${chatId}`);
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete chat session ${chatId}`
+    );
+    this.log(`Deleted chat session: ${chatId}`);
+  }
+
+  // === Project Methods ===
+
+  /**
+   * Creates a project with a specific name.
+   *
+   * @param name - The name for the project
+   * @returns The project ID
+   * @throws Error if the project creation fails
+   */
+  async createProject(name: string): Promise<number> {
+    const response = await this.post(
+      `/user/projects/create?name=${encodeURIComponent(name)}`
+    );
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create project"
+    );
+    this.log(`Created project: ${name} (ID: ${data.id})`);
+    return data.id;
+  }
+
+  /**
+   * Deletes a project.
+   *
+   * @param projectId - The project ID to delete
+   */
+  async deleteProject(projectId: number): Promise<void> {
+    const response = await this.delete(`/user/projects/${projectId}`);
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete project ${projectId}`
+    );
+    this.log(`Deleted project: ${projectId}`);
   }
 }

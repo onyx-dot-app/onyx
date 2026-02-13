@@ -56,7 +56,9 @@ def _get_agents_admin_paginated(
     return response.json(), response.status_code
 
 
-def test_persona_pagination_basic(reset: None, admin_user: DATestUser) -> None:
+def test_persona_pagination_basic(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     """Test basic pagination - verify correct items and total count."""
     # Preconditions
     personas_to_create = 25
@@ -90,7 +92,9 @@ def test_persona_pagination_basic(reset: None, admin_user: DATestUser) -> None:
     assert page_beyond["total_items"] >= personas_to_create  # Total doesn't change.
 
 
-def test_persona_pagination_ordering(reset: None, admin_user: DATestUser) -> None:
+def test_persona_pagination_ordering(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     """Test ordering - display_priority ASC nulls last, then ID ASC."""
     # Preconditions
     # Create personas with specific display_priority values.
@@ -139,7 +143,9 @@ def test_persona_pagination_ordering(reset: None, admin_user: DATestUser) -> Non
         assert our_expected_ordered_persona_ids[i] == our_personas_in_results[i]["id"]
 
 
-def test_persona_pagination_admin_endpoint(reset: None, admin_user: DATestUser) -> None:
+def test_persona_pagination_admin_endpoint(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     """Test admin paginated endpoint returns PersonaSnapshot format."""
     # Preconditions
     personas_to_create = 5
@@ -167,7 +173,9 @@ def test_persona_pagination_admin_endpoint(reset: None, admin_user: DATestUser) 
     assert "user_file_ids" in first_persona
 
 
-def test_persona_pagination_with_deleted(reset: None, admin_user: DATestUser) -> None:
+def test_persona_pagination_with_deleted(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     """Test pagination with include_deleted parameter."""
     # Preconditions
     # Create and delete a persona.
@@ -197,7 +205,7 @@ def test_persona_pagination_with_deleted(reset: None, admin_user: DATestUser) ->
 
 
 def test_persona_pagination_page_size_limits(
-    reset: None, admin_user: DATestUser
+    reset: None, admin_user: DATestUser  # noqa: ARG001
 ) -> None:
     """Test page_size parameter validation (max 1000)."""
     # Preconditions
@@ -227,7 +235,9 @@ def test_persona_pagination_page_size_limits(
     assert status_code == 422  # Validation error
 
 
-def test_persona_pagination_count_accuracy(reset: None, admin_user: DATestUser) -> None:
+def test_persona_pagination_count_accuracy(
+    reset: None, admin_user: DATestUser  # noqa: ARG001
+) -> None:
     """Test that total_items count is consistent across pages."""
     # Preconditions
     # Create 15 personas.
@@ -264,7 +274,7 @@ def test_persona_pagination_count_accuracy(reset: None, admin_user: DATestUser) 
 
 
 def test_persona_pagination_user_permissions(
-    reset: None, admin_user: DATestUser, basic_user: DATestUser
+    reset: None, admin_user: DATestUser, basic_user: DATestUser  # noqa: ARG001
 ) -> None:
     """Test that pagination respects user permissions."""
     # Preconditions

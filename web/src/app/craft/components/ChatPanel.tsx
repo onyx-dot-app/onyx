@@ -25,7 +25,6 @@ import {
   UploadFileStatus,
   useUploadFilesContext,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { uploadFile } from "@/app/craft/services/apiServices";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -38,6 +37,7 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
+import { Button as OpalButton } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
@@ -120,7 +120,8 @@ export default function BuildChatPanel({
 
   // Disable input when pre-provisioning is in progress or failed (waiting for retry)
   const sandboxNotReady = isPreProvisioning || isPreProvisioningFailed;
-  const { currentMessageFiles, hasUploadingFiles } = useUploadFilesContext();
+  const { currentMessageFiles, hasUploadingFiles, setActiveSession } =
+    useUploadFilesContext();
   const followupSuggestions = useFollowupSuggestions();
   const suggestionsLoading = useSuggestionsLoading();
   const clearFollowupSuggestions = useBuildSessionStore(
@@ -132,6 +133,16 @@ export default function BuildChatPanel({
   useEffect(() => {
     currentFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
+
+  /**
+   * Keep the upload context in sync with the active session.
+   * The context handles all session change logic internally (fetching attachments,
+   * clearing files, auto-uploading pending files).
+   */
+  useEffect(() => {
+    const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
+    setActiveSession(activeSession);
+  }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
   // Ref to access InputBar methods
   const inputBarRef = useRef<InputBarHandle>(null);
@@ -332,23 +343,7 @@ export default function BuildChatPanel({
           });
         }
 
-        // Upload any files that need to be uploaded:
-        // - PENDING: Was attached before session existed, needs upload now
-        // - FAILED: Previous upload failed, retry
-        // - No path + not currently uploading: Edge case fallback
-        const currentFiles = currentFilesRef.current;
-        const filesToUpload = currentFiles.filter(
-          (f) =>
-            f.file &&
-            (f.status === UploadFileStatus.PENDING ||
-              f.status === UploadFileStatus.FAILED ||
-              (!f.path && f.status !== UploadFileStatus.UPLOADING))
-        );
-        if (filesToUpload.length > 0) {
-          await Promise.all(
-            filesToUpload.map((f) => uploadFile(newSessionId, f.file!))
-          );
-        }
+        // Note: PENDING files are auto-uploaded by the context when session becomes available
 
         // Navigate to URL - session controller will set currentSessionId
         router.push(
@@ -404,10 +399,11 @@ export default function BuildChatPanel({
           <div className="flex flex-row items-center gap-2 max-w-[75%]">
             {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
             {isMobile && leftSidebarFolded && (
-              <IconButton
+              <OpalButton
                 icon={SvgSidebar}
                 onClick={() => setLeftSidebarFolded(false)}
-                internal
+                prominence="tertiary"
+                size="sm"
               />
             )}
             <SandboxStatusIndicator />
@@ -438,7 +434,6 @@ export default function BuildChatPanel({
               onSubmit={handleSubmit}
               isRunning={isRunning}
               sandboxInitializing={sandboxNotReady}
-              preProvisionedSessionId={preProvisionedSessionId}
             />
           ) : (
             <BuildMessageList
@@ -499,8 +494,6 @@ export default function BuildChatPanel({
                 onSubmit={handleSubmit}
                 isRunning={isRunning}
                 placeholder="Continue the conversation..."
-                sessionId={sessionId ?? undefined}
-                preProvisionedSessionId={preProvisionedSessionId}
               />
             </div>
           </div>

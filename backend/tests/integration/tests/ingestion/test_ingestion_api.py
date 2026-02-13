@@ -10,7 +10,9 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 
-def test_ingestion_api_crud(reset: None, vespa_client: vespa_fixture) -> None:
+def test_ingestion_api_crud(
+    reset: None, vespa_client: vespa_fixture  # noqa: ARG001
+) -> None:
     """Test create, list, and delete via the ingestion API."""
     admin_user: DATestUser = UserManager.create(email="admin@onyx.app")
     cc_pair = CCPairManager.create_from_scratch(
@@ -20,7 +22,7 @@ def test_ingestion_api_crud(reset: None, vespa_client: vespa_fixture) -> None:
         connector_specific_config={
             "file_locations": [],
             "file_names": [],
-            "zip_metadata": {},
+            "zip_metadata_file_id": None,
         },
         user_performing_action=admin_user,
     )

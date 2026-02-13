@@ -243,6 +243,7 @@ class WebappInfo(BaseModel):
     has_webapp: bool  # Whether a webapp exists in outputs/web
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
+    ready: bool  # Whether the NextJS dev server is actually responding
 
 
 # ===== File Upload Models =====
@@ -263,6 +264,14 @@ class RateLimitResponse(BaseModel):
     messages_used: int
     limit: int
     reset_timestamp: str | None = None
+
+
+# ===== Pre-Provisioned Session Check Models =====
+class PreProvisionedCheckResponse(BaseModel):
+    """Response for checking if a pre-provisioned session is still valid (empty)."""
+
+    valid: bool  # True if session exists and has no messages
+    session_id: str | None = None  # Session ID if valid, None otherwise
 
 
 # ===== Build Connector Models =====
@@ -323,3 +332,11 @@ class GenerateSuggestionsResponse(BaseModel):
     """Response containing generated suggestions."""
 
     suggestions: list[SuggestionBubble]
+
+
+class PptxPreviewResponse(BaseModel):
+    """Response with PPTX slide preview metadata."""
+
+    slide_count: int
+    slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
+    cached: bool  # Whether result was served from cache

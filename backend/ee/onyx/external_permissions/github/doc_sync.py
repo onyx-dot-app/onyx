@@ -34,7 +34,7 @@ GITHUB_DOC_SYNC_LABEL = "github_doc_sync"
 def github_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
-    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[DocExternalAccess, None, None]:
     """
@@ -50,7 +50,12 @@ def github_doc_sync(
         **cc_pair.connector.connector_specific_config
     )
 
-    github_connector.load_credentials(cc_pair.credential.credential_json)
+    credential_json = (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
+    github_connector.load_credentials(credential_json)
     logger.info("GitHub connector credentials loaded successfully")
 
     if not github_connector.github_client:
@@ -60,21 +65,7 @@ def github_doc_sync(
     # Get all repositories from GitHub API
     logger.info("Fetching all repositories from GitHub API")
     try:
-        repos = []
-        if github_connector.repositories:
-            if "," in github_connector.repositories:
-                # Multiple repositories specified
-                repos = github_connector.get_github_repos(
-                    github_connector.github_client
-                )
-            else:
-                # Single repository
-                repos = [
-                    github_connector.get_github_repo(github_connector.github_client)
-                ]
-        else:
-            # All repositories
-            repos = github_connector.get_all_repos(github_connector.github_client)
+        repos = github_connector.fetch_configured_repos()
 
         logger.info(f"Found {len(repos)} repositories to check")
     except Exception as e:

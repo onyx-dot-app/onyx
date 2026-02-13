@@ -3,6 +3,7 @@
 # 2. Use user provided custom prompts
 # 3. Save the plan for replay
 
+import time
 from collections.abc import Callable
 from typing import cast
 
@@ -16,7 +17,10 @@ from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
+from onyx.chat.models import ToolCallSimple
+from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import MessageType
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import get_clarification_tool_definitions
@@ -32,6 +36,8 @@ from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FINAL_REPORT_PROMPT
+from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER
+from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER_TOKENS
 from onyx.prompts.deep_research.orchestration_layer import (
     INTERNAL_SEARCH_CLARIFICATION_GUIDANCE,
 )
@@ -71,6 +77,11 @@ logger = setup_logger()
 MAX_USER_MESSAGES_FOR_CONTEXT = 5
 MAX_FINAL_REPORT_TOKENS = 20000
 
+# 30 minute timeout before forcing final report generation
+# NOTE: The overall execution may be much longer still because it could run a research cycle at minute 29
+# and that runs for another nearly 30 minutes.
+DEEP_RESEARCH_FORCE_REPORT_SECONDS = 30 * 60
+
 # Might be something like (this gives a lot of leeway for change but typically the models don't do this):
 # 0. Research topics 1-3
 # 1. Think
@@ -89,6 +100,7 @@ MAX_ORCHESTRATOR_CYCLES_REASONING = 4
 
 def generate_final_report(
     history: list[ChatMessageSimple],
+    research_plan: str,
     llm: LLM,
     token_counter: Callable[[str], int],
     state_container: ChatStateContainer,
@@ -97,6 +109,8 @@ def generate_final_report(
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None,
     saved_reasoning: str | None = None,
+    pre_answer_processing_time: float | None = None,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
 ) -> bool:
     """Generate the final research report.
 
@@ -114,10 +128,11 @@ def generate_final_report(
             token_count=token_counter(final_report_prompt),
             message_type=MessageType.SYSTEM,
         )
+        final_reminder = USER_FINAL_REPORT_QUERY.format(research_plan=research_plan)
         reminder_message = ChatMessageSimple(
-            message=USER_FINAL_REPORT_QUERY,
-            token_count=token_counter(USER_FINAL_REPORT_QUERY),
-            message_type=MessageType.USER,
+            message=final_reminder,
+            token_count=token_counter(final_reminder),
+            message_type=MessageType.USER_REMINDER,
         )
         final_report_history = construct_message_history(
             system_prompt=system_prompt,
@@ -126,6 +141,7 @@ def generate_final_report(
             reminder_message=reminder_message,
             project_files=None,
             available_tokens=llm.config.max_input_tokens,
+            all_injected_file_metadata=all_injected_file_metadata,
         )
 
         citation_processor = DynamicCitationProcessor()
@@ -147,6 +163,8 @@ def generate_final_report(
             user_identity=user_identity,
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
+            pre_answer_processing_time=pre_answer_processing_time,
+            timeout_override=300,  # 5 minute read timeout for long report generation
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -172,13 +190,14 @@ def run_deep_research_llm_loop(
     state_container: ChatStateContainer,
     simple_chat_history: list[ChatMessageSimple],
     tools: list[Tool],
-    custom_agent_prompt: str | None,
+    custom_agent_prompt: str | None,  # noqa: ARG001
     llm: LLM,
     token_counter: Callable[[str], int],
     db_session: Session,
     skip_clarification: bool = False,
     user_identity: LLMUserIdentity | None = None,
     chat_session_id: str | None = None,
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
 ) -> None:
     with trace(
         "run_deep_research_llm_loop",
@@ -200,6 +219,9 @@ def run_deep_research_llm_loop(
 
         initialize_litellm()
 
+        # Track processing start time for tool duration calculation
+        processing_start_time = time.monotonic()
+
         available_tokens = llm.config.max_input_tokens
 
         llm_step_result: LlmStepResult | None = None
@@ -218,7 +240,7 @@ def run_deep_research_llm_loop(
             if include_internal_search_tunings
             else ""
         )
-        if not skip_clarification:
+        if not SKIP_DEEP_RESEARCH_CLARIFICATION and not skip_clarification:
             with function_span("clarification_step") as span:
                 clarification_prompt = CLARIFICATION_PROMPT.format(
                     current_datetime=get_current_llm_day_time(full_sentence=False),
@@ -238,8 +260,12 @@ def run_deep_research_llm_loop(
                     project_files=None,
                     available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
+                    all_injected_file_metadata=all_injected_file_metadata,
                 )
 
+                # Calculate tool processing duration for clarification step
+                # (used if the LLM emits a clarification question instead of calling tools)
+                clarification_tool_duration = time.monotonic() - processing_start_time
                 llm_step_result, _ = run_llm_step(
                     emitter=emitter,
                     history=truncated_message_history,
@@ -254,6 +280,7 @@ def run_deep_research_llm_loop(
                     final_documents=None,
                     user_identity=user_identity,
                     is_deep_research=True,
+                    pre_answer_processing_time=clarification_tool_duration,
                 )
 
                 if not llm_step_result.tool_calls:
@@ -282,6 +309,8 @@ def run_deep_research_llm_loop(
                 token_count=300,
                 message_type=MessageType.SYSTEM,
             )
+            # Note this is fine to use a USER message type here as it can just be interpretered as a
+            # user's message directly to the LLM.
             reminder_message = ChatMessageSimple(
                 message=RESEARCH_PLAN_REMINDER,
                 token_count=100,
@@ -295,6 +324,7 @@ def run_deep_research_llm_loop(
                 project_files=None,
                 available_tokens=available_tokens,
                 last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT + 1,
+                all_injected_file_metadata=all_injected_file_metadata,
             )
 
             research_plan_generator = run_llm_step_pkt_generator(
@@ -349,6 +379,8 @@ def run_deep_research_llm_loop(
             llm_step_result = cast(LlmStepResult, llm_step_result)
 
             research_plan = llm_step_result.answer
+            if research_plan is None:
+                raise RuntimeError("Deep Research failed to generate a research plan")
             span.span_data.output = research_plan if research_plan else None
 
         #########################################################
@@ -392,13 +424,24 @@ def run_deep_research_llm_loop(
                 orchestrator_start_turn_index  # Track the final turn_index for stop packet
             )
             for cycle in range(max_orchestrator_cycles):
-                if cycle == max_orchestrator_cycles - 1:
-                    # If it's the last cycle, forcibly generate the final report
+                # Check if we've exceeded the time limit or reached the last cycle
+                # - if so, skip LLM and generate final report
+                elapsed_seconds = time.monotonic() - processing_start_time
+                timed_out = elapsed_seconds > DEEP_RESEARCH_FORCE_REPORT_SECONDS
+                is_last_cycle = cycle == max_orchestrator_cycles - 1
+
+                if timed_out or is_last_cycle:
+                    if timed_out:
+                        logger.info(
+                            f"Deep research exceeded {DEEP_RESEARCH_FORCE_REPORT_SECONDS}s "
+                            f"(elapsed: {elapsed_seconds:.1f}s), forcing final report generation"
+                        )
                     report_turn_index = (
                         orchestrator_start_turn_index + cycle + reasoning_cycles
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -406,10 +449,20 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
+                        pre_answer_processing_time=elapsed_seconds,
+                        all_injected_file_metadata=all_injected_file_metadata,
                     )
-                    # Update final_turn_index: base + 1 for the report itself + 1 if reasoning occurred
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
+
+                if cycle == 1:
+                    first_cycle_reminder_message = ChatMessageSimple(
+                        message=FIRST_CYCLE_REMINDER,
+                        token_count=FIRST_CYCLE_REMINDER_TOKENS,
+                        message_type=MessageType.USER_REMINDER,
+                    )
+                else:
+                    first_cycle_reminder_message = None
 
                 research_agent_calls: list[ToolCallKickoff] = []
 
@@ -431,10 +484,11 @@ def run_deep_research_llm_loop(
                     system_prompt=system_prompt,
                     custom_agent_prompt=None,
                     simple_chat_history=simple_chat_history,
-                    reminder_message=None,
+                    reminder_message=first_cycle_reminder_message,
                     project_files=None,
                     available_tokens=available_tokens,
                     last_n_user_messages=MAX_USER_MESSAGES_FOR_CONTEXT,
+                    all_injected_file_metadata=all_injected_file_metadata,
                 )
 
                 # Use think tool processor for non-reasoning models to convert
@@ -466,6 +520,10 @@ def run_deep_research_llm_loop(
                     user_identity=user_identity,
                     custom_token_processor=custom_processor,
                     is_deep_research=True,
+                    # Even for the reasoning tool, this should be plenty
+                    # The generation here should never be very long as it's just the tool calls.
+                    # This prevents timeouts where the model gets into an endless loop of null or bad tokens.
+                    max_tokens=1024,
                 )
                 if has_reasoned:
                     reasoning_cycles += 1
@@ -486,6 +544,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -493,6 +552,9 @@ def run_deep_research_llm_loop(
                         turn_index=report_turn_index,
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
+                        pre_answer_processing_time=time.monotonic()
+                        - processing_start_time,
+                        all_injected_file_metadata=all_injected_file_metadata,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -505,6 +567,7 @@ def run_deep_research_llm_loop(
                     )
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
+                        research_plan=research_plan,
                         llm=llm,
                         token_counter=token_counter,
                         state_container=state_container,
@@ -513,6 +576,9 @@ def run_deep_research_llm_loop(
                         citation_mapping=citation_mapping,
                         user_identity=user_identity,
                         saved_reasoning=most_recent_reasoning,
+                        pre_answer_processing_time=time.monotonic()
+                        - processing_start_time,
+                        all_injected_file_metadata=all_injected_file_metadata,
                     )
                     final_turn_index = report_turn_index + (1 if report_reasoned else 0)
                     break
@@ -528,15 +594,23 @@ def run_deep_research_llm_loop(
                         span.span_data.input = str(think_tool_call.tool_args)
                         most_recent_reasoning = state_container.reasoning_tokens
                         tool_call_message = think_tool_call.to_msg_str()
+                        tool_call_token_count = token_counter(tool_call_message)
 
-                        think_tool_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=token_counter(tool_call_message),
-                            message_type=MessageType.TOOL_CALL,
+                        # Create ASSISTANT message with tool_calls (OpenAI parallel format)
+                        think_tool_simple = ToolCallSimple(
                             tool_call_id=think_tool_call.tool_call_id,
+                            tool_name=think_tool_call.tool_name,
+                            tool_arguments=think_tool_call.tool_args,
+                            token_count=tool_call_token_count,
+                        )
+                        think_assistant_msg = ChatMessageSimple(
+                            message="",
+                            token_count=tool_call_token_count,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=[think_tool_simple],
                             image_files=None,
                         )
-                        simple_chat_history.append(think_tool_msg)
+                        simple_chat_history.append(think_assistant_msg)
 
                         think_tool_response_msg = ChatMessageSimple(
                             message=THINK_TOOL_RESPONSE_MESSAGE,
@@ -567,6 +641,7 @@ def run_deep_research_llm_loop(
                         )
                         report_reasoned = generate_final_report(
                             history=simple_chat_history,
+                            research_plan=research_plan,
                             llm=llm,
                             token_counter=token_counter,
                             state_container=state_container,
@@ -574,6 +649,9 @@ def run_deep_research_llm_loop(
                             turn_index=report_turn_index,
                             citation_mapping=citation_mapping,
                             user_identity=user_identity,
+                            pre_answer_processing_time=time.monotonic()
+                            - processing_start_time,
+                            all_injected_file_metadata=all_injected_file_metadata,
                         )
                         final_turn_index = report_turn_index + (
                             1 if report_reasoned else 0
@@ -612,6 +690,33 @@ def run_deep_research_llm_loop(
 
                     citation_mapping = research_results.citation_mapping
 
+                    # Build ONE ASSISTANT message with all tool calls (OpenAI parallel format)
+                    tool_calls_simple: list[ToolCallSimple] = []
+                    for current_tool_call in research_agent_calls:
+                        tool_call_message = current_tool_call.to_msg_str()
+                        tool_call_token_count = token_counter(tool_call_message)
+                        tool_calls_simple.append(
+                            ToolCallSimple(
+                                tool_call_id=current_tool_call.tool_call_id,
+                                tool_name=current_tool_call.tool_name,
+                                tool_arguments=current_tool_call.tool_args,
+                                token_count=tool_call_token_count,
+                            )
+                        )
+
+                    total_tool_call_tokens = sum(
+                        tc.token_count for tc in tool_calls_simple
+                    )
+                    assistant_with_tools = ChatMessageSimple(
+                        message="",
+                        token_count=total_tool_call_tokens,
+                        message_type=MessageType.ASSISTANT,
+                        tool_calls=tool_calls_simple,
+                        image_files=None,
+                    )
+                    simple_chat_history.append(assistant_with_tools)
+
+                    # Now add TOOL_CALL_RESPONSE messages and tool call info for each result
                     for tab_index, report in enumerate(
                         research_results.intermediate_reports
                     ):
@@ -644,18 +749,6 @@ def run_deep_research_llm_loop(
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)
-
-                        tool_call_message = current_tool_call.to_msg_str()
-                        tool_call_token_count = token_counter(tool_call_message)
-
-                        tool_call_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=tool_call_token_count,
-                            message_type=MessageType.TOOL_CALL,
-                            tool_call_id=current_tool_call.tool_call_id,
-                            image_files=None,
-                        )
-                        simple_chat_history.append(tool_call_msg)
 
                         tool_call_response_msg = ChatMessageSimple(
                             message=report,

@@ -1,3 +1,4 @@
+from unittest.mock import ANY
 from unittest.mock import patch
 
 import litellm
@@ -14,6 +15,7 @@ from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import FunctionCall
 from onyx.llm.models import LanguageModelInput
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolCall
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
@@ -248,6 +250,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             max_tokens=None,
+            client=ANY,  # HTTPHandler instance created per-request
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
@@ -402,6 +405,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             max_tokens=None,
+            client=ANY,  # HTTPHandler instance created per-stream
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
@@ -431,6 +435,32 @@ def test_vertex_stream_omits_stream_options() -> None:
         assert "stream_options" not in kwargs
 
 
+def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-5.2",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.OPENAI,
+            model_name="gpt-5.2",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"]["effort"] == "medium"
+
+
 def test_vertex_opus_4_5_omits_reasoning_effort() -> None:
     llm = LitellmLLM(
         api_key="test_key",
@@ -454,6 +484,54 @@ def test_vertex_opus_4_5_omits_reasoning_effort() -> None:
 
         kwargs = mock_completion.call_args.kwargs
         assert "reasoning_effort" not in kwargs
+
+
+def test_openai_chat_omits_reasoning_params() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-5-chat",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.OPENAI,
+            model_name="gpt-5-chat",
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch(
+            "onyx.llm.multi_llm.model_is_reasoning_model", return_value=True
+        ) as mock_is_reasoning,
+        patch(
+            "onyx.llm.multi_llm.is_true_openai_model", return_value=True
+        ) as mock_is_openai,
+    ):
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(
+                        content="Hello",
+                        role="assistant",
+                    ),
+                )
+            ],
+            model="gpt-5-chat",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        llm.invoke(messages)
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["model"] == "openai/responses/gpt-5-chat"
+        assert "reasoning" not in kwargs
+        assert "reasoning_effort" not in kwargs
+        assert mock_is_reasoning.called
+        assert mock_is_openai.called
 
 
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
@@ -601,3 +679,152 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
         kwargs = mock_completion.call_args.kwargs
         assert "user" not in kwargs
         assert kwargs["metadata"]["foo"] == "bar"
+
+
+def test_openai_model_invoke_uses_httphandler_client(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Test that OpenAI models get an HTTPHandler client passed for invoke()."""
+    from litellm import HTTPHandler
+
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(content="Hello", role="assistant"),
+                )
+            ],
+            model="gpt-3.5-turbo",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        default_multi_llm.invoke(messages)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert isinstance(kwargs["client"], HTTPHandler)
+
+
+def test_openai_model_stream_uses_httphandler_client(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Test that OpenAI models get an HTTPHandler client passed for stream()."""
+    from litellm import HTTPHandler
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(default_multi_llm.stream(messages))
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert isinstance(kwargs["client"], HTTPHandler)
+
+
+def test_anthropic_model_passes_no_client() -> None:
+    """Test that non-OpenAI models (Anthropic) don't get a client passed."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-3-opus-20240229",
+        max_input_tokens=200000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(content="Hello", role="assistant"),
+                )
+            ],
+            model="claude-3-opus-20240229",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        llm.invoke(messages)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["client"] is None
+
+
+def test_bedrock_model_passes_no_client() -> None:
+    """Test that Bedrock models don't get a client passed."""
+    llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(content="Hello", role="assistant"),
+                )
+            ],
+            model="anthropic.claude-3-sonnet-20240229-v1:0",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        llm.invoke(messages)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["client"] is None
+
+
+def test_azure_openai_model_uses_httphandler_client() -> None:
+    """Test that Azure OpenAI models get an HTTPHandler client passed.
+
+    Azure OpenAI uses the same responses API as OpenAI, so it needs
+    the same HTTPHandler isolation to avoid connection pool conflicts.
+    """
+    from litellm import HTTPHandler
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="gpt-4o",
+        api_base="https://my-resource.openai.azure.com",
+        api_version="2024-02-15-preview",
+        max_input_tokens=128000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_response = litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    finish_reason="stop",
+                    index=0,
+                    message=litellm.Message(content="Hello", role="assistant"),
+                )
+            ],
+            model="gpt-4o",
+        )
+        mock_completion.return_value = mock_response
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        llm.invoke(messages)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert isinstance(kwargs["client"], HTTPHandler)

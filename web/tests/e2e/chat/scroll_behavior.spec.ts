@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
 import { sendMessage, startNewChat } from "../utils/chatActions";
@@ -128,6 +128,151 @@ test.describe("Chat Scroll Behavior", () => {
     // The scroll container should be scrolled to bottom
     const scrollContainer = getScrollContainer(page);
     const isAtBottom = await scrollContainer.evaluate((el: HTMLElement) => {
+      return Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 10;
+    });
+
+    expect(isAtBottom).toBe(true);
+  });
+});
+
+/**
+ * Tests for the Dynamic Bottom Spacer feature.
+ *
+ * The DynamicBottomSpacer creates a "fresh chat" effect where new messages
+ * appear at the top of the viewport (below the header), giving each exchange
+ * a clean slate appearance while preserving scroll-up access to history.
+ */
+test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
+  test.describe.configure({ mode: "serial" });
+
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAsRandomUser(page);
+    await page.goto("/app");
+    const nameInput = page.getByPlaceholder("Your name");
+    await nameInput.waitFor();
+    await nameInput.fill("Playwright Tester");
+    await page.getByText("Save").click();
+    await Promise.all([
+      page.getByText("Agents").first().waitFor(),
+      page.getByText("Projects").first().waitFor(),
+    ]);
+  });
+
+  /**
+   * Helper to get the position of an element relative to scroll container
+   */
+  async function getElementPositionInContainer(
+    page: Page,
+    elementLocator: ReturnType<Page["locator"]>
+  ) {
+    return elementLocator.evaluate((el: HTMLElement) => {
+      const scrollContainer = el.closest(".overflow-y-auto");
+      if (!scrollContainer) return null;
+
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const elementRect = el.getBoundingClientRect();
+
+      return {
+        topOffset: elementRect.top - containerRect.top,
+        containerHeight: containerRect.height,
+        elementTop: elementRect.top,
+        containerTop: containerRect.top,
+      };
+    });
+  }
+
+  test("Follow-up message appears near top of viewport (fresh chat effect)", async ({
+    page,
+  }) => {
+    // First, create some conversation history
+    await sendMessage(
+      page,
+      "This is the first message to establish conversation history"
+    );
+
+    // Send a follow-up message - this should trigger the fresh chat effect
+    await sendMessage(
+      page,
+      "This follow-up message should appear near the top of the viewport"
+    );
+
+    // Get the last user message (the follow-up)
+    const lastUserMessage = page.locator("#onyx-human-message").last();
+    await lastUserMessage.waitFor({ state: "visible" });
+
+    // Check that the follow-up message is positioned near the top of the container
+    // (within ~150px to account for sticky header and some padding)
+    await expect
+      .poll(
+        async () => {
+          const position = await getElementPositionInContainer(
+            page,
+            lastUserMessage
+          );
+          return position?.topOffset ?? Number.POSITIVE_INFINITY;
+        },
+        { timeout: 5000 }
+      )
+      .toBeLessThan(150);
+  });
+
+  test("Dynamic spacer element exists and has correct attributes", async ({
+    page,
+  }) => {
+    // Send a message to start a conversation
+    await sendMessage(page, "Test message to initialize chat");
+
+    // Send a follow-up to trigger the spacer
+    await sendMessage(page, "Follow-up message");
+
+    // Verify the dynamic spacer element exists with correct attributes
+    const spacer = page.locator('[data-dynamic-spacer="true"]');
+    await expect(spacer).toBeVisible({ timeout: 10000 });
+    await expect(spacer).toHaveAttribute("aria-hidden", "true");
+  });
+
+  test("User can scroll up to see previous messages after fresh chat effect", async ({
+    page,
+  }) => {
+    // Create conversation history
+    await sendMessage(page, "First message in the conversation");
+    await sendMessage(page, "Second message in the conversation");
+
+    // Send a follow-up (triggers fresh chat effect)
+    await sendMessage(page, "Third message - should be at top");
+
+    // Now scroll up to verify previous messages are accessible
+    const scrollContainer = getScrollContainer(page);
+    await scrollContainer.evaluate((el: HTMLElement) => {
+      el.scrollTo({ top: 0, behavior: "instant" });
+    });
+
+    // Wait for scroll to complete
+    await expect
+      .poll(() => scrollContainer.evaluate((el: HTMLElement) => el.scrollTop), {
+        timeout: 5000,
+      })
+      .toBeLessThanOrEqual(1);
+
+    // Verify the first message is now visible
+    const firstUserMessage = page.locator("#onyx-human-message").first();
+    await expect(firstUserMessage).toBeVisible();
+
+    // Verify the first message content
+    await expect(firstUserMessage).toContainText("First message");
+  });
+
+  test("Scroll container remains at bottom after AI response completes", async ({
+    page,
+  }) => {
+    // Send a message
+    await sendMessage(page, "Please respond with a short message");
+
+    // After AI response completes, verify we're still at the bottom
+    const scrollContainer = getScrollContainer(page);
+    const isAtBottom = await scrollContainer.evaluate((el: HTMLElement) => {
+      // Allow a small tolerance (10px) for rounding
       return Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 10;
     });
 

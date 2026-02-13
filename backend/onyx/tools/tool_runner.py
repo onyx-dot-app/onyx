@@ -6,6 +6,7 @@ import onyx.tracing.framework._error_tracing as _error_tracing
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -220,7 +221,7 @@ def run_tool_calls(
     tools: list[Tool],
     # The stuff below is needed for the different individual built-in tools
     message_history: list[ChatMessageSimple],
-    memories: list[str] | None,
+    user_memory_context: UserMemoryContext | None,
     user_info: str | None,
     citation_mapping: dict[int, str],
     next_citation_num: int,
@@ -231,6 +232,9 @@ def run_tool_calls(
     skip_search_query_expansion: bool = False,
     # A map of url -> summary for passing web results to open url tool
     url_snippet_map: dict[str, str] = {},
+    # When False, don't pass memory context to search tools for query expansion
+    # (but still pass it to the memory tool for persistence)
+    inject_memories_in_prompt: bool = True,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -252,7 +256,7 @@ def run_tool_calls(
         tools: List of available tool instances.
         message_history: Chat message history (used to find the most recent user query
             for `SearchTool` override kwargs).
-        memories: User memories, if available (passed through to `SearchTool`).
+        user_memory_context: User memory context, if available (passed through to `SearchTool`).
         user_info: User information string, if available (passed through to `SearchTool`).
         citation_mapping: Current citation number to URL mapping. May be updated with
             new citations produced by search tools.
@@ -338,11 +342,20 @@ def run_tool_calls(
             if last_user_message is None:
                 raise ValueError("No user message found in message history")
 
+            search_memory_context = (
+                user_memory_context
+                if inject_memories_in_prompt
+                else (
+                    user_memory_context.without_memories()
+                    if user_memory_context
+                    else None
+                )
+            )
             override_kwargs = SearchToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
                 original_query=last_user_message,
                 message_history=minimal_history,
-                memories=memories,
+                user_memory_context=search_memory_context,
                 user_info=user_info,
                 skip_query_expansion=skip_search_query_expansion,
             )
@@ -366,7 +379,21 @@ def run_tool_calls(
             starting_citation_num += 100
 
         elif isinstance(tool, MemoryTool):
-            raise NotImplementedError("MemoryTool is not implemented")
+            override_kwargs = MemoryToolOverrideKwargs(
+                user_name=(
+                    user_memory_context.user_info.name if user_memory_context else None
+                ),
+                user_email=(
+                    user_memory_context.user_info.email if user_memory_context else None
+                ),
+                user_role=(
+                    user_memory_context.user_info.role if user_memory_context else None
+                ),
+                existing_memories=(
+                    list(user_memory_context.memories) if user_memory_context else []
+                ),
+                chat_history=minimal_history,
+            )
 
         tool_run_params.append((tool, tool_call, override_kwargs))
 

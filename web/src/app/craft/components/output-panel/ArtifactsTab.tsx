@@ -63,9 +63,9 @@ export default function ArtifactsTab({
                 key={artifact.id}
                 className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors"
               >
-                <SvgGlobe size={24} className="stroke-text-03 flex-shrink-0" />
+                <SvgGlobe size={24} className="stroke-text-02 flex-shrink-0" />
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 flex items-center gap-2">
                   <Text secondaryBody text04 className="truncate">
                     {artifact.name}
                   </Text>

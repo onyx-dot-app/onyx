@@ -20,6 +20,8 @@ strict_equality = true
 exclude = [
   "^generated/.*",
   "^\\.venv/",
+  "^onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx/",
+  "^onyx/server/features/build/sandbox/kubernetes/docker/templates/venv/",
 ]
 
 [[tool.mypy.overrides]]
@@ -39,15 +41,3 @@ ignore_errors = true
 module = "transformers.*"
 follow_imports = "skip"
 ignore_errors = true
-
-[tool.ruff]
-line-length = 130
-target-version = "py311"
-
-[tool.ruff.lint]
-ignore = []
-select = [
-  "E",
-  "F",
-  "W",
-]

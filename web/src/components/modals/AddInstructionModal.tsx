@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Button from "@/refresh-components/buttons/Button";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines } from "@opal/icons";
@@ -35,14 +35,14 @@ export default function AddInstructionModal() {
         <Modal.Header
           icon={SvgAddLines}
           title="Set Project Instructions"
-          description="Instruct specific behaviors, focus, tones, or formats for the response in this project."
+          description="Specify the behaviors or tone for the chat sessions in this project."
           onClose={() => modal.toggle(false)}
         />
         <Modal.Body>
           <InputTextArea
             value={instructionText}
             onChange={(event) => setInstructionText(event.target.value)}
-            placeholder="Think step by step and show reasoning for complex problems. Use specific examples."
+            placeholder="My goal with is to... be sure to... in your responses."
           />
         </Modal.Body>
         <Modal.Footer>

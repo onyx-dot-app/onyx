@@ -2,8 +2,8 @@
 
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
-import { useSearchParams, useRouter } from "next/navigation";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useRouter } from "next/navigation";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -33,16 +33,16 @@ import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useAgents, useCurrentAgent, usePinnedAgents } from "@/hooks/useAgents";
-import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
   DRAG_TYPES,
@@ -53,7 +53,7 @@ import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import { ChatSession } from "@/app/app/interfaces";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { useModalContext } from "@/components/context/ModalContext";
@@ -79,6 +79,8 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
+import { useAppMode } from "@/providers/AppModeProvider";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -151,6 +153,8 @@ const MemoizedAppSidebarInner = memo(
     const { popup, setPopup } = usePopup();
     const posthog = usePostHog();
     const { newTenantInfo, invitationInfo } = useModalContext();
+    const { setAppMode } = useAppMode();
+    const { reset } = useQueryController();
 
     // Use SWR hooks for data fetching
     const {
@@ -422,9 +426,13 @@ const MemoizedAppSidebarInner = memo(
       ]
     );
 
-    const { isAdmin, isCurator } = useUser();
+    const { isAdmin, isCurator, user } = useUser();
     const activeSidebarTab = useAppFocus();
     const createProjectModal = useCreateModal();
+    const defaultAppMode =
+      (user?.preferences?.default_app_mode?.toLowerCase() as
+        | "chat"
+        | "search") ?? "chat";
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
@@ -437,12 +445,23 @@ const MemoizedAppSidebarInner = memo(
             folded={folded}
             href={href}
             transient={activeSidebarTab.isNewSession()}
+            onClick={() => {
+              if (!activeSidebarTab.isNewSession()) return;
+              setAppMode(defaultAppMode);
+              reset();
+            }}
           >
             New Session
           </SidebarTab>
         </div>
       );
-    }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+    }, [
+      folded,
+      activeSidebarTab,
+      combinedSettings,
+      currentAgent,
+      defaultAppMode,
+    ]);
 
     const buildButton = useMemo(
       () => (
@@ -510,12 +529,18 @@ const MemoizedAppSidebarInner = memo(
       setShowIntroAnimation(true);
     }, []);
 
+    const vectorDbEnabled =
+      combinedSettings?.settings?.vector_db_enabled !== false;
+    const adminDefaultHref = vectorDbEnabled
+      ? "/admin/indexing/status"
+      : "/admin/assistants";
+
     const settingsButton = useMemo(
       () => (
         <div>
           {(isAdmin || isCurator) && (
             <SidebarTab
-              href="/admin/indexing/status"
+              href={adminDefaultHref}
               leftIcon={SvgSettings}
               folded={folded}
             >
@@ -530,7 +555,14 @@ const MemoizedAppSidebarInner = memo(
           />
         </div>
       ),
-      [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+      [
+        folded,
+        isAdmin,
+        isCurator,
+        handleShowBuildIntro,
+        isOnyxCraftEnabled,
+        adminDefaultHref,
+      ]
     );
 
     return (
@@ -655,9 +687,10 @@ const MemoizedAppSidebarInner = memo(
                   <SidebarSection
                     title="Projects"
                     action={
-                      <IconButton
+                      <OpalButton
                         icon={SvgFolderPlus}
-                        internal
+                        prominence="tertiary"
+                        size="sm"
                         tooltip="New Project"
                         onClick={() => createProjectModal.toggle(true)}
                       />

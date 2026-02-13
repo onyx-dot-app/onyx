@@ -15,7 +15,7 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
 
 
-def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:
+def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:  # noqa: ARG001
     """Helper function to set up test tenants with documents and users."""
     unique = uuid4().hex
     # Creating an admin user for Tenant 1

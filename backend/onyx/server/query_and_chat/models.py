@@ -87,6 +87,8 @@ class SendMessageRequest(BaseModel):
     message: str
 
     llm_override: LLMOverride | None = None
+    # Test-only override for deterministic LiteLLM mock responses.
+    mock_llm_response: str | None = None
 
     allowed_tool_ids: list[int] | None = None
     forced_tool_id: int | None = None
@@ -191,6 +193,8 @@ class CreateChatMessageRequest(ChunkContext):
     # allows the caller to override the Persona / Prompt
     # these do not persist in the chat thread details
     llm_override: LLMOverride | None = None
+    # Test-only override for deterministic LiteLLM mock responses.
+    mock_llm_response: str | None = None
     prompt_override: PromptOverride | None = None
 
     # Allows the caller to override the temperature for the chat session
@@ -310,6 +314,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     error: str | None = None
     current_feedback: str | None = None  # "like" | "dislike" | null
+    processing_duration_seconds: float | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore

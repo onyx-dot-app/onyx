@@ -13,6 +13,7 @@ logger = setup_logger()
 _LOG_FILE_NAME_TIMESTAMP_FORMAT = "%Y-%m-%d_%H-%M-%S-%f"
 
 
+# NOTE: This is no longer used but keeping it around in case it's reintroduced
 class LongTermLogger:
     """NOTE: should support a LOT of data AND should be extremely fast,
     ideally done in a background thread."""
@@ -97,7 +98,7 @@ class LongTermLogger:
         category: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
-        limit: int = 100,
+        limit: int = 100,  # noqa: ARG002
     ) -> list[JSON_ro]:
         category_path = self.log_file_path / category
         files = list(category_path.glob("*.json"))

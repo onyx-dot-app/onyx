@@ -1,8 +1,8 @@
 import { FormikProps, ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import { SearchMultiSelectDropdown } from "@/components/Dropdown";
-import { cn } from "@/lib/utils";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
+import { Disabled } from "@/refresh-components/Disabled";
 import { SvgX } from "@opal/icons";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
@@ -84,15 +84,11 @@ export function GenericMultiSelect<
   const selectedIds = (formikProps.values[fieldName] as number[]) || [];
   const selectedItems = items.filter((item) => selectedIds.includes(item.id));
 
-  const handleSelect = (option: { name: string; value: string | number }) => {
+  const handleSelect = (itemId: number) => {
     if (disabled) return;
     const currentIds = (formikProps.values[fieldName] as number[]) || [];
-    const numValue =
-      typeof option.value === "string"
-        ? parseInt(option.value, 10)
-        : option.value;
-    if (!currentIds.includes(numValue)) {
-      formikProps.setFieldValue(fieldName, [...currentIds, numValue]);
+    if (!currentIds.includes(itemId)) {
+      formikProps.setFieldValue(fieldName, [...currentIds, itemId]);
     }
   };
 
@@ -117,17 +113,29 @@ export function GenericMultiSelect<
         </Text>
       )}
 
-      <div className={cn(disabled && "opacity-50 pointer-events-none")}>
-        <SearchMultiSelectDropdown
-          options={items
-            .filter((item) => !selectedIds.includes(item.id))
-            .map((item) => ({
-              name: item.name,
-              value: item.id,
-            }))}
-          onSelect={handleSelect}
-        />
-      </div>
+      <Disabled disabled={disabled}>
+        <div>
+          <InputComboBox
+            placeholder="Search..."
+            value=""
+            onChange={() => {}}
+            onValueChange={(selectedValue) => {
+              const numValue = parseInt(selectedValue, 10);
+              if (!isNaN(numValue)) {
+                handleSelect(numValue);
+              }
+            }}
+            options={items
+              .filter((item) => !selectedIds.includes(item.id))
+              .map((item) => ({
+                label: item.name,
+                value: String(item.id),
+              }))}
+            strict
+            leftSearchIcon
+          />
+        </div>
+      </Disabled>
 
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">

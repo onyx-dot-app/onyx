@@ -951,7 +951,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
 
         return False
 
-    def progress(self, tag: str, amount: int) -> None:
+    def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
         try:
             self.redis_connector.permissions.set_active()
 
@@ -982,7 +982,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
 
 
 def monitor_ccpair_permissions_taskset(
-    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session  # noqa: ARG001
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)

@@ -22,7 +22,7 @@ class VertexAIPromptCacheProvider(PromptCacheProvider):
         cacheable_prefix: LanguageModelInput | None,
         suffix: LanguageModelInput,
         continuation: bool,
-        cache_metadata: CacheMetadata | None,
+        cache_metadata: CacheMetadata | None,  # noqa: ARG002
     ) -> LanguageModelInput:
         """Prepare messages for Vertex AI caching.
 
@@ -53,8 +53,8 @@ class VertexAIPromptCacheProvider(PromptCacheProvider):
 
     def extract_cache_metadata(
         self,
-        response: dict,
-        cache_key: str,
+        response: dict,  # noqa: ARG002
+        cache_key: str,  # noqa: ARG002
     ) -> CacheMetadata | None:
         """Extract cache metadata from Vertex AI response.
 

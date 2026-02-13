@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { checkUserOwnsAssistant, updateAgentSharedStatus } from "@/lib/agents";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,
   SvgBarChart,
@@ -28,7 +28,7 @@ import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentViewerModal from "@/sections/modals/AgentViewerModal";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
-import Hoverable from "@/refresh-components/Hoverable";
+import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
@@ -103,13 +103,12 @@ export default function AgentCard({ agent }: AgentCardProps) {
         <AgentViewerModal agent={fullAgent!} />
       </agentViewerModal.Provider>
 
-      <Hoverable
-        asChild
-        onClick={() => agentViewerModal.toggle(true)}
+      <Interactive.Base
+        onClick={handleStartChat}
         group="group/AgentCard"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        nonInteractive
+        variant="none"
       >
         <Card padding={0} gap={0} height="full">
           <div className="flex self-stretch h-[6rem]">
@@ -199,7 +198,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             </div>
           </div>
         </Card>
-      </Hoverable>
+      </Interactive.Base>
     </>
   );
 }

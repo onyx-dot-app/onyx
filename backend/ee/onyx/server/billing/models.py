@@ -10,6 +10,7 @@ class CreateCheckoutSessionRequest(BaseModel):
     """Request to create a Stripe checkout session."""
 
     billing_period: Literal["monthly", "annual"] = "monthly"
+    seats: int | None = None
     email: str | None = None
 
 
@@ -67,6 +68,7 @@ class SeatUpdateResponse(BaseModel):
     current_seats: int
     used_seats: int
     message: str | None = None
+    license: str | None = None  # Regenerated license (self-hosted stores this)
 
 
 class StripePublishableKeyResponse(BaseModel):

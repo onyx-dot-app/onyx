@@ -88,7 +88,9 @@ def actual_sandbox_path(sandbox_record: Sandbox) -> Path:
 
 
 @pytest.fixture
-def test_user(db_session: Session, tenant_context: None) -> Generator[User, None, None]:
+def test_user(
+    db_session: Session, tenant_context: None  # noqa: ARG001
+) -> Generator[User, None, None]:
     """Create or get a test user for sandbox tests."""
     from sqlalchemy import select
 
@@ -122,7 +124,7 @@ def test_user(db_session: Session, tenant_context: None) -> Generator[User, None
 
 @pytest.fixture
 def sandbox_record(
-    db_session: Session, tenant_context: None, test_user: User
+    db_session: Session, tenant_context: None, test_user: User  # noqa: ARG001
 ) -> Generator[Sandbox, None, None]:
     """Create a real Sandbox record in the database and set up sandbox directory."""
     from sqlalchemy import select
@@ -161,7 +163,7 @@ def sandbox_record(
 
 @pytest.fixture
 def build_session_record(
-    db_session: Session, tenant_context: None, test_user: User
+    db_session: Session, tenant_context: None, test_user: User  # noqa: ARG001
 ) -> Generator[BuildSession, None, None]:
     """Create a BuildSession record for testing session-specific operations."""
     build_session = BuildSession(
@@ -240,10 +242,10 @@ class TestTerminate:
     def test_terminate_cleans_up_resources(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         sandbox_record: Sandbox,
-        temp_sandbox_dir: Path,
-        tenant_context: None,
+        temp_sandbox_dir: Path,  # noqa: ARG002
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that terminate cleans up sandbox resources.
 
@@ -260,10 +262,10 @@ class TestCreateSnapshot:
     def test_create_snapshot_archives_outputs(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
-        file_store_initialized: None,
+        tenant_context: None,  # noqa: ARG002
+        file_store_initialized: None,  # noqa: ARG002
     ) -> None:
         """Test that create_snapshot archives the session's outputs directory.
 
@@ -287,9 +289,9 @@ class TestHealthCheck:
     def test_health_check_returns_false_when_no_processes(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         sandbox_record: Sandbox,
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that health_check returns False when no processes are running.
 
@@ -306,9 +308,9 @@ class TestListDirectory:
     def test_list_directory_returns_entries(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that list_directory returns filesystem entries."""
         sandbox, session_id = session_workspace
@@ -331,9 +333,9 @@ class TestReadFile:
     def test_read_file_returns_contents(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that read_file returns file contents as bytes."""
         sandbox, session_id = session_workspace
@@ -352,9 +354,9 @@ class TestSendMessage:
     def test_send_message_streams_events(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that send_message streams ACPEvent objects and ends with PromptResponse.
 
@@ -379,9 +381,9 @@ class TestSendMessage:
     def test_send_message_write_file(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that send_message can write files and emits edit tool calls."""
         sandbox, session_id = session_workspace
@@ -416,9 +418,9 @@ class TestSendMessage:
     def test_send_message_read_file(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that send_message can read files and emits read tool calls."""
         sandbox, session_id = session_workspace
@@ -456,9 +458,9 @@ class TestUploadFile:
     def test_upload_file_creates_file(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that upload_file creates a file in the attachments directory."""
         sandbox, session_id = session_workspace
@@ -481,9 +483,9 @@ class TestUploadFile:
     def test_upload_file_handles_collision(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that upload_file renames files on collision."""
         sandbox, session_id = session_workspace
@@ -505,9 +507,9 @@ class TestDeleteFile:
     def test_delete_file_removes_file(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that delete_file removes a file."""
         sandbox, session_id = session_workspace
@@ -532,9 +534,9 @@ class TestDeleteFile:
     def test_delete_file_returns_false_for_missing(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that delete_file returns False for non-existent file."""
         sandbox, session_id = session_workspace
@@ -548,9 +550,9 @@ class TestDeleteFile:
     def test_delete_file_rejects_path_traversal(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that delete_file rejects path traversal attempts."""
         sandbox, session_id = session_workspace
@@ -565,9 +567,9 @@ class TestGetUploadStats:
     def test_get_upload_stats_empty(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test get_upload_stats returns zeros for empty directory."""
         sandbox, session_id = session_workspace
@@ -582,9 +584,9 @@ class TestGetUploadStats:
     def test_get_upload_stats_with_files(
         self,
         sandbox_manager: LocalSandboxManager,
-        db_session: Session,
+        db_session: Session,  # noqa: ARG002
         session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,
+        tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test get_upload_stats returns correct count and size."""
         sandbox, session_id = session_workspace

@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useState, memo } from "react";
-import {
-  Project,
-  useProjectsContext,
-} from "@/app/app/projects/ProjectsContext";
+import { Project, useProjectsContext } from "@/providers/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Popover, { PopoverMenu } from "@/refresh-components/Popover";
@@ -16,6 +13,7 @@ import { cn, noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "./constants";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -140,10 +138,12 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
         <Popover.Anchor>
           <SidebarTab
             leftIcon={() => (
-              <IconButton
-                onHover={handleIconHover}
+              <OpalButton
+                onMouseEnter={() => handleIconHover(true)}
+                onMouseLeave={() => handleIconHover(false)}
                 icon={getFolderIcon()}
-                internal
+                prominence="tertiary"
+                size="sm"
                 onClick={noProp(handleIconClick)}
               />
             )}

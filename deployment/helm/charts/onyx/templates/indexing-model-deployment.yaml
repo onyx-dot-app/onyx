@@ -1,4 +1,4 @@
-{{- if gt (int .Values.indexCapability.replicaCount) 0 }}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.indexCapability.replicaCount) 0) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -75,5 +75,17 @@ spec:
         {{- if .Values.indexCapability.resources }}
         resources:
           {{- toYaml .Values.indexCapability.resources | nindent 10 }}
+        {{- end }}
+        {{- with .Values.indexCapability.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.indexCapability.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.indexCapability.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
         {{- end }}
 {{- end }}

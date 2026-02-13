@@ -1,7 +1,7 @@
 "use client";
 
 import { OnyxIcon, OnyxLogoTypeIcon } from "@/components/icons/icons";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import Image from "next/image";
 import {
   LOGO_FOLDED_SIZE_PX,

@@ -1,13 +1,12 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
-import ChatInputBar, {
-  ChatInputBarHandle,
-} from "@/app/app/components/input/ChatInputBar";
+import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -18,26 +17,25 @@ import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
-import { useDeepResearchToggle } from "@/app/app/hooks/useDeepResearchToggle";
-import { useChatController } from "@/app/app/hooks/useChatController";
-import { useChatSessionController } from "@/app/app/hooks/useChatSessionController";
-import { useAssistantController } from "@/app/app/hooks/useAssistantController";
+import { useProjectsContext } from "@/providers/ProjectsContext";
+import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import useChatController from "@/hooks/useChatController";
+import useChatSessionController from "@/hooks/useChatSessionController";
+import useAgentController from "@/hooks/useAgentController";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
   useChatSessionStore,
   useDocumentSidebarVisible,
 } from "@/app/app/stores/useChatSessionStore";
-import MessageList from "@/components/chat/MessageList";
-import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
+import ChatUI from "@/sections/chat/ChatUI";
+import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
-import * as AppLayouts from "@/layouts/app-layouts";
 import { cn } from "@/lib/utils";
 import Logo from "@/refresh-components/Logo";
 import Spacer from "@/refresh-components/Spacer";
-import { useAppSidebarContext } from "@/refresh-components/contexts/AppSidebarContext";
+import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import {
   SvgUser,
@@ -45,13 +43,10 @@ import {
   SvgExternalLink,
   SvgAlertTriangle,
 } from "@opal/icons";
-import {
-  CHAT_BACKGROUND_NONE,
-  getBackgroundById,
-} from "@/lib/constants/chatBackgrounds";
+import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
-import TextView from "@/components/chat/TextView";
+import TextViewModal from "@/sections/modals/TextViewModal";
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -109,7 +104,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
-    useAssistantController({
+    useAgentController({
       selectedChatSession: undefined,
       onAssistantSelect: () => {},
     });
@@ -158,18 +153,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     }
   }, []);
 
-  // Chat background - shared with ChatPage
-  const chatBackgroundId = user?.preferences?.chat_background;
-  const chatBackground = getBackgroundById(chatBackgroundId ?? null);
-  const hasBackground =
-    chatBackground && chatBackground.url !== CHAT_BACKGROUND_NONE;
+  // Chat background from context
+  const { hasBackground, appBackgroundUrl } = useAppBackground();
 
   // Modals
   const [showTurnOffModal, setShowTurnOffModal] = useState<boolean>(false);
 
   // Refs
   const inputRef = useRef<HTMLDivElement>(null);
-  const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
+  const chatInputBarRef = useRef<AppInputBarHandle | null>(null);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
   // Access chat state from store
@@ -261,7 +253,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [handleMessageSpecificFileUpload]
   );
 
-  // Handle submit from ChatInputBar
+  // Handle submit from AppInputBar
   const handleChatInputSubmit = useCallback(
     (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
@@ -316,7 +308,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       )}
       style={
         !isSidePanel && hasBackground
-          ? { backgroundImage: `url(${chatBackground.url})` }
+          ? { backgroundImage: `url(${appBackgroundUrl})` }
           : undefined
       }
     >
@@ -372,9 +364,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
-                  disableFadeOverlay={!isSidePanel}
                 >
-                  <MessageList
+                  <ChatUI
                     liveAssistant={resolvedAssistant}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
@@ -385,7 +376,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
-                    disableBlur={!hasBackground}
                   />
                 </ChatScrollContainer>
               </>
@@ -393,55 +383,44 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Welcome message - centered when no messages */}
             {!hasMessages && (
-              <div className="w-full flex-1 flex flex-col items-center justify-end">
+              <div className="relative w-full flex-1 flex flex-col items-center justify-end">
                 <WelcomeMessage isDefaultAgent />
                 <Spacer rem={1.5} />
               </div>
             )}
 
-            {/* ChatInputBar container - absolutely positioned when in chat, centered when no messages */}
+            {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
-              className={cn(
-                "flex justify-center",
-                hasMessages
-                  ? "absolute bottom-6 left-0 right-0 pointer-events-none"
-                  : "w-full"
-              )}
+              className="w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4"
             >
-              <div
-                className={cn(
-                  "w-[min(50rem,100%)] flex flex-col px-4",
-                  hasMessages && "pointer-events-auto"
-                )}
-              >
-                <ChatInputBar
-                  ref={chatInputBarRef}
-                  deepResearchEnabled={deepResearchEnabled}
-                  toggleDeepResearch={toggleDeepResearch}
-                  toggleDocumentSidebar={() => {}}
-                  filterManager={filterManager}
-                  llmManager={llmManager}
-                  removeDocs={() => {}}
-                  retrievalEnabled={false}
-                  selectedDocuments={[]}
-                  initialMessage={message}
-                  stopGenerating={stopGenerating}
-                  onSubmit={handleChatInputSubmit}
-                  chatState={currentChatState}
-                  currentSessionFileTokenCount={currentSessionFileTokenCount}
-                  availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
-                  selectedAssistant={liveAssistant ?? undefined}
-                  handleFileUpload={handleFileUpload}
-                  disabled={
-                    !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
-                  }
-                />
-                <Spacer rem={0.5} />
-              </div>
+              <AppInputBar
+                ref={chatInputBarRef}
+                deepResearchEnabled={deepResearchEnabled}
+                toggleDeepResearch={toggleDeepResearch}
+                toggleDocumentSidebar={() => {}}
+                filterManager={filterManager}
+                llmManager={llmManager}
+                removeDocs={() => {}}
+                retrievalEnabled={false}
+                selectedDocuments={[]}
+                initialMessage={message}
+                stopGenerating={stopGenerating}
+                onSubmit={handleChatInputSubmit}
+                chatState={currentChatState}
+                currentSessionFileTokenCount={currentSessionFileTokenCount}
+                availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
+                selectedAssistant={liveAssistant ?? undefined}
+                handleFileUpload={handleFileUpload}
+                disabled={
+                  !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
+                }
+              />
+              <Spacer rem={0.5} />
             </div>
+
+            {/* Spacer to push content up when showing welcome message */}
             {!hasMessages && <div className="flex-1 w-full" />}
-            <AppLayouts.Footer />
           </div>
         )}
       </Dropzone>
@@ -463,7 +442,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Text/document preview modal */}
       {presentingDocument && (
-        <TextView
+        <TextViewModal
           presentingDocument={presentingDocument}
           onClose={() => setPresentingDocument(null)}
         />

@@ -31,6 +31,14 @@ export enum PacketType {
   CUSTOM_TOOL_START = "custom_tool_start",
   CUSTOM_TOOL_DELTA = "custom_tool_delta",
 
+  // File reader tool packets
+  FILE_READER_START = "file_reader_start",
+  FILE_READER_RESULT = "file_reader_result",
+  // Memory tool packets
+  MEMORY_TOOL_START = "memory_tool_start",
+  MEMORY_TOOL_DELTA = "memory_tool_delta",
+  MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access",
+
   // Reasoning packets
   REASONING_START = "reasoning_start",
   REASONING_DELTA = "reasoning_delta",
@@ -58,6 +66,7 @@ export interface MessageStart extends BaseObj {
   content: string;
 
   final_documents: OnyxDocument[] | null;
+  pre_answer_processing_seconds?: number;
 }
 
 export interface MessageDelta extends BaseObj {
@@ -168,6 +177,38 @@ export interface CustomToolDelta extends BaseObj {
   file_ids?: string[] | null;
 }
 
+// File Reader Packets
+export interface FileReaderStart extends BaseObj {
+  type: "file_reader_start";
+}
+
+export interface FileReaderResult extends BaseObj {
+  type: "file_reader_result";
+  file_name: string;
+  file_id: string;
+  start_char: number;
+  end_char: number;
+  total_chars: number;
+  preview_start: string;
+  preview_end: string;
+}
+// Memory Tool Packets
+export interface MemoryToolStart extends BaseObj {
+  type: "memory_tool_start";
+}
+
+export interface MemoryToolDelta extends BaseObj {
+  type: "memory_tool_delta";
+  memory_text: string;
+  operation: "add" | "update";
+  memory_id: number | null;
+  index: number | null;
+}
+
+export interface MemoryToolNoAccess extends BaseObj {
+  type: "memory_tool_no_access";
+}
+
 // Reasoning Packets
 export interface ReasoningStart extends BaseObj {
   type: "reasoning_start";
@@ -266,12 +307,25 @@ export type CustomToolObj =
   | CustomToolDelta
   | SectionEnd
   | PacketError;
+export type FileReaderToolObj =
+  | FileReaderStart
+  | FileReaderResult
+  | SectionEnd
+  | PacketError;
+export type MemoryToolObj =
+  | MemoryToolStart
+  | MemoryToolDelta
+  | MemoryToolNoAccess
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
   | PythonToolObj
   | FetchToolObj
-  | CustomToolObj;
+  | CustomToolObj
+  | FileReaderToolObj
+  | MemoryToolObj;
 
 export type ReasoningObj =
   | ReasoningStart
@@ -364,6 +418,15 @@ export interface FetchToolPacket {
 export interface CustomToolPacket {
   placement: Placement;
   obj: CustomToolObj;
+}
+
+export interface FileReaderToolPacket {
+  placement: Placement;
+  obj: FileReaderToolObj;
+}
+export interface MemoryToolPacket {
+  placement: Placement;
+  obj: MemoryToolObj;
 }
 
 export interface ReasoningPacket {

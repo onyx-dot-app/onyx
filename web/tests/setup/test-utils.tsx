@@ -2,6 +2,7 @@ import React, { ReactElement } from "react";
 import { render, RenderOptions } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 /**
  * Custom render function that wraps components with common providers
@@ -31,7 +32,7 @@ function AllTheProviders({ children, swrConfig = {} }: AllProvidersProps) {
         ...swrConfig,
       }}
     >
-      {children}
+      <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
     </SWRConfig>
   );
 }

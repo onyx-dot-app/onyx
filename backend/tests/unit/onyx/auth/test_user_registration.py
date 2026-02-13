@@ -77,8 +77,8 @@ class TestDisposableEmailValidation:
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
     async def test_blocks_disposable_email_before_tenant_provision(
         self,
-        mock_get_user_count: MagicMock,
-        mock_session_manager: MagicMock,
+        mock_get_user_count: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,  # noqa: ARG002
         mock_fetch_ee: MagicMock,
         mock_is_disposable: MagicMock,
         mock_user_create: UserCreate,
@@ -161,8 +161,8 @@ class TestMultiTenantInviteLogic:
         mock_get_user_count: MagicMock,
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
-        mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_sql_alchemy_db: MagicMock,
         mock_user_create: UserCreate,
         mock_async_session: MagicMock,
@@ -209,8 +209,8 @@ class TestMultiTenantInviteLogic:
         mock_get_user_count: MagicMock,
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
-        mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_sql_alchemy_db: MagicMock,
         mock_user_create: UserCreate,
         mock_async_session: MagicMock,
@@ -260,8 +260,8 @@ class TestSingleTenantInviteLogic:
         mock_get_user_count: MagicMock,
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
-        mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_user_create: UserCreate,
         mock_async_session: MagicMock,
     ) -> None:
@@ -384,6 +384,29 @@ class TestWhitelistBehavior:
         verify_email_is_invited("Allowed@Example.Com")
 
 
+class TestSeatLimitEnforcement:
+    """Seat limits block new user creation on self-hosted deployments."""
+
+    def test_adding_user_fails_when_seats_full(self) -> None:
+        from onyx.auth.users import enforce_seat_limit
+
+        seat_result = MagicMock(available=False, error_message="Seat limit reached")
+        with patch(
+            "onyx.auth.users.fetch_ee_implementation_or_noop",
+            return_value=lambda *_a, **_kw: seat_result,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                enforce_seat_limit(MagicMock())
+
+            assert exc.value.status_code == 402
+
+    def test_seat_limit_only_enforced_for_self_hosted(self) -> None:
+        from onyx.auth.users import enforce_seat_limit
+
+        with patch("onyx.auth.users.MULTI_TENANT", True):
+            enforce_seat_limit(MagicMock())  # should not raise
+
+
 class TestCaseInsensitiveEmailMatching:
     """Test case-insensitive email matching for existing user checks."""
 
@@ -404,7 +427,7 @@ class TestCaseInsensitiveEmailMatching:
         mock_session_manager: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_verify_domain: MagicMock,
-        mock_is_disposable: MagicMock,
+        mock_is_disposable: MagicMock,  # noqa: ARG002
         mock_async_session: MagicMock,
     ) -> None:
         """Existing user check should use case-insensitive email comparison."""

@@ -29,12 +29,11 @@ import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Horizontal, Title } from "@/layouts/input-layouts";
 import Switch from "@/refresh-components/inputs/Switch";
 import Button from "@/refresh-components/buttons/Button";
-import Hoverable, { HoverableContainer } from "@/refresh-components/Hoverable";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import ChatInputBar from "@/app/app/components/input/ChatInputBar";
+import AppInputBar from "@/sections/input/AppInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import { formatMmDdYyyy } from "@/lib/utils";
-import { useProjectsContext } from "@/app/app/projects/ProjectsContext";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import {
@@ -42,6 +41,7 @@ import {
   getDisplayName,
 } from "@/lib/llm/utils";
 import { useLLMProviders } from "@/lib/hooks/useLLMProviders";
+import { Interactive } from "@opal/core";
 
 /**
  * Read-only MCP Server card for the viewer modal.
@@ -132,7 +132,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const filterManager = useFilters();
 
   return (
-    <ChatInputBar
+    <AppInputBar
       onSubmit={onSubmit}
       llmManager={llmManager}
       chatState="input"
@@ -395,20 +395,19 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               <Title title="Conversation Starters" />
               <div className="grid grid-cols-2 gap-1 w-full">
                 {agent.starter_messages.map((starter, index) => (
-                  <Hoverable
+                  <Interactive.Base
                     key={index}
                     onClick={() => handleStartChat(starter.message)}
-                    variant="tertiary"
-                    asChild
+                    prominence="tertiary"
                   >
-                    <HoverableContainer>
+                    <Interactive.Container>
                       <LineItemLayout
                         icon={SvgBubbleText}
                         title={starter.message}
                         variant="tertiary-muted"
                       />
-                    </HoverableContainer>
-                  </Hoverable>
+                    </Interactive.Container>
+                  </Interactive.Base>
                 ))}
               </div>
             </>

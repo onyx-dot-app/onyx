@@ -8,6 +8,8 @@ from ee.onyx.external_permissions.jira.models import Holder
 from ee.onyx.external_permissions.jira.models import Permission
 from ee.onyx.external_permissions.jira.models import User
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
 
 HolderMap = dict[str, list[Holder]]
@@ -252,7 +254,14 @@ def _build_external_access_from_holder_map(
 def get_project_permissions(
     jira_client: JIRA,
     jira_project: str,
+    add_prefix: bool = False,
 ) -> ExternalAccess | None:
+    """
+    Get project permissions from Jira.
+
+    add_prefix: When True, prefix group IDs with source type (for indexing path).
+               When False (default), leave unprefixed (for permission sync path).
+    """
     project_permissions: PermissionScheme = jira_client.project_permissionscheme(
         project=jira_project
     )
@@ -267,6 +276,20 @@ def get_project_permissions(
 
     holder_map = _build_holder_map(permissions=project_permissions.permissions)
 
-    return _build_external_access_from_holder_map(
+    external_access = _build_external_access_from_holder_map(
         jira_client=jira_client, jira_project=jira_project, holder_map=holder_map
     )
+
+    # Prefix group IDs with source type if requested (for indexing path)
+    if add_prefix and external_access and external_access.external_user_group_ids:
+        prefixed_groups = {
+            build_ext_group_name_for_onyx(g, DocumentSource.JIRA)
+            for g in external_access.external_user_group_ids
+        }
+        return ExternalAccess(
+            external_user_emails=external_access.external_user_emails,
+            external_user_group_ids=prefixed_groups,
+            is_public=external_access.is_public,
+        )
+
+    return external_access

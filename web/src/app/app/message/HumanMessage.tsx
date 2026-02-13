@@ -6,9 +6,8 @@ import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import FileDisplay from "./FileDisplay";
 
@@ -73,9 +72,9 @@ function MessageEditing({
             if (e.key === "Enter" && e.metaKey) handleSubmit();
           }}
         />
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-1">
           <Button onClick={handleSubmit}>Submit</Button>
-          <Button secondary onClick={handleCancel}>
+          <Button prominence="secondary" onClick={handleCancel}>
             Cancel
           </Button>
         </div>
@@ -216,15 +215,15 @@ const HumanMessage = React.memo(function HumanMessage({
               </div>
             </div>
             {onEdit && !isEditing && (!files || files.length === 0) && (
-              <div className="flex flex-row gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
-                  tertiary
+                  prominence="tertiary"
                   data-testid="HumanMessage/copy-button"
                 />
-                <IconButton
+                <Button
                   icon={SvgEdit}
-                  tertiary
+                  prominence="tertiary"
                   tooltip="Edit"
                   onClick={() => setIsEditing(true)}
                   data-testid="HumanMessage/edit-button"
@@ -242,10 +241,10 @@ const HumanMessage = React.memo(function HumanMessage({
                   : "invisible"
               )}
             >
-              <IconButton
+              <Button
                 icon={SvgEdit}
                 onClick={() => setIsEditing(true)}
-                tertiary
+                prominence="tertiary"
                 tooltip="Edit"
               />
             </div>

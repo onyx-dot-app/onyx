@@ -59,7 +59,7 @@ def generate_report(
 def read_usage_report(
     report_name: str,
     _: User = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
+    db_session: Session = Depends(get_session),  # noqa: ARG001
 ) -> Response:
     try:
         file = get_usage_report_data(report_name)

@@ -20,7 +20,6 @@ use tauri::Wry;
 use tauri::{
     webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindowBuilder,
 };
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use url::Url;
 #[cfg(target_os = "macos")]
 use tokio::time::sleep;
@@ -449,73 +448,6 @@ async fn start_drag_window(window: tauri::Window) -> Result<(), String> {
 }
 
 // ============================================================================
-// Shortcuts Setup
-// ============================================================================
-
-fn setup_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let new_chat = Shortcut::new(Some(Modifiers::SUPER), Code::KeyN);
-    let reload = Shortcut::new(Some(Modifiers::SUPER), Code::KeyR);
-    let back = Shortcut::new(Some(Modifiers::SUPER), Code::BracketLeft);
-    let forward = Shortcut::new(Some(Modifiers::SUPER), Code::BracketRight);
-    let new_window_shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyN);
-    let show_app = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space);
-    let open_settings_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::Comma);
-
-    let app_handle = app.clone();
-
-    // Avoid hijacking the system-wide Cmd+R on macOS.
-    #[cfg(target_os = "macos")]
-    let shortcuts = [
-        new_chat,
-        back,
-        forward,
-        new_window_shortcut,
-        show_app,
-        open_settings_shortcut,
-    ];
-
-    #[cfg(not(target_os = "macos"))]
-    let shortcuts = [
-        new_chat,
-        reload,
-        back,
-        forward,
-        new_window_shortcut,
-        show_app,
-        open_settings_shortcut,
-    ];
-
-    app.global_shortcut().on_shortcuts(
-        shortcuts,
-        move |_app, shortcut, _event| {
-            if shortcut == &new_chat {
-                trigger_new_chat(&app_handle);
-            }
-
-            if let Some(window) = app_handle.get_webview_window("main") {
-                if shortcut == &reload {
-                    let _ = window.eval("window.location.reload()");
-                } else if shortcut == &back {
-                    let _ = window.eval("window.history.back()");
-                } else if shortcut == &forward {
-                    let _ = window.eval("window.history.forward()");
-                } else if shortcut == &open_settings_shortcut {
-                    open_settings(&app_handle);
-                }
-            }
-
-            if shortcut == &new_window_shortcut {
-                trigger_new_window(&app_handle);
-            } else if shortcut == &show_app {
-                focus_main_window(&app_handle);
-            }
-        },
-    )?;
-
-    Ok(())
-}
-
-// ============================================================================
 // Menu Setup
 // ============================================================================
 
@@ -574,7 +506,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         TRAY_MENU_OPEN_APP_ID,
         "Open Onyx",
         true,
-        Some("CmdOrCtrl+Shift+Space"),
+        None::<&str>,
     )?;
     let open_chat = MenuItem::with_id(
         app,
@@ -666,7 +598,6 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(ConfigState {
             config: RwLock::new(config),
@@ -697,11 +628,6 @@ fn main() {
         })
         .setup(move |app| {
             let app_handle = app.handle();
-
-            // Setup global shortcuts
-            if let Err(e) = setup_shortcuts(&app_handle) {
-                eprintln!("Failed to setup shortcuts: {}", e);
-            }
 
             if let Err(e) = setup_app_menu(&app_handle) {
                 eprintln!("Failed to setup menu: {}", e);

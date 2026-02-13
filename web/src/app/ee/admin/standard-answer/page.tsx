@@ -29,8 +29,8 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgTrash } from "@opal/icons";
+import { Button } from "@opal/components";
 const NUM_RESULTS_PER_PAGE = 10;
 
 type Displayable = JSX.Element | string;
@@ -142,7 +142,7 @@ const StandardAnswersTableRow = ({
         >
           {standardAnswer.answer}
         </ReactMarkdown>,
-        <IconButton
+        <Button
           key={`delete-${standardAnswer.id}`}
           icon={SvgTrash}
           onClick={() => handleDelete(standardAnswer.id)}

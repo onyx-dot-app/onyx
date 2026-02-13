@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
-from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import User
@@ -69,8 +69,15 @@ from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_t
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
+    SSEKeepalive,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.tasks.tasks import (
+    _get_disabled_user_library_paths,
+)
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.features.build.session.prompts import (
@@ -79,7 +86,7 @@ from onyx.server.features.build.session.prompts import (
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_span_output
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -338,15 +345,19 @@ class SessionManager:
                 )
 
         # Fallback to system default
-        default_provider = fetch_default_provider(self._db_session)
-        if not default_provider:
-            raise ValueError("No LLM provider configured")
+        default_model = fetch_default_llm_model(self._db_session)
+        if not default_model:
+            raise ValueError("No default LLM model found")
 
         return LLMProviderConfig(
-            provider=default_provider.provider,
-            model_name=default_provider.default_model_name,
-            api_key=default_provider.api_key,
-            api_base=default_provider.api_base,
+            provider=default_model.llm_provider.provider,
+            model_name=default_model.name,
+            api_key=(
+                default_model.llm_provider.api_key.get_value(apply_mask=False)
+                if default_model.llm_provider.api_key
+                else None
+            ),
+            api_base=default_model.llm_provider.api_base,
         )
 
     # =========================================================================
@@ -478,8 +489,10 @@ class SessionManager:
                     tenant_id=tenant_id,
                     llm_config=llm_config,
                 )
-                sandbox.status = sandbox_info.status
-                self._db_session.flush()
+                # Use update function to also set heartbeat when transitioning to RUNNING
+                update_sandbox_status__no_commit(
+                    self._db_session, sandbox_id, sandbox_info.status
+                )
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
@@ -491,8 +504,9 @@ class SessionManager:
                     self._sandbox_manager.terminate(sandbox_id)
 
                     # Mark as terminated and re-provision
-                    sandbox.status = SandboxStatus.TERMINATED
-                    self._db_session.flush()
+                    update_sandbox_status__no_commit(
+                        self._db_session, sandbox_id, SandboxStatus.TERMINATED
+                    )
 
                     logger.info(
                         f"Re-provisioning sandbox {sandbox_id} for user {user_id}"
@@ -503,8 +517,10 @@ class SessionManager:
                         tenant_id=tenant_id,
                         llm_config=llm_config,
                     )
-                    sandbox.status = sandbox_info.status
-                    self._db_session.flush()
+                    # Use update function to also set heartbeat when transitioning to RUNNING
+                    update_sandbox_status__no_commit(
+                        self._db_session, sandbox_id, sandbox_info.status
+                    )
                 else:
                     logger.info(
                         f"Reusing existing sandbox {sandbox_id} (status: {sandbox.status}) "
@@ -536,9 +552,10 @@ class SessionManager:
                 llm_config=llm_config,
             )
 
-            # Update sandbox record with status from provisioning
-            sandbox.status = sandbox_info.status
-            self._db_session.flush()
+            # Update sandbox status (also refreshes heartbeat when transitioning to RUNNING)
+            update_sandbox_status__no_commit(
+                self._db_session, sandbox_id, sandbox_info.status
+            )
 
         # Set up session workspace within the sandbox
         logger.info(
@@ -548,6 +565,18 @@ class SessionManager:
         user = fetch_user_by_id(self._db_session, user_id)
         user_name = user.personal_name if user else None
         user_role = user.personal_role if user else None
+
+        # Get excluded user library paths (files with sync_disabled=True)
+        # Only query if not using demo data (user library only applies to user files)
+        excluded_user_library_paths: list[str] | None = None
+        if not demo_data_enabled:
+            excluded_user_library_paths = _get_disabled_user_library_paths(
+                self._db_session, str(user_id)
+            )
+            if excluded_user_library_paths:
+                logger.debug(
+                    f"Excluding {len(excluded_user_library_paths)} disabled user library paths"
+                )
 
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
@@ -561,7 +590,9 @@ class SessionManager:
             user_work_area=user_work_area,
             user_level=user_level,
             use_demo_data=demo_data_enabled,
+            excluded_user_library_paths=excluded_user_library_paths,
         )
+
         sandbox_id = sandbox.id
         logger.info(
             f"Successfully created session {session_id} with workspace in sandbox {sandbox.id}"
@@ -824,10 +855,8 @@ class SessionManager:
                     response = llm.invoke(
                         prompt_messages, reasoning_effort=ReasoningEffort.OFF
                     )
+                    record_llm_response(span_generation, response)
                     generated_name = llm_response_to_string(response).strip().strip('"')
-                    record_llm_span_output(
-                        span_generation, generated_name, response.usage
-                    )
 
             # Ensure the name isn't too long (max 50 chars)
             if len(generated_name) > 50:
@@ -884,8 +913,8 @@ class SessionManager:
                         reasoning_effort=ReasoningEffort.OFF,
                         max_tokens=500,
                     )
+                    record_llm_response(span_generation, response)
                     raw_output = llm_response_to_string(response).strip()
-                    record_llm_span_output(span_generation, raw_output, response.usage)
 
             return self._parse_suggestions(raw_output)
         except Exception as e:
@@ -1238,6 +1267,14 @@ class SessionManager:
             for acp_event in self._sandbox_manager.send_message(
                 sandbox_id, session_id, user_message_content
             ):
+                # Handle SSE keepalive - send comment to keep connection alive
+                if isinstance(acp_event, SSEKeepalive):
+                    # SSE comments start with : and are ignored by EventSource
+                    # but keep the HTTP connection alive
+                    packet_logger.log_sse_emit("keepalive", session_id)
+                    yield ": keepalive\n\n"
+                    continue
+
                 # Check if we need to finalize pending chunks before processing
                 event_type = self._get_event_type(acp_event)
                 if state.should_finalize_chunks(event_type):
@@ -1338,6 +1375,7 @@ class SessionManager:
                                     db_session=self._db_session,
                                 )
 
+                    # Log full event to packet logger (can handle large payloads)
                     packet_logger.log("tool_call_progress", event_data)
                     packet_logger.log_sse_emit("tool_call_progress", session_id)
                     yield _serialize_acp_event(acp_event, "tool_call_progress")
@@ -1643,6 +1681,62 @@ class SessionManager:
         docx_filename = filename.rsplit(".", 1)[0] + ".docx"
         return (docx_bytes, docx_filename)
 
+    def get_pptx_preview(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> dict[str, Any] | None:
+        """
+        Generate slide image previews for a PPTX file.
+
+        Converts the PPTX to individual JPEG slide images using
+        soffice + pdftoppm, with caching to avoid re-conversion.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the PPTX file within session workspace
+
+        Returns:
+            Dict with slide_count, slide_paths, and cached flag,
+            or None if session not found.
+
+        Raises:
+            ValueError: If path is invalid or conversion fails
+        """
+        import hashlib
+
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            return None
+
+        # Validate file extension
+        if not path.lower().endswith(".pptx"):
+            raise ValueError("Only .pptx files are supported for preview")
+
+        # Compute cache directory from path hash
+        path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
+        cache_dir = f"outputs/.pptx-preview/{path_hash}"
+
+        slide_paths, cached = self._sandbox_manager.generate_pptx_preview(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            pptx_path=path,
+            cache_dir=cache_dir,
+        )
+
+        return {
+            "slide_count": len(slide_paths),
+            "slide_paths": slide_paths,
+            "cached": cached,
+        }
+
     def get_webapp_info(
         self,
         session_id: UUID,
@@ -1656,7 +1750,8 @@ class SessionManager:
             user_id: The user ID to verify ownership
 
         Returns:
-            Dict with has_webapp, webapp_url, and status, or None if session not found
+            Dict with has_webapp, webapp_url, status, and ready,
+            or None if session not found
         """
         # Verify session ownership
         session = get_build_session(session_id, user_id, self._db_session)
@@ -1665,19 +1760,50 @@ class SessionManager:
 
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
-            return {"has_webapp": False, "webapp_url": None, "status": "no_sandbox"}
+            return {
+                "has_webapp": False,
+                "webapp_url": None,
+                "status": "no_sandbox",
+                "ready": False,
+            }
 
         # Return the proxy URL - the proxy handles routing to the correct sandbox
         # for both local and Kubernetes environments
         webapp_url = None
+        ready = False
         if session.nextjs_port:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
+
+            # Quick health check: can the API server reach the NextJS dev server?
+            ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
 
         return {
             "has_webapp": session.nextjs_port is not None,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
+            "ready": ready,
         }
+
+    def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:
+        """Check if the NextJS dev server is responding.
+
+        Does a quick HTTP GET to the sandbox's internal URL with a short timeout.
+        Returns True if the server responds with any status code, False on timeout
+        or connection error.
+        """
+        import httpx
+
+        from onyx.server.features.build.sandbox.base import get_sandbox_manager
+
+        try:
+            sandbox_manager = get_sandbox_manager()
+            internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
+            with httpx.Client(timeout=2.0) as client:
+                resp = client.get(internal_url)
+                # Any response (even 500) means the server is up
+                return resp.status_code < 500
+        except (httpx.TimeoutException, httpx.ConnectError, Exception):
+            return False
 
     def download_webapp_zip(
         self,

@@ -97,7 +97,9 @@ class TestLicenseEnforcementMiddleware:
         logger = MagicMock()
         captured_middleware: Any = None
 
-        def capture_middleware(middleware_type: str) -> Callable[[Any], Any]:
+        def capture_middleware(
+            middleware_type: str,  # noqa: ARG001
+        ) -> Callable[[Any], Any]:
             def decorator(func: Any) -> Any:
                 nonlocal captured_middleware
                 captured_middleware = func
@@ -108,7 +110,7 @@ class TestLicenseEnforcementMiddleware:
         app.middleware = capture_middleware
         add_license_enforcement_middleware(app, logger)
 
-        async def call_next(req: Request) -> Response:
+        async def call_next(req: Request) -> Response:  # noqa: ARG001
             response = MagicMock()
             response.status_code = 200
             return response
@@ -185,7 +187,7 @@ class TestLicenseEnforcementMiddleware:
         mock_get_metadata: MagicMock,
         mock_get_tenant: MagicMock,
         mock_refresh: MagicMock,
-        mock_get_session: MagicMock,
+        mock_get_session: MagicMock,  # noqa: ARG002
         middleware_harness: MiddlewareHarness,
     ) -> None:
         """No license blocks EE-only paths with 402."""
@@ -216,7 +218,7 @@ class TestLicenseEnforcementMiddleware:
         mock_get_metadata: MagicMock,
         mock_get_tenant: MagicMock,
         mock_refresh: MagicMock,
-        mock_get_session: MagicMock,
+        mock_get_session: MagicMock,  # noqa: ARG002
         middleware_harness: MiddlewareHarness,
     ) -> None:
         """No license allows community features (non-EE paths)."""

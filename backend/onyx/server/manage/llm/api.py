@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -19,9 +20,11 @@ from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_persona_with_groups
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.llm import remove_llm_provider
@@ -37,7 +40,6 @@ from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
-from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -69,6 +71,7 @@ from onyx.server.manage.llm.utils import infer_vision_support
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
+from onyx.utils.encryption import mask_string as mask_with_ellipsis
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -122,6 +125,48 @@ def _mask_provider_credentials(provider_view: LLMProviderView) -> None:
         provider_view.custom_config = masked_config
 
 
+def _is_sensitive_custom_config_key(key: str) -> bool:
+    key_lower = key.lower()
+    return any(sensitive_key in key_lower for sensitive_key in _SENSITIVE_CONFIG_KEYS)
+
+
+def _is_masked_value_for_existing(
+    incoming_value: str, existing_value: str, key: str
+) -> bool:
+    """Return True when incoming_value is a masked round-trip of existing_value."""
+    if not _is_sensitive_custom_config_key(key):
+        return False
+
+    masked_candidates = {
+        _mask_string(existing_value),
+        mask_with_ellipsis(existing_value),
+        "****",
+        "••••••••••••",
+        "***REDACTED***",
+    }
+    return incoming_value in masked_candidates
+
+
+def _restore_masked_custom_config_values(
+    existing_custom_config: dict[str, str] | None,
+    new_custom_config: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Restore sensitive custom config values when clients send masked placeholders."""
+    if not existing_custom_config or not new_custom_config:
+        return new_custom_config
+
+    restored_config = dict(new_custom_config)
+
+    for key, incoming_value in restored_config.items():
+        existing_value = existing_custom_config.get(key)
+        if not isinstance(incoming_value, str) or not isinstance(existing_value, str):
+            continue
+        if _is_masked_value_for_existing(incoming_value, existing_value, key):
+            restored_config[key] = existing_value
+
+    return restored_config
+
+
 def _validate_llm_provider_change(
     existing_api_base: str | None,
     existing_custom_config: dict[str, str] | None,
@@ -142,7 +187,10 @@ def _validate_llm_provider_change(
     if not MULTI_TENANT or api_key_changed:
         return
 
-    api_base_changed = new_api_base != existing_api_base
+    normalized_existing_api_base = existing_api_base or None
+    normalized_new_api_base = new_api_base or None
+
+    api_base_changed = normalized_new_api_base != normalized_existing_api_base
     custom_config_changed = (
         new_custom_config and new_custom_config != existing_custom_config
     )
@@ -192,16 +240,25 @@ def test_llm_configuration(
         existing_provider = fetch_existing_llm_provider(
             name=test_llm_request.name, db_session=db_session
         )
+        if existing_provider:
+            test_custom_config = _restore_masked_custom_config_values(
+                existing_custom_config=existing_provider.custom_config,
+                new_custom_config=test_custom_config,
+            )
         # if an API key is not provided, use the existing provider's API key
         if existing_provider and not test_llm_request.api_key_changed:
             _validate_llm_provider_change(
                 existing_api_base=existing_provider.api_base,
                 existing_custom_config=existing_provider.custom_config,
                 new_api_base=test_llm_request.api_base,
-                new_custom_config=test_llm_request.custom_config,
+                new_custom_config=test_custom_config,
                 api_key_changed=False,
             )
-            test_api_key = existing_provider.api_key
+            test_api_key = (
+                existing_provider.api_key.get_value(apply_mask=False)
+                if existing_provider.api_key
+                else None
+            )
         if existing_provider and not test_llm_request.custom_config_changed:
             test_custom_config = existing_provider.custom_config
 
@@ -252,7 +309,9 @@ def list_llm_providers(
 
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(
-        db_session, exclude_image_generation_providers=not include_image_gen
+        db_session=db_session,
+        flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        exclude_image_generation_providers=not include_image_gen,
     ):
         from_model_start = datetime.now(timezone.utc)
         full_llm_provider = LLMProviderView.from_model(llm_provider_model)
@@ -301,6 +360,12 @@ def put_llm_provider(
 
     # SSRF Protection: Validate api_base and custom_config match stored values
     if existing_provider:
+        llm_provider_upsert_request.custom_config = (
+            _restore_masked_custom_config_values(
+                existing_custom_config=existing_provider.custom_config,
+                new_custom_config=llm_provider_upsert_request.custom_config,
+            )
+        )
         _validate_llm_provider_change(
             existing_api_base=existing_provider.api_base,
             existing_custom_config=existing_provider.custom_config,
@@ -335,6 +400,8 @@ def put_llm_provider(
             model_configuration.is_visible = True
             default_model_found = True
 
+    # TODO: Remove this logic on api change
+    # Believed to be a dead pathway but we want to be safe for now
     if not default_model_found:
         llm_provider_upsert_request.model_configurations.append(
             ModelConfigurationUpsertRequest(
@@ -345,7 +412,11 @@ def put_llm_provider(
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
     if existing_provider and not llm_provider_upsert_request.api_key_changed:
-        llm_provider_upsert_request.api_key = existing_provider.api_key
+        llm_provider_upsert_request.api_key = (
+            existing_provider.api_key.get_value(apply_mask=False)
+            if existing_provider.api_key
+            else None
+        )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
@@ -416,6 +487,8 @@ def set_provider_as_default_vision(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
+    if vision_model is None:
+        raise HTTPException(status_code=404, detail="Vision model not provided")
     update_default_vision_provider(
         provider_id=provider_id, vision_model=vision_model, db_session=db_session
     )
@@ -445,41 +518,34 @@ def get_vision_capable_providers(
     db_session: Session = Depends(get_session),
 ) -> list[VisionProviderResponse]:
     """Return a list of LLM providers and their models that support image input"""
+    vision_models = fetch_existing_models(
+        db_session=db_session, flow_types=[LLMModelFlowType.VISION]
+    )
 
-    providers = fetch_existing_llm_providers(db_session)
-    vision_providers = []
+    # Group vision models by provider ID (using ID as key since it's hashable)
+    provider_models: dict[int, list[str]] = defaultdict(list)
+    providers_by_id: dict[int, LLMProviderView] = {}
 
-    logger.info("Fetching vision-capable providers")
-
-    for provider in providers:
-        vision_models = []
-
-        # Check each model for vision capability
-        for model_configuration in provider.model_configurations:
-            if model_supports_image_input(model_configuration.name, provider.provider):
-                vision_models.append(model_configuration.name)
-                logger.debug(
-                    f"Vision model found: {provider.provider}/{model_configuration.name}"
-                )
-
-        # Only include providers with at least one vision-capable model
-        if vision_models:
-            provider_view = LLMProviderView.from_model(provider)
+    for vision_model in vision_models:
+        provider_id = vision_model.llm_provider.id
+        provider_models[provider_id].append(vision_model.name)
+        # Only create the view once per provider
+        if provider_id not in providers_by_id:
+            provider_view = LLMProviderView.from_model(vision_model.llm_provider)
             _mask_provider_credentials(provider_view)
+            providers_by_id[provider_id] = provider_view
 
-            vision_providers.append(
-                VisionProviderResponse(
-                    **provider_view.model_dump(),
-                    vision_models=vision_models,
-                )
-            )
+    # Build response list
+    vision_provider_response = [
+        VisionProviderResponse(
+            **providers_by_id[provider_id].model_dump(),
+            vision_models=model_names,
+        )
+        for provider_id, model_names in provider_models.items()
+    ]
 
-            logger.info(
-                f"Vision provider: {provider.provider} with models: {vision_models}"
-            )
-
-    logger.info(f"Found {len(vision_providers)} vision-capable providers")
-    return vision_providers
+    logger.debug(f"Found {len(vision_provider_response)} vision-capable providers")
+    return vision_provider_response
 
 
 """Endpoints for all"""
@@ -502,7 +568,9 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
 
@@ -545,7 +613,9 @@ def get_valid_model_names_for_persona(
         return []
 
     is_admin = user.role == UserRole.ADMIN
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     valid_models = []
@@ -592,7 +662,9 @@ def list_llm_providers_for_persona(
         )
 
     is_admin = user.role == UserRole.ADMIN
-    all_providers = fetch_existing_llm_providers(db_session)
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+    )
     user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
 
     llm_provider_list: list[LLMProviderDescriptor] = []
@@ -630,7 +702,7 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(db_session)
+    providers = fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT])
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:
@@ -639,7 +711,11 @@ def get_provider_contextual_cost(
                 provider=provider.provider,
                 model=model_configuration.name,
                 deployment_name=provider.deployment_name,
-                api_key=provider.api_key,
+                api_key=(
+                    provider.api_key.get_value(apply_mask=False)
+                    if provider.api_key
+                    else None
+                ),
                 api_base=provider.api_base,
                 api_version=provider.api_version,
                 custom_config=provider.custom_config,
@@ -919,6 +995,11 @@ def get_ollama_available_models(
             )
         )
 
+    sorted_results = sorted(
+        all_models_with_context_size_and_vision,
+        key=lambda m: m.name.lower(),
+    )
+
     # Sync new models to DB if provider_name is specified
     if request.provider_name:
         try:
@@ -929,7 +1010,7 @@ def get_ollama_available_models(
                     "max_input_tokens": r.max_input_tokens,
                     "supports_image_input": r.supports_image_input,
                 }
-                for r in all_models_with_context_size_and_vision
+                for r in sorted_results
             ]
             new_count = sync_model_configurations(
                 db_session=db_session,
@@ -943,7 +1024,7 @@ def get_ollama_available_models(
         except ValueError as e:
             logger.warning(f"Failed to sync Ollama models to DB: {e}")
 
-    return all_models_with_context_size_and_vision
+    return sorted_results
 
 
 def _get_openrouter_models_response(api_base: str, api_key: str) -> dict:

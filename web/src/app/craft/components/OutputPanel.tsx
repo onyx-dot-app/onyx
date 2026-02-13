@@ -19,13 +19,12 @@ import {
   fetchArtifacts,
   exportDocx,
 } from "@/app/craft/services/apiServices";
-import { cn } from "@/lib/utils";
+import { cn, getFileIcon } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgGlobe,
   SvgHardDrive,
   SvgFiles,
-  SvgFileText,
   SvgX,
   SvgMinus,
   SvgMaximize2,
@@ -88,6 +87,15 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const setActiveFilePreviewPath = useBuildSessionStore(
     (state) => state.setActiveFilePreviewPath
   );
+
+  // Store actions for refresh
+  const triggerFilesRefresh = useBuildSessionStore(
+    (state) => state.triggerFilesRefresh
+  );
+
+  // Counters to force-reload previews
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [filePreviewRefreshKey, setFilePreviewRefreshKey] = useState(0);
 
   // Determine which tab is visually active
   const isFilePreviewActive = activeFilePreviewPath !== null;
@@ -162,8 +170,25 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, cachedForSessionId]);
 
-  // Webapp refresh trigger from streaming
+  // Webapp refresh trigger from streaming / restore
   const webappNeedsRefresh = useWebappNeedsRefresh();
+
+  // Track polling window: poll for up to 30s after a restore/refresh trigger
+  const [pollingDeadline, setPollingDeadline] = useState<number | null>(null);
+  const [isWebappReady, setIsWebappReady] = useState(false);
+
+  // When webappNeedsRefresh bumps (restore or file edit), start a 30s polling window
+  // and reset readiness so we poll until the server is back up
+  useEffect(() => {
+    if (webappNeedsRefresh > 0) {
+      setPollingDeadline(Date.now() + 30_000);
+      setIsWebappReady(false);
+
+      // Force a re-render after 30s to stop polling even if server never responded
+      const timer = setTimeout(() => setPollingDeadline(null), 30_000);
+      return () => clearTimeout(timer);
+    }
+  }, [webappNeedsRefresh]);
 
   // Fetch webapp info from dedicated endpoint
   // Only fetch for real sessions when panel is fully open
@@ -173,15 +198,27 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     !session.id.startsWith("temp-") &&
     session.status !== "creating";
 
+  // Poll every 2s while NextJS is starting up (capped at 30s), then stop
+  const shouldPoll =
+    !isWebappReady && pollingDeadline !== null && Date.now() < pollingDeadline;
+
   const { data: webappInfo, mutate } = useSWR(
     shouldFetchWebapp ? `/api/build/sessions/${session.id}/webapp-info` : null,
     () => (session?.id ? fetchWebappInfo(session.id) : null),
     {
-      refreshInterval: 0, // Disable polling, use event-based refresh
+      refreshInterval: shouldPoll ? 2000 : 0,
       revalidateOnFocus: true,
-      keepPreviousData: true, // Stale-while-revalidate
+      keepPreviousData: true,
     }
   );
+
+  // Update readiness from SWR response and clear polling deadline
+  useEffect(() => {
+    if (webappInfo?.ready) {
+      setIsWebappReady(true);
+      setPollingDeadline(null);
+    }
+  }, [webappInfo?.ready]);
 
   // Update cache when SWR returns data for current session
   useEffect(() => {
@@ -190,9 +227,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [webappInfo?.webapp_url, session?.id, cachedForSessionId]);
 
-  // Refresh when web/ file changes
-  // webappNeedsRefresh is a counter that increments on each edit, ensuring
-  // each edit triggers a new refresh even if the panel is already open
+  // Refresh when web/ file changes or after restore
+  // webappNeedsRefresh is a counter that increments on each edit/restore,
+  // ensuring each triggers a new refresh even if the panel is already open
   useEffect(() => {
     if (webappNeedsRefresh > 0 && isFullyOpen && session?.id) {
       mutate();
@@ -230,11 +267,21 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, navigateTabForward]);
 
-  // Determine if the active file preview is a markdown file (for download button)
+  // Determine if the active file preview is a markdown or pptx file (for download buttons)
   const isMarkdownPreview =
     isFilePreviewActive &&
     activeFilePreviewPath &&
     /\.md$/i.test(activeFilePreviewPath);
+
+  const isPptxPreview =
+    isFilePreviewActive &&
+    activeFilePreviewPath &&
+    /\.pptx$/i.test(activeFilePreviewPath);
+
+  const isPdfPreview =
+    isFilePreviewActive &&
+    activeFilePreviewPath &&
+    /\.pdf$/i.test(activeFilePreviewPath);
 
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
@@ -260,7 +307,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, activeFilePreviewPath]);
 
-  const handleMdDownload = useCallback(() => {
+  const handleRawFileDownload = useCallback(() => {
     if (!session?.id || !activeFilePreviewPath) return;
     const encodedPath = activeFilePreviewPath
       .split("/")
@@ -274,6 +321,26 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     link.click();
     document.body.removeChild(link);
   }, [session?.id, activeFilePreviewPath]);
+
+  // Unified refresh handler — dispatches based on the active tab/preview
+  const handleRefresh = useCallback(() => {
+    if (isFilePreviewActive && activeFilePreviewPath) {
+      // File preview tab: bump key to reload standalone + content previews
+      setFilePreviewRefreshKey((k) => k + 1);
+    } else if (activeOutputTab === "preview") {
+      // Web preview tab: remount the iframe
+      setPreviewRefreshKey((k) => k + 1);
+    } else if (activeOutputTab === "files" && session?.id) {
+      // Files tab: clear cache and re-fetch directory listing
+      triggerFilesRefresh(session.id);
+    }
+  }, [
+    isFilePreviewActive,
+    activeFilePreviewPath,
+    activeOutputTab,
+    session?.id,
+    triggerFilesRefresh,
+  ]);
 
   // Fetch artifacts - poll every 5 seconds when on artifacts tab
   const shouldFetchArtifacts =
@@ -432,6 +499,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             {/* Preview tabs */}
             {filePreviewTabs.map((previewTab) => {
               const isActive = activeFilePreviewPath === previewTab.path;
+              const TabIcon = getFileIcon(previewTab.fileName);
               return (
                 <button
                   key={previewTab.path}
@@ -456,7 +524,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       }}
                     />
                   )}
-                  <SvgFileText
+                  <TabIcon
                     size={14}
                     className={cn(
                       "stroke-current flex-shrink-0",
@@ -532,9 +600,21 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             ? displayUrl
             : null
         }
-        onDownloadRaw={isMarkdownPreview ? handleMdDownload : undefined}
+        onDownloadRaw={
+          isMarkdownPreview || isPptxPreview || isPdfPreview
+            ? handleRawFileDownload
+            : undefined
+        }
+        downloadRawTooltip={
+          isPdfPreview
+            ? "Download PDF"
+            : isPptxPreview
+              ? "Download PPTX"
+              : "Download MD file"
+        }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
+        onRefresh={handleRefresh}
       />
 
       {/* Tab Content */}
@@ -544,6 +624,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
           <FilePreviewContent
             sessionId={session.id}
             filePath={activeFilePreviewPath}
+            refreshKey={filePreviewRefreshKey}
           />
         )}
         {/* Pinned tab content - only show when no file preview is active */}
@@ -556,7 +637,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
               (!session ? (
                 <CraftingLoader />
               ) : (
-                <PreviewTab webappUrl={displayUrl} />
+                <PreviewTab
+                  webappUrl={displayUrl}
+                  refreshKey={previewRefreshKey}
+                />
               ))}
             {activeOutputTab === "files" && (
               <FilesTab

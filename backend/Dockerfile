@@ -134,6 +134,7 @@ COPY --chown=onyx:onyx ./alembic_tenants /app/alembic_tenants
 COPY --chown=onyx:onyx ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 COPY --chown=onyx:onyx ./static /app/static
+COPY --chown=onyx:onyx ./keys /app/keys
 
 # Escape hatch scripts
 COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging
@@ -148,6 +149,11 @@ RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
         echo "Running Craft template setup at build time..." && \
         ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
     fi
+
+# Set Craft template paths to the in-image locations
+# These match the paths where setup_craft_templates.sh creates the templates
+ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
+ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
 
 # Put logo in assets
 COPY --chown=onyx:onyx ./assets /app/assets

@@ -57,6 +57,11 @@ class Settings(BaseModel):
     anonymous_user_enabled: bool | None = None
     deep_research_enabled: bool | None = None
 
+    # Enterprise features flag - set by license enforcement at runtime
+    # When LICENSE_ENFORCEMENT_ENABLED=true, this reflects license status
+    # When LICENSE_ENFORCEMENT_ENABLED=false, defaults to False
+    ee_features_enabled: bool = False
+
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
@@ -75,6 +80,9 @@ class Settings(BaseModel):
     # Default Assistant settings
     disable_default_assistant: bool | None = False
 
+    # OpenSearch migration
+    opensearch_indexing_enabled: bool = False
+
 
 class UserSettings(Settings):
     notifications: list[Notification]
@@ -82,3 +90,7 @@ class UserSettings(Settings):
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA
     # Feature flag for Onyx Craft (Build Mode) - used for server-side redirects
     onyx_craft_enabled: bool = False
+    # True when a vector database (Vespa/OpenSearch) is available.
+    # False when DISABLE_VECTOR_DB is set — connectors, RAG search, and
+    # document sets are unavailable.
+    vector_db_enabled: bool = True

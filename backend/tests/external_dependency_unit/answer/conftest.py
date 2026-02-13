@@ -12,6 +12,7 @@ from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 
 
 # Counter for generating unique file IDs in mock file store
@@ -28,6 +29,12 @@ def ensure_default_llm_provider(db_session: Session) -> None:
             api_key=os.environ.get("OPENAI_API_KEY", "test"),
             is_public=True,
             default_model_name="gpt-4o-mini",
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini",
+                    is_visible=True,
+                )
+            ],
             groups=[],
         )
         provider = upsert_llm_provider(
@@ -36,6 +43,8 @@ def ensure_default_llm_provider(db_session: Session) -> None:
         )
         update_default_provider(provider.id, db_session)
     except Exception as exc:  # pragma: no cover - only hits on duplicate setup issues
+        # Rollback to clear the pending transaction state
+        db_session.rollback()
         print(f"Note: Could not create LLM provider: {exc}")
 
 
@@ -46,8 +55,8 @@ def mock_nlp_embeddings_post() -> Iterator[None]:
     def _mock_post(
         url: str,
         json: Mapping[str, Any] | None = None,
-        headers: Mapping[str, str] | None = None,
-        **kwargs: Any,
+        headers: Mapping[str, str] | None = None,  # noqa: ARG001
+        **kwargs: Any,  # noqa: ARG001
     ) -> MagicMock:
         resp = MagicMock()
         if "encoder/bi-encoder-embed" in url:
@@ -89,7 +98,7 @@ def mock_file_store() -> Iterator[None]:
     """Mock the file store to avoid S3/storage dependencies in tests."""
     global _mock_file_id_counter
 
-    def _mock_save_file(*args: Any, **kwargs: Any) -> str:
+    def _mock_save_file(*args: Any, **kwargs: Any) -> str:  # noqa: ARG001
         global _mock_file_id_counter
         _mock_file_id_counter += 1
         # Return a predictable file ID for tests
@@ -108,10 +117,10 @@ def mock_file_store() -> Iterator[None]:
 
 @pytest.fixture
 def mock_external_deps(
-    mock_nlp_embeddings_post: None,
-    mock_gpu_status: None,
-    mock_vespa_query: None,
-    mock_file_store: None,
+    mock_nlp_embeddings_post: None,  # noqa: ARG001
+    mock_gpu_status: None,  # noqa: ARG001
+    mock_vespa_query: None,  # noqa: ARG001
+    mock_file_store: None,  # noqa: ARG001
 ) -> Iterator[None]:
     """Convenience fixture to enable all common external dependency mocks."""
     yield

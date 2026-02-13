@@ -34,7 +34,9 @@ from tests.integration.common_utils.vespa import vespa_fixture
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
-def test_user_group_deletion(reset: None, vespa_client: vespa_fixture) -> None:
+def test_user_group_deletion(
+    reset: None, vespa_client: vespa_fixture  # noqa: ARG001
+) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
 

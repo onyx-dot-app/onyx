@@ -52,6 +52,9 @@ env:
   MCP_SERVER_PUBLIC_HOST: host.docker.internal
   MCP_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
 
+  # Visual regression S3 bucket (shared across all jobs)
+  PLAYWRIGHT_S3_BUCKET: onyx-playwright-artifacts
+
 jobs:
   build-web-image:
     runs-on:
@@ -90,7 +93,7 @@ jobs:
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -151,7 +154,7 @@ jobs:
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -212,7 +215,7 @@ jobs:
       # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -239,6 +242,9 @@ jobs:
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
     name: Playwright Tests (${{ matrix.project }})
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
+      contents: read
     runs-on:
       - runs-on
       - runner=8cpu-linux-arm64
@@ -249,7 +255,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [admin, no-auth, exclusive]
+        project: [admin, exclusive]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -259,7 +265,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup node
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # ratchet:actions/setup-node@v4
         with:
           node-version: 22
           cache: "npm"
@@ -289,7 +295,10 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
@@ -299,15 +308,12 @@ jobs:
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
-          if [ "${{ matrix.project }}" = "no-auth" ]; then
-            echo "PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true" >> deployment/docker_compose/.env
-          fi
 
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # ratchet:docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -428,11 +434,6 @@ jobs:
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          # Create test-results directory to ensure it exists for artifact upload
-          mkdir -p test-results
-          if [ "${PROJECT}" = "no-auth" ]; then
-            export PLAYWRIGHT_FORCE_EMPTY_LLM_PROVIDERS=true
-          fi
           npx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
@@ -440,8 +441,133 @@ jobs:
         with:
           # Includes test results and trace.zip files
           name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
-          path: ./web/test-results/
+          path: ./web/output/playwright/
           retention-days: 30
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/output/screenshots/
+          retention-days: 30
+
+      # --- Visual Regression Diff ---
+      - name: Configure AWS credentials
+        if: always()
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Install the latest version of uv
+        if: always()
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+          version: "0.9.9"
+
+      - name: Determine baseline revision
+        if: always()
+        id: baseline-rev
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
+          GH_REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            # PRs compare against the base branch (e.g. main, release/2.5)
+            echo "rev=${BASE_REF}" >> "$GITHUB_OUTPUT"
+          elif [ "${EVENT_NAME}" = "merge_group" ]; then
+            # Merge queue compares against the target branch (e.g. refs/heads/main -> main)
+            echo "rev=${MERGE_GROUP_BASE_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GH_REF}" == refs/tags/* ]]; then
+            # Tag builds compare against the tag name
+            echo "rev=${REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            # Push builds (main, release/*) compare against the branch name
+            echo "rev=${REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate screenshot diff report
+        if: always()
+        env:
+          PROJECT: ${{ matrix.project }}
+          PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
+          BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
+        run: |
+          uv run --no-sync --with onyx-devtools ods screenshot-diff compare \
+            --project "${PROJECT}" \
+            --rev "${BASELINE_REV}"
+
+      - name: Upload visual diff report to S3
+        if: always()
+        env:
+          PROJECT: ${{ matrix.project }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          SUMMARY_FILE="web/output/screenshot-diff/${PROJECT}/summary.json"
+          if [ ! -f "${SUMMARY_FILE}" ]; then
+            echo "No summary file found — skipping S3 upload."
+            exit 0
+          fi
+
+          HAS_DIFF=$(jq -r '.has_differences' "${SUMMARY_FILE}")
+          if [ "${HAS_DIFF}" != "true" ]; then
+            echo "No visual differences for ${PROJECT} — skipping S3 upload."
+            exit 0
+          fi
+
+          aws s3 sync "web/output/screenshot-diff/${PROJECT}/" \
+            "s3://${PLAYWRIGHT_S3_BUCKET}/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
+
+      - name: Upload visual diff summary
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: screenshot-diff-summary-${{ matrix.project }}
+          path: ./web/output/screenshot-diff/${{ matrix.project }}/summary.json
+          if-no-files-found: ignore
+          retention-days: 5
+
+      - name: Upload visual diff report artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: screenshot-diff-report-${{ matrix.project }}-${{ github.run_id }}
+          path: ./web/output/screenshot-diff/${{ matrix.project }}/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Update S3 baselines
+        if: >-
+          success() && (
+            github.ref == 'refs/heads/main' ||
+            startsWith(github.ref, 'refs/heads/release/') ||
+            startsWith(github.ref, 'refs/tags/v') ||
+            (
+              github.event_name == 'merge_group' && (
+                github.event.merge_group.base_ref == 'refs/heads/main' ||
+                startsWith(github.event.merge_group.base_ref, 'refs/heads/release/')
+              )
+            )
+          )
+        env:
+          PROJECT: ${{ matrix.project }}
+          PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
+          BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
+        run: |
+          if [ -d "web/output/screenshots/" ] && [ "$(ls -A web/output/screenshots/)" ]; then
+            uv run --no-sync --with onyx-devtools ods screenshot-diff upload-baselines \
+              --project "${PROJECT}" \
+              --rev "${BASELINE_REV}" \
+              --delete
+          else
+            echo "No screenshots to upload for ${PROJECT} — skipping baseline update."
+          fi
 
       # save before stopping the containers so the logs can be captured
       - name: Save Docker logs
@@ -460,6 +586,95 @@ jobs:
           name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
           path: ${{ github.workspace }}/docker-compose.log
 
+  # Post a single combined visual regression comment after all matrix jobs finish
+  visual-regression-comment:
+    needs: [playwright-tests]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download visual diff summaries
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # ratchet:actions/download-artifact@v4
+        with:
+          pattern: screenshot-diff-summary-*
+          path: summaries/
+
+      - name: Post combined PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
+        run: |
+          MARKER="<!-- visual-regression-report -->"
+
+          # Build the markdown table from all summary files
+          TABLE_HEADER="| Project | Changed | Added | Removed | Unchanged | Report |"
+          TABLE_DIVIDER="|---------|---------|-------|---------|-----------|--------|"
+          TABLE_ROWS=""
+          HAS_ANY_SUMMARY=false
+
+          for SUMMARY_DIR in summaries/screenshot-diff-summary-*/; do
+            SUMMARY_FILE="${SUMMARY_DIR}summary.json"
+            if [ ! -f "${SUMMARY_FILE}" ]; then
+              continue
+            fi
+
+            HAS_ANY_SUMMARY=true
+            PROJECT=$(jq -r '.project' "${SUMMARY_FILE}")
+            CHANGED=$(jq -r '.changed' "${SUMMARY_FILE}")
+            ADDED=$(jq -r '.added' "${SUMMARY_FILE}")
+            REMOVED=$(jq -r '.removed' "${SUMMARY_FILE}")
+            UNCHANGED=$(jq -r '.unchanged' "${SUMMARY_FILE}")
+            TOTAL=$(jq -r '.total' "${SUMMARY_FILE}")
+            HAS_DIFF=$(jq -r '.has_differences' "${SUMMARY_FILE}")
+
+            if [ "${TOTAL}" = "0" ]; then
+              REPORT_LINK="_No screenshots_"
+            elif [ "${HAS_DIFF}" = "true" ]; then
+              REPORT_URL="https://${S3_BUCKET}.s3.us-east-2.amazonaws.com/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/index.html"
+              REPORT_LINK="[View Report](${REPORT_URL})"
+            else
+              REPORT_LINK="✅ No changes"
+            fi
+
+            TABLE_ROWS="${TABLE_ROWS}| \`${PROJECT}\` | ${CHANGED} | ${ADDED} | ${REMOVED} | ${UNCHANGED} | ${REPORT_LINK} |\n"
+          done
+
+          if [ "${HAS_ANY_SUMMARY}" = "false" ]; then
+            echo "No visual diff summaries found — skipping PR comment."
+            exit 0
+          fi
+
+          BODY=$(printf '%s\n' \
+            "${MARKER}" \
+            "### 🖼️ Visual Regression Report" \
+            "" \
+            "${TABLE_HEADER}" \
+            "${TABLE_DIVIDER}" \
+            "$(printf '%b' "${TABLE_ROWS}")")
+
+          # Upsert: find existing comment with the marker, or create a new one
+          EXISTING_COMMENT_ID=$(gh api \
+            "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
+            2>/dev/null | head -1)
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api \
+              --method PATCH \
+              "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" \
+              -f body="${BODY}"
+          else
+            gh api \
+              --method POST \
+              "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+              -f body="${BODY}"
+          fi
+
   playwright-required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
@@ -470,48 +685,3 @@ jobs:
       - name: Check job status
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: exit 1
-
-# NOTE: Chromatic UI diff testing is currently disabled.
-# We are using Playwright for local and CI testing without visual regression checks.
-# Chromatic may be reintroduced in the future for UI diff testing if needed.
-
-# chromatic-tests:
-#   name: Chromatic Tests
-
-#   needs: playwright-tests
-#   runs-on:
-#     [
-#       runs-on,
-#       runner=32cpu-linux-x64,
-#       disk=large,
-#       "run-id=${{ github.run_id }}",
-#     ]
-#   steps:
-#     - name: Checkout code
-#       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
-#       with:
-#         fetch-depth: 0
-
-#     - name: Setup node
-#       uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # ratchet:actions/setup-node@v4
-#       with:
-#         node-version: 22
-
-#     - name: Install node dependencies
-#       working-directory: ./web
-#       run: npm ci
-
-#     - name: Download Playwright test results
-#       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
-#       with:
-#         name: test-results
-#         path: ./web/test-results
-
-#     - name: Run Chromatic
-#       uses: chromaui/action@latest
-#       with:
-#         playwright: true
-#         projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
-#         workingDir: ./web
-#       env:
-#         CHROMATIC_ARCHIVE_LOCATION: ./test-results

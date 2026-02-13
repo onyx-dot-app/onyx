@@ -31,7 +31,7 @@
 }
 
 .table-row-layout[data-selected="true"] {
-  background-color: var(--background-tint-01);
+  background-color: var(--action-link-01);
 }
 
 /* Table Cell Layout

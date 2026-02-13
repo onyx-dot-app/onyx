@@ -71,7 +71,7 @@ class LocalSandboxManager(SandboxManager):
         """Initialize managers."""
         # Paths for templates
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
-        skills_path = build_dir / "skills"
+        skills_path = build_dir / "sandbox" / "kubernetes" / "docker" / "skills"
         agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         self._directory_manager = DirectoryManager(
@@ -152,12 +152,123 @@ class LocalSandboxManager(SandboxManager):
         """
         return self._get_sandbox_path(sandbox_id) / "sessions" / str(session_id)
 
+    def _setup_filtered_files(
+        self,
+        session_path: Path,
+        source_path: Path,
+        excluded_paths: list[str],
+    ) -> None:
+        """Set up files directory with filtered symlinks based on exclusions.
+
+        Instead of symlinking the entire source directory, this creates a files/
+        directory structure where:
+        - Top-level items (except user_library) are symlinked directly
+        - user_library/ is created as a real directory with filtered symlinks
+
+        Args:
+            session_path: Path to the session directory
+            source_path: Path to the user's knowledge files (e.g., /storage/tenant/knowledge/user/)
+            excluded_paths: List of paths within user_library to exclude
+                (e.g., ["/data/file.xlsx", "/reports/old.pdf"])
+        """
+        files_dir = session_path / "files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+
+        # Normalize excluded paths for comparison (remove leading slash)
+        excluded_set = {p.lstrip("/") for p in excluded_paths}
+
+        if not source_path.exists():
+            logger.warning(f"Source path does not exist: {source_path}")
+            return
+
+        # Iterate through top-level items in source
+        for item in source_path.iterdir():
+            target_link = files_dir / item.name
+
+            if item.name == "user_library":
+                # user_library needs filtered handling
+                self._setup_filtered_user_library(
+                    target_dir=target_link,
+                    source_dir=item,
+                    excluded_set=excluded_set,
+                    base_path="",
+                )
+            else:
+                # Other directories/files: symlink directly
+                if not target_link.exists():
+                    target_link.symlink_to(item, target_is_directory=item.is_dir())
+
+    def _setup_filtered_user_library(
+        self,
+        target_dir: Path,
+        source_dir: Path,
+        excluded_set: set[str],
+        base_path: str,
+    ) -> bool:
+        """Recursively set up user_library with filtered symlinks.
+
+        Creates directory structure and symlinks only non-excluded files.
+        Only creates directories if they will contain at least one enabled file.
+
+        Args:
+            target_dir: Where to create the filtered structure
+            source_dir: Source user_library directory
+            excluded_set: Set of excluded relative paths (e.g., {"data/file.xlsx"})
+            base_path: Current path relative to user_library root (for recursion)
+
+        Returns:
+            True if any content was created (files or non-empty subdirectories)
+        """
+        if not source_dir.exists():
+            return False
+
+        has_content = False
+
+        for item in source_dir.iterdir():
+            # Build relative path for exclusion check
+            rel_path = (
+                f"{base_path}/{item.name}".lstrip("/") if base_path else item.name
+            )
+            target_link = target_dir / item.name
+
+            if item.is_dir():
+                # Check if entire directory is excluded
+                if rel_path in excluded_set:
+                    logger.debug(f"Excluding directory: user_library/{rel_path}")
+                    continue
+
+                # Recurse into directory - only create if it has content
+                subdir_has_content = self._setup_filtered_user_library(
+                    target_dir=target_link,
+                    source_dir=item,
+                    excluded_set=excluded_set,
+                    base_path=rel_path,
+                )
+                if subdir_has_content:
+                    has_content = True
+            else:
+                # Check if file is excluded
+                if rel_path in excluded_set:
+                    logger.debug(f"Excluding file: user_library/{rel_path}")
+                    continue
+
+                # Create parent directory if needed (lazy creation)
+                if not target_dir.exists():
+                    target_dir.mkdir(parents=True, exist_ok=True)
+
+                # Create symlink to file
+                if not target_link.exists():
+                    target_link.symlink_to(item)
+                has_content = True
+
+        return has_content
+
     def provision(
         self,
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,
+        llm_config: LLMProviderConfig,  # noqa: ARG002
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -265,12 +376,13 @@ class LocalSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int,
         file_system_path: str | None = None,
-        snapshot_path: str | None = None,
+        snapshot_path: str | None = None,  # noqa: ARG002
         user_name: str | None = None,
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
         use_demo_data: bool = False,
+        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -280,7 +392,7 @@ class LocalSandboxManager(SandboxManager):
         3. .venv/ (from template)
         4. AGENTS.md
         5. .agent/skills/
-        6. files/ (symlink to demo data OR user's file_system_path)
+        6. files/ (symlink to demo data OR filtered user files)
         7. opencode.json
         8. org_info/ (if demo_data is enabled, the org structure and user identity for the user's demo persona)
         9. attachments/
@@ -297,6 +409,8 @@ class LocalSandboxManager(SandboxManager):
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
             use_demo_data: If True, symlink files/ to demo data; else to user files
+            excluded_user_library_paths: List of paths within user_library/ to exclude
+                (e.g., ["/data/file.xlsx"]). These files won't be linked in the sandbox.
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -320,7 +434,7 @@ class LocalSandboxManager(SandboxManager):
         logger.debug(f"Session directory created at {session_path}")
 
         try:
-            # Setup files symlink - choose between demo data or user files
+            # Setup files access - choose between demo data or user files
             if use_demo_data:
                 # Demo mode: symlink to demo data directory
                 symlink_target = Path(DEMO_DATA_PATH)
@@ -329,17 +443,33 @@ class LocalSandboxManager(SandboxManager):
                         f"Demo data directory does not exist: {symlink_target}"
                     )
                 logger.info(f"Setting up files symlink to demo data: {symlink_target}")
-            elif file_system_path:
-                # Normal mode: symlink to user's knowledge files
-                symlink_target = Path(file_system_path)
-                logger.debug(
-                    f"Setting up files symlink to user files: {symlink_target}"
+                self._directory_manager.setup_files_symlink(
+                    session_path, symlink_target
                 )
+            elif file_system_path:
+                source_path = Path(file_system_path)
+                # Check if we have exclusions for user_library
+                if excluded_user_library_paths:
+                    # Create filtered file structure with symlinks to enabled files only
+                    logger.debug(
+                        f"Setting up filtered files with {len(excluded_user_library_paths)} exclusions"
+                    )
+                    self._setup_filtered_files(
+                        session_path=session_path,
+                        source_path=source_path,
+                        excluded_paths=excluded_user_library_paths,
+                    )
+                else:
+                    # No exclusions: simple symlink to entire directory
+                    logger.debug(
+                        f"Setting up files symlink to user files: {source_path}"
+                    )
+                    self._directory_manager.setup_files_symlink(
+                        session_path, source_path
+                    )
             else:
                 raise ValueError("No files symlink target provided")
-
-            self._directory_manager.setup_files_symlink(session_path, symlink_target)
-            logger.debug("Files symlink ready")
+            logger.debug("Files ready")
 
             # Setup org_info directory with user identity (at session root)
             if user_work_area:
@@ -608,34 +738,14 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         tenant_id: str,
     ) -> SnapshotResult | None:
-        """Create a snapshot of a session's outputs directory.
+        """Not implemented for local backend - workspaces persist on disk.
 
-        Returns None if snapshots are disabled (local backend).
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to snapshot
-            tenant_id: Tenant identifier for storage path
-
-        Returns:
-            SnapshotResult with storage path and size, or None if
-            snapshots are disabled for this backend
+        Local sandboxes don't use snapshots since the filesystem persists.
+        This should never be called for local backend.
         """
-        session_path = self._get_session_path(sandbox_id, session_id)
-        # SnapshotManager expects string session_id for storage path
-        _, storage_path, size_bytes = self._snapshot_manager.create_snapshot(
-            session_path,
-            str(session_id),
-            tenant_id,
-        )
-
-        logger.info(
-            f"Created snapshot for session {session_id}, size: {size_bytes} bytes"
-        )
-
-        return SnapshotResult(
-            storage_path=storage_path,
-            size_bytes=size_bytes,
+        raise NotImplementedError(
+            "create_snapshot is not supported for local backend. "
+            "Local sandboxes persist on disk and don't use snapshots."
         )
 
     def session_workspace_exists(
@@ -661,53 +771,26 @@ class LocalSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002
         nextjs_port: int,
+        llm_config: LLMProviderConfig,
+        use_demo_data: bool = False,
     ) -> None:
-        """Restore a snapshot into a session's workspace directory and start NextJS.
+        """Not implemented for local backend - workspaces persist on disk.
 
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to restore
-            snapshot_storage_path: Path to the snapshot in storage
-            tenant_id: Tenant identifier for storage access
-            nextjs_port: Port number for the NextJS dev server
-
-        Raises:
-            RuntimeError: If snapshot restoration fails
-            FileNotFoundError: If snapshot does not exist
+        Local sandboxes don't use snapshots since the filesystem persists.
+        This should never be called for local backend.
         """
-        session_path = self._get_session_path(sandbox_id, session_id)
-
-        # Ensure session directory exists
-        session_path.mkdir(parents=True, exist_ok=True)
-
-        # Use SnapshotManager to restore
-        self._snapshot_manager.restore_snapshot(
-            storage_path=snapshot_storage_path,
-            target_path=session_path,
+        raise NotImplementedError(
+            "restore_snapshot is not supported for local backend. "
+            "Local sandboxes persist on disk and don't use snapshots."
         )
 
-        logger.info(f"Restored snapshot for session {session_id}")
-
-        # Start NextJS dev server
-        web_dir = session_path / "outputs" / "web"
-        if web_dir.exists():
-            logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
-            nextjs_process = self._process_manager.start_nextjs_server(
-                web_dir, nextjs_port
-            )
-            # Store process for clean shutdown on session delete
-            self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
-            logger.info(
-                f"Started NextJS server for session {session_id} on port {nextjs_port}"
-            )
-        else:
-            logger.warning(
-                f"Web directory not found at {web_dir}, skipping NextJS startup"
-            )
-
-    def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
+    def health_check(
+        self,
+        sandbox_id: UUID,
+        timeout: float = 60.0,  # noqa: ARG002
+    ) -> bool:
         """Check if the sandbox is healthy (folder exists).
 
         Args:
@@ -962,7 +1045,42 @@ class LocalSandboxManager(SandboxManager):
             f"({len(content)} bytes)"
         )
 
+        # Inject attachments section into AGENTS.md if not already present
+        self._ensure_agents_md_attachments_section(session_path)
+
         return f"attachments/{filename}"
+
+    def _ensure_agents_md_attachments_section(self, session_path: Path) -> None:
+        """Ensure AGENTS.md has the attachments section.
+
+        Called after uploading a file. Only adds the section if it doesn't exist.
+        Inserts the section above ## Skills for better document flow.
+        """
+        from onyx.server.features.build.sandbox.util.agent_instructions import (
+            ATTACHMENTS_SECTION_CONTENT,
+        )
+
+        agents_md_path = session_path / "AGENTS.md"
+        if not agents_md_path.exists():
+            return
+
+        current_content = agents_md_path.read_text()
+        section_marker = "## Attachments (PRIORITY)"
+
+        if section_marker not in current_content:
+            # Insert before ## Skills if it exists, otherwise append
+            skills_marker = "## Skills"
+            if skills_marker in current_content:
+                updated_content = current_content.replace(
+                    skills_marker,
+                    ATTACHMENTS_SECTION_CONTENT + "\n\n" + skills_marker,
+                )
+            else:
+                updated_content = (
+                    current_content.rstrip() + "\n\n" + ATTACHMENTS_SECTION_CONTENT
+                )
+            agents_md_path.write_text(updated_content)
+            logger.debug("Added attachments section to AGENTS.md")
 
     def delete_file(
         self,
@@ -1049,7 +1167,7 @@ class LocalSandboxManager(SandboxManager):
 
         return file_count, total_size
 
-    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
+    def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:  # noqa: ARG002
         """Get the webapp URL for a session's Next.js server.
 
         For local backend, returns localhost URL with port.
@@ -1063,24 +1181,139 @@ class LocalSandboxManager(SandboxManager):
         """
         return f"http://localhost:{port}"
 
+    def generate_pptx_preview(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        pptx_path: str,
+        cache_dir: str,
+    ) -> tuple[list[str], bool]:
+        """Convert PPTX to slide images using soffice + pdftoppm.
+
+        Uses local filesystem and subprocess for conversion.
+        """
+        session_path = self._get_session_path(sandbox_id, session_id)
+        clean_pptx = self._sanitize_path(pptx_path)
+        clean_cache = self._sanitize_path(cache_dir)
+        pptx_abs = session_path / clean_pptx
+        cache_abs = session_path / clean_cache
+
+        if not pptx_abs.is_file():
+            raise ValueError(f"File not found: {pptx_path}")
+
+        # Check cache - if slides exist and are newer than the PPTX, use them
+        cached = False
+        if cache_abs.is_dir():
+            existing = sorted(cache_abs.glob("slide-*.jpg"))
+            if existing:
+                pptx_mtime = pptx_abs.stat().st_mtime
+                cache_mtime = existing[0].stat().st_mtime
+                if cache_mtime >= pptx_mtime:
+                    cached = True
+                    return (
+                        [str(f.relative_to(session_path)) for f in existing],
+                        cached,
+                    )
+                # Stale cache - remove old slides
+                for f in existing:
+                    f.unlink()
+
+        cache_abs.mkdir(parents=True, exist_ok=True)
+
+        # Convert PPTX -> PDF using soffice
+        try:
+            import os
+
+            env = os.environ.copy()
+            env["SAL_USE_VCLPLUGIN"] = "svp"
+            subprocess.run(
+                [
+                    "soffice",
+                    "--headless",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    str(cache_abs),
+                    str(pptx_abs),
+                ],
+                env=env,
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+        except FileNotFoundError:
+            raise ValueError(
+                "LibreOffice (soffice) is not installed. "
+                "PPTX preview requires LibreOffice."
+            )
+        except subprocess.TimeoutExpired:
+            raise ValueError("PPTX conversion timed out")
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"PPTX conversion failed: {e.stderr.decode()}")
+
+        # Find the generated PDF
+        pdf_files = list(cache_abs.glob("*.pdf"))
+        if not pdf_files:
+            raise ValueError("soffice did not produce a PDF file")
+        pdf_path = pdf_files[0]
+
+        # Convert PDF -> JPEG slides using pdftoppm
+        try:
+            subprocess.run(
+                [
+                    "pdftoppm",
+                    "-jpeg",
+                    "-r",
+                    "150",
+                    str(pdf_path),
+                    str(cache_abs / "slide"),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+        except FileNotFoundError:
+            raise ValueError(
+                "pdftoppm (poppler-utils) is not installed. "
+                "PPTX preview requires poppler."
+            )
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"PDF to image conversion failed: {e.stderr.decode()}")
+
+        # Clean up PDF
+        pdf_path.unlink(missing_ok=True)
+
+        # Collect slide images
+        slides = sorted(cache_abs.glob("slide-*.jpg"))
+        return (
+            [str(f.relative_to(session_path)) for f in slides],
+            False,
+        )
+
     def sync_files(
         self,
         sandbox_id: UUID,
-        user_id: UUID,
-        tenant_id: str,
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        source: str | None = None,  # noqa: ARG002
     ) -> bool:
         """No-op for local mode - files are directly accessible via symlink.
 
         In local mode, the sandbox's files/ directory is a symlink to the
-        local persistent document storage, so no sync is needed.
+        local persistent document storage, so no sync is needed. File visibility
+        in sessions is controlled via filtered symlinks in setup_session_workspace().
 
         Args:
             sandbox_id: The sandbox UUID (unused)
             user_id: The user ID (unused)
             tenant_id: The tenant ID (unused)
+            source: The source type (unused in local mode)
 
         Returns:
             True (always succeeds since no sync is needed)
         """
-        logger.debug(f"sync_files called for local sandbox {sandbox_id} - no-op")
+        source_info = f" source={source}" if source else ""
+        logger.debug(
+            f"sync_files called for local sandbox {sandbox_id}{source_info} - no-op"
+        )
         return True
