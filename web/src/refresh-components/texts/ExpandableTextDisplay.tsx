@@ -306,7 +306,7 @@ export default function ExpandableTextDisplay({
 
         {/* Expand button - only show when content is truncated */}
 
-        <div className="flex justify-end items-end mt-1 w-8">
+        <div className="flex justify-end self-end mt-1 w-8">
           {isTruncated && (
             <Button
               prominence="tertiary"

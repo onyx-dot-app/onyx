@@ -615,7 +615,13 @@ const TabsTrigger = React.forwardRef<
             <Icon size={14} className={cn(iconVariants[variant])} />
           </div>
         )}
-        {typeof children === "string" ? <Text>{children}</Text> : children}
+        {typeof children === "string" ? (
+          <div className="px-0.5">
+            <Text>{children}</Text>
+          </div>
+        ) : (
+          children
+        )}
         {isLoading && (
           <span
             className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ml-1"
