@@ -473,12 +473,16 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
           GH_REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "${EVENT_NAME}" = "pull_request" ]; then
             # PRs compare against the base branch (e.g. main, release/2.5)
             echo "rev=${BASE_REF}" >> "$GITHUB_OUTPUT"
+          elif [ "${EVENT_NAME}" = "merge_group" ]; then
+            # Merge queue compares against the target branch (e.g. refs/heads/main -> main)
+            echo "rev=${MERGE_GROUP_BASE_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
           elif [[ "${GH_REF}" == refs/tags/* ]]; then
             # Tag builds compare against the tag name
             echo "rev=${REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -543,7 +547,13 @@ jobs:
           success() && (
             github.ref == 'refs/heads/main' ||
             startsWith(github.ref, 'refs/heads/release/') ||
-            startsWith(github.ref, 'refs/tags/v')
+            startsWith(github.ref, 'refs/tags/v') ||
+            (
+              github.event_name == 'merge_group' && (
+                github.event.merge_group.base_ref == 'refs/heads/main' ||
+                startsWith(github.event.merge_group.base_ref, 'refs/heads/release/')
+              )
+            )
           )
         env:
           PROJECT: ${{ matrix.project }}
