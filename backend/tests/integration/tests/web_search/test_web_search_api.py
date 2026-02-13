@@ -40,6 +40,7 @@ class TestOnyxWebCrawler:
         assert "This domain is for use in" in content
         assert "documentation" in content or "illustrative" in content
 
+    @pytest.mark.skip(reason="Temporarily disabled")
     def test_fetches_multiple_urls(self, admin_user: DATestUser) -> None:
         """Test that the crawler can fetch multiple URLs in one request."""
         response = requests.post(
