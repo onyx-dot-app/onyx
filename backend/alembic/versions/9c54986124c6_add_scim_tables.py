@@ -55,6 +55,7 @@ def upgrade() -> None:
             "updated_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
+            onupdate=sa.text("now()"),
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
@@ -88,6 +89,7 @@ def upgrade() -> None:
             "updated_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
+            onupdate=sa.text("now()"),
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
