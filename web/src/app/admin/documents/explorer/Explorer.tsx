@@ -69,7 +69,7 @@ const DocumentDisplay = ({
               refresh();
             } else {
               toast.error(
-                `Failed to update document - ${getErrorMsg(response)}}`
+                `Failed to update document - ${getErrorMsg(response)}`
               );
             }
           }}
