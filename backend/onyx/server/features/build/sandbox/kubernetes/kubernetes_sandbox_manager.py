@@ -532,7 +532,7 @@ done
             ],
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "1000m", "memory": "2Gi"},
-                limits={"cpu": "4000m", "memory": "8Gi"},
+                limits={"cpu": "2000m", "memory": "10Gi"},
             ),
             # TODO: Re-enable probes when sandbox container runs actual services.
             # Note: Next.js ports are now per-session (dynamic), so container-level
