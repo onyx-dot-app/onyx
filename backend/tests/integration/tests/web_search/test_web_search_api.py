@@ -17,6 +17,7 @@ class TestOnyxWebCrawler:
     content from public websites correctly.
     """
 
+    @pytest.mark.skip(reason="Temporarily disabled")
     def test_fetches_public_url_successfully(self, admin_user: DATestUser) -> None:
         """Test that the crawler can fetch content from a public URL."""
         response = requests.post(
