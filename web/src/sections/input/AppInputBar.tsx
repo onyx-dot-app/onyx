@@ -510,7 +510,7 @@ const AppInputBar = React.memo(
                   aria-multiline
                   placeholder={
                     isSearchMode
-                      ? "Search through connected sources"
+                      ? "Search connected sources"
                       : "How can I help you today"
                   }
                   value={message}
