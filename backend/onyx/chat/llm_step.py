@@ -630,27 +630,10 @@ def translate_history_to_llm_format(
     if model_needs_formatting_reenabled(llm_config.model_name):
         for i, m in enumerate(messages):
             if isinstance(m, SystemMessage):
-                content = m.content
-                if isinstance(content, str):
-                    new_content: str | list[TextContentPart | ImageContentPart] = (
-                        CODE_BLOCK_MARKDOWN + content
-                    )
-                else:
-                    new_parts = list(content)
-                    for j, part in enumerate(new_parts):
-                        if isinstance(part, TextContentPart):
-                            new_parts[j] = TextContentPart(
-                                type="text",
-                                text=CODE_BLOCK_MARKDOWN + part.text,
-                                cache_control=part.cache_control,
-                            )
-                            break
-                    else:
-                        new_parts.insert(
-                            0, TextContentPart(type="text", text=CODE_BLOCK_MARKDOWN)
-                        )
-                    new_content = new_parts
-                messages[i] = SystemMessage(role="system", content=new_content)
+                messages[i] = SystemMessage(
+                    role="system",
+                    content=CODE_BLOCK_MARKDOWN + m.content,
+                )
                 break
 
     # prompt caching: rely on should_cache in ChatMessageSimple to
