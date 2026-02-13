@@ -25,6 +25,11 @@ def upgrade() -> None:
         sa.Column("hashed_token", sa.String(length=64), nullable=False),
         sa.Column("token_display", sa.String(), nullable=False),
         sa.Column(
+            "created_by_id",
+            fastapi_users_db_sqlalchemy.generics.GUID(),
+            nullable=False,
+        ),
+        sa.Column(
             "is_active",
             sa.Boolean(),
             server_default=sa.text("true"),
@@ -37,6 +42,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["created_by_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("hashed_token"),
     )

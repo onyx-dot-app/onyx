@@ -4899,6 +4899,10 @@ class ScimToken(Base):
         String, nullable=False
     )  # Last 4 chars for UI identification
 
+    created_by_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
     is_active: Mapped[bool] = mapped_column(
         Boolean, server_default=text("true"), nullable=False
     )
@@ -4908,6 +4912,8 @@ class ScimToken(Base):
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
 
 
 class ScimUserMapping(Base):
