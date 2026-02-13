@@ -1,4 +1,5 @@
 import contextvars
+import re
 from concurrent.futures import as_completed
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +15,7 @@ from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
@@ -62,11 +64,44 @@ class AirtableClientNotSetUpError(PermissionError):
         super().__init__("Airtable Client is not set up, was load_credentials called?")
 
 
+# Matches URLs like https://airtable.com/appXXX/tblYYY/viwZZZ?blocks=hide
+# Captures: base_id (appXXX), table_id (tblYYY), and optionally view_id (viwZZZ)
+_AIRTABLE_URL_PATTERN = re.compile(
+    r"https?://airtable\.com/(app[A-Za-z0-9]+)/(tbl[A-Za-z0-9]+)(?:/(viw[A-Za-z0-9]+))?",
+)
+
+
+def parse_airtable_url(
+    url: str,
+) -> tuple[str, str, str | None]:
+    """Parse an Airtable URL into (base_id, table_id, view_id).
+
+    Accepts URLs like:
+      https://airtable.com/appXXX/tblYYY
+      https://airtable.com/appXXX/tblYYY/viwZZZ
+      https://airtable.com/appXXX/tblYYY/viwZZZ?blocks=hide
+
+    Returns:
+        (base_id, table_id, view_id or None)
+
+    Raises:
+        ValueError if the URL doesn't match the expected format.
+    """
+    match = _AIRTABLE_URL_PATTERN.search(url.strip())
+    if not match:
+        raise ValueError(
+            f"Could not parse Airtable URL: '{url}'. "
+            "Expected format: https://airtable.com/appXXX/tblYYY[/viwZZZ]"
+        )
+    return match.group(1), match.group(2), match.group(3)
+
+
 class AirtableConnector(LoadConnector):
     def __init__(
         self,
-        base_id: str,
-        table_name_or_id: str,
+        base_id: str = "",
+        table_name_or_id: str = "",
+        airtable_url: str = "",
         treat_all_non_attachment_fields_as_metadata: bool = False,
         view_id: str | None = None,
         share_id: str | None = None,
@@ -75,16 +110,33 @@ class AirtableConnector(LoadConnector):
         """Initialize an AirtableConnector.
 
         Args:
-            base_id: The ID of the Airtable base to connect to
-            table_name_or_id: The name or ID of the table to index
+            base_id: The ID of the Airtable base (not required when airtable_url is set)
+            table_name_or_id: The name or ID of the table (not required when airtable_url is set)
+            airtable_url: An Airtable URL to parse base_id, table_id, and view_id from.
+                Overrides base_id, table_name_or_id, and view_id if provided.
             treat_all_non_attachment_fields_as_metadata: If True, all fields except attachments will be treated as metadata.
                 If False, only fields with types in DEFAULT_METADATA_FIELD_TYPES will be treated as metadata.
             view_id: Optional ID of a specific view to use
-            share_id: Optional ID of a "share" to use for generating record URLs (https://airtable.com/developers/web/api/list-shares)
+            share_id: Optional ID of a "share" to use for generating record URLs
             batch_size: Number of records to process in each batch
+
+        Mode is auto-detected: if a specific table is identified (via URL or
+        base_id + table_name_or_id), the connector indexes that single table.
+        Otherwise, it discovers and indexes all accessible bases and tables.
         """
+        # If a URL is provided, parse it to extract base_id, table_id, and view_id
+        if airtable_url:
+            parsed_base_id, parsed_table_id, parsed_view_id = parse_airtable_url(
+                airtable_url
+            )
+            base_id = parsed_base_id
+            table_name_or_id = parsed_table_id
+            if parsed_view_id:
+                view_id = parsed_view_id
+
         self.base_id = base_id
         self.table_name_or_id = table_name_or_id
+        self.index_all = not (base_id and table_name_or_id)
         self.view_id = view_id
         self.share_id = share_id
         self.batch_size = batch_size
@@ -102,6 +154,33 @@ class AirtableConnector(LoadConnector):
         if not self._airtable_client:
             raise AirtableClientNotSetUpError()
         return self._airtable_client
+
+    def validate_connector_settings(self) -> None:
+        if self.index_all:
+            try:
+                bases = self.airtable_client.bases()
+                if not bases:
+                    raise ConnectorValidationError(
+                        "No bases found. Ensure your API token has access to at least one base."
+                    )
+            except ConnectorValidationError:
+                raise
+            except Exception as e:
+                raise ConnectorValidationError(f"Failed to list Airtable bases: {e}")
+        else:
+            if not self.base_id or not self.table_name_or_id:
+                raise ConnectorValidationError(
+                    "A valid Airtable URL or base_id and table_name_or_id are required "
+                    "when not using index_all mode."
+                )
+            try:
+                table = self.airtable_client.table(self.base_id, self.table_name_or_id)
+                table.schema()
+            except Exception as e:
+                raise ConnectorValidationError(
+                    f"Failed to access table '{self.table_name_or_id}' "
+                    f"in base '{self.base_id}': {e}"
+                )
 
     @classmethod
     def _get_record_url(
@@ -267,6 +346,7 @@ class AirtableConnector(LoadConnector):
         field_name: str,
         field_info: Any,
         field_type: str,
+        base_id: str,
         table_id: str,
         view_id: str | None,
         record_id: str,
@@ -291,7 +371,7 @@ class AirtableConnector(LoadConnector):
             field_name=field_name,
             field_info=field_info,
             field_type=field_type,
-            base_id=self.base_id,
+            base_id=base_id,
             table_id=table_id,
             view_id=view_id,
             record_id=record_id,
@@ -326,15 +406,17 @@ class AirtableConnector(LoadConnector):
         record: RecordDict,
         table_schema: TableSchema,
         primary_field_name: str | None,
+        base_id: str,
+        base_name: str | None = None,
     ) -> Document | None:
         """Process a single Airtable record into a Document.
 
         Args:
             record: The Airtable record to process
             table_schema: Schema information for the table
-            table_name: Name of the table
-            table_id: ID of the table
             primary_field_name: Name of the primary field, if any
+            base_id: The ID of the base this record belongs to
+            base_name: The name of the base (used in semantic ID for index_all mode)
 
         Returns:
             Document object representing the record
@@ -367,6 +449,7 @@ class AirtableConnector(LoadConnector):
                 field_name=field_name,
                 field_info=field_val,
                 field_type=field_type,
+                base_id=base_id,
                 table_id=table_id,
                 view_id=view_id,
                 record_id=record_id,
@@ -379,11 +462,26 @@ class AirtableConnector(LoadConnector):
             logger.warning(f"No sections found for record {record_id}")
             return None
 
-        semantic_id = (
-            f"{table_name}: {primary_field_value}"
-            if primary_field_value
-            else table_name
-        )
+        # Include base name in semantic ID only in index_all mode
+        if self.index_all and base_name:
+            semantic_id = (
+                f"{base_name} > {table_name}: {primary_field_value}"
+                if primary_field_value
+                else f"{base_name} > {table_name}"
+            )
+        else:
+            semantic_id = (
+                f"{table_name}: {primary_field_value}"
+                if primary_field_value
+                else table_name
+            )
+
+        # Build hierarchy source_path for Craft file system subdirectory structure.
+        # This creates: airtable/{base_name}/{table_name}/record.json
+        source_path: list[str] = []
+        if base_name:
+            source_path.append(base_name)
+        source_path.append(table_name)
 
         return Document(
             id=f"airtable__{record_id}",
@@ -391,19 +489,39 @@ class AirtableConnector(LoadConnector):
             source=DocumentSource.AIRTABLE,
             semantic_identifier=semantic_id,
             metadata=metadata,
+            doc_metadata={
+                "hierarchy": {
+                    "source_path": source_path,
+                    "base_id": base_id,
+                    "table_id": table_id,
+                    "table_name": table_name,
+                    **({"base_name": base_name} if base_name else {}),
+                }
+            },
         )
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        """
-        Fetch all records from the table.
+    def _resolve_base_name(self, base_id: str) -> str | None:
+        """Try to resolve a human-readable base name from the API."""
+        try:
+            for base_info in self.airtable_client.bases():
+                if base_info.id == base_id:
+                    return base_info.name
+        except Exception:
+            logger.debug(f"Could not resolve base name for {base_id}")
+        return None
 
-        NOTE: Airtable does not support filtering by time updated, so
-        we have to fetch all records every time.
-        """
-        if not self.airtable_client:
-            raise AirtableClientNotSetUpError()
+    def _index_table(
+        self,
+        base_id: str,
+        table_name_or_id: str,
+        base_name: str | None = None,
+    ) -> GenerateDocumentsOutput:
+        """Index all records from a single table. Yields batches of Documents."""
+        # Resolve base name for hierarchy if not provided
+        if base_name is None:
+            base_name = self._resolve_base_name(base_id)
 
-        table = self.airtable_client.table(self.base_id, self.table_name_or_id)
+        table = self.airtable_client.table(base_id, table_name_or_id)
         records = table.all()
 
         table_schema = table.schema()
@@ -415,21 +533,25 @@ class AirtableConnector(LoadConnector):
                 primary_field_name = field.name
                 break
 
-        logger.info(f"Starting to process Airtable records for {table.name}.")
+        logger.info(
+            f"Processing {len(records)} records from table "
+            f"'{table_schema.name}' in base '{base_name or base_id}'."
+        )
+
+        if not records:
+            return
 
         # Process records in parallel batches using ThreadPoolExecutor
         PARALLEL_BATCH_SIZE = 8
         max_workers = min(PARALLEL_BATCH_SIZE, len(records))
-        record_documents: list[Document | HierarchyNode] = []
 
-        # Process records in batches
         for i in range(0, len(records), PARALLEL_BATCH_SIZE):
             batch_records = records[i : i + PARALLEL_BATCH_SIZE]
-            record_documents = []
+            record_documents: list[Document | HierarchyNode] = []
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit batch tasks
-                future_to_record: dict[Future, RecordDict] = {}
+                future_to_record: dict[Future[Document | None], RecordDict] = {}
                 for record in batch_records:
                     # Capture the current context so that the thread gets the current tenant ID
                     current_context = contextvars.copy_context()
@@ -440,6 +562,8 @@ class AirtableConnector(LoadConnector):
                             record=record,
                             table_schema=table_schema,
                             primary_field_name=primary_field_name,
+                            base_id=base_id,
+                            base_name=base_name,
                         )
                     ] = record
 
@@ -454,9 +578,58 @@ class AirtableConnector(LoadConnector):
                         logger.exception(f"Failed to process record {record['id']}")
                         raise e
 
-            yield record_documents
-            record_documents = []
+            if record_documents:
+                yield record_documents
 
-        # Yield any remaining records
-        if record_documents:
-            yield record_documents
+    def load_from_state(self) -> GenerateDocumentsOutput:
+        """
+        Fetch all records from one or all tables.
+
+        NOTE: Airtable does not support filtering by time updated, so
+        we have to fetch all records every time.
+        """
+        if not self.airtable_client:
+            raise AirtableClientNotSetUpError()
+
+        if self.index_all:
+            yield from self._load_all()
+        else:
+            yield from self._index_table(
+                base_id=self.base_id,
+                table_name_or_id=self.table_name_or_id,
+            )
+
+    def _load_all(self) -> GenerateDocumentsOutput:
+        """Discover all bases and tables, then index everything."""
+        bases = self.airtable_client.bases()
+        logger.info(f"Discovered {len(bases)} Airtable base(s).")
+
+        for base_info in bases:
+            base_id = base_info.id
+            base_name = base_info.name
+            logger.info(f"Listing tables for base '{base_name}' ({base_id}).")
+
+            try:
+                base = self.airtable_client.base(base_id)
+                tables = base.tables()
+            except Exception:
+                logger.exception(
+                    f"Failed to list tables for base '{base_name}' ({base_id}), skipping."
+                )
+                continue
+
+            logger.info(f"Found {len(tables)} table(s) in base '{base_name}'.")
+
+            for table in tables:
+                try:
+                    yield from self._index_table(
+                        base_id=base_id,
+                        table_name_or_id=table.id,
+                        base_name=base_name,
+                    )
+                except Exception:
+                    logger.exception(
+                        f"Failed to index table '{table.name}' ({table.id}) "
+                        f"in base '{base_name}' ({base_id}), skipping."
+                    )
+                    continue

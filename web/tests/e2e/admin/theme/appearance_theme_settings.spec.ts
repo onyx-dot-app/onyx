@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "../../utils/auth";
 
-test.describe("Appearance Theme Settings", () => {
+test.describe("Appearance Theme Settings @exclusive", () => {
   const TEST_VALUES = {
     applicationName: `TestApp${Date.now()}`,
     greetingMessage: "Welcome to our test application",
