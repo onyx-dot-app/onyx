@@ -129,46 +129,56 @@ export async function expectScreenshot(
   } = options;
 
   // Hide elements by setting visibility: hidden
+  let styleHandle;
   if (hide.length > 0) {
-    await page.addStyleTag({
+    styleHandle = await page.addStyleTag({
       content: hide
         .map((selector) => `${selector} { visibility: hidden !important; }`)
         .join("\n"),
     });
   }
 
-  // Combine default masks with per-call masks
-  const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
-  const maskLocators = allMaskSelectors.map((selector) =>
-    page.locator(selector)
-  );
+  try {
+    // Combine default masks with per-call masks
+    const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
+    const maskLocators = allMaskSelectors.map((selector) =>
+      page.locator(selector)
+    );
 
-  // Build the screenshot name array (Playwright expects string[])
-  const nameArg = name ? [name + ".png"] : undefined;
+    // Build the screenshot name array (Playwright expects string[])
+    const nameArg = name ? [name + ".png"] : undefined;
 
-  if (VISUAL_REGRESSION_ENABLED) {
-    // Assert mode — fail the test if the screenshot differs from baseline
-    const screenshotOpts = {
-      fullPage,
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
-      ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
-      ...(threshold !== undefined && { threshold }),
-    };
+    if (VISUAL_REGRESSION_ENABLED) {
+      // Assert mode — fail the test if the screenshot differs from baseline
+      const screenshotOpts = {
+        fullPage,
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+        ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
+        ...(threshold !== undefined && { threshold }),
+      };
 
-    if (nameArg) {
-      await expect(page).toHaveScreenshot(nameArg, screenshotOpts);
+      if (nameArg) {
+        await expect(page).toHaveScreenshot(nameArg, screenshotOpts);
+      } else {
+        await expect(page).toHaveScreenshot(screenshotOpts);
+      }
     } else {
-      await expect(page).toHaveScreenshot(screenshotOpts);
+      // Capture-only mode — save the screenshot without asserting
+      const screenshotPath = name
+        ? `output/screenshots/${name}.png`
+        : undefined;
+      await page.screenshot({
+        path: screenshotPath,
+        fullPage,
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+        ...options.screenshotOptions,
+      });
     }
-  } else {
-    // Capture-only mode — save the screenshot without asserting
-    const screenshotPath = name ? `output/screenshots/${name}.png` : undefined;
-    await page.screenshot({
-      path: screenshotPath,
-      fullPage,
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
-      ...options.screenshotOptions,
-    });
+  } finally {
+    // Remove the injected style tag to avoid affecting subsequent screenshots/assertions
+    if (styleHandle) {
+      await styleHandle.evaluate((el: HTMLStyleElement) => el.remove());
+    }
   }
 }
 
@@ -199,41 +209,51 @@ export async function expectElementScreenshot(
   const page = locator.page();
 
   // Hide elements by setting visibility: hidden
+  let styleHandle;
   if (hide.length > 0) {
-    await page.addStyleTag({
+    styleHandle = await page.addStyleTag({
       content: hide
         .map((selector) => `${selector} { visibility: hidden !important; }`)
         .join("\n"),
     });
   }
 
-  // Combine default masks with per-call masks
-  const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
-  const maskLocators = allMaskSelectors.map((selector) =>
-    page.locator(selector)
-  );
+  try {
+    // Combine default masks with per-call masks
+    const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
+    const maskLocators = allMaskSelectors.map((selector) =>
+      page.locator(selector)
+    );
 
-  // Build the screenshot name array (Playwright expects string[])
-  const nameArg = name ? [name + ".png"] : undefined;
+    // Build the screenshot name array (Playwright expects string[])
+    const nameArg = name ? [name + ".png"] : undefined;
 
-  if (VISUAL_REGRESSION_ENABLED) {
-    const screenshotOpts = {
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
-      ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
-      ...(threshold !== undefined && { threshold }),
-    };
+    if (VISUAL_REGRESSION_ENABLED) {
+      const screenshotOpts = {
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+        ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
+        ...(threshold !== undefined && { threshold }),
+      };
 
-    if (nameArg) {
-      await expect(locator).toHaveScreenshot(nameArg, screenshotOpts);
+      if (nameArg) {
+        await expect(locator).toHaveScreenshot(nameArg, screenshotOpts);
+      } else {
+        await expect(locator).toHaveScreenshot(screenshotOpts);
+      }
     } else {
-      await expect(locator).toHaveScreenshot(screenshotOpts);
+      // Capture-only mode — save the screenshot without asserting
+      const screenshotPath = name
+        ? `output/screenshots/${name}.png`
+        : undefined;
+      await locator.screenshot({
+        path: screenshotPath,
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+      });
     }
-  } else {
-    // Capture-only mode — save the screenshot without asserting
-    const screenshotPath = name ? `output/screenshots/${name}.png` : undefined;
-    await locator.screenshot({
-      path: screenshotPath,
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
-    });
+  } finally {
+    // Remove the injected style tag to avoid affecting subsequent screenshots/assertions
+    if (styleHandle) {
+      await styleHandle.evaluate((el: HTMLStyleElement) => el.remove());
+    }
   }
 }
