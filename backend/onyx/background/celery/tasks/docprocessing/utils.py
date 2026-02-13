@@ -68,7 +68,7 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
             elapsed = time.monotonic() - self.start_monotonic
             if elapsed > self.timeout_seconds:
                 logger.warning(
-                    f"{self.__class__.__name__} - task timeout exceeded: "
+                    f"IndexingCallback Docprocessing - task timeout exceeded: "
                     f"elapsed={elapsed:.0f}s timeout={self.timeout_seconds}s "
                     f"cc_pair={self.redis_connector.cc_pair_id}"
                 )
