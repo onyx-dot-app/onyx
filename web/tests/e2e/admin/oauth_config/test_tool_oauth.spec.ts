@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { Page } from "@playwright/test";
+import { Page, Browser } from "@playwright/test";
 import { loginAs } from "../../utils/auth";
+import { OnyxApiClient } from "../../utils/onyxApiClient";
 
 // --- Locator Helper Functions ---
 const getAuthorizationUrlInput = (page: Page) =>
@@ -48,6 +49,32 @@ const SIMPLE_OPENAPI_SCHEMA = `{
   }
 }`;
 
+let createdAssistantId: number | null = null;
+let createdToolName: string | null = null;
+
+test.afterAll(async ({ browser }: { browser: Browser }) => {
+  const context = await browser.newContext({
+    storageState: "admin_auth.json",
+  });
+  const page = await context.newPage();
+  const client = new OnyxApiClient(page.request);
+
+  // Delete the assistant first (it references the tool)
+  if (createdAssistantId !== null) {
+    await client.deleteAssistant(createdAssistantId);
+  }
+
+  // Then delete the tool
+  if (createdToolName !== null) {
+    const tool = await client.findToolByName(createdToolName);
+    if (tool) {
+      await client.deleteCustomTool(tool.id);
+    }
+  }
+
+  await context.close();
+});
+
 test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration", async ({
   page,
 }) => {
@@ -55,7 +82,7 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await loginAs(page, "admin");
 
   // --- Step 1: Navigate to OpenAPI Actions Page and Open Add Modal ---
-  const toolName = `Test API ${Date.now()}`; // Unique tool name for this test run
+  const toolName = `Test API ${Date.now()}`;
   const authorizationUrl = "https://github.com/login/oauth/authorize";
   const tokenUrl = "https://github.com/login/oauth/access_token";
   const clientId = "test_client_id_456";
@@ -100,6 +127,9 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await expect(page.getByText("Authentication Method")).toBeVisible({
     timeout: 5000,
   });
+
+  // Store tool name for cleanup now that the tool is confirmed created
+  createdToolName = toolName;
 
   // OAuth should be selected by default, fill in OAuth config details
   await getAuthorizationUrlInput(page).fill(authorizationUrl);
@@ -215,6 +245,11 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   const assistantUrl = page.url();
   const assistantIdMatch = assistantUrl.match(/assistantId=(\d+)/);
   expect(assistantIdMatch).toBeTruthy();
+
+  // Store assistant ID for cleanup
+  if (assistantIdMatch) {
+    createdAssistantId = Number(assistantIdMatch[1]);
+  }
 
   // Test complete! We've verified:
   // 5. The tool with OAuth config is available in assistant creation
