@@ -488,53 +488,35 @@ class LitellmLLM(LLM):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
         try:
-            if self._custom_config:
-                # When custom_config is set, env vars are temporarily injected
-                # under a global lock. Using stream=True here means the lock is
-                # only held during connection setup (not the full inference).
-                # The chunks are then collected outside the lock and reassembled
-                # into a single ModelResponse via stream_chunk_builder.
-                from litellm import stream_chunk_builder
-                from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+            # When custom_config is set, env vars are temporarily injected
+            # under a global lock. Using stream=True here means the lock is
+            # only held during connection setup (not the full inference).
+            # The chunks are then collected outside the lock and reassembled
+            # into a single ModelResponse via stream_chunk_builder.
+            from litellm import stream_chunk_builder
+            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
 
-                stream_response = cast(
-                    LiteLLMCustomStreamWrapper,
-                    self._completion(
-                        prompt=prompt,
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        stream=True,
-                        structured_response_format=structured_response_format,
-                        timeout_override=timeout_override,
-                        max_tokens=max_tokens,
-                        parallel_tool_calls=True,
-                        reasoning_effort=reasoning_effort,
-                        user_identity=user_identity,
-                        client=client,
-                    ),
-                )
-                chunks = list(stream_response)
-                response = cast(
-                    LiteLLMModelResponse,
-                    stream_chunk_builder(chunks),
-                )
-            else:
-                response = cast(
-                    LiteLLMModelResponse,
-                    self._completion(
-                        prompt=prompt,
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        stream=False,
-                        structured_response_format=structured_response_format,
-                        timeout_override=timeout_override,
-                        max_tokens=max_tokens,
-                        parallel_tool_calls=True,
-                        reasoning_effort=reasoning_effort,
-                        user_identity=user_identity,
-                        client=client,
-                    ),
-                )
+            stream_response = cast(
+                LiteLLMCustomStreamWrapper,
+                self._completion(
+                    prompt=prompt,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=True,
+                    structured_response_format=structured_response_format,
+                    timeout_override=timeout_override,
+                    max_tokens=max_tokens,
+                    parallel_tool_calls=True,
+                    reasoning_effort=reasoning_effort,
+                    user_identity=user_identity,
+                    client=client,
+                ),
+            )
+            chunks = list(stream_response)
+            response = cast(
+                LiteLLMModelResponse,
+                stream_chunk_builder(chunks),
+            )
 
             model_response = from_litellm_model_response(response)
 
