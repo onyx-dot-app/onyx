@@ -652,7 +652,7 @@ def update_default_vision_provider(
     )
 
 
-def _update_no_default_contextual_rag_provider(
+def update_no_default_contextual_rag_provider(
     db_session: Session,
 ) -> None:
     db_session.execute(
@@ -671,29 +671,25 @@ def update_default_contextual_model(
     enable_contextual_rag: bool,
     contextual_rag_llm_provider: str | None,
     contextual_rag_llm_name: str | None,
-) -> str | None:
+) -> None:
     """Sets or clears the default contextual RAG model.
 
     Should be called whenever the PRESENT search settings change
     (e.g. inline update or FUTURE → PRESENT swap).
-
-    Returns:
-        None if success
-        Error message if failure
     """
-    if not enable_contextual_rag:
-        _update_no_default_contextual_rag_provider(db_session=db_session)
-        return None
-
-    if not contextual_rag_llm_name or not contextual_rag_llm_provider:
-        _update_no_default_contextual_rag_provider(db_session=db_session)
-        return None
+    if (
+        not enable_contextual_rag
+        or not contextual_rag_llm_name
+        or not contextual_rag_llm_provider
+    ):
+        update_no_default_contextual_rag_provider(db_session=db_session)
+        return
 
     provider = fetch_existing_llm_provider(
         name=contextual_rag_llm_provider, db_session=db_session
     )
     if not provider:
-        return f"Provider '{contextual_rag_llm_provider}' not found"
+        raise ValueError(f"Provider '{contextual_rag_llm_provider}' not found")
 
     model_config = next(
         (
@@ -704,7 +700,9 @@ def update_default_contextual_model(
         None,
     )
     if not model_config:
-        return f"Model '{contextual_rag_llm_name}' not found for provider '{contextual_rag_llm_provider}'"
+        raise ValueError(
+            f"Model '{contextual_rag_llm_name}' not found for provider '{contextual_rag_llm_provider}'"
+        )
 
     add_model_to_flow(
         db_session=db_session,
@@ -718,7 +716,7 @@ def update_default_contextual_model(
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
 
-    return None
+    return
 
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:

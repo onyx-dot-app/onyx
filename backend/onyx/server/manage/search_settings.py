@@ -12,6 +12,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_contextual_model
+from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import User
 from onyx.db.search_settings import delete_search_settings
@@ -331,10 +332,17 @@ def _sync_default_contextual_model(db_session: Session) -> None:
     """Syncs the default CONTEXTUAL_RAG flow to match the PRESENT search settings."""
     primary = get_current_search_settings(db_session)
 
-    if error_msg := update_default_contextual_model(
-        db_session=db_session,
-        enable_contextual_rag=primary.enable_contextual_rag,
-        contextual_rag_llm_provider=primary.contextual_rag_llm_provider,
-        contextual_rag_llm_name=primary.contextual_rag_llm_name,
-    ):
-        logger.error(f"Error syncing default contextual model: {error_msg}")
+    try:
+        update_default_contextual_model(
+            db_session=db_session,
+            enable_contextual_rag=primary.enable_contextual_rag,
+            contextual_rag_llm_provider=primary.contextual_rag_llm_provider,
+            contextual_rag_llm_name=primary.contextual_rag_llm_name,
+        )
+    except ValueError as e:
+        logger.error(
+            f"Error syncing default contextual model, defaulting to no contextual model: {e}"
+        )
+        update_no_default_contextual_rag_provider(
+            db_session=db_session,
+        )
