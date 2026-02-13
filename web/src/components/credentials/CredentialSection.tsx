@@ -3,9 +3,7 @@
 import { AccessType, ValidSources } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { FaKey } from "react-icons/fa";
 import { useState } from "react";
-import { FiEdit2 } from "react-icons/fi";
 import {
   deleteCredential,
   swapCredential,
@@ -16,7 +14,6 @@ import { toast } from "@/hooks/useToast";
 import CreateCredential from "./actions/CreateCredential";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
 import ModifyCredential from "./actions/ModifyCredential";
-import Text from "@/components/ui/text";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
@@ -33,10 +30,12 @@ import {
   useOAuthDetails,
 } from "@/lib/connectors/oauth";
 import { Spinner } from "@/components/Spinner";
-import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
-import { Card } from "../ui/card";
+import CreateStdOAuthCredential from "@/components/credentials/actions/CreateStdOAuthCredential";
+import Card from "@/refresh-components/cards/Card";
 import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgEdit, SvgKey } from "@opal/icons";
+import { LineItemLayout } from "@/layouts/general-layouts";
+import { Button } from "@opal/components";
 
 export interface CredentialSectionProps {
   ccPair: CCPairFullInfo;
@@ -170,88 +169,30 @@ export default function CredentialSection({
   }
 
   return (
-    <div
-      className="flex
-      flex-col
-      gap-y-4
-      rounded-lg
-      bg-background"
-    >
-      <Card className="p-6">
-        <div className="flex items-center">
-          <div className="flex-shrink-0 mr-3">
-            <FaKey className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="flex-grow flex flex-col justify-center">
-            <div className="flex items-center justify-between">
-              <div>
-                <Text className="font-medium">
-                  {ccPair.credential.name ||
-                    `Credential #${ccPair.credential.id}`}
-                </Text>
-                <div className="text-xs text-muted-foreground/70">
-                  Created{" "}
-                  <i>
-                    {new Date(
-                      ccPair.credential.time_created
-                    ).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </i>
-                  {ccPair.credential.user_email && (
-                    <>
-                      {" "}
-                      by <i>{ccPair.credential.user_email}</i>
-                    </>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={() => setShowModifyCredential(true)}
-                className="inline-flex
-                  items-center
-                  justify-center
-                  p-2
-                  rounded-md
-                  text-muted-foreground
-                  hover:bg-accent
-                  hover:text-accent-foreground
-                  transition-colors"
-              >
-                <FiEdit2 className="h-4 w-4" />
-                <span className="sr-only">Update Credentials</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </Card>
-
+    <>
       {showModifyCredential && (
         <Modal open onOpenChange={closeModifyCredential}>
           <Modal.Content>
             <Modal.Header
               icon={SvgEdit}
               title="Update Credentials"
+              description="Select a credential as needed! Ensure that you have selected a credential with the proper permissions for this connector!"
               onClose={closeModifyCredential}
             />
-            <Modal.Body>
-              <ModifyCredential
-                close={closeModifyCredential}
-                accessType={ccPair.access_type}
-                attachedConnector={ccPair.connector}
-                defaultedCredential={defaultedCredential}
-                credentials={credentials}
-                editableCredentials={editableCredentials}
-                onDeleteCredential={onDeleteCredential}
-                onEditCredential={(credential: Credential<any>) =>
-                  onEditCredential(credential)
-                }
-                onSwap={onSwap}
-                onCreateNew={() => makeShowCreateCredential()}
-              />
-            </Modal.Body>
+            <ModifyCredential
+              close={closeModifyCredential}
+              accessType={ccPair.access_type}
+              attachedConnector={ccPair.connector}
+              defaultedCredential={defaultedCredential}
+              credentials={credentials}
+              editableCredentials={editableCredentials}
+              onDeleteCredential={onDeleteCredential}
+              onEditCredential={(credential: Credential<any>) =>
+                onEditCredential(credential)
+              }
+              onSwap={onSwap}
+              onCreateNew={() => makeShowCreateCredential()}
+            />
           </Modal.Content>
         </Modal>
       )}
@@ -262,15 +203,14 @@ export default function CredentialSection({
             <Modal.Header
               icon={SvgEdit}
               title="Edit Credential"
+              description="Ensure that you update to a credential with the proper permissions!"
               onClose={closeEditingCredential}
             />
-            <Modal.Body>
-              <EditCredential
-                onUpdate={onUpdateCredential}
-                credential={editingCredential}
-                onClose={closeEditingCredential}
-              />
-            </Modal.Body>
+            <EditCredential
+              onUpdate={onUpdateCredential}
+              credential={editingCredential}
+              onClose={closeEditingCredential}
+            />
           </Modal.Content>
         </Modal>
       )}
@@ -308,6 +248,30 @@ export default function CredentialSection({
           </Modal.Content>
         </Modal>
       )}
-    </div>
+
+      <Card padding={0.5}>
+        <LineItemLayout
+          icon={SvgKey}
+          title={
+            ccPair.credential.name || `Credential #${ccPair.credential.id}`
+          }
+          description={`Created ${new Date(
+            ccPair.credential.time_created
+          ).toLocaleDateString(undefined, {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          })} by ${ccPair.credential.user_email}`}
+          rightChildren={
+            <Button
+              icon={SvgEdit}
+              prominence="tertiary"
+              onClick={() => setShowModifyCredential(true)}
+            />
+          }
+          reducedPadding
+        />
+      </Card>
+    </>
   );
 }
