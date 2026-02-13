@@ -932,6 +932,9 @@ MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
 
+# Limit on number of users a free trial tenant can invite (cloud only)
+NUM_FREE_TRIAL_USER_INVITES = int(os.environ.get("NUM_FREE_TRIAL_USER_INVITES", "10"))
+
 # Security and authentication
 DATA_PLANE_SECRET = os.environ.get(
     "DATA_PLANE_SECRET", ""

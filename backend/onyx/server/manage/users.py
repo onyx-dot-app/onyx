@@ -37,6 +37,7 @@ from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
+from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
@@ -94,6 +95,7 @@ from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
+from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -395,6 +397,17 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
+    # Limit bulk invites for trial tenants to prevent email spam
+    # Only count new invites, not re-invites of existing users
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        current_invited = len(already_invited)
+        if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
+            raise HTTPException(
+                status_code=403,
+                detail="You have hit your invite limit. "
+                "Please upgrade for unlimited invites.",
+            )
+
     # Check seat availability for new users
     if emails_needing_seats:
         enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
@@ -413,10 +426,10 @@ def bulk_invite_users(
     all_emails = list(set(new_invited_emails) | set(initial_invited_users))
     number_of_invited_users = write_invited_users(all_emails)
 
-    # send out email invitations if enabled
+    # send out email invitations only to new users (not already invited or existing)
     if ENABLE_EMAIL_INVITES:
         try:
-            for email in new_invited_emails:
+            for email in emails_needing_seats:
                 send_user_email_invite(email, current_user, AUTH_TYPE)
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
