@@ -9,7 +9,12 @@ from onyx.connectors.web.connector import WebConnector
 
 def _collect_slim_docs(connector: WebConnector) -> list[SlimDocument]:
     """Helper to flatten all batches into a single list."""
-    return [doc for batch in connector.retrieve_all_slim_docs() for doc in batch]
+    docs: list[SlimDocument] = []
+    for batch in connector.retrieve_all_slim_docs():
+        for doc in batch:
+            assert isinstance(doc, SlimDocument)
+            docs.append(doc)
+    return docs
 
 
 def test_web_connector_is_slim_connector() -> None:
