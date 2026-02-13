@@ -508,7 +508,11 @@ const AppInputBar = React.memo(
                   style={{ scrollbarWidth: "thin" }}
                   role="textarea"
                   aria-multiline
-                  placeholder="How can I help you today"
+                  placeholder={
+                    isSearchMode
+                      ? "Search connected sources"
+                      : "How can I help you today"
+                  }
                   value={message}
                   onKeyDown={(event) => {
                     if (
