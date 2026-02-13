@@ -261,7 +261,11 @@ export default function CredentialSection({
             year: "numeric",
             month: "short",
             day: "numeric",
-          })} by ${ccPair.credential.user_email}`}
+          })}${
+            ccPair.credential.user_email
+              ? ` by ${ccPair.credential.user_email}`
+              : ""
+          }`}
           rightChildren={
             <Button
               icon={SvgEdit}
