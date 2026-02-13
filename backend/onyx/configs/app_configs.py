@@ -977,6 +977,7 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 
 # CORS origins for MCP clients (comma-separated)

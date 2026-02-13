@@ -57,7 +57,12 @@ spec:
             {{- toYaml .Values.mcpServer.securityContext | nindent 12 }}
           image: "{{ .Values.mcpServer.image.repository }}:{{ .Values.mcpServer.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
-          command: ["python", "onyx/mcp_server_main.py"]
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              echo "Starting Onyx MCP Server" &&
+              uvicorn onyx.mcp_server.api:mcp_app --host {{ .Values.global.host }} --port {{ .Values.mcpServer.containerPorts.server }}
           ports:
             - name: mcp-server-port
               containerPort: {{ .Values.mcpServer.containerPorts.server }}
