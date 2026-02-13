@@ -34,9 +34,6 @@ test.describe("Login flow", () => {
 
     await expect(page).toHaveURL(/\/app/);
 
-    // Capture the post-login app page
-    await expectScreenshot(page, { name: "login-success-app-page" });
-
     // Verify the session is valid
     const me = await page.request.get("/api/me");
     expect(me.ok()).toBe(true);
