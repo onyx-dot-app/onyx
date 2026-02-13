@@ -141,42 +141,44 @@ def default_multi_llm() -> LitellmLLM:
 def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
     # Mock the litellm.completion function
     with patch("litellm.completion") as mock_completion:
-        # Create a mock response with multiple tool calls using litellm objects
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="tool_calls",
-                    index=0,
-                    message=litellm.Message(
-                        content=None,
-                        role="assistant",
-                        tool_calls=[
-                            litellm.ChatCompletionMessageToolCall(
-                                id="call_1",
-                                function=LiteLLMFunction(
-                                    name="get_weather",
-                                    arguments='{"location": "New York"}',
+        # invoke() internally uses stream=True and reassembles via
+        # stream_chunk_builder, so the mock must return stream chunks.
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(
+                            role="assistant",
+                            tool_calls=[
+                                ChatCompletionDeltaToolCall(
+                                    id="call_1",
+                                    function=LiteLLMFunction(
+                                        name="get_weather",
+                                        arguments='{"location": "New York"}',
+                                    ),
+                                    type="function",
+                                    index=0,
                                 ),
-                                type="function",
-                            ),
-                            litellm.ChatCompletionMessageToolCall(
-                                id="call_2",
-                                function=LiteLLMFunction(
-                                    name="get_time", arguments='{"timezone": "EST"}'
+                                ChatCompletionDeltaToolCall(
+                                    id="call_2",
+                                    function=LiteLLMFunction(
+                                        name="get_time",
+                                        arguments='{"timezone": "EST"}',
+                                    ),
+                                    type="function",
+                                    index=1,
                                 ),
-                                type="function",
-                            ),
-                        ],
-                    ),
-                )
-            ],
-            model="gpt-3.5-turbo",
-            usage=litellm.Usage(
-                prompt_tokens=50, completion_tokens=30, total_tokens=80
+                            ],
+                        ),
+                        finish_reason="tool_calls",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
             ),
-        )
-        mock_completion.return_value = mock_response
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         # Define input messages
         messages: LanguageModelInput = [
@@ -250,11 +252,12 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             ],
             tools=tools,
             tool_choice=None,
-            stream=False,
+            stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
             max_tokens=None,
             client=ANY,  # HTTPHandler instance created per-request
+            stream_options={"include_usage": True},
             parallel_tool_calls=True,
             mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
@@ -511,21 +514,20 @@ def test_openai_chat_omits_reasoning_params() -> None:
             "onyx.llm.multi_llm.is_true_openai_model", return_value=True
         ) as mock_is_openai,
     ):
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(
-                        content="Hello",
-                        role="assistant",
-                    ),
-                )
-            ],
-            model="gpt-5-chat",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-5-chat",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         llm.invoke(messages)
@@ -543,21 +545,20 @@ def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
     ):
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(
-                        content="Hello",
-                        role="assistant",
-                    ),
-                )
-            ],
-            model="gpt-3.5-turbo",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
@@ -577,21 +578,20 @@ def test_user_identity_user_id_truncated_to_64_chars(
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
     ):
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(
-                        content="Hello",
-                        role="assistant",
-                    ),
-                )
-            ],
-            model="gpt-3.5-turbo",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         long_user_id = "u" * 82
@@ -611,21 +611,20 @@ def test_user_identity_metadata_disabled_omits_identity(
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
     ):
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(
-                        content="Hello",
-                        role="assistant",
-                    ),
-                )
-            ],
-            model="gpt-3.5-turbo",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
@@ -658,21 +657,20 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
         patch("litellm.completion") as mock_completion,
         patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
     ):
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(
-                        content="Hello",
-                        role="assistant",
-                    ),
-                )
-            ],
-            model="gpt-3.5-turbo",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         identity = LLMUserIdentity(user_id="user_123", session_id="session_abc")
@@ -692,18 +690,20 @@ def test_openai_model_invoke_uses_httphandler_client(
     from litellm import HTTPHandler
 
     with patch("litellm.completion") as mock_completion:
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(content="Hello", role="assistant"),
-                )
-            ],
-            model="gpt-3.5-turbo",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-3.5-turbo",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         default_multi_llm.invoke(messages)
@@ -741,18 +741,20 @@ def test_anthropic_model_passes_no_client() -> None:
     )
 
     with patch("litellm.completion") as mock_completion:
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(content="Hello", role="assistant"),
-                )
-            ],
-            model="claude-3-opus-20240229",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="claude-3-opus-20240229",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         llm.invoke(messages)
@@ -773,18 +775,20 @@ def test_bedrock_model_passes_no_client() -> None:
     )
 
     with patch("litellm.completion") as mock_completion:
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(content="Hello", role="assistant"),
-                )
-            ],
-            model="anthropic.claude-3-sonnet-20240229-v1:0",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="anthropic.claude-3-sonnet-20240229-v1:0",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         llm.invoke(messages)
@@ -813,18 +817,20 @@ def test_azure_openai_model_uses_httphandler_client() -> None:
     )
 
     with patch("litellm.completion") as mock_completion:
-        mock_response = litellm.ModelResponse(
-            id="chatcmpl-123",
-            choices=[
-                litellm.Choices(
-                    finish_reason="stop",
-                    index=0,
-                    message=litellm.Message(content="Hello", role="assistant"),
-                )
-            ],
-            model="gpt-4o",
-        )
-        mock_completion.return_value = mock_response
+        mock_stream_chunks = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model="gpt-4o",
+            ),
+        ]
+        mock_completion.return_value = mock_stream_chunks
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         llm.invoke(messages)
@@ -1145,25 +1151,27 @@ def test_multithreaded_invoke_without_custom_config_skips_env_lock() -> None:
         ),
     )
 
-    mock_response = litellm.ModelResponse(
-        id="chatcmpl-123",
-        choices=[
-            litellm.Choices(
-                finish_reason="stop",
-                index=0,
-                message=litellm.Message(content="Hi", role="assistant"),
-            )
-        ],
-        model=model_name,
-    )
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hi"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model=model_name,
+        ),
+    ]
 
     call_kwargs: dict[str, dict[str, Any]] = {}
 
-    def fake_completion(**kwargs: Any) -> litellm.ModelResponse:
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
         api_key = kwargs.get("api_key", "")
         label = "A" if api_key == "key_a" else "B"
         call_kwargs[label] = kwargs
-        return mock_response
+        return mock_stream_chunks
 
     errors: list[Exception] = []
 
@@ -1193,9 +1201,9 @@ def test_multithreaded_invoke_without_custom_config_skips_env_lock() -> None:
     assert not errors, f"Thread errors: {errors}"
     assert "A" in call_kwargs and "B" in call_kwargs
 
-    # Both calls should use stream=False (no internal stream+reassemble)
-    assert call_kwargs["A"]["stream"] is False
-    assert call_kwargs["B"]["stream"] is False
+    # invoke() always uses stream=True internally (reassembles via stream_chunk_builder)
+    assert call_kwargs["A"]["stream"] is True
+    assert call_kwargs["B"]["stream"] is True
 
     # The env lock context manager should never have been called
     mock_env_lock.assert_not_called()
