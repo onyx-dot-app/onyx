@@ -32,7 +32,6 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import {
   handleMoveOperation,
   shouldShowMoveModal,
@@ -107,7 +106,6 @@ function Header() {
     currentProjectId,
   } = useProjectsContext();
   const { currentChatSession, refreshChatSessions } = useChatSessions();
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
   const appFocus = useAppFocus();
   const { classification } = useQueryController();
@@ -141,17 +139,14 @@ function Header() {
     async (targetProjectId: number) => {
       if (!currentChatSession) return;
       try {
-        await handleMoveOperation(
-          {
-            chatSession: currentChatSession,
-            targetProjectId,
-            refreshChatSessions,
-            refreshCurrentProjectDetails,
-            fetchProjects,
-            currentProjectId,
-          },
-          setPopup
-        );
+        await handleMoveOperation({
+          chatSession: currentChatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        });
         resetMoveState();
         setPopoverOpen(false);
       } catch (error) {
@@ -164,7 +159,6 @@ function Header() {
       refreshCurrentProjectDetails,
       fetchProjects,
       currentProjectId,
-      setPopup,
       resetMoveState,
     ]
   );
@@ -194,18 +188,9 @@ function Header() {
       setDeleteModalOpen(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
-      showErrorNotification(
-        setPopup,
-        "Failed to delete chat. Please try again."
-      );
+      showErrorNotification("Failed to delete chat. Please try again.");
     }
-  }, [
-    currentChatSession,
-    refreshChatSessions,
-    fetchProjects,
-    router,
-    setPopup,
-  ]);
+  }, [currentChatSession, refreshChatSessions, fetchProjects, router]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
@@ -261,8 +246,6 @@ function Header() {
 
   return (
     <>
-      {popup}
-
       {showShareModal && currentChatSession && (
         <ShareChatSessionModal
           chatSession={currentChatSession}

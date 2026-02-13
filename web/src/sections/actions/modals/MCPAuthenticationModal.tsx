@@ -27,7 +27,7 @@ import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import Message from "@/refresh-components/messages/Message";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
 import { AuthType } from "@/lib/constants";
@@ -35,7 +35,6 @@ import { AuthType } from "@/lib/constants";
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;
   skipOverlay?: boolean;
-  setPopup?: (spec: PopupSpec) => void;
   onTriggerFetchTools?: (serverId: number) => Promise<void> | void;
   mutateMcpServers: KeyedMutator<MCPServersResponse>;
 }
@@ -101,7 +100,6 @@ const validationSchema = Yup.object().shape({
 export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
-  setPopup,
   onTriggerFetchTools,
   mutateMcpServers,
 }: MCPAuthenticationModalProps) {
@@ -303,13 +301,11 @@ export default function MCPAuthenticationModal({
       console.error("Error saving authentication:", error);
       // Ensure UI reflects latest status after any auth/config failure
       await mutateMcpServers();
-      setPopup?.({
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to save authentication configuration",
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to save authentication configuration"
+      );
     } finally {
       setIsSubmitting(false);
     }

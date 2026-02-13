@@ -45,8 +45,6 @@ export function VertexAIForm({
       {({
         onClose,
         mutate,
-        popup,
-        setPopup,
         isTesting,
         setIsTesting,
         testError,
@@ -88,89 +86,85 @@ export function VertexAIForm({
         });
 
         return (
-          <>
-            {popup}
-            <Formik
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-              validateOnMount={true}
-              onSubmit={async (values, { setSubmitting }) => {
-                // Filter out empty custom_config values except for required ones
-                const filteredCustomConfig = Object.fromEntries(
-                  Object.entries(values.custom_config || {}).filter(
-                    ([key, v]) => key === "vertex_credentials" || v !== ""
-                  )
-                );
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            validateOnMount={true}
+            onSubmit={async (values, { setSubmitting }) => {
+              // Filter out empty custom_config values except for required ones
+              const filteredCustomConfig = Object.fromEntries(
+                Object.entries(values.custom_config || {}).filter(
+                  ([key, v]) => key === "vertex_credentials" || v !== ""
+                )
+              );
 
-                const submitValues = {
-                  ...values,
-                  custom_config:
-                    Object.keys(filteredCustomConfig).length > 0
-                      ? filteredCustomConfig
-                      : undefined,
-                };
+              const submitValues = {
+                ...values,
+                custom_config:
+                  Object.keys(filteredCustomConfig).length > 0
+                    ? filteredCustomConfig
+                    : undefined,
+              };
 
-                await submitLLMProvider({
-                  providerName: VERTEXAI_PROVIDER_NAME,
-                  values: submitValues,
-                  initialValues,
-                  modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  setPopup,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }}
-            >
-              {(formikProps) => {
-                return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+              await submitLLMProvider({
+                providerName: VERTEXAI_PROVIDER_NAME,
+                values: submitValues,
+                initialValues,
+                modelConfigurations,
+                existingLlmProvider,
+                shouldMarkAsDefault,
+                setIsTesting,
+                setTestError,
+                mutate,
+                onClose,
+                setSubmitting,
+              });
+            }}
+          >
+            {(formikProps) => {
+              return (
+                <Form className={LLM_FORM_CLASS_NAME}>
+                  <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <FileUploadFormField
-                      name="custom_config.vertex_credentials"
-                      label="Credentials File"
-                      subtext="Upload your Google Cloud service account JSON credentials file."
-                    />
+                  <FileUploadFormField
+                    name="custom_config.vertex_credentials"
+                    label="Credentials File"
+                    subtext="Upload your Google Cloud service account JSON credentials file."
+                  />
 
-                    <TextFormField
-                      name="custom_config.vertex_location"
-                      label="Location"
-                      placeholder={VERTEXAI_DEFAULT_LOCATION}
-                      subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
-                      optional
-                    />
+                  <TextFormField
+                    name="custom_config.vertex_location"
+                    label="Location"
+                    placeholder={VERTEXAI_DEFAULT_LOCATION}
+                    subtext="The Google Cloud region for your Vertex AI models (e.g., global, us-east1, us-central1, europe-west1). See [Google's documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#google_model_endpoint_locations) to find the appropriate region for your model."
+                    optional
+                  />
 
-                    <Separator />
+                  <Separator />
 
-                    <DisplayModels
-                      modelConfigurations={modelConfigurations}
-                      formikProps={formikProps}
-                      recommendedDefaultModel={
-                        wellKnownLLMProvider?.recommended_default_model ?? null
-                      }
-                      shouldShowAutoUpdateToggle={true}
-                    />
+                  <DisplayModels
+                    modelConfigurations={modelConfigurations}
+                    formikProps={formikProps}
+                    recommendedDefaultModel={
+                      wellKnownLLMProvider?.recommended_default_model ?? null
+                    }
+                    shouldShowAutoUpdateToggle={true}
+                  />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                  <AdvancedOptions formikProps={formikProps} />
 
-                    <FormActionButtons
-                      isTesting={isTesting}
-                      testError={testError}
-                      existingLlmProvider={existingLlmProvider}
-                      mutate={mutate}
-                      onClose={onClose}
-                      isFormValid={formikProps.isValid}
-                    />
-                  </Form>
-                );
-              }}
-            </Formik>
-          </>
+                  <FormActionButtons
+                    isTesting={isTesting}
+                    testError={testError}
+                    existingLlmProvider={existingLlmProvider}
+                    mutate={mutate}
+                    onClose={onClose}
+                    isFormValid={formikProps.isValid}
+                  />
+                </Form>
+              );
+            }}
+          </Formik>
         );
       }}
     </ProviderFormEntrypointWrapper>

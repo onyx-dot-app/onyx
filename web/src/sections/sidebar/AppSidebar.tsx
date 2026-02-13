@@ -41,7 +41,6 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
@@ -150,7 +149,6 @@ const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
     const router = useRouter();
     const combinedSettings = useSettingsContext();
-    const { popup, setPopup } = usePopup();
     const posthog = usePostHog();
     const { newTenantInfo, invitationInfo } = useModalContext();
     const { setAppMode } = useAppMode();
@@ -321,17 +319,14 @@ const MemoizedAppSidebarInner = memo(
       chatSession: ChatSession
     ) {
       try {
-        await handleMoveOperation(
-          {
-            chatSession,
-            targetProjectId,
-            refreshChatSessions,
-            refreshCurrentProjectDetails,
-            fetchProjects: refreshProjects,
-            currentProjectId,
-          },
-          setPopup
-        );
+        await handleMoveOperation({
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects: refreshProjects,
+          currentProjectId,
+        });
         const projectRefreshPromise = currentProjectId
           ? refreshCurrentProjectDetails()
           : refreshProjects();
@@ -388,10 +383,7 @@ const MemoizedAppSidebarInner = memo(
           try {
             await performChatMove(targetProject.id, chatSession);
           } catch (error) {
-            showErrorNotification(
-              setPopup,
-              "Failed to move chat. Please try again."
-            );
+            showErrorNotification("Failed to move chat. Please try again.");
           }
         }
 
@@ -422,7 +414,6 @@ const MemoizedAppSidebarInner = memo(
         refreshChatSessions,
         refreshCurrentProjectDetails,
         refreshProjects,
-        setPopup,
       ]
     );
 
@@ -567,7 +558,6 @@ const MemoizedAppSidebarInner = memo(
 
     return (
       <>
-        {popup}
         <createProjectModal.Provider>
           <CreateProjectModal />
         </createProjectModal.Provider>
@@ -596,7 +586,6 @@ const MemoizedAppSidebarInner = memo(
                   await performChatMove(target, chat);
                 } catch (error) {
                   showErrorNotification(
-                    setPopup,
                     "Failed to move chat. Please try again."
                   );
                 }

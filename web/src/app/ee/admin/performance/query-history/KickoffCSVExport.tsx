@@ -1,4 +1,4 @@
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import Button from "@/refresh-components/buttons/Button";
 import { useRef, useState } from "react";
 import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
@@ -27,8 +27,6 @@ export default function KickoffCSVExport({
   const [, rerender] = useState<void>();
   const [spinnerStatus, setSpinnerStatus] = useState<SpinnerStatus>("static");
 
-  const { popup, setPopup } = usePopup();
-
   const reset = (failure: boolean = false) => {
     setSpinnerStatus("static");
     if (timerIdRef.current) {
@@ -38,10 +36,7 @@ export default function KickoffCSVExport({
     retryCount.current = 0;
 
     if (failure) {
-      setPopup({
-        message: "Failed to download the query-history.",
-        type: "error",
-      });
+      toast.error("Failed to download the query-history.");
     }
 
     rerender();
@@ -55,9 +50,9 @@ export default function KickoffCSVExport({
     }
 
     setSpinnerStatus("spinning");
-    setPopup({
-      message: `Generating CSV report. Click the '${PREVIOUS_CSV_TASK_BUTTON_NAME}' button to see all jobs.`,
-    });
+    toast.info(
+      `Generating CSV report. Click the '${PREVIOUS_CSV_TASK_BUTTON_NAME}' button to see all jobs.`
+    );
     const response = await fetch(withDateRange(dateRange), {
       method: "POST",
       headers: {
@@ -115,24 +110,21 @@ export default function KickoffCSVExport({
   };
 
   return (
-    <>
-      {popup}
-      <div className="flex flex-1 flex-col w-full justify-center">
-        <Button
-          className="ml-auto"
-          onClick={startExport}
-          danger={spinnerStatus === "spinning"}
-          leftIcon={
-            spinnerStatus === "spinning"
-              ? ({ className }) => (
-                  <SvgLoader className={cn(className, "animate-spin")} />
-                )
-              : SvgPlayCircle
-          }
-        >
-          {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
-        </Button>
-      </div>
-    </>
+    <div className="flex flex-1 flex-col w-full justify-center">
+      <Button
+        className="ml-auto"
+        onClick={startExport}
+        danger={spinnerStatus === "spinning"}
+        leftIcon={
+          spinnerStatus === "spinning"
+            ? ({ className }) => (
+                <SvgLoader className={cn(className, "animate-spin")} />
+              )
+            : SvgPlayCircle
+        }
+      >
+        {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
+      </Button>
+    </div>
   );
 }

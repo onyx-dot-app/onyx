@@ -60,8 +60,6 @@ export function AzureForm({
       {({
         onClose,
         mutate,
-        popup,
-        setPopup,
         isTesting,
         setIsTesting,
         testError,
@@ -93,81 +91,77 @@ export function AzureForm({
         });
 
         return (
-          <>
-            {popup}
-            <Formik
-              initialValues={initialValues}
-              validationSchema={validationSchema}
-              validateOnMount={true}
-              onSubmit={async (values, { setSubmitting }) => {
-                // Parse target_uri to extract api_base, api_version, and deployment_name
-                let processedValues: AzureFormValues = { ...values };
+          <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            validateOnMount={true}
+            onSubmit={async (values, { setSubmitting }) => {
+              // Parse target_uri to extract api_base, api_version, and deployment_name
+              let processedValues: AzureFormValues = { ...values };
 
-                if (values.target_uri) {
-                  try {
-                    const { url, apiVersion, deploymentName } =
-                      parseAzureTargetUri(values.target_uri);
-                    processedValues = {
-                      ...processedValues,
-                      api_base: url.origin,
-                      api_version: apiVersion,
-                      deployment_name:
-                        deploymentName || processedValues.deployment_name,
-                    };
-                  } catch (error) {
-                    console.error("Failed to parse target_uri:", error);
-                  }
+              if (values.target_uri) {
+                try {
+                  const { url, apiVersion, deploymentName } =
+                    parseAzureTargetUri(values.target_uri);
+                  processedValues = {
+                    ...processedValues,
+                    api_base: url.origin,
+                    api_version: apiVersion,
+                    deployment_name:
+                      deploymentName || processedValues.deployment_name,
+                  };
+                } catch (error) {
+                  console.error("Failed to parse target_uri:", error);
                 }
+              }
 
-                await submitLLMProvider({
-                  providerName: AZURE_PROVIDER_NAME,
-                  values: processedValues,
-                  initialValues,
-                  modelConfigurations,
-                  existingLlmProvider,
-                  shouldMarkAsDefault,
-                  setIsTesting,
-                  setTestError,
-                  setPopup,
-                  mutate,
-                  onClose,
-                  setSubmitting,
-                });
-              }}
-            >
-              {(formikProps) => {
-                return (
-                  <Form className={LLM_FORM_CLASS_NAME}>
-                    <DisplayNameField disabled={!!existingLlmProvider} />
+              await submitLLMProvider({
+                providerName: AZURE_PROVIDER_NAME,
+                values: processedValues,
+                initialValues,
+                modelConfigurations,
+                existingLlmProvider,
+                shouldMarkAsDefault,
+                setIsTesting,
+                setTestError,
+                mutate,
+                onClose,
+                setSubmitting,
+              });
+            }}
+          >
+            {(formikProps) => {
+              return (
+                <Form className={LLM_FORM_CLASS_NAME}>
+                  <DisplayNameField disabled={!!existingLlmProvider} />
 
-                    <PasswordInputTypeInField name="api_key" label="API Key" />
+                  <PasswordInputTypeInField name="api_key" label="API Key" />
 
-                    <TextFormField
-                      name="target_uri"
-                      label="Target URI"
-                      placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
-                      subtext="The complete target URI for your deployment from the Azure AI portal."
-                    />
+                  <TextFormField
+                    name="target_uri"
+                    label="Target URI"
+                    placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+                    subtext="The complete target URI for your deployment from the Azure AI portal."
+                  />
 
-                    <Separator />
-                    <SingleDefaultModelField placeholder="E.g. gpt-4o" />
-                    <Separator />
+                  <Separator />
+                  <SingleDefaultModelField placeholder="E.g. gpt-4o" />
+                  <Separator />
 
-                    <AdvancedOptions formikProps={formikProps} />
+                  <AdvancedOptions formikProps={formikProps} />
 
-                    <FormActionButtons
-                      isTesting={isTesting}
-                      testError={testError}
-                      existingLlmProvider={existingLlmProvider}
-                      mutate={mutate}
-                      onClose={onClose}
-                      isFormValid={formikProps.isValid}
-                    />
-                  </Form>
-                );
-              }}
-            </Formik>
-          </>
+                  <FormActionButtons
+                    isTesting={isTesting}
+                    testError={testError}
+                    existingLlmProvider={existingLlmProvider}
+                    mutate={mutate}
+                    onClose={onClose}
+                    isFormValid={formikProps.isValid}
+                  />
+                </Form>
+              );
+            }}
+          </Formik>
         );
       }}
     </ProviderFormEntrypointWrapper>

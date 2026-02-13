@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Dialog } from "@headlessui/react";
 import Button from "@/refresh-components/buttons/Button";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "../context/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -35,7 +35,6 @@ export default function NewTeamModal() {
   const appDomain = user?.email.split("@")[1];
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setPopup } = usePopup();
 
   useEffect(() => {
     const hasNewTeamParam = searchParams?.has("new_team");
@@ -100,18 +99,12 @@ export default function NewTeamModal() {
       }
 
       setHasRequestedInvite(true);
-      setPopup({
-        message: "Your invite request has been sent to the team admin.",
-        type: "success",
-      });
+      toast.success("Your invite request has been sent to the team admin.");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to request an invite";
       setError(message);
-      setPopup({
-        message,
-        type: "error",
-      });
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

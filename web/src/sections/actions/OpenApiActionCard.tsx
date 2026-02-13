@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
@@ -23,7 +23,6 @@ export interface OpenApiActionCardProps {
   onDelete?: (tool: ToolSnapshot) => Promise<void> | void;
   onRename?: (toolId: number, newName: string) => Promise<void>;
   mutateOpenApiTools: () => Promise<unknown> | void;
-  setPopup: (popup: PopupSpec | null) => void;
   onOpenDisconnectModal?: (tool: ToolSnapshot) => void;
 }
 
@@ -34,7 +33,6 @@ export default function OpenApiActionCard({
   onDelete,
   onRename,
   mutateOpenApiTools,
-  setPopup,
   onOpenDisconnectModal,
 }: OpenApiActionCardProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);

@@ -23,7 +23,6 @@ import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button as OpalButton } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import {
   shouldShowMoveModal,
@@ -131,7 +130,6 @@ const ChatButton = memo(
       currentProjectId,
       createProject,
     } = useProjectsContext();
-    const { popup, setPopup } = usePopup();
     const { agents } = useAgents();
     const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
     const [popoverOpen, setPopoverOpen] = useState(false);
@@ -317,26 +315,20 @@ const ChatButton = memo(
         await refreshChatSessions();
       } catch (error) {
         console.error("Failed to delete chat:", error);
-        showErrorNotification(
-          setPopup,
-          "Failed to delete chat. Please try again."
-        );
+        showErrorNotification("Failed to delete chat. Please try again.");
       }
     }
 
     async function performMove(targetProjectId: number) {
       try {
-        await handleMoveOperation(
-          {
-            chatSession,
-            targetProjectId,
-            refreshChatSessions,
-            refreshCurrentProjectDetails,
-            fetchProjects,
-            currentProjectId,
-          },
-          setPopup
-        );
+        await handleMoveOperation({
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects,
+          currentProjectId,
+        });
         setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
@@ -396,10 +388,7 @@ const ChatButton = memo(
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
-        showErrorNotification(
-          setPopup,
-          "Failed to create project. Please try again."
-        );
+        showErrorNotification("Failed to create project. Please try again.");
         setNavigateAfterMoveProjectId(null);
       }
     }
@@ -460,8 +449,6 @@ const ChatButton = memo(
 
     return (
       <>
-        {popup}
-
         {deleteConfirmationModalOpen && (
           <ConfirmationModalLayout
             title="Delete Chat"

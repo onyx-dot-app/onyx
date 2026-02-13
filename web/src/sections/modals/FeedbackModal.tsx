@@ -2,7 +2,6 @@
 
 import { FeedbackType } from "@/app/app/interfaces";
 import Button from "@/refresh-components/buttons/Button";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -26,8 +25,7 @@ export default function FeedbackModal({
   messageId,
 }: FeedbackModalProps) {
   const modal = useModal();
-  const { popup, setPopup } = usePopup();
-  const { handleFeedbackChange } = useFeedbackController({ setPopup });
+  const { handleFeedbackChange } = useFeedbackController();
 
   const initialValues: FeedbackFormValues = {
     additional_feedback: "",
@@ -58,8 +56,6 @@ export default function FeedbackModal({
 
   return (
     <>
-      {popup}
-
       <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
         <Modal.Content width="sm">
           <Modal.Header

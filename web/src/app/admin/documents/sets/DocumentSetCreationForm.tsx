@@ -2,7 +2,7 @@
 
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   createDocumentSet,
   updateDocumentSet,
@@ -30,7 +30,6 @@ interface SetCreationPopupProps {
   ccPairs: ConnectorStatus<any, any>[];
   userGroups: UserGroup[] | undefined;
   onClose: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   existingDocumentSet?: DocumentSetSummary;
 }
 
@@ -38,7 +37,6 @@ export const DocumentSetCreationForm = ({
   ccPairs,
   userGroups,
   onClose,
-  setPopup,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
@@ -116,21 +114,19 @@ export const DocumentSetCreationForm = ({
           }
           formikHelpers.setSubmitting(false);
           if (response.ok) {
-            setPopup({
-              message: isUpdate
+            toast.success(
+              isUpdate
                 ? "Successfully updated document set!"
-                : "Successfully created document set!",
-              type: "success",
-            });
+                : "Successfully created document set!"
+            );
             onClose();
           } else {
             const errorMsg = await response.text();
-            setPopup({
-              message: isUpdate
+            toast.error(
+              isUpdate
                 ? `Error updating document set - ${errorMsg}`
-                : `Error creating document set - ${errorMsg}`,
-              type: "error",
-            });
+                : `Error creating document set - ${errorMsg}`
+            );
           }
         }}
       >

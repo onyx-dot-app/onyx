@@ -5,7 +5,7 @@ import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
 import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
@@ -53,7 +53,6 @@ export default function CreateCredential({
   hideSource,
   sourceType,
   accessType,
-  setPopup,
   close,
   onClose = () => null,
   onSwitch,
@@ -65,7 +64,6 @@ export default function CreateCredential({
   hideSource?: boolean; // hides docs link
   sourceType: ValidSources;
   accessType: AccessType;
-  setPopup: (popupSpec: PopupSpec | null) => void;
 
   // Optional toggle- close section after selection?
   close?: boolean;
@@ -143,12 +141,15 @@ export default function CreateCredential({
         if (action === "createAndSwap") {
           onSwap(credential, swapConnector.id, accessType);
         } else {
-          setPopup({ type: "success", message: "Created new credential!" });
-          setTimeout(() => setPopup(null), 4000);
+          toast.success("Created new credential!");
         }
         onClose();
       } else {
-        setPopup({ message, type: isSuccess ? "success" : "error" });
+        if (isSuccess) {
+          toast.success(message);
+        } else {
+          toast.error(message);
+        }
       }
 
       if (close) {
@@ -161,7 +162,7 @@ export default function CreateCredential({
       }
     } catch (error) {
       console.error("Error submitting credential:", error);
-      setPopup({ message: "Error submitting credential", type: "error" });
+      toast.error("Error submitting credential");
     } finally {
       formikHelpers.setSubmitting(false);
     }
@@ -172,7 +173,7 @@ export default function CreateCredential({
   }
 
   if (sourceType == "google_drive") {
-    return <GDriveMain setPopup={setPopup} />;
+    return <GDriveMain />;
   }
 
   const credentialTemplate: dictionaryType = credentialTemplates[sourceType];

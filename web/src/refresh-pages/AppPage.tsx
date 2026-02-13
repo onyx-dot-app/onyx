@@ -7,7 +7,7 @@ import {
   getAvailableContextTokens,
 } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
@@ -272,22 +272,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     return deduplicatedSources;
   }, [availableSources, federatedConnectorsData]);
 
-  const { popup, setPopup } = usePopup();
-
-  // Show popup if any files failed in ProjectsContext reconciliation
+  // Show toast if any files failed in ProjectsContext reconciliation
   useEffect(() => {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
-      setPopup({
-        type: "error",
-        message:
-          lastFailedFiles.length === 1
-            ? `File failed and was removed: ${names}`
-            : `Files failed and were removed: ${names}`,
-      });
+      toast.error(
+        lastFailedFiles.length === 1
+          ? `File failed and was removed: ${names}`
+          : `Files failed and were removed: ${names}`
+      );
       clearLastFailedFiles();
     }
-  }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
+  }, [lastFailedFiles, clearLastFailedFiles]);
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
 
@@ -379,7 +375,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       existingChatSessionId: currentChatSessionId,
       selectedDocuments,
       searchParams,
-      setPopup,
       resetInputBar,
       setSelectedAssistantFromId,
     });
@@ -433,10 +428,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      setPopup({
-        message: "No previously-submitted user message found.",
-        type: "error",
-      });
+      toast.error("No previously-submitted user message found.");
       return;
     }
 
@@ -447,13 +439,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       deepResearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }, [
-    messageHistory,
-    setPopup,
-    onSubmit,
-    currentMessageFiles,
-    deepResearchEnabled,
-  ]);
+  }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
   const toggleDocumentSidebar = useCallback(() => {
     if (!documentSidebarVisible) {
@@ -665,10 +651,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   return (
     <>
       <HealthCheckBanner />
-
-      {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit.
-      Only used in the EE version of the app. */}
-      {popup}
 
       <AppPopup />
 

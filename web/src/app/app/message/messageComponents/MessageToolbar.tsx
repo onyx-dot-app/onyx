@@ -23,7 +23,6 @@ import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { RegenerationFactory } from "./AgentMessage";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
@@ -145,8 +144,7 @@ export default function MessageToolbar({
   );
 
   // Feedback modal state and handlers
-  const { popup, setPopup } = usePopup();
-  const { handleFeedbackChange } = useFeedbackController({ setPopup });
+  const { handleFeedbackChange } = useFeedbackController();
   const modal = useCreateModal();
   const [feedbackModalProps, setFeedbackModalProps] =
     useState<FeedbackModalProps | null>(null);
@@ -207,8 +205,6 @@ export default function MessageToolbar({
 
   return (
     <>
-      {popup}
-
       <modal.Provider>
         <FeedbackModal {...feedbackModalProps!} />
       </modal.Provider>

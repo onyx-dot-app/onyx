@@ -12,7 +12,7 @@ import {
 import { Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import { mutate } from "swr";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
@@ -61,7 +61,6 @@ const handleCreateTokenRateLimit = async (
 function Main() {
   const [tabIndex, setTabIndex] = useState(0);
   const [modalIsOpen, setModalIsOpen] = useState(false);
-  const { popup, setPopup } = usePopup();
 
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
@@ -92,18 +91,16 @@ function Main() {
     )
       .then(() => {
         setModalIsOpen(false);
-        setPopup({ type: "success", message: "Token rate limit created!" });
+        toast.success("Token rate limit created!");
         updateTable(target_scope);
       })
       .catch((error) => {
-        setPopup({ type: "error", message: error.message });
+        toast.error(error.message);
       });
   };
 
   return (
     <Section alignItems="stretch" justifyContent="start" height="auto">
-      {popup}
-
       <Text>
         Token rate limits enable you control how many tokens can be spent in a
         given time period. With token rate limits, you can:
@@ -200,7 +197,6 @@ function Main() {
       <CreateRateLimitModal
         isOpen={modalIsOpen}
         setIsOpen={() => setModalIsOpen(false)}
-        setPopup={setPopup}
         onSubmit={handleSubmit}
         forSpecificScope={
           isPaidEnterpriseFeaturesEnabled ? undefined : Scope.GLOBAL
