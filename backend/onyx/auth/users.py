@@ -323,7 +323,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Verify captcha if enabled (for cloud signup protection)
         from onyx.auth.captcha import CaptchaVerificationError
         from onyx.auth.captcha import is_captcha_enabled
+        from onyx.auth.captcha import is_captcha_v2_enabled
         from onyx.auth.captcha import verify_captcha_token
+        from onyx.auth.captcha import verify_captcha_v2_token
 
         if is_captcha_enabled() and request is not None:
             # Get captcha token from request body or headers
@@ -339,6 +341,22 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 await verify_captcha_token(
                     captcha_token or "", expected_action="signup"
                 )
+            except CaptchaVerificationError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"reason": str(e)},
+                )
+
+        # Verify reCAPTCHA v2 if enabled (cloud only)
+        if is_captcha_v2_enabled() and request is not None:
+            captcha_v2_token = request.headers.get("X-Captcha-V2-Token")
+            if not captcha_v2_token:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"reason": "CAPTCHA verification required"},
+                )
+            try:
+                verify_captcha_v2_token(captcha_v2_token)
             except CaptchaVerificationError as e:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

@@ -6,7 +6,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
@@ -18,6 +18,8 @@ import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { SvgArrowRightCircle } from "@opal/icons";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
+import { useCaptchaV2 } from "@/lib/hooks/useCaptchaV2";
+import { Section } from "@/layouts/general-layouts";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -43,6 +45,26 @@ export default function EmailPasswordForm({
   const [showApiMessage, setShowApiMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const { getCaptchaToken } = useCaptcha();
+  const {
+    isCaptchaEnabled: isCaptchaV2Enabled,
+    isLoaded: isCaptchaV2Loaded,
+    token: captchaV2Token,
+    renderCaptcha,
+    resetCaptcha,
+  } = useCaptchaV2();
+  const captchaRendered = useRef(false);
+
+  useEffect(() => {
+    if (
+      isSignup &&
+      isCaptchaV2Enabled &&
+      isCaptchaV2Loaded &&
+      !captchaRendered.current
+    ) {
+      renderCaptcha("signup-captcha-container");
+      captchaRendered.current = true;
+    }
+  }, [isSignup, isCaptchaV2Enabled, isCaptchaV2Loaded, renderCaptcha]);
 
   const apiMessages = useMemo(
     () => ({
@@ -100,11 +122,13 @@ export default function EmailPasswordForm({
               email,
               values.password,
               referralSource,
-              captchaToken
+              captchaToken,
+              captchaV2Token ?? undefined
             );
 
             if (!response.ok) {
               setIsWorking(false);
+              resetCaptcha();
 
               const errorDetail: any = (await response.json()).detail;
               let errorMsg: string = "Unknown error";
@@ -239,10 +263,21 @@ export default function EmailPasswordForm({
                 )}
               />
 
+              <Section>
+                {isSignup && isCaptchaV2Enabled && (
+                  <div id="signup-captcha-container" />
+                )}
+              </Section>
+
               <Button
                 type="submit"
                 className="w-full mt-1"
-                disabled={isSubmitting || !isValid || !dirty}
+                disabled={
+                  isSubmitting ||
+                  !isValid ||
+                  !dirty ||
+                  (isSignup && isCaptchaV2Enabled && !captchaV2Token)
+                }
                 rightIcon={SvgArrowRightCircle}
               >
                 {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}

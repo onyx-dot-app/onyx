@@ -21,9 +21,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
-from onyx.auth.captcha import CaptchaVerificationError
-from onyx.auth.captcha import is_captcha_v2_enabled
-from onyx.auth.captcha import verify_captcha_v2_token
 from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
@@ -368,26 +365,12 @@ def download_users_csv(
 
 @router.put("/manage/admin/users", tags=PUBLIC_API_TAGS)
 def bulk_invite_users(
-    request: Request,
     emails: list[str] = Body(..., embed=True),
     current_user: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> int:
     """emails are string validated. If any email fails validation, no emails are
     invited and an exception is raised."""
-    # Verify CAPTCHA if enabled (cloud only)
-    if is_captcha_v2_enabled():
-        captcha_token = request.headers.get("X-Captcha-Token")
-        if not captcha_token:
-            raise HTTPException(
-                status_code=400,
-                detail="CAPTCHA verification required",
-            )
-        try:
-            verify_captcha_v2_token(captcha_token)
-        except CaptchaVerificationError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
     tenant_id = get_current_tenant_id()
 
     new_invited_emails = []

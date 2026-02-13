@@ -22,12 +22,14 @@
  */
 
 import { useCallback, useEffect, useState, useRef } from "react";
+import { useTheme } from "next-themes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 const RECAPTCHA_V2_SITE_KEY =
   process.env.NEXT_PUBLIC_RECAPTCHA_V2_SITE_KEY || "";
 
 export function useCaptchaV2() {
+  const { resolvedTheme } = useTheme();
   const [isLoaded, setIsLoaded] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const widgetIdRef = useRef<number | null>(null);
@@ -95,13 +97,15 @@ export function useCaptchaV2() {
 
       const id = window.grecaptcha.render(containerId, {
         sitekey: RECAPTCHA_V2_SITE_KEY,
+        theme: resolvedTheme === "dark" ? "dark" : "light",
+        size: "normal",
         callback: (response: string) => setToken(response),
         "expired-callback": () => setToken(null),
         "error-callback": () => setToken(null),
       });
       widgetIdRef.current = id;
     },
-    [isLoaded, isCaptchaEnabled]
+    [isLoaded, isCaptchaEnabled, resolvedTheme]
   );
 
   const resetCaptcha = useCallback(() => {

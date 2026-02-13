@@ -17,6 +17,8 @@ declare global {
         container: string | HTMLElement,
         options: {
           sitekey: string;
+          theme?: "light" | "dark";
+          size?: "normal" | "compact";
           callback: (response: string) => void;
           "expired-callback"?: () => void;
           "error-callback"?: () => void;

@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
-import { Formik, Form, FormikHelpers } from "formik";
+import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
 import Button from "@/refresh-components/buttons/Button";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import { FormikField } from "@/refresh-components/form/FormikField";
-import { FormField } from "@/refresh-components/form/FormField";
-import { useCaptchaV2 } from "@/lib/hooks/useCaptchaV2";
 
 const WHITESPACE_SPLIT = /\s+/;
 const EMAIL_REGEX = /[^@]+@[^.]+\.[^.]/;
 
-interface BulkAddProps {
+const addUsers = async (url: string, { arg }: { arg: Array<string> }) => {
+  return await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ emails: arg }),
+  });
+};
+
+interface FormProps {
   onSuccess: () => void;
   onFailure: (res: Response) => void;
 }
@@ -27,116 +32,71 @@ const normalizeEmails = (emails: string) =>
     .filter(Boolean)
     .map((email) => email.toLowerCase());
 
-const validate = (values: FormValues) => {
-  const errors: Partial<FormValues> = {};
-  const emails = normalizeEmails(values.emails);
-  if (!emails.length) {
-    errors.emails = "Required";
-  } else {
-    for (const email of emails) {
-      if (!email.match(EMAIL_REGEX)) {
-        errors.emails = `${email} is not a valid email`;
-        break;
-      }
-    }
-  }
-  return errors;
-};
-
-function BulkAdd({ onSuccess, onFailure }: BulkAddProps) {
-  const { isCaptchaEnabled, isLoaded, token, renderCaptcha, resetCaptcha } =
-    useCaptchaV2();
-  const captchaRendered = useRef(false);
-
-  useEffect(() => {
-    if (isCaptchaEnabled && isLoaded && !captchaRendered.current) {
-      renderCaptcha("bulk-add-captcha-container");
-      captchaRendered.current = true;
-    }
-  }, [isCaptchaEnabled, isLoaded, renderCaptcha]);
-
-  const handleSubmit = useCallback(
-    async (
-      values: FormValues,
-      { setSubmitting }: FormikHelpers<FormValues>
-    ) => {
-      const emails = normalizeEmails(values.emails);
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (isCaptchaEnabled && token) {
-        headers["X-Captcha-Token"] = token;
-      }
-
-      try {
-        const res = await fetch("/api/manage/admin/users", {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ emails }),
-        });
-
-        if (res.ok) {
-          onSuccess();
-        } else {
-          resetCaptcha();
-          onFailure(res);
+const AddUserFormRenderer = ({
+  touched,
+  errors,
+  isSubmitting,
+  handleSubmit,
+}: FormikProps<FormValues>) => (
+  <Form className="w-full" onSubmit={handleSubmit}>
+    <Field
+      id="emails"
+      name="emails"
+      as="textarea"
+      className="w-full p-4"
+      onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleSubmit();
         }
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [isCaptchaEnabled, token, onSuccess, onFailure, resetCaptcha]
-  );
+      }}
+    />
+    {touched.emails && errors.emails && (
+      <div className="text-error text-sm">{errors.emails}</div>
+    )}
+    <Button type="submit" disabled={isSubmitting} className="self-end">
+      Add
+    </Button>
+  </Form>
+);
 
-  return (
-    <Formik<FormValues>
-      initialValues={{ emails: "" }}
-      validate={validate}
-      onSubmit={handleSubmit}
-    >
-      {({ isSubmitting, handleSubmit: formikHandleSubmit }) => (
-        <Form className="w-full">
-          <FormikField<string>
-            name="emails"
-            render={(field, _helper, meta, state) => (
-              <FormField name="emails" state={state}>
-                <FormField.Control>
-                  <InputTextArea
-                    {...field}
-                    variant={state === "error" ? "error" : "primary"}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        formikHandleSubmit();
-                      }
-                    }}
-                  />
-                </FormField.Control>
-                <FormField.Message
-                  messages={{
-                    idle: "",
-                    error: meta.error,
-                    success: "",
-                  }}
-                />
-              </FormField>
-            )}
-          />
-          {isCaptchaEnabled && (
-            <div id="bulk-add-captcha-container" className="mt-4" />
-          )}
-          <Button
-            type="submit"
-            disabled={isSubmitting || (isCaptchaEnabled && !token)}
-            className="self-end"
-          >
-            Add
-          </Button>
-        </Form>
-      )}
-    </Formik>
-  );
-}
+const AddUserForm = withFormik<FormProps, FormValues>({
+  mapPropsToValues: (props) => {
+    return {
+      emails: "",
+    };
+  },
+  validate: (values: FormValues): FormikErrors<FormValues> => {
+    const emails = normalizeEmails(values.emails);
+    if (!emails.length) {
+      return { emails: "Required" };
+    }
+    for (let email of emails) {
+      if (!email.match(EMAIL_REGEX)) {
+        return { emails: `${email} is not a valid email` };
+      }
+    }
+    return {};
+  },
+  handleSubmit: async (values: FormValues, formikBag) => {
+    const emails = normalizeEmails(values.emails);
+    formikBag.setSubmitting(true);
+    await addUsers("/api/manage/admin/users", { arg: emails })
+      .then((res) => {
+        if (res.ok) {
+          formikBag.props.onSuccess();
+        } else {
+          formikBag.props.onFailure(res);
+        }
+      })
+      .finally(() => {
+        formikBag.setSubmitting(false);
+      });
+  },
+})(AddUserFormRenderer);
+
+const BulkAdd = ({ onSuccess, onFailure }: FormProps) => {
+  return <AddUserForm onSuccess={onSuccess} onFailure={onFailure} />;
+};
 
 export default BulkAdd;

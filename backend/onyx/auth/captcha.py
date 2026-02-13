@@ -4,12 +4,13 @@ import httpx
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CAPTCHA_ENABLED
 from onyx.configs.app_configs import RECAPTCHA_SCORE_THRESHOLD
 from onyx.configs.app_configs import RECAPTCHA_SECRET_KEY
 from onyx.configs.app_configs import RECAPTCHA_V2_SECRET_KEY
+from onyx.configs.constants import AuthType
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -111,7 +112,7 @@ async def verify_captcha_token(
 
 def is_captcha_v2_enabled() -> bool:
     """Check if captcha v2 verification is enabled (cloud only)."""
-    return MULTI_TENANT and bool(RECAPTCHA_V2_SECRET_KEY)
+    return AUTH_TYPE == AuthType.CLOUD and bool(RECAPTCHA_V2_SECRET_KEY)
 
 
 def verify_captcha_v2_token(token: str) -> None:
