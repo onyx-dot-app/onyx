@@ -1,6 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAs } from "../utils/auth";
 import { createAssistant } from "../utils/assistantUtils";
+import { OnyxApiClient } from "../utils/onyxApiClient";
 
 const DISABLE_DEFAULT_ASSISTANT_LABEL =
   'label:has-text("Disable Default Assistant") input[type="checkbox"]';
@@ -49,6 +50,8 @@ async function setDisableDefaultAssistantSetting(
 }
 
 test.describe("Disable Default Assistant Setting @exclusive", () => {
+  let createdAssistantId: number | null = null;
+
   test.beforeEach(async ({ page }) => {
     // Log in as admin
     await page.context().clearCookies();
@@ -56,6 +59,13 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
   });
 
   test.afterEach(async ({ page }) => {
+    // Clean up any assistant created during the test
+    if (createdAssistantId !== null) {
+      const client = new OnyxApiClient(page.request);
+      await client.deleteAssistant(createdAssistantId);
+      createdAssistantId = null;
+    }
+
     // Ensure default assistant is enabled (checkbox unchecked) after each test
     // to avoid interfering with other tests
     await setDisableDefaultAssistantSetting(page, false);
@@ -89,6 +99,11 @@ test.describe("Disable Default Assistant Setting @exclusive", () => {
     const currentUrl = page.url();
     const assistantIdMatch = currentUrl.match(/assistantId=(\d+)/);
     expect(assistantIdMatch).toBeTruthy();
+
+    // Store for cleanup
+    if (assistantIdMatch) {
+      createdAssistantId = Number(assistantIdMatch[1]);
+    }
 
     // Click the "New Session" button
     const newSessionButton = page.locator(

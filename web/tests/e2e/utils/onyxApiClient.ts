@@ -602,6 +602,34 @@ export class OnyxApiClient {
     return success;
   }
 
+  async deleteCustomTool(toolId: number): Promise<boolean> {
+    const response = await this.request.delete(
+      `${this.baseUrl}/admin/tool/custom/${toolId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete custom tool ${toolId}`
+    );
+    if (success) {
+      this.log(`Deleted custom tool ${toolId}`);
+    }
+    return success;
+  }
+
+  async listOpenApiTools(): Promise<
+    Array<{ id: number; name: string; description: string }>
+  > {
+    const response = await this.get("/tool/openapi");
+    return await this.handleResponse(response, "Failed to list OpenAPI tools");
+  }
+
+  async findToolByName(
+    name: string
+  ): Promise<{ id: number; name: string; description: string } | null> {
+    const tools = await this.listOpenApiTools();
+    return tools.find((tool) => tool.name === name) ?? null;
+  }
+
   async deleteAssistant(assistantId: number): Promise<boolean> {
     const response = await this.request.delete(
       `${this.baseUrl}/persona/${assistantId}`

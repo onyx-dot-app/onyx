@@ -119,6 +119,23 @@ test.describe("Assistant Creation and Edit Verification", () => {
   test.describe.configure({ mode: "serial" });
 
   test.describe("User Files Only", () => {
+    let userFilesAssistantId: number | null = null;
+
+    test.afterAll(async ({ browser }: { browser: Browser }) => {
+      if (userFilesAssistantId !== null) {
+        const context = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        const page = await context.newPage();
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteAssistant(userFilesAssistantId);
+        await context.close();
+        console.log(
+          "[test] Cleanup completed - deleted User Files Only assistant"
+        );
+      }
+    });
+
     test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
     }: {
@@ -163,6 +180,11 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const assistantIdMatch = url.match(/assistantId=(\d+)/);
       expect(assistantIdMatch).toBeTruthy();
 
+      // Store assistant ID for cleanup
+      if (assistantIdMatch) {
+        userFilesAssistantId = Number(assistantIdMatch[1]);
+      }
+
       console.log(
         `[test] Successfully created assistant without connectors: ${assistantName}`
       );
@@ -172,22 +194,28 @@ test.describe("Assistant Creation and Edit Verification", () => {
   test.describe("With Knowledge", () => {
     let ccPairId: number;
     let documentSetId: number;
+    let knowledgeAssistantId: number | null = null;
 
     test.afterAll(async ({ browser }: { browser: Browser }) => {
       // Cleanup using browser fixture (worker-scoped) to avoid per-test fixture limitation
+      const context = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const page = await context.newPage();
+      const cleanupClient = new OnyxApiClient(page.request);
+
+      if (knowledgeAssistantId !== null) {
+        await cleanupClient.deleteAssistant(knowledgeAssistantId);
+      }
       if (ccPairId && documentSetId) {
-        const context = await browser.newContext({
-          storageState: "admin_auth.json",
-        });
-        const page = await context.newPage();
-        const cleanupClient = new OnyxApiClient(page.request);
         await cleanupClient.deleteDocumentSet(documentSetId);
         await cleanupClient.deleteCCPair(ccPairId);
-        await context.close();
-        console.log(
-          "[test] Cleanup completed - deleted connector and document set"
-        );
       }
+
+      await context.close();
+      console.log(
+        "[test] Cleanup completed - deleted assistant, connector, and document set"
+      );
     });
 
     test("should create and edit assistant with Knowledge enabled", async ({
@@ -268,6 +296,9 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(assistantIdMatch).toBeTruthy();
       const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
       expect(assistantId).not.toBeNull();
+
+      // Store assistant ID for cleanup
+      knowledgeAssistantId = Number(assistantId);
 
       // Navigate directly to the edit page
       await page.goto(`/app/agents/edit/${assistantId}`);
