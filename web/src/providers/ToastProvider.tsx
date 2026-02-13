@@ -51,6 +51,13 @@ function ToastContainer() {
     }, ANIMATION_DURATION);
   }, []);
 
+  // NOTE (@raunakab):
+  //
+  // Keep this here for debugging purposes.
+  // useOnMount(() => {
+  //   toast.success("Hello, good sir", { duration: Infinity });
+  // });
+
   if (visible.length === 0) return null;
 
   return (
