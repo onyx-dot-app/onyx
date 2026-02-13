@@ -331,9 +331,10 @@ def _sync_default_contextual_model(db_session: Session) -> None:
     """Syncs the default CONTEXTUAL_RAG flow to match the PRESENT search settings."""
     primary = get_current_search_settings(db_session)
 
-    update_default_contextual_model(
+    if error_msg := update_default_contextual_model(
         db_session=db_session,
         enable_contextual_rag=primary.enable_contextual_rag,
         contextual_rag_llm_provider=primary.contextual_rag_llm_provider,
         contextual_rag_llm_name=primary.contextual_rag_llm_name,
-    )
+    ):
+        logger.error(f"Error syncing default contextual model: {error_msg}")

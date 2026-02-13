@@ -82,12 +82,13 @@ def _perform_index_swap(
     )
 
     # Update the default contextual model to match the newly promoted settings
-    update_default_contextual_model(
+    if error_msg := update_default_contextual_model(
         db_session=db_session,
         enable_contextual_rag=new_search_settings.enable_contextual_rag,
         contextual_rag_llm_provider=new_search_settings.contextual_rag_llm_provider,
         contextual_rag_llm_name=new_search_settings.contextual_rag_llm_name,
-    )
+    ):
+        logger.error(f"Error updating default contextual model: {error_msg}")
 
     # This flow is for checking and possibly creating an index so we get all
     # indices.

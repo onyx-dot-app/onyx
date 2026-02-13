@@ -652,18 +652,7 @@ def update_default_vision_provider(
     )
 
 
-def update_default_contextual_rag_provider(
-    provider_id: int, model_name: str, db_session: Session
-) -> None:
-    _update_default_model(
-        db_session=db_session,
-        provider_id=provider_id,
-        model=model_name,
-        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
-    )
-
-
-def update_no_default_contextual_rag_provider(
+def _update_no_default_contextual_rag_provider(
     db_session: Session,
 ) -> None:
     db_session.execute(
@@ -682,26 +671,29 @@ def update_default_contextual_model(
     enable_contextual_rag: bool,
     contextual_rag_llm_provider: str | None,
     contextual_rag_llm_name: str | None,
-) -> None:
+) -> str | None:
     """Sets or clears the default contextual RAG model.
 
     Should be called whenever the PRESENT search settings change
     (e.g. inline update or FUTURE → PRESENT swap).
+
+    Returns:
+        None if success
+        Error message if failure
     """
     if not enable_contextual_rag:
-        update_no_default_contextual_rag_provider(db_session=db_session)
-        return
+        _update_no_default_contextual_rag_provider(db_session=db_session)
+        return None
 
     if not contextual_rag_llm_name or not contextual_rag_llm_provider:
-        update_no_default_contextual_rag_provider(db_session=db_session)
-        return
+        _update_no_default_contextual_rag_provider(db_session=db_session)
+        return None
 
     provider = fetch_existing_llm_provider(
         name=contextual_rag_llm_provider, db_session=db_session
     )
     if not provider:
-        update_no_default_contextual_rag_provider(db_session=db_session)
-        return
+        return f"Provider '{contextual_rag_llm_provider}' not found"
 
     model_config = next(
         (
@@ -712,18 +704,18 @@ def update_default_contextual_model(
         None,
     )
     if not model_config:
-        update_no_default_contextual_rag_provider(db_session=db_session)
-        return
+        return f"Model '{contextual_rag_llm_name}' not found for provider '{contextual_rag_llm_provider}'"
 
     add_model_to_flow(
         db_session=db_session,
         model_configuration_id=model_config.id,
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
-    update_default_contextual_rag_provider(
-        provider_id=provider.id,
-        model_name=contextual_rag_llm_name,
+    _update_default_model(
         db_session=db_session,
+        provider_id=provider.id,
+        model=contextual_rag_llm_name,
+        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
 
 
