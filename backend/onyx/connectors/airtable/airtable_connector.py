@@ -1,6 +1,5 @@
 import contextvars
 import re
-import time
 from concurrent.futures import as_completed
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
@@ -634,6 +633,3 @@ class AirtableConnector(LoadConnector):
                         f"in base '{base_name}' ({base_id}), skipping."
                     )
                     continue
-
-                # Small delay between tables to be respectful of rate limits
-                time.sleep(0.25)
