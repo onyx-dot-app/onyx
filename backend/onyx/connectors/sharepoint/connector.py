@@ -165,8 +165,6 @@ def sleep_and_retry(
                 logger.error(
                     f"SharePoint request failed for {method_name}: "
                     f"status={status}, "
-                    f"headers={dict(e.response.headers)}, "
-                    f"url={e.response.url}"
                 )
             raise e
 
