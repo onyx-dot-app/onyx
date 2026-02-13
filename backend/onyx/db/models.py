@@ -4877,3 +4877,90 @@ class BuildMessage(Base):
             "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
         ),
     )
+
+
+"""
+SCIM 2.0 Provisioning Models (Enterprise Edition only)
+Used for automated user/group provisioning from identity providers (Okta, Azure AD).
+"""
+
+
+class ScimToken(Base):
+    """Bearer tokens for IdP SCIM authentication."""
+
+    __tablename__ = "scim_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    hashed_token: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False
+    )  # SHA256 = 64 hex chars
+    token_display: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # Last 4 chars for UI identification
+
+    created_by_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("true"), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    created_by: Mapped[User] = relationship("User", foreign_keys=[created_by_id])
+
+
+class ScimUserMapping(Base):
+    """Maps SCIM externalId from the IdP to an Onyx User."""
+
+    __tablename__ = "scim_user_mapping"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+
+
+class ScimGroupMapping(Base):
+    """Maps SCIM externalId from the IdP to an Onyx UserGroup."""
+
+    __tablename__ = "scim_group_mapping"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user_group: Mapped[UserGroup] = relationship(
+        "UserGroup", foreign_keys=[user_group_id]
+    )
