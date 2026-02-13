@@ -677,6 +677,53 @@ def update_no_default_contextual_rag_provider(
     db_session.commit()
 
 
+def update_default_contextual_model(
+    db_session: Session,
+    enable_contextual_rag: bool,
+    contextual_rag_llm_provider: str | None,
+    contextual_rag_llm_name: str | None,
+) -> None:
+    """Sets or clears the default contextual RAG model.
+
+    Should be called whenever the PRESENT search settings change
+    (e.g. inline update or FUTURE → PRESENT swap).
+    """
+    if not enable_contextual_rag:
+        update_no_default_contextual_rag_provider(db_session=db_session)
+        return
+
+    if not contextual_rag_llm_name or not contextual_rag_llm_provider:
+        return
+
+    provider = fetch_existing_llm_provider(
+        name=contextual_rag_llm_provider, db_session=db_session
+    )
+    if not provider:
+        return
+
+    model_config = next(
+        (
+            mc
+            for mc in provider.model_configurations
+            if mc.name == contextual_rag_llm_name
+        ),
+        None,
+    )
+    if not model_config:
+        return
+
+    add_model_to_flow(
+        db_session=db_session,
+        model_configuration_id=model_config.id,
+        flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
+    )
+    update_default_contextual_rag_provider(
+        provider_id=provider.id,
+        model_name=contextual_rag_llm_name,
+        db_session=db_session,
+    )
+
+
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     """Fetch all LLM providers that are in Auto mode."""
     query = (

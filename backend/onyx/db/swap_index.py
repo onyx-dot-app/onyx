@@ -15,6 +15,7 @@ from onyx.db.index_attempt import (
     count_unique_active_cc_pairs_with_successful_index_attempts,
 )
 from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
+from onyx.db.llm import update_default_contextual_model
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
@@ -78,6 +79,14 @@ def _perform_index_swap(
         search_settings=new_search_settings,
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
+    )
+
+    # Update the default contextual model to match the newly promoted settings
+    update_default_contextual_model(
+        db_session=db_session,
+        enable_contextual_rag=new_search_settings.enable_contextual_rag,
+        contextual_rag_llm_provider=new_search_settings.contextual_rag_llm_provider,
+        contextual_rag_llm_name=new_search_settings.contextual_rag_llm_name,
     )
 
     # This flow is for checking and possibly creating an index so we get all
