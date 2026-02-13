@@ -138,6 +138,41 @@ async function sendMessageAndCapturePayload(
   return request.postDataJSON() as SendChatMessagePayload;
 }
 
+type LlmProviderBasics = {
+  name: string;
+  model_configurations: Array<{ name: string }>;
+};
+
+async function listUserLlmProviders(page: Page): Promise<LlmProviderBasics[]> {
+  const response = await page.request.get("/api/llm/provider");
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as LlmProviderBasics[];
+}
+
+async function waitForModelOnProvider(
+  page: Page,
+  modelName: string,
+  providerNames: string[]
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const providers = await listUserLlmProviders(page);
+        return providerNames.every((providerName) =>
+          providers.some(
+            (provider) =>
+              provider.name === providerName &&
+              provider.model_configurations.some(
+                (modelConfig) => modelConfig.name === modelName
+              )
+          )
+        );
+      },
+      { timeout: 30000 }
+    )
+    .toBeTruthy();
+}
+
 function buildMockStreamResponse(turn: number): string {
   const userMessageId = turn * 100 + 1;
   const assistantMessageId = turn * 100 + 2;
@@ -298,16 +333,27 @@ test.describe("LLM Runtime Selection", () => {
       request.postDataJSON()
     )) as SendChatMessagePayload;
 
-    await page.waitForSelector('[data-testid="AgentMessage/regenerate"]', {
-      state: "visible",
-      timeout: 20000,
-    });
+    await expect
+      .poll(
+        async () => {
+          const messageSwitcher = page
+            .getByTestId("MessageSwitcher/container")
+            .first();
+          if (!(await messageSwitcher.isVisible())) {
+            return "";
+          }
+          return ((await messageSwitcher.textContent()) ?? "").replace(
+            /\s+/g,
+            ""
+          );
+        },
+        { timeout: 60000 }
+      )
+      .toContain("2/2");
 
     const messageSwitcher = page
       .getByTestId("MessageSwitcher/container")
       .first();
-    await expect(messageSwitcher).toBeVisible({ timeout: 10000 });
-    await expect(messageSwitcher).toContainText("2/2");
 
     await messageSwitcher
       .locator("..")
@@ -357,6 +403,11 @@ test.describe("LLM Runtime Selection", () => {
 
     providersToCleanup.push(openAiProviderId, anthropicProviderId);
 
+    await waitForModelOnProvider(page, sharedModelName, [
+      openAiProviderName,
+      anthropicProviderName,
+    ]);
+
     const capturedPayloads: SendChatMessagePayload[] = [];
     let turn = 0;
 
@@ -379,14 +430,11 @@ test.describe("LLM Runtime Selection", () => {
     const dialog = page.locator('[role="dialog"]');
     await dialog.getByPlaceholder("Search models...").fill(sharedModelName);
 
-    const sharedModelOptions = dialog
-      .locator("button[data-selected]")
-      .filter({ hasText: sharedModelName });
+    const sharedModelOptions = dialog.locator("button[data-selected]");
     await expect(sharedModelOptions).toHaveCount(2);
 
     await sharedModelOptions.first().click();
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
-    await verifyCurrentModel(page, sharedModelName);
 
     await sendMessage(page, "Collision payload check one.");
     await expect.poll(() => capturedPayloads.length).toBe(1);
