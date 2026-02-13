@@ -79,6 +79,14 @@ SHARED_DOCUMENTS_MAP_REVERSE = {v: k for k, v in SHARED_DOCUMENTS_MAP.items()}
 
 ASPX_EXTENSION = ".aspx"
 
+# The office365 library's ClientContext caches the access token from
+# the first request and never refreshes it.  Microsoft Graph / SharePoint
+# access tokens live ~1 hour.  By re-running load_credentials every 30
+# minutes we create a fresh MSAL app (with an empty token cache), which
+# causes the next ClientContext created in the indexing loop to acquire a
+# brand-new token instead of reusing a stale one.
+_CREDENTIAL_REFRESH_INTERVAL_S = 30 * 60
+
 
 class SiteDescriptor(BaseModel):
     """Data class for storing SharePoint site information.
@@ -105,44 +113,17 @@ class CertificateData(BaseModel):
 
 
 # TODO(Evan): Remove this once we have a proper token refresh mechanism.
-def _clear_cached_token(query_obj: ClientQuery) -> bool:
-    """Clear the cached access token on the query object's ClientContext so
-    the next request re-invokes the token callback and gets a fresh token.
-
-    The office365 library's AuthenticationContext.with_access_token() caches
-    the token in ``_cached_token`` and never refreshes it.  Setting it to
-    ``None`` forces re-acquisition on the next request.
-
-    Returns True if the token was successfully cleared."""
-    ctx = getattr(query_obj, "context", query_obj)
-    auth_ctx = getattr(ctx, "authentication_context", None)
-    if auth_ctx is not None and hasattr(auth_ctx, "_cached_token"):
-        auth_ctx._cached_token = None
-        return True
-    return False
-
-
 def sleep_and_retry(
     query_obj: ClientQuery, method_name: str, max_retries: int = 3
 ) -> Any:
     """
-    Execute a SharePoint query with retry logic for rate limiting
-    and automatic token refresh on 401 Unauthorized.
+    Execute a SharePoint query with retry logic for rate limiting.
     """
     for attempt in range(max_retries + 1):
         try:
             return query_obj.execute_query()
         except ClientRequestException as e:
             status = e.response.status_code if e.response is not None else None
-
-            # 401 — token expired.  Clear the cached token and retry immediately.
-            if status == 401 and attempt < max_retries:
-                cleared = _clear_cached_token(query_obj)
-                logger.warning(
-                    f"Token expired on {method_name}, attempt {attempt + 1}/{max_retries + 1}, "
-                    f"cleared cached token={cleared}, retrying"
-                )
-                continue
 
             # 429 / 503 — rate limit or transient error.  Back off and retry.
             if status in (429, 503) and attempt < max_retries:
@@ -742,6 +723,8 @@ class SharepointConnector(
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
         self.sp_tenant_domain: str | None = None
+        self._credential_json: dict[str, Any] | None = None
+        self._credentials_refreshed_at: float = 0.0
 
     def validate_connector_settings(self) -> None:
         # Validate that at least one content type is enabled
@@ -764,6 +747,14 @@ class SharepointConnector(
     def graph_client(self) -> GraphClient:
         if self._graph_client is None:
             raise ConnectorMissingCredentialError("Sharepoint")
+
+        elapsed = time.monotonic() - self._credentials_refreshed_at
+        if elapsed > _CREDENTIAL_REFRESH_INTERVAL_S and self._credential_json:
+            logger.info(
+                f"Proactively refreshing SharePoint credentials "
+                f"(last refreshed {elapsed:.0f}s ago)"
+            )
+            self.load_credentials(self._credential_json)
 
         return self._graph_client
 
@@ -1289,6 +1280,9 @@ class SharepointConnector(
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        self._credential_json = credentials
+        self._credentials_refreshed_at = time.monotonic()
+
         auth_method = credentials.get(
             "authentication_method", SharepointAuthMethod.CLIENT_SECRET.value
         )
