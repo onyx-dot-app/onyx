@@ -12,6 +12,7 @@ from onyx.prompts.chat_prompts import DATETIME_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import REMINDER_TAG_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.constants import CODE_BLOCK_PAT
+from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -99,8 +100,6 @@ def replace_citation_guidance_tag(
 
 def replace_reminder_tag(prompt_str: str) -> str:
     """Replace {{REMINDER_TAG_DESCRIPTION}} with the reminder tag content."""
-    from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
-
     if REMINDER_TAG_REPLACEMENT_PAT in prompt_str:
         prompt_str = prompt_str.replace(
             REMINDER_TAG_REPLACEMENT_PAT, REMINDER_TAG_DESCRIPTION
