@@ -184,7 +184,7 @@ class TestIndexAll:
     def test_index_all_discovers_all_bases_and_tables(
         self, mock_sleep: MagicMock  # noqa: ARG002
     ) -> None:
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         mock_api = _setup_mock_api(SAMPLE_BASES)
         connector._airtable_client = mock_api
 
@@ -204,7 +204,7 @@ class TestIndexAll:
     def test_index_all_semantic_id_includes_base_name(
         self, mock_sleep: MagicMock  # noqa: ARG002
     ) -> None:
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         mock_api = _setup_mock_api(SAMPLE_BASES)
         connector._airtable_client = mock_api
 
@@ -229,7 +229,7 @@ class TestIndexAll:
         self, mock_sleep: MagicMock  # noqa: ARG002
     ) -> None:
         """Verify doc_metadata hierarchy source_path is [base_name, table_name]."""
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         mock_api = _setup_mock_api(SAMPLE_BASES)
         connector._airtable_client = mock_api
 
@@ -256,7 +256,7 @@ class TestIndexAll:
     def test_index_all_empty_account(
         self, mock_sleep: MagicMock  # noqa: ARG002
     ) -> None:
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         mock_api = MagicMock()
         mock_api.bases.return_value = []
         connector._airtable_client = mock_api
@@ -309,7 +309,7 @@ class TestIndexAll:
             return original_table_side_effect(base_id, table_name_or_id)
 
         mock_api.table.side_effect = table_with_failure
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         connector._airtable_client = mock_api
 
         docs = _collect_docs(connector)
@@ -362,7 +362,7 @@ class TestIndexAll:
 
         mock_api.base.side_effect = base_with_failure
 
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         connector._airtable_client = mock_api
 
         docs = _collect_docs(connector)
@@ -459,7 +459,7 @@ class TestSpecificTableMode:
 
 class TestValidateConnectorSettings:
     def test_validate_index_all_success(self) -> None:
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         mock_api = _setup_mock_api(SAMPLE_BASES)
         connector._airtable_client = mock_api
 
@@ -467,7 +467,7 @@ class TestValidateConnectorSettings:
         connector.validate_connector_settings()
 
     def test_validate_index_all_no_bases(self) -> None:
-        connector = AirtableConnector(index_all=True)
+        connector = AirtableConnector()
         mock_api = MagicMock()
         mock_api.bases.return_value = []
         connector._airtable_client = mock_api
@@ -486,16 +486,18 @@ class TestValidateConnectorSettings:
         # Should not raise
         connector.validate_connector_settings()
 
-    def test_validate_specific_table_missing_fields(self) -> None:
+    def test_validate_empty_fields_auto_detects_index_all(self) -> None:
+        """Empty base_id + table_name_or_id auto-detects as index_all mode."""
         connector = AirtableConnector(
             base_id="",
             table_name_or_id="",
         )
-        mock_api = MagicMock()
-        connector._airtable_client = mock_api
+        assert connector.index_all is True
 
-        with pytest.raises(ConnectorValidationError, match="required"):
-            connector.validate_connector_settings()
+        # Validation should go through the index_all path
+        mock_api = _setup_mock_api(SAMPLE_BASES)
+        connector._airtable_client = mock_api
+        connector.validate_connector_settings()
 
     def test_validate_specific_table_api_error(self) -> None:
         connector = AirtableConnector(

@@ -1575,14 +1575,6 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
             label: "Everything",
             fields: [
               {
-                type: "checkbox",
-                label: "Index all bases and tables",
-                name: "index_all",
-                hidden: true,
-                default: true,
-                optional: false,
-              },
-              {
                 type: "string_tab",
                 label: "Everything",
                 name: "everything_description",

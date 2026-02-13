@@ -103,7 +103,6 @@ class AirtableConnector(LoadConnector):
         base_id: str = "",
         table_name_or_id: str = "",
         airtable_url: str = "",
-        index_all: bool = False,
         treat_all_non_attachment_fields_as_metadata: bool = False,
         view_id: str | None = None,
         share_id: str | None = None,
@@ -112,16 +111,19 @@ class AirtableConnector(LoadConnector):
         """Initialize an AirtableConnector.
 
         Args:
-            base_id: The ID of the Airtable base (not required when index_all=True or airtable_url is set)
-            table_name_or_id: The name or ID of the table (not required when index_all=True or airtable_url is set)
+            base_id: The ID of the Airtable base (not required when airtable_url is set)
+            table_name_or_id: The name or ID of the table (not required when airtable_url is set)
             airtable_url: An Airtable URL to parse base_id, table_id, and view_id from.
                 Overrides base_id, table_name_or_id, and view_id if provided.
-            index_all: If True, automatically discover and index all bases and tables accessible by the token.
             treat_all_non_attachment_fields_as_metadata: If True, all fields except attachments will be treated as metadata.
                 If False, only fields with types in DEFAULT_METADATA_FIELD_TYPES will be treated as metadata.
             view_id: Optional ID of a specific view to use
             share_id: Optional ID of a "share" to use for generating record URLs
             batch_size: Number of records to process in each batch
+
+        Mode is auto-detected: if a specific table is identified (via URL or
+        base_id + table_name_or_id), the connector indexes that single table.
+        Otherwise, it discovers and indexes all accessible bases and tables.
         """
         # If a URL is provided, parse it to extract base_id, table_id, and view_id
         if airtable_url:
@@ -135,7 +137,7 @@ class AirtableConnector(LoadConnector):
 
         self.base_id = base_id
         self.table_name_or_id = table_name_or_id
-        self.index_all = index_all
+        self.index_all = not (base_id and table_name_or_id)
         self.view_id = view_id
         self.share_id = share_id
         self.batch_size = batch_size
