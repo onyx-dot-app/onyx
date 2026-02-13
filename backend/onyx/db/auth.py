@@ -106,6 +106,10 @@ class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
             create_dict["role"] = UserRole.ADMIN
         else:
             create_dict["role"] = UserRole.BASIC
+
+        # Remove schema-only fields that aren't columns on the User model
+        create_dict.pop("captcha_token", None)
+
         return await super().create(create_dict)
 
 
