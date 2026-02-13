@@ -140,8 +140,11 @@ test.describe("Signup flow", () => {
       page.getByText("Unknown error", { exact: true })
     ).toBeVisible();
 
-    // Capture the error state
-    await expectScreenshot(page, { name: "signup-disposable-email-error" });
+    // Capture the error state with hidden email to avoid non-deterministic diffs
+    await expectScreenshot(page, {
+      name: "signup-disposable-email-error",
+      mask: ["[data-testid='email']"],
+    });
 
     // Should stay on the signup page
     await expect(page).toHaveURL(/\/auth\/signup/);
