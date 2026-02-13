@@ -52,6 +52,9 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 )
 from onyx.server.manage.llm.models import BedrockFinalModelResponse
 from onyx.server.manage.llm.models import BedrockModelsRequest
+from onyx.server.manage.llm.models import LitellmFinalModelResponse
+from onyx.server.manage.llm.models import LitellmModelDetails
+from onyx.server.manage.llm.models import LitellmModelsRequest
 from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -1133,3 +1136,70 @@ def get_openrouter_available_models(
             logger.warning(f"Failed to sync OpenRouter models to DB: {e}")
 
     return sorted_results
+
+
+@admin_router.post("/litellm/available-models")
+def get_litellm_available_models(
+    request: LitellmModelsRequest,
+    _: User = Depends(current_admin_user),
+    _db_session: Session = Depends(get_session),
+) -> list[LitellmFinalModelResponse]:
+    """Fetch available models from Litellm proxy /api/v1/models endpoint."""
+    response_json = _get_litellm_models_response(
+        api_key=request.api_key, api_base=request.api_base
+    )
+
+    data = response_json.get("data", [])
+    if not isinstance(data, list) or len(data) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No models found from your Litellm endpoint",
+        )
+
+    results: list[LitellmFinalModelResponse] = []
+    for item in data:
+        try:
+            model_details = LitellmModelDetails.model_validate(item)
+
+            results.append(
+                LitellmFinalModelResponse(
+                    provider_name=model_details.owned_by,
+                    model_name=model_details.id,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Litellm model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
+
+    if not results:
+        raise HTTPException(
+            status_code=400, detail="No compatible models found from Litellm"
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.model_name.lower())
+
+    return sorted_results
+
+
+def _get_litellm_models_response(api_key: str, api_base: str) -> dict:
+    """Perform GET to Litellm proxy /api/v1/models and return parsed JSON."""
+    cleaned_api_base = api_base.strip().rstrip("/")
+    url = f"{cleaned_api_base}/v1/models"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "https://onyx.app",
+        "X-Title": "Onyx",
+    }
+
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch Litellm models: {e}",
+        )

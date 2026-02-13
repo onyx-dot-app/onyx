@@ -421,3 +421,25 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+
+
+class LitellmModelsRequest(BaseModel):
+    api_key: str
+    api_base: str
+
+
+class LitellmModelDetails(BaseModel):
+    """Response model for Litellm proxy /api/v1/models endpoint"""
+
+    id: str  # Model ID (e.g. "gpt-4o")
+
+    object: str  # "model"
+
+    created: int  # Unix timestamp in seconds
+
+    owned_by: str  # Provider name (e.g. "openai")
+
+
+class LitellmFinalModelResponse(BaseModel):
+    provider_name: str  # Provider name (e.g. "openai")
+    model_name: str  # Model ID (e.g. "gpt-4o")
