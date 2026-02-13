@@ -4,7 +4,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useState, useMemo, useEffect } from "react";
 import { UniqueIdentifier } from "@dnd-kit/core";
 import { DraggableTable } from "@/components/table/DraggableTable";
@@ -16,7 +16,7 @@ import {
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
 import { useUser } from "@/providers/UserProvider";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgAlertCircle, SvgTrash } from "@opal/icons";
@@ -56,7 +56,6 @@ export function PersonasTable({
   pageSize: number;
 }) {
   const router = useRouter();
-  const { popup, setPopup } = usePopup();
   const { refreshUser, isAdmin } = useUser();
 
   const editablePersonas = useMemo(() => {
@@ -109,10 +108,7 @@ export function PersonasTable({
     });
 
     if (!response.ok) {
-      setPopup({
-        type: "error",
-        message: `Failed to update persona order - ${await response.text()}`,
-      });
+      toast.error(`Failed to update persona order - ${await response.text()}`);
       setFinalPersonas(personas);
       await refreshPersonas();
       return;
@@ -139,10 +135,7 @@ export function PersonasTable({
         refreshPersonas();
         closeDeleteModal();
       } else {
-        setPopup({
-          type: "error",
-          message: `Failed to delete persona - ${await response.text()}`,
-        });
+        toast.error(`Failed to delete persona - ${await response.text()}`);
       }
     }
   };
@@ -167,17 +160,13 @@ export function PersonasTable({
         refreshPersonas();
         closeDefaultModal();
       } else {
-        setPopup({
-          type: "error",
-          message: `Failed to update persona - ${await response.text()}`,
-        });
+        toast.error(`Failed to update persona - ${await response.text()}`);
       }
     }
   };
 
   return (
     <div>
-      {popup}
       {deleteModalOpen && personaToDelete && (
         <ConfirmationModalLayout
           icon={SvgAlertCircle}
@@ -290,10 +279,9 @@ export function PersonasTable({
                   if (response.ok) {
                     refreshPersonas();
                   } else {
-                    setPopup({
-                      type: "error",
-                      message: `Failed to update persona - ${await response.text()}`,
-                    });
+                    toast.error(
+                      `Failed to update persona - ${await response.text()}`
+                    );
                   }
                 }}
                 className={`
@@ -312,9 +300,9 @@ export function PersonasTable({
               <div key="edit" className="flex">
                 <div className="mr-auto my-auto">
                   {!persona.builtin_persona && isEditable ? (
-                    <IconButton
+                    <OpalButton
                       icon={SvgTrash}
-                      tertiary
+                      prominence="tertiary"
                       onClick={() => openDeleteModal(persona)}
                     />
                   ) : (

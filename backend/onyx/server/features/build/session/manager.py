@@ -75,6 +75,9 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
     SSEKeepalive,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.tasks.tasks import (
+    _get_disabled_user_library_paths,
+)
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.features.build.session.prompts import (
@@ -83,7 +86,7 @@ from onyx.server.features.build.session.prompts import (
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
-from onyx.tracing.llm_utils import record_llm_span_output
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -563,6 +566,18 @@ class SessionManager:
         user_name = user.personal_name if user else None
         user_role = user.personal_role if user else None
 
+        # Get excluded user library paths (files with sync_disabled=True)
+        # Only query if not using demo data (user library only applies to user files)
+        excluded_user_library_paths: list[str] | None = None
+        if not demo_data_enabled:
+            excluded_user_library_paths = _get_disabled_user_library_paths(
+                self._db_session, str(user_id)
+            )
+            if excluded_user_library_paths:
+                logger.debug(
+                    f"Excluding {len(excluded_user_library_paths)} disabled user library paths"
+                )
+
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
@@ -575,7 +590,9 @@ class SessionManager:
             user_work_area=user_work_area,
             user_level=user_level,
             use_demo_data=demo_data_enabled,
+            excluded_user_library_paths=excluded_user_library_paths,
         )
+
         sandbox_id = sandbox.id
         logger.info(
             f"Successfully created session {session_id} with workspace in sandbox {sandbox.id}"
@@ -838,10 +855,8 @@ class SessionManager:
                     response = llm.invoke(
                         prompt_messages, reasoning_effort=ReasoningEffort.OFF
                     )
+                    record_llm_response(span_generation, response)
                     generated_name = llm_response_to_string(response).strip().strip('"')
-                    record_llm_span_output(
-                        span_generation, generated_name, response.usage
-                    )
 
             # Ensure the name isn't too long (max 50 chars)
             if len(generated_name) > 50:
@@ -898,8 +913,8 @@ class SessionManager:
                         reasoning_effort=ReasoningEffort.OFF,
                         max_tokens=500,
                     )
+                    record_llm_response(span_generation, response)
                     raw_output = llm_response_to_string(response).strip()
-                    record_llm_span_output(span_generation, raw_output, response.usage)
 
             return self._parse_suggestions(raw_output)
         except Exception as e:
@@ -1665,6 +1680,62 @@ class SessionManager:
 
         docx_filename = filename.rsplit(".", 1)[0] + ".docx"
         return (docx_bytes, docx_filename)
+
+    def get_pptx_preview(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        path: str,
+    ) -> dict[str, Any] | None:
+        """
+        Generate slide image previews for a PPTX file.
+
+        Converts the PPTX to individual JPEG slide images using
+        soffice + pdftoppm, with caching to avoid re-conversion.
+
+        Args:
+            session_id: The session UUID
+            user_id: The user ID to verify ownership
+            path: Relative path to the PPTX file within session workspace
+
+        Returns:
+            Dict with slide_count, slide_paths, and cached flag,
+            or None if session not found.
+
+        Raises:
+            ValueError: If path is invalid or conversion fails
+        """
+        import hashlib
+
+        # Verify session ownership
+        session = get_build_session(session_id, user_id, self._db_session)
+        if session is None:
+            return None
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            return None
+
+        # Validate file extension
+        if not path.lower().endswith(".pptx"):
+            raise ValueError("Only .pptx files are supported for preview")
+
+        # Compute cache directory from path hash
+        path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
+        cache_dir = f"outputs/.pptx-preview/{path_hash}"
+
+        slide_paths, cached = self._sandbox_manager.generate_pptx_preview(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            pptx_path=path,
+            cache_dir=cache_dir,
+        )
+
+        return {
+            "slide_count": len(slide_paths),
+            "slide_paths": slide_paths,
+            "cached": cached,
+        }
 
     def get_webapp_info(
         self,

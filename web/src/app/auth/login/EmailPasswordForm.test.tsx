@@ -189,7 +189,7 @@ describe("Email/Password Signup Workflow", () => {
     // Verify success message is shown
     await waitFor(() => {
       expect(
-        screen.getByText(/account created successfully/i)
+        screen.getByText(/account created\. signing in/i)
       ).toBeInTheDocument();
     });
   });

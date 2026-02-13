@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import EditableTag from "@/refresh-components/buttons/EditableTag";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import Tag from "@/refresh-components/buttons/Tag";
+import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Divider from "@/refresh-components/Divider";
 import { Section } from "@/layouts/general-layouts";
@@ -454,7 +454,8 @@ function CommandMenuHeader({
           {/* Standalone search icon */}
           <SvgSearch className="w-6 h-6 stroke-text-04" />
           {filters.map((filter) => (
-            <EditableTag
+            <Tag
+              variant="editable"
               key={filter.id}
               label={filter.label}
               icon={filter.icon}
@@ -466,9 +467,10 @@ function CommandMenuHeader({
         </Section>
         {onClose && (
           <DialogPrimitive.Close asChild>
-            <IconButton
+            <Button
               icon={SvgX}
-              internal
+              prominence="tertiary"
+              size="sm"
               onClick={onClose}
               aria-label="Close menu"
             />

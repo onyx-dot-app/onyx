@@ -2,7 +2,7 @@ import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import { User } from "@/lib/types";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import Text from "@/refresh-components/texts/Text";
 import { LoadingAnimation } from "@/components/Loading";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -11,13 +11,11 @@ import { SvgKey, SvgRefreshCw } from "@opal/icons";
 export interface ResetPasswordModalProps {
   user: User;
   onClose: () => void;
-  setPopup: (spec: PopupSpec) => void;
 }
 
 export default function ResetPasswordModal({
   user,
   onClose,
-  setPopup,
 }: ResetPasswordModalProps) {
   const [newPassword, setNewPassword] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,19 +34,13 @@ export default function ResetPasswordModal({
       if (response.ok) {
         const data = await response.json();
         setNewPassword(data.new_password);
-        setPopup({ message: "Password reset successfully", type: "success" });
+        toast.success("Password reset successfully");
       } else {
         const errorData = await response.json();
-        setPopup({
-          message: errorData.detail || "Failed to reset password",
-          type: "error",
-        });
+        toast.error(errorData.detail || "Failed to reset password");
       }
     } catch (error) {
-      setPopup({
-        message: "An error occurred while resetting the password",
-        type: "error",
-      });
+      toast.error("An error occurred while resetting the password");
     } finally {
       setIsLoading(false);
     }

@@ -144,6 +144,10 @@ function.
 If you make any updates to a celery worker and you want to test these changes, you will need
 to ask me to restart the celery worker. There is no auto-restart on code-change mechanism.
 
+**Task Time Limits**:
+Since all tasks are executed in thread pools, the time limit features of Celery are silently 
+disabled and won't work. Timeout logic must be implemented within the task itself.
+
 ### Code Quality
 
 ```bash

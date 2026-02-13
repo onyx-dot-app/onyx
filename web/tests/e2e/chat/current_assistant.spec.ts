@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { dragElementAbove, dragElementBelow } from "../utils/dragUtils";
 import { loginAsRandomUser } from "../utils/auth";
 import { createAssistant, pinAssistantByName } from "../utils/assistantUtils";

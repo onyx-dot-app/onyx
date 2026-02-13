@@ -6,10 +6,8 @@ import {
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
 import { StreamStopInfo } from "@/lib/search/interfaces";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
-import { stopChatSession } from "@/app/app/chat_search/utils";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
@@ -50,7 +48,7 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   ReadonlyURLSearchParams,
   usePathname,
@@ -107,9 +105,21 @@ interface UseChatControllerProps {
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
-  setPopup: (popup: PopupSpec) => void;
   resetInputBar: () => void;
   setSelectedAssistantFromId: (assistantId: number | null) => void;
+}
+
+async function stopChatSession(chatSessionId: string): Promise<void> {
+  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to stop chat session: ${response.statusText}`);
+  }
 }
 
 export default function useChatController({
@@ -119,7 +129,6 @@ export default function useChatController({
   liveAssistant,
   existingChatSessionId,
   selectedDocuments,
-  setPopup,
   resetInputBar,
   setSelectedAssistantFromId,
 }: UseChatControllerProps) {
@@ -441,15 +450,9 @@ export default function useChatController({
 
       if (currentChatState != "input") {
         if (currentChatState == "uploading") {
-          setPopup({
-            message: "Please wait for the content to upload",
-            type: "error",
-          });
+          toast.error("Please wait for the content to upload");
         } else {
-          setPopup({
-            message: "Please wait for the response to complete",
-            type: "error",
-          });
+          toast.error("Please wait for the response to complete");
         }
 
         return;
@@ -553,11 +556,9 @@ export default function useChatController({
         : null;
 
       if (!messageToResend && messageIdToResend !== undefined) {
-        setPopup({
-          message:
-            "Failed to re-send message - please refresh the page and try again.",
-          type: "error",
-        });
+        toast.error(
+          "Failed to re-send message - please refresh the page and try again."
+        );
         resetRegenerationState(frozenSessionId);
         updateChatStateAction(frozenSessionId, "input");
         return;
@@ -952,7 +953,6 @@ export default function useChatController({
       existingChatSessionId,
       selectedDocuments,
       searchParams,
-      setPopup,
       resetInputBar,
       setSelectedAssistantFromId,
       updateSelectedNodeForDocDisplay,
@@ -986,18 +986,15 @@ export default function useChatController({
       );
 
       if (imageFiles.length > 0 && !llmAcceptsImages) {
-        setPopup({
-          type: "error",
-          message:
-            "The current model does not support image input. Please select a model with Vision support.",
-        });
+        toast.error(
+          "The current model does not support image input. Please select a model with Vision support."
+        );
         return;
       }
       updateChatStateAction(getCurrentSessionId(), "uploading");
       const uploadedMessageFiles = await beginUpload(
         Array.from(acceptedFiles),
-        null,
-        setPopup
+        null
       );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
@@ -1060,10 +1057,7 @@ export default function useChatController({
         router.push(data.redirect_url);
       } catch (error) {
         console.error("Error seeding chat from Slack:", error);
-        setPopup({
-          message: "Failed to load chat from Slack",
-          type: "error",
-        });
+        toast.error("Failed to load chat from Slack");
       }
     };
 

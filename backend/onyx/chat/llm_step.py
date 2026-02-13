@@ -36,6 +36,10 @@ from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.utils import model_needs_formatting_reenabled
+from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -332,26 +336,48 @@ def extract_tool_calls_from_response_text(
     # Find all JSON objects in the response text
     json_objects = find_all_json_objects(response_text)
 
-    tool_calls: list[ToolCallKickoff] = []
-    tab_index = 0
+    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
+    prev_json_obj: dict[str, Any] | None = None
+    prev_tool_call: tuple[str, dict[str, Any]] | None = None
 
     for json_obj in json_objects:
         matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
-        if matched_tool_call:
-            tool_name, tool_args = matched_tool_call
-            tool_calls.append(
-                ToolCallKickoff(
-                    tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
-                    tool_name=tool_name,
-                    tool_args=tool_args,
-                    placement=Placement(
-                        turn_index=placement.turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=placement.sub_turn_index,
-                    ),
-                )
+        if not matched_tool_call:
+            continue
+
+        # `find_all_json_objects` can return both an outer tool-call object and
+        # its nested arguments object. If both resolve to the same tool call,
+        # drop only this nested duplicate artifact.
+        if (
+            prev_json_obj is not None
+            and prev_tool_call is not None
+            and matched_tool_call == prev_tool_call
+            and _is_nested_arguments_duplicate(
+                previous_json_obj=prev_json_obj,
+                current_json_obj=json_obj,
+                tool_name_to_def=tool_name_to_def,
             )
-            tab_index += 1
+        ):
+            continue
+
+        matched_tool_calls.append(matched_tool_call)
+        prev_json_obj = json_obj
+        prev_tool_call = matched_tool_call
+
+    tool_calls: list[ToolCallKickoff] = []
+    for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
+        tool_calls.append(
+            ToolCallKickoff(
+                tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
+                tool_name=tool_name,
+                tool_args=tool_args,
+                placement=Placement(
+                    turn_index=placement.turn_index,
+                    tab_index=tab_index,
+                    sub_turn_index=placement.sub_turn_index,
+                ),
+            )
+        )
 
     logger.info(
         f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
@@ -433,6 +459,42 @@ def _try_match_json_to_tool(
     return None
 
 
+def _is_nested_arguments_duplicate(
+    previous_json_obj: dict[str, Any],
+    current_json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> bool:
+    """Detect when current object is the nested args object from previous tool call."""
+    extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
+    return extracted_args is not None and current_json_obj == extracted_args
+
+
+def _extract_nested_arguments_obj(
+    json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> dict[str, Any] | None:
+    # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
+    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
+        args_obj = json_obj.get("arguments", json_obj.get("parameters"))
+        if isinstance(args_obj, dict):
+            return args_obj
+
+    # Format 2: {"function": {"name": "...", "arguments": {...}}}
+    if "function" in json_obj and isinstance(json_obj["function"], dict):
+        function_obj = json_obj["function"]
+        if "name" in function_obj and function_obj["name"] in tool_name_to_def:
+            args_obj = function_obj.get("arguments", function_obj.get("parameters"))
+            if isinstance(args_obj, dict):
+                return args_obj
+
+    # Format 3: {"tool_name": {...arguments...}}
+    for tool_name in tool_name_to_def:
+        if tool_name in json_obj and isinstance(json_obj[tool_name], dict):
+            return json_obj[tool_name]
+
+    return None
+
+
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
@@ -451,6 +513,7 @@ def translate_history_to_llm_format(
         if PROMPT_CACHE_CHAT_HISTORY and msg.message_type in [
             MessageType.SYSTEM,
             MessageType.USER,
+            MessageType.USER_REMINDER,
             MessageType.ASSISTANT,
             MessageType.TOOL_CALL_RESPONSE,
         ]:
@@ -512,6 +575,16 @@ def translate_history_to_llm_format(
                 )
                 messages.append(user_msg_text)
 
+        elif msg.message_type == MessageType.USER_REMINDER:
+            # User reminder messages are wrapped with system-reminder tags
+            # and converted to UserMessage (LLM APIs don't have a native reminder type)
+            wrapped_content = f"{SYSTEM_REMINDER_TAG_OPEN}\n{msg.message}\n{SYSTEM_REMINDER_TAG_CLOSE}"
+            reminder_msg = UserMessage(
+                role="user",
+                content=wrapped_content,
+            )
+            messages.append(reminder_msg)
+
         elif msg.message_type == MessageType.ASSISTANT:
             tool_calls_list: list[ToolCall] | None = None
             if msg.tool_calls:
@@ -551,6 +624,17 @@ def translate_history_to_llm_format(
             logger.warning(
                 f"Unknown message type {msg.message_type} in history. Skipping message."
             )
+
+    # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
+    # reasoning models need CODE_BLOCK_MARKDOWN prefix for correct markdown generation)
+    if model_needs_formatting_reenabled(llm_config.model_name):
+        for i, m in enumerate(messages):
+            if isinstance(m, SystemMessage):
+                messages[i] = SystemMessage(
+                    role="system",
+                    content=CODE_BLOCK_MARKDOWN + m.content,
+                )
+                break
 
     # prompt caching: rely on should_cache in ChatMessageSimple to
     # pick the split point for the cacheable prefix and suffix

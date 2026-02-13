@@ -673,7 +673,6 @@ class TestOpenSearchClient:
         search_body = DocumentQuery.get_hybrid_search_query(
             query_text=query_text,
             query_vector=query_vector,
-            num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
             # We're not worried about filtering here. tenant_id in this object
@@ -726,7 +725,6 @@ class TestOpenSearchClient:
         search_body = DocumentQuery.get_hybrid_search_query(
             query_text=query_text,
             query_vector=query_vector,
-            num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
             # We're not worried about filtering here. tenant_id in this object
@@ -827,7 +825,6 @@ class TestOpenSearchClient:
         search_body = DocumentQuery.get_hybrid_search_query(
             query_text=query_text,
             query_vector=query_vector,
-            num_candidates=10,
             num_hits=5,
             tenant_state=tenant_x,
             # The user should only be able to see their private docs. tenant_id
@@ -951,7 +948,6 @@ class TestOpenSearchClient:
         search_body = DocumentQuery.get_hybrid_search_query(
             query_text=query_text,
             query_vector=query_vector,
-            num_candidates=10,
             num_hits=5,
             tenant_state=tenant_x,
             # Explicitly pass in an empty list to enforce private doc filtering.
@@ -1315,7 +1311,6 @@ class TestOpenSearchClient:
         last_week_search_body = DocumentQuery.get_hybrid_search_query(
             query_text="Good match",
             query_vector=_generate_test_vector(0.1),
-            num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
             index_filters=IndexFilters(
@@ -1326,7 +1321,6 @@ class TestOpenSearchClient:
         last_six_months_search_body = DocumentQuery.get_hybrid_search_query(
             query_text="Good match",
             query_vector=_generate_test_vector(0.1),
-            num_candidates=10,
             num_hits=5,
             tenant_state=tenant_state,
             index_filters=IndexFilters(

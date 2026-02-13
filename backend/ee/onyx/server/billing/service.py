@@ -109,7 +109,9 @@ async def _make_billing_request(
     headers = _get_headers(license_data)
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+        async with httpx.AsyncClient(
+            timeout=_REQUEST_TIMEOUT, follow_redirects=True
+        ) as client:
             if method == "GET":
                 response = await client.get(url, headers=headers, params=params)
             else:

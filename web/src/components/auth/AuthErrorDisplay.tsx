@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePopup } from "../admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 
 const ERROR_MESSAGES = {
   Anonymous: "Your team does not have anonymous access enabled.",
@@ -13,18 +13,15 @@ export default function AuthErrorDisplay({
   searchParams: any;
 }) {
   const error = searchParams?.error;
-  const { popup, setPopup } = usePopup();
 
   useEffect(() => {
     if (error) {
-      setPopup({
-        message:
-          ERROR_MESSAGES[error as keyof typeof ERROR_MESSAGES] ||
-          "An error occurred.",
-        type: "error",
-      });
+      toast.error(
+        ERROR_MESSAGES[error as keyof typeof ERROR_MESSAGES] ||
+          "An error occurred."
+      );
     }
   }, [error]);
 
-  return <>{popup}</>;
+  return null;
 }

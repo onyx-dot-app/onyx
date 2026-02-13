@@ -19,13 +19,12 @@ import {
   fetchArtifacts,
   exportDocx,
 } from "@/app/craft/services/apiServices";
-import { cn } from "@/lib/utils";
+import { cn, getFileIcon } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgGlobe,
   SvgHardDrive,
   SvgFiles,
-  SvgFileText,
   SvgX,
   SvgMinus,
   SvgMaximize2,
@@ -88,6 +87,15 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const setActiveFilePreviewPath = useBuildSessionStore(
     (state) => state.setActiveFilePreviewPath
   );
+
+  // Store actions for refresh
+  const triggerFilesRefresh = useBuildSessionStore(
+    (state) => state.triggerFilesRefresh
+  );
+
+  // Counters to force-reload previews
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [filePreviewRefreshKey, setFilePreviewRefreshKey] = useState(0);
 
   // Determine which tab is visually active
   const isFilePreviewActive = activeFilePreviewPath !== null;
@@ -259,11 +267,21 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, navigateTabForward]);
 
-  // Determine if the active file preview is a markdown file (for download button)
+  // Determine if the active file preview is a markdown or pptx file (for download buttons)
   const isMarkdownPreview =
     isFilePreviewActive &&
     activeFilePreviewPath &&
     /\.md$/i.test(activeFilePreviewPath);
+
+  const isPptxPreview =
+    isFilePreviewActive &&
+    activeFilePreviewPath &&
+    /\.pptx$/i.test(activeFilePreviewPath);
+
+  const isPdfPreview =
+    isFilePreviewActive &&
+    activeFilePreviewPath &&
+    /\.pdf$/i.test(activeFilePreviewPath);
 
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
@@ -289,7 +307,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, activeFilePreviewPath]);
 
-  const handleMdDownload = useCallback(() => {
+  const handleRawFileDownload = useCallback(() => {
     if (!session?.id || !activeFilePreviewPath) return;
     const encodedPath = activeFilePreviewPath
       .split("/")
@@ -303,6 +321,26 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     link.click();
     document.body.removeChild(link);
   }, [session?.id, activeFilePreviewPath]);
+
+  // Unified refresh handler — dispatches based on the active tab/preview
+  const handleRefresh = useCallback(() => {
+    if (isFilePreviewActive && activeFilePreviewPath) {
+      // File preview tab: bump key to reload standalone + content previews
+      setFilePreviewRefreshKey((k) => k + 1);
+    } else if (activeOutputTab === "preview") {
+      // Web preview tab: remount the iframe
+      setPreviewRefreshKey((k) => k + 1);
+    } else if (activeOutputTab === "files" && session?.id) {
+      // Files tab: clear cache and re-fetch directory listing
+      triggerFilesRefresh(session.id);
+    }
+  }, [
+    isFilePreviewActive,
+    activeFilePreviewPath,
+    activeOutputTab,
+    session?.id,
+    triggerFilesRefresh,
+  ]);
 
   // Fetch artifacts - poll every 5 seconds when on artifacts tab
   const shouldFetchArtifacts =
@@ -461,6 +499,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             {/* Preview tabs */}
             {filePreviewTabs.map((previewTab) => {
               const isActive = activeFilePreviewPath === previewTab.path;
+              const TabIcon = getFileIcon(previewTab.fileName);
               return (
                 <button
                   key={previewTab.path}
@@ -485,7 +524,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       }}
                     />
                   )}
-                  <SvgFileText
+                  <TabIcon
                     size={14}
                     className={cn(
                       "stroke-current flex-shrink-0",
@@ -561,9 +600,21 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             ? displayUrl
             : null
         }
-        onDownloadRaw={isMarkdownPreview ? handleMdDownload : undefined}
+        onDownloadRaw={
+          isMarkdownPreview || isPptxPreview || isPdfPreview
+            ? handleRawFileDownload
+            : undefined
+        }
+        downloadRawTooltip={
+          isPdfPreview
+            ? "Download PDF"
+            : isPptxPreview
+              ? "Download PPTX"
+              : "Download MD file"
+        }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
+        onRefresh={handleRefresh}
       />
 
       {/* Tab Content */}
@@ -573,6 +624,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
           <FilePreviewContent
             sessionId={session.id}
             filePath={activeFilePreviewPath}
+            refreshKey={filePreviewRefreshKey}
           />
         )}
         {/* Pinned tab content - only show when no file preview is active */}
@@ -585,7 +637,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
               (!session ? (
                 <CraftingLoader />
               ) : (
-                <PreviewTab webappUrl={displayUrl} />
+                <PreviewTab
+                  webappUrl={displayUrl}
+                  refreshKey={previewRefreshKey}
+                />
               ))}
             {activeOutputTab === "files" && (
               <FilesTab

@@ -30,12 +30,14 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.auth.users import enforce_seat_limit
 from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
+from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
@@ -56,6 +58,7 @@ from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
+from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
@@ -76,6 +79,8 @@ from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
 from onyx.server.manage.models import ChatBackgroundRequest
+from onyx.server.manage.models import DefaultAppModeRequest
+from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
@@ -90,6 +95,7 @@ from onyx.server.manage.models import UserSpecificAssistantPreferences
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
+from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -391,14 +397,20 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
+    # Limit bulk invites for trial tenants to prevent email spam
+    # Only count new invites, not re-invites of existing users
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        current_invited = len(already_invited)
+        if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
+            raise HTTPException(
+                status_code=403,
+                detail="You have hit your invite limit. "
+                "Please upgrade for unlimited invites.",
+            )
+
     # Check seat availability for new users
-    # Only for self-hosted (non-multi-tenant) deployments
-    if not MULTI_TENANT and emails_needing_seats:
-        result = fetch_ee_implementation_or_noop(
-            "onyx.db.license", "check_seat_availability", None
-        )(db_session, seats_needed=len(emails_needing_seats))
-        if result is not None and not result.available:
-            raise HTTPException(status_code=402, detail=result.error_message)
+    if emails_needing_seats:
+        enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
 
     if MULTI_TENANT:
         try:
@@ -414,10 +426,10 @@ def bulk_invite_users(
     all_emails = list(set(new_invited_emails) | set(initial_invited_users))
     number_of_invited_users = write_invited_users(all_emails)
 
-    # send out email invitations if enabled
+    # send out email invitations only to new users (not already invited or existing)
     if ENABLE_EMAIL_INVITES:
         try:
-            for email in new_invited_emails:
+            for email in emails_needing_seats:
                 send_user_email_invite(email, current_user, AUTH_TYPE)
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
@@ -564,12 +576,7 @@ def activate_user_api(
 
     # Check seat availability before activating
     # Only for self-hosted (non-multi-tenant) deployments
-    if not MULTI_TENANT:
-        result = fetch_ee_implementation_or_noop(
-            "onyx.db.license", "check_seat_availability", None
-        )(db_session, seats_needed=1)
-        if result is not None and not result.available:
-            raise HTTPException(status_code=402, detail=result.error_message)
+    enforce_seat_limit(db_session)
 
     activate_user(user_to_activate, db_session)
 
@@ -593,11 +600,16 @@ def get_valid_domains(
 
 @router.get("/users", tags=PUBLIC_API_TAGS)
 def list_all_users_basic_info(
+    include_api_keys: bool = False,
     _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     users = get_all_users(db_session)
-    return [MinimalUserSnapshot(id=user.id, email=user.email) for user in users]
+    return [
+        MinimalUserSnapshot(id=user.id, email=user.email)
+        for user in users
+        if include_api_keys or not is_api_key_email_address(user.email)
+    ]
 
 
 @router.get("/get-user-role", tags=PUBLIC_API_TAGS)
@@ -817,6 +829,15 @@ def update_user_chat_background_api(
     update_user_chat_background(user.id, request.chat_background, db_session)
 
 
+@router.patch("/user/default-app-mode")
+def update_user_default_app_mode_api(
+    request: DefaultAppModeRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_default_app_mode(user.id, request.default_app_mode, db_session)
+
+
 @router.patch("/user/default-model")
 def update_user_default_model_api(
     request: ChosenDefaultModelRequest,
@@ -840,7 +861,14 @@ def update_user_personalization_api(
         if request.use_memories is not None
         else current_use_memories
     )
-    existing_memories = [memory.memory_text for memory in user.memories]
+    new_enable_memory_tool = (
+        request.enable_memory_tool
+        if request.enable_memory_tool is not None
+        else user.enable_memory_tool
+    )
+    existing_memories = [
+        MemoryItem(id=memory.id, content=memory.memory_text) for memory in user.memories
+    ]
     new_memories = (
         request.memories if request.memories is not None else existing_memories
     )
@@ -855,6 +883,7 @@ def update_user_personalization_api(
         personal_name=new_name,
         personal_role=new_role,
         use_memories=new_use_memories,
+        enable_memory_tool=new_enable_memory_tool,
         memories=new_memories,
         user_preferences=new_user_preferences,
         db_session=db_session,

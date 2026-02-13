@@ -10,6 +10,7 @@ from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.index_attempt import expire_index_attempts
+from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import User
 from onyx.db.search_settings import delete_search_settings
@@ -24,6 +25,7 @@ from onyx.file_processing.unstructured import update_unstructured_api_key
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
 from onyx.server.models import IdReturn
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -31,7 +33,7 @@ router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
 
 
-@router.post("/set-new-search-settings")
+@router.post("/set-new-search-settings", dependencies=[Depends(require_vector_db)])
 def set_new_search_settings(
     search_settings_new: SearchSettingsCreationRequest,  # noqa: ARG001
     _: User = Depends(current_admin_user),
@@ -41,6 +43,8 @@ def set_new_search_settings(
     Gives an error if the same model name is used as the current or secondary index
     """
     # TODO(andrei): Re-enable.
+    # NOTE Enable integration external dependency tests in test_search_settings.py
+    # when this is reenabled. They are currently skipped
     logger.error("Setting new search settings is temporarily disabled.")
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -67,6 +71,12 @@ def set_new_search_settings(
     #             status_code=status.HTTP_400_BAD_REQUEST,
     #             detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
     #         )
+
+    # validate_contextual_rag_model(
+    #     provider_name=search_settings_new.contextual_rag_llm_provider,
+    #     model_name=search_settings_new.contextual_rag_llm_name,
+    #     db_session=db_session,
+    # )
 
     # search_settings = get_current_search_settings(db_session)
 
@@ -133,7 +143,7 @@ def set_new_search_settings(
     # return IdReturn(id=new_search_settings.id)
 
 
-@router.post("/cancel-new-embedding")
+@router.post("/cancel-new-embedding", dependencies=[Depends(require_vector_db)])
 def cancel_new_embedding(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
@@ -153,7 +163,9 @@ def cancel_new_embedding(
 
         # remove the old index from the vector db
         primary_search_settings = get_current_search_settings(db_session)
-        document_index = get_default_document_index(primary_search_settings, None)
+        document_index = get_default_document_index(
+            primary_search_settings, None, db_session
+        )
         document_index.ensure_indices_exist(
             primary_embedding_dim=primary_search_settings.final_embedding_dim,
             primary_embedding_precision=primary_search_settings.embedding_precision,
@@ -230,6 +242,12 @@ def update_saved_search_settings(
             detail="Contextual RAG disabled in Onyx Cloud",
         )
 
+    validate_contextual_rag_model(
+        provider_name=search_settings.contextual_rag_llm_provider,
+        model_name=search_settings.contextual_rag_llm_name,
+        db_session=db_session,
+    )
+
     update_current_search_settings(
         search_settings=search_settings, db_session=db_session
     )
@@ -256,3 +274,38 @@ def delete_unstructured_api_key_endpoint(
     _: User = Depends(current_admin_user),
 ) -> None:
     delete_unstructured_api_key()
+
+
+def validate_contextual_rag_model(
+    provider_name: str | None,
+    model_name: str | None,
+    db_session: Session,
+) -> None:
+    if error_msg := _validate_contextual_rag_model(
+        provider_name=provider_name,
+        model_name=model_name,
+        db_session=db_session,
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+
+def _validate_contextual_rag_model(
+    provider_name: str | None,
+    model_name: str | None,
+    db_session: Session,
+) -> str | None:
+    if provider_name is None and model_name is None:
+        return None
+    if not provider_name or not model_name:
+        return "Provider name and model name are required"
+
+    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    if not provider:
+        return f"Provider {provider_name} not found"
+    model_config = next(
+        (mc for mc in provider.model_configurations if mc.name == model_name), None
+    )
+    if not model_config:
+        return f"Model {model_name} not found in provider {provider_name}"
+
+    return None

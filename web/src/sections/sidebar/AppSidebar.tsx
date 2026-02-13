@@ -2,7 +2,7 @@
 
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useSWR from "swr";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import Text from "@/refresh-components/texts/Text";
@@ -41,8 +41,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
-import { usePopup } from "@/components/admin/connectors/Popup";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
   DRAG_TYPES,
@@ -79,6 +78,8 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
+import { useAppMode } from "@/providers/AppModeProvider";
+import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -148,9 +149,10 @@ const MemoizedAppSidebarInner = memo(
   ({ folded, onFoldClick }: AppSidebarInnerProps) => {
     const router = useRouter();
     const combinedSettings = useSettingsContext();
-    const { popup, setPopup } = usePopup();
     const posthog = usePostHog();
     const { newTenantInfo, invitationInfo } = useModalContext();
+    const { setAppMode } = useAppMode();
+    const { reset } = useQueryController();
 
     // Use SWR hooks for data fetching
     const {
@@ -317,17 +319,14 @@ const MemoizedAppSidebarInner = memo(
       chatSession: ChatSession
     ) {
       try {
-        await handleMoveOperation(
-          {
-            chatSession,
-            targetProjectId,
-            refreshChatSessions,
-            refreshCurrentProjectDetails,
-            fetchProjects: refreshProjects,
-            currentProjectId,
-          },
-          setPopup
-        );
+        await handleMoveOperation({
+          chatSession,
+          targetProjectId,
+          refreshChatSessions,
+          refreshCurrentProjectDetails,
+          fetchProjects: refreshProjects,
+          currentProjectId,
+        });
         const projectRefreshPromise = currentProjectId
           ? refreshCurrentProjectDetails()
           : refreshProjects();
@@ -384,10 +383,7 @@ const MemoizedAppSidebarInner = memo(
           try {
             await performChatMove(targetProject.id, chatSession);
           } catch (error) {
-            showErrorNotification(
-              setPopup,
-              "Failed to move chat. Please try again."
-            );
+            showErrorNotification("Failed to move chat. Please try again.");
           }
         }
 
@@ -418,13 +414,16 @@ const MemoizedAppSidebarInner = memo(
         refreshChatSessions,
         refreshCurrentProjectDetails,
         refreshProjects,
-        setPopup,
       ]
     );
 
-    const { isAdmin, isCurator } = useUser();
+    const { isAdmin, isCurator, user } = useUser();
     const activeSidebarTab = useAppFocus();
     const createProjectModal = useCreateModal();
+    const defaultAppMode =
+      (user?.preferences?.default_app_mode?.toLowerCase() as
+        | "chat"
+        | "search") ?? "chat";
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent
@@ -437,12 +436,23 @@ const MemoizedAppSidebarInner = memo(
             folded={folded}
             href={href}
             transient={activeSidebarTab.isNewSession()}
+            onClick={() => {
+              if (!activeSidebarTab.isNewSession()) return;
+              setAppMode(defaultAppMode);
+              reset();
+            }}
           >
             New Session
           </SidebarTab>
         </div>
       );
-    }, [folded, activeSidebarTab, combinedSettings, currentAgent]);
+    }, [
+      folded,
+      activeSidebarTab,
+      combinedSettings,
+      currentAgent,
+      defaultAppMode,
+    ]);
 
     const buildButton = useMemo(
       () => (
@@ -510,12 +520,18 @@ const MemoizedAppSidebarInner = memo(
       setShowIntroAnimation(true);
     }, []);
 
+    const vectorDbEnabled =
+      combinedSettings?.settings?.vector_db_enabled !== false;
+    const adminDefaultHref = vectorDbEnabled
+      ? "/admin/indexing/status"
+      : "/admin/assistants";
+
     const settingsButton = useMemo(
       () => (
         <div>
           {(isAdmin || isCurator) && (
             <SidebarTab
-              href="/admin/indexing/status"
+              href={adminDefaultHref}
               leftIcon={SvgSettings}
               folded={folded}
             >
@@ -530,12 +546,18 @@ const MemoizedAppSidebarInner = memo(
           />
         </div>
       ),
-      [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+      [
+        folded,
+        isAdmin,
+        isCurator,
+        handleShowBuildIntro,
+        isOnyxCraftEnabled,
+        adminDefaultHref,
+      ]
     );
 
     return (
       <>
-        {popup}
         <createProjectModal.Provider>
           <CreateProjectModal />
         </createProjectModal.Provider>
@@ -564,7 +586,6 @@ const MemoizedAppSidebarInner = memo(
                   await performChatMove(target, chat);
                 } catch (error) {
                   showErrorNotification(
-                    setPopup,
                     "Failed to move chat. Please try again."
                   );
                 }
@@ -655,9 +676,10 @@ const MemoizedAppSidebarInner = memo(
                   <SidebarSection
                     title="Projects"
                     action={
-                      <IconButton
+                      <OpalButton
                         icon={SvgFolderPlus}
-                        internal
+                        prominence="tertiary"
+                        size="sm"
                         tooltip="New Project"
                         onClick={() => createProjectModal.toggle(true)}
                       />

@@ -3,12 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
-import ChatInputBar, {
-  ChatInputBarHandle,
-} from "@/app/app/components/input/ChatInputBar";
+import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
@@ -30,8 +28,8 @@ import {
   useChatSessionStore,
   useDocumentSidebarVisible,
 } from "@/app/app/stores/useChatSessionStore";
-import MessageList from "@/components/chat/MessageList";
-import ChatScrollContainer from "@/components/chat/ChatScrollContainer";
+import ChatUI from "@/sections/chat/ChatUI";
+import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@/lib/utils";
@@ -65,8 +63,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { user, authTypeMetadata } = useUser();
   const { setFolded } = useAppSidebarContext();
 
-  const { popup, setPopup } = usePopup();
-
   // Hide sidebar when in side panel mode
   useEffect(() => {
     if (isSidePanel) {
@@ -89,20 +85,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     clearLastFailedFiles,
   } = useProjectsContext();
 
-  // Show popup if any files failed
+  // Show toast if any files failed
   useEffect(() => {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
-      setPopup({
-        type: "error",
-        message:
-          lastFailedFiles.length === 1
-            ? `File failed and was removed: ${names}`
-            : `Files failed and were removed: ${names}`,
-      });
+      toast.error(
+        lastFailedFiles.length === 1
+          ? `File failed and was removed: ${names}`
+          : `Files failed and were removed: ${names}`
+      );
       clearLastFailedFiles();
     }
-  }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
+  }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
@@ -163,7 +157,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Refs
   const inputRef = useRef<HTMLDivElement>(null);
-  const chatInputBarRef = useRef<ChatInputBarHandle | null>(null);
+  const chatInputBarRef = useRef<AppInputBarHandle | null>(null);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
   // Access chat state from store
@@ -224,7 +218,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       existingChatSessionId,
       selectedDocuments: [],
       searchParams: searchParams!,
-      setPopup,
       resetInputBar,
       setSelectedAssistantFromId,
     });
@@ -255,7 +248,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [handleMessageSpecificFileUpload]
   );
 
-  // Handle submit from ChatInputBar
+  // Handle submit from AppInputBar
   const handleChatInputSubmit = useCallback(
     (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
@@ -275,10 +268,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      setPopup({
-        message: "No previously-submitted user message found.",
-        type: "error",
-      });
+      toast.error("No previously-submitted user message found.");
       return;
     }
 
@@ -288,13 +278,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       deepResearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }, [
-    messageHistory,
-    onSubmit,
-    currentMessageFiles,
-    deepResearchEnabled,
-    setPopup,
-  ]);
+  }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
   const handleOpenInOnyx = () => {
     window.open(`${window.location.origin}/app`, "_blank");
@@ -314,8 +298,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           : undefined
       }
     >
-      {popup}
-
       {/* Semi-transparent overlay for readability when background is set */}
       {!isSidePanel && hasBackground && (
         <div className="absolute inset-0 bg-background/80 pointer-events-none" />
@@ -367,7 +349,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   autoScroll={autoScrollEnabled}
                   isStreaming={isStreaming}
                 >
-                  <MessageList
+                  <ChatUI
                     liveAssistant={resolvedAssistant}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
@@ -391,12 +373,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </div>
             )}
 
-            {/* ChatInputBar container - in normal flex flow like AppPage */}
+            {/* AppInputBar container - in normal flex flow like AppPage */}
             <div
               ref={inputRef}
               className="w-full max-w-[var(--app-page-main-content-width)] flex flex-col px-4"
             >
-              <ChatInputBar
+              <AppInputBar
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}

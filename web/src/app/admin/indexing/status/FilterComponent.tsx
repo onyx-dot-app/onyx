@@ -14,7 +14,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccessType, ValidStatuses } from "@/lib/types";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { SvgFilter } from "@opal/icons";
 export interface FilterOptions {
   accessType: AccessType[] | null;
@@ -128,7 +128,11 @@ export const FilterComponent = forwardRef<
     <div className="relative">
       <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
-          <IconButton icon={SvgFilter} secondary transient={isOpen} />
+          <OpalButton
+            icon={SvgFilter}
+            prominence="secondary"
+            transient={isOpen}
+          />
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"

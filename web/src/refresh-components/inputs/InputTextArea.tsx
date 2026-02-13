@@ -52,6 +52,7 @@ export interface InputTextAreaProps
   variant?: Variants;
   autoResize?: boolean;
   maxRows?: number;
+  resizable?: boolean;
 }
 const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
   (
@@ -62,6 +63,7 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
       readOnly,
       autoResize = false,
       maxRows,
+      resizable = true,
       ...props
     },
     ref
@@ -104,7 +106,7 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
       adjustHeight();
     }, [adjustHeight, props.value]);
 
-    const resizeClass = autoResize ? "resize-none" : "resize-y";
+    const resizeClass = autoResize || !resizable ? "resize-none" : "resize-y";
 
     return (
       <div

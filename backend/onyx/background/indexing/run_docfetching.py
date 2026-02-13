@@ -677,7 +677,6 @@ def connector_document_extraction(
                 logger.debug(f"Indexing batch of documents: {batch_description}")
                 memory_tracer.increment_and_maybe_trace()
 
-                # cc4a
                 if processing_mode == ProcessingMode.FILE_SYSTEM:
                     # File system only - write directly to persistent storage,
                     # skip chunking/embedding/Vespa but still track documents in DB
@@ -817,17 +816,19 @@ def connector_document_extraction(
         if processing_mode == ProcessingMode.FILE_SYSTEM:
             creator_id = index_attempt.connector_credential_pair.creator_id
             if creator_id:
+                source_value = db_connector.source.value
                 app.send_task(
                     OnyxCeleryTask.SANDBOX_FILE_SYNC,
                     kwargs={
                         "user_id": str(creator_id),
                         "tenant_id": tenant_id,
+                        "source": source_value,
                     },
                     queue=OnyxCeleryQueues.SANDBOX,
                 )
                 logger.info(
                     f"Triggered sandbox file sync for user {creator_id} "
-                    f"after indexing complete"
+                    f"source={source_value} after indexing complete"
                 )
 
     except Exception as e:

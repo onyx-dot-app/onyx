@@ -27,7 +27,7 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
@@ -37,6 +37,7 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown } from "@opal/icons";
+import { Button as OpalButton } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@/lib/utils";
@@ -61,7 +62,6 @@ export default function BuildChatPanel({
 }: BuildChatPanelProps) {
   const router = useRouter();
   const posthog = usePostHog();
-  const { popup, setPopup } = usePopup();
   const outputPanelOpen = useOutputPanelOpen();
   const session = useSession();
   const sessionId = useSessionId();
@@ -260,10 +260,7 @@ export default function BuildChatPanel({
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
         if (isRunning) {
-          setPopup({
-            message: "Please wait for the current operation to complete.",
-            type: "error",
-          });
+          toast.error("Please wait for the current operation to complete.");
           return;
         }
 
@@ -287,10 +284,7 @@ export default function BuildChatPanel({
         if (!newSessionId) {
           // This should not happen if UI properly disables input until ready
           console.error("[ChatPanel] No pre-provisioned session available");
-          setPopup({
-            message: "Please wait for sandbox to initialize",
-            type: "error",
-          });
+          toast.error("Please wait for sandbox to initialize");
           return;
         }
 
@@ -363,7 +357,6 @@ export default function BuildChatPanel({
       hasSession,
       sessionId,
       isRunning,
-      setPopup,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
@@ -380,7 +373,6 @@ export default function BuildChatPanel({
 
   return (
     <div className="h-full w-full">
-      {popup}
       <UpgradePlanModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
@@ -398,10 +390,11 @@ export default function BuildChatPanel({
           <div className="flex flex-row items-center gap-2 max-w-[75%]">
             {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
             {isMobile && leftSidebarFolded && (
-              <IconButton
+              <OpalButton
                 icon={SvgSidebar}
                 onClick={() => setLeftSidebarFolded(false)}
-                internal
+                prominence="tertiary"
+                size="sm"
               />
             )}
             <SandboxStatusIndicator />

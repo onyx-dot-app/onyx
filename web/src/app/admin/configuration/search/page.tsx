@@ -18,7 +18,7 @@ import { useContext } from "react";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import CardSection from "@/components/admin/CardSection";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
+import { useToastFromQuery } from "@/hooks/useToast";
 import { SvgSearch } from "@opal/icons";
 export interface EmbeddingDetails {
   api_key: string;
@@ -29,7 +29,7 @@ export interface EmbeddingDetails {
 
 function Main() {
   const settings = useContext(SettingsContext);
-  const { popup: searchSettingsPopup } = usePopupFromQuery({
+  useToastFromQuery({
     "search-settings": {
       message: `Changed search settings successfully`,
       type: "success",
@@ -80,7 +80,6 @@ function Main() {
 
   return (
     <div>
-      {searchSettingsPopup}
       {!futureEmbeddingModel ? (
         <>
           {settings?.settings.needs_reindexing && (

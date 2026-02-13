@@ -12,7 +12,7 @@ import {
   MCPServer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
 import AddMCPServerModal from "@/sections/actions/modals/AddMCPServerModal";
@@ -41,7 +41,6 @@ export default function MCPPageContent() {
   const authModal = useCreateModal();
   const disconnectModal = useCreateModal();
   const manageServerModal = useCreateModal();
-  const { popup, setPopup } = usePopup();
 
   // Local state
   const [activeServer, setActiveServer] = useState<MCPServer | null>(null);
@@ -90,20 +89,16 @@ export default function MCPPageContent() {
 
           await refreshMCPServerTools(serverIdInt);
 
-          setPopup({
-            message: "Successfully connected and fetched tools",
-            type: "success",
-          });
+          toast.success("Successfully connected and fetched tools");
 
           await mutateMcpServers();
         } catch (error) {
           console.error("Failed to fetch tools:", error);
-          setPopup({
-            message: `Failed to fetch tools: ${
+          toast.error(
+            `Failed to fetch tools: ${
               error instanceof Error ? error.message : "Unknown error"
-            }`,
-            type: "error",
-          });
+            }`
+          );
           await mutateMcpServers();
         }
       };
@@ -115,7 +110,6 @@ export default function MCPPageContent() {
     router,
     fetchingToolsServerIds,
     mutateMcpServers,
-    setPopup,
     setServerToExpand,
   ]);
 
@@ -176,27 +170,22 @@ export default function MCPPageContent() {
         MCPServerStatus.DISCONNECTED
       );
 
-      setPopup({
-        message: "MCP Server disconnected successfully",
-        type: "success",
-      });
+      toast.success("MCP Server disconnected successfully");
 
       await mutateMcpServers();
       disconnectModal.toggle(false);
       setActiveServer(null);
     } catch (error) {
       console.error("Error disconnecting server:", error);
-      setPopup({
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to disconnect MCP Server",
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to disconnect MCP Server"
+      );
     } finally {
       setIsDisconnecting(false);
     }
-  }, [activeServer, setPopup, mutateMcpServers, disconnectModal]);
+  }, [activeServer, mutateMcpServers, disconnectModal]);
 
   const handleConfirmDisconnectAndDelete = useCallback(async () => {
     if (!activeServer) return;
@@ -205,27 +194,20 @@ export default function MCPPageContent() {
     try {
       await deleteMCPServer(activeServer.id);
 
-      setPopup({
-        message: "MCP Server deleted successfully",
-        type: "success",
-      });
+      toast.success("MCP Server deleted successfully");
 
       await mutateMcpServers();
       disconnectModal.toggle(false);
       setActiveServer(null);
     } catch (error) {
       console.error("Error deleting server:", error);
-      setPopup({
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to delete MCP Server",
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete MCP Server"
+      );
     } finally {
       setIsDisconnecting(false);
     }
-  }, [activeServer, setPopup, mutateMcpServers, disconnectModal]);
+  }, [activeServer, mutateMcpServers, disconnectModal]);
 
   const openManageServerModal = useCallback(
     (serverId: number) => {
@@ -257,24 +239,17 @@ export default function MCPPageContent() {
       try {
         await deleteMCPServer(serverId);
 
-        setPopup({
-          message: "MCP Server deleted successfully",
-          type: "success",
-        });
+        toast.success("MCP Server deleted successfully");
 
         await mutateMcpServers();
       } catch (error) {
         console.error("Error deleting server:", error);
-        setPopup({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to delete MCP Server",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error ? error.message : "Failed to delete MCP Server"
+        );
       }
     },
-    [setPopup, mutateMcpServers]
+    [mutateMcpServers]
   );
 
   const handleAuthenticate = useCallback(
@@ -303,24 +278,20 @@ export default function MCPPageContent() {
 
         await refreshMCPServerTools(serverId);
 
-        setPopup({
-          message: "Successfully connected and fetched tools",
-          type: "success",
-        });
+        toast.success("Successfully connected and fetched tools");
 
         await mutateMcpServers();
       } catch (error) {
         console.error("Failed to fetch tools:", error);
-        setPopup({
-          message: `Failed to fetch tools: ${
+        toast.error(
+          `Failed to fetch tools: ${
             error instanceof Error ? error.message : "Unknown error"
-          }`,
-          type: "error",
-        });
+          }`
+        );
         await mutateMcpServers();
       }
     },
-    [fetchingToolsServerIds, mutateMcpServers, setPopup, setServerToExpand]
+    [fetchingToolsServerIds, mutateMcpServers, setServerToExpand]
   );
 
   const handleReconnect = useCallback(
@@ -328,24 +299,19 @@ export default function MCPPageContent() {
       try {
         await updateMCPServerStatus(serverId, MCPServerStatus.CONNECTED);
 
-        setPopup({
-          message: "MCP Server reconnected successfully",
-          type: "success",
-        });
+        toast.success("MCP Server reconnected successfully");
 
         await mutateMcpServers();
       } catch (error) {
         console.error("Error reconnecting server:", error);
-        setPopup({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to reconnect MCP Server",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to reconnect MCP Server"
+        );
       }
     },
-    [setPopup, mutateMcpServers]
+    [mutateMcpServers]
   );
 
   const handleToolToggle = useCallback(
@@ -372,24 +338,19 @@ export default function MCPPageContent() {
         // Revalidate to get fresh data from server
         await mutateServerTools();
 
-        setPopup({
-          message: `Tool ${enabled ? "enabled" : "disabled"} successfully`,
-          type: "success",
-        });
+        toast.success(`Tool ${enabled ? "enabled" : "disabled"} successfully`);
       } catch (error) {
         console.error("Error toggling tool:", error);
 
         // Revert on error by revalidating
         await mutateServerTools();
 
-        setPopup({
-          message:
-            error instanceof Error ? error.message : "Failed to update tool",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error ? error.message : "Failed to update tool"
+        );
       }
     },
-    [setPopup]
+    []
   );
 
   const handleRefreshTools = useCallback(
@@ -407,20 +368,15 @@ export default function MCPPageContent() {
         // Also refresh the servers list to update tool counts
         await mutateMcpServers();
 
-        setPopup({
-          message: "Tools refreshed successfully",
-          type: "success",
-        });
+        toast.success("Tools refreshed successfully");
       } catch (error) {
         console.error("Error refreshing tools:", error);
-        setPopup({
-          message:
-            error instanceof Error ? error.message : "Failed to refresh tools",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error ? error.message : "Failed to refresh tools"
+        );
       }
     },
-    [mutateMcpServers, setPopup]
+    [mutateMcpServers]
   );
 
   const handleUpdateToolsStatus = useCallback(
@@ -432,10 +388,7 @@ export default function MCPPageContent() {
     ) => {
       try {
         if (toolIds.length === 0) {
-          setPopup({
-            message: "No tools to disable",
-            type: "info",
-          });
+          toast.info("No tools to disable");
           return;
         }
 
@@ -455,12 +408,11 @@ export default function MCPPageContent() {
         // Revalidate to get fresh data from server
         await mutateServerTools();
 
-        setPopup({
-          message: `${result.updated_count} tool${
+        toast.success(
+          `${result.updated_count} tool${
             result.updated_count !== 1 ? "s" : ""
-          } ${enabled ? "enabled" : "disabled"} successfully`,
-          type: "success",
-        });
+          } ${enabled ? "enabled" : "disabled"} successfully`
+        );
       } catch (error) {
         console.error(
           `Error ${enabled ? "enabling" : "disabling"} all tools:`,
@@ -470,16 +422,14 @@ export default function MCPPageContent() {
         // Revert on error by revalidating
         await mutateServerTools();
 
-        setPopup({
-          message:
-            error instanceof Error
-              ? error.message
-              : `Failed to ${enabled ? "enable" : "disable"} all tools`,
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : `Failed to ${enabled ? "enable" : "disable"} all tools`
+        );
       }
     },
-    [setPopup]
+    []
   );
 
   const onServerCreated = useCallback(
@@ -499,24 +449,17 @@ export default function MCPPageContent() {
     async (serverId: number, newName: string) => {
       try {
         await updateMCPServer(serverId, { name: newName });
-        setPopup({
-          message: "MCP Server renamed successfully",
-          type: "success",
-        });
+        toast.success("MCP Server renamed successfully");
         await mutateMcpServers();
       } catch (error) {
         console.error("Error renaming server:", error);
-        setPopup({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to rename MCP Server",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error ? error.message : "Failed to rename MCP Server"
+        );
         throw error; // Re-throw so ButtonRenaming can handle it
       }
     },
-    [setPopup, mutateMcpServers]
+    [mutateMcpServers]
   );
 
   // Filter servers based on search query
@@ -534,8 +477,6 @@ export default function MCPPageContent() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {popup}
-
       {/* Shared overlay that persists across modal transitions */}
       {showSharedOverlay && (
         <div
@@ -599,7 +540,6 @@ export default function MCPPageContent() {
         <MCPAuthenticationModal
           mcpServer={activeServer}
           skipOverlay
-          setPopup={setPopup}
           onTriggerFetchTools={triggerFetchToolsInPlace}
           mutateMcpServers={mutateMcpServers}
         />
@@ -614,7 +554,6 @@ export default function MCPPageContent() {
           manageServerModal={manageServerModal}
           onServerCreated={onServerCreated}
           handleAuthenticate={handleAuthenticate}
-          setPopup={setPopup}
           mutateMcpServers={async () => {
             await mutateMcpServers();
           }}

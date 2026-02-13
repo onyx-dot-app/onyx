@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import ToolItemSkeleton from "@/sections/actions/skeleton/ToolItemSkeleton";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -96,9 +96,10 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (
-                <IconButton
+                <OpalButton
                   icon={SvgEye}
-                  internal
+                  prominence="tertiary"
+                  size="sm"
                   onClick={onToggleShowOnlyEnabled}
                   transient={showOnlyEnabled}
                   tooltip={
@@ -112,9 +113,10 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 />
               )}
               {onUpdateToolsStatus && enabledCount > 0 && (
-                <IconButton
+                <OpalButton
                   icon={SvgXCircle}
-                  internal
+                  prominence="tertiary"
+                  size="sm"
                   onClick={() => onUpdateToolsStatus(false)}
                   tooltip="Disable all tools"
                   aria-label="Disable all tools"

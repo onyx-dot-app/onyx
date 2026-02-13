@@ -9,7 +9,7 @@ import SignedUpUserTable from "@/components/admin/users/SignedUpUserTable";
 import Modal from "@/refresh-components/Modal";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -52,12 +52,10 @@ function CountDisplay({ label, value, isLoading }: CountDisplayProps) {
 
 const UsersTables = ({
   q,
-  setPopup,
   isDownloadingUsers,
   setIsDownloadingUsers,
 }: {
   q: string;
-  setPopup: (spec: PopupSpec) => void;
   isDownloadingUsers: boolean;
   setIsDownloadingUsers: (loading: boolean) => void;
 }) => {
@@ -86,10 +84,7 @@ const UsersTables = ({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(anchor_tag);
     } catch (error) {
-      setPopup({
-        message: `Failed to download all users - ${error}`,
-        type: "error",
-      });
+      toast.error(`Failed to download all users - ${error}`);
     } finally {
       //Ensure spinner is visible for at least 1 second
       //This is to avoid the spinner disappearing too quickly
@@ -165,7 +160,6 @@ const UsersTables = ({
           <CardContent>
             <SignedUpUserTable
               invitedUsers={invitedUsers || []}
-              setPopup={setPopup}
               q={q}
               invitedUsersMutate={invitedUsersMutate}
               countDisplay={
@@ -204,7 +198,6 @@ const UsersTables = ({
           <CardContent>
             <InvitedUserTable
               users={invitedUsers || []}
-              setPopup={setPopup}
               mutate={invitedUsersMutate}
               error={invitedUsersError}
               isLoading={invitedUsersLoading}
@@ -232,7 +225,6 @@ const UsersTables = ({
             <CardContent>
               <PendingUsersTable
                 users={pendingUsers || []}
-                setPopup={setPopup}
                 mutate={pendingUsersMutate}
                 error={pendingUsersError}
                 isLoading={pendingUsersLoading}
@@ -249,14 +241,12 @@ const UsersTables = ({
 };
 
 const SearchableTables = () => {
-  const { popup, setPopup } = usePopup();
   const [query, setQuery] = useState("");
   const [isDownloadingUsers, setIsDownloadingUsers] = useState(false);
 
   return (
     <div>
       {isDownloadingUsers && <Spinner />}
-      {popup}
       <div className="flex flex-col gap-y-4">
         <div className="flex flex-row items-center gap-2">
           <InputTypeIn
@@ -264,11 +254,10 @@ const SearchableTables = () => {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <AddUserButton setPopup={setPopup} />
+          <AddUserButton />
         </div>
         <UsersTables
           q={query}
-          setPopup={setPopup}
           isDownloadingUsers={isDownloadingUsers}
           setIsDownloadingUsers={setIsDownloadingUsers}
         />
@@ -277,11 +266,7 @@ const SearchableTables = () => {
   );
 };
 
-const AddUserButton = ({
-  setPopup,
-}: {
-  setPopup: (spec: PopupSpec) => void;
-}) => {
+const AddUserButton = () => {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
   const [firstUserConfirmationModal, setFirstUserConfirmationModal] =
     useState(false);
@@ -305,18 +290,12 @@ const AddUserButton = ({
       (key) => typeof key === "string" && key.startsWith("/api/manage/users")
     );
     setBulkAddUsersModal(false);
-    setPopup({
-      message: "Users invited!",
-      type: "success",
-    });
+    toast.success("Users invited!");
   };
 
   const onFailure = async (res: Response) => {
     const error = (await res.json()).detail;
-    setPopup({
-      message: `Failed to invite users - ${error}`,
-      type: "error",
-    });
+    toast.error(`Failed to invite users - ${error}`);
   };
 
   const handleInviteClick = () => {

@@ -23,7 +23,7 @@ import {
 import { sanitizeKGConfig } from "@/app/admin/kg/utils";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
@@ -74,12 +74,10 @@ const IgnoreDomains = createDomainField(
 function KGConfiguration({
   kgConfig,
   onSubmitSuccess,
-  setPopup,
   entityTypesMutate,
 }: {
   kgConfig: KGConfig;
   onSubmitSuccess?: () => void;
-  setPopup?: (spec: PopupSpec | null) => void;
   entityTypesMutate?: () => void;
 }) {
   const initialValues: KGConfig = {
@@ -139,17 +137,11 @@ function KGConfiguration({
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;
       console.warn({ errorMsg });
-      setPopup?.({
-        message: "Failed to configure Knowledge Graph.",
-        type: "error",
-      });
+      toast.error("Failed to configure Knowledge Graph.");
       return;
     }
 
-    setPopup?.({
-      message: "Successfully configured Knowledge Graph.",
-      type: "success",
-    });
+    toast.success("Successfully configured Knowledge Graph.");
     resetForm({ values });
     onSubmitSuccess?.();
 
@@ -232,7 +224,6 @@ function Main() {
   );
 
   // Local State:
-  const { popup, setPopup } = usePopup();
   const [configureModalShown, setConfigureModalShown] = useState(false);
 
   if (
@@ -248,7 +239,6 @@ function Main() {
 
   return (
     <div className="flex flex-col py-4 gap-y-8">
-      {popup}
       <CardSection className="max-w-2xl shadow-01 rounded-08 flex flex-col gap-2">
         <Text as="p" headingH2>
           Knowledge Graph Configuration (Private Beta)
@@ -308,7 +298,6 @@ function Main() {
             <Modal.Body>
               <KGConfiguration
                 kgConfig={kgConfig}
-                setPopup={setPopup}
                 onSubmitSuccess={async () => {
                   await configMutate();
                   setConfigureModalShown(false);

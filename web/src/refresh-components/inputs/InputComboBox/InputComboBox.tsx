@@ -94,7 +94,7 @@ import {
 import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { FieldMessage } from "../../messages/FieldMessage";
 
 // Hooks
@@ -391,8 +391,9 @@ const InputComboBox = ({
                 </div>
               )}
               {hasOptions && (
-                <IconButton
-                  internal
+                <Button
+                  prominence="tertiary"
+                  size="sm"
                   onClick={noProp(toggleDropdown)}
                   disabled={disabled}
                   icon={isOpen ? SvgChevronUp : SvgChevronDown}

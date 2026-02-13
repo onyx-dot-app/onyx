@@ -5,7 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
@@ -417,7 +417,12 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
                 ref={closeButtonRef as React.RefObject<HTMLDivElement>}
               >
                 <DialogPrimitive.Close asChild>
-                  <IconButton icon={SvgX} internal onClick={onClose} />
+                  <Button
+                    icon={SvgX}
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={onClose}
+                  />
                 </DialogPrimitive.Close>
               </div>
             )}

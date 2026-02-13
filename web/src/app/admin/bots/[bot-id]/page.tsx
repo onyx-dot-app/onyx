@@ -5,7 +5,6 @@ import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import SlackChannelConfigsTable from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
@@ -18,7 +17,6 @@ function SlackBotEditPage({
 }) {
   // Unwrap the params promise
   const unwrappedParams = use(params);
-  const { popup, setPopup } = usePopup();
 
   const {
     data: slackBot,
@@ -85,7 +83,6 @@ function SlackBotEditPage({
           slackBotId={slackBot.id}
           slackChannelConfigs={slackChannelConfigs}
           refresh={refreshSlackChannelConfigs}
-          setPopup={setPopup}
         />
       </div>
     </>

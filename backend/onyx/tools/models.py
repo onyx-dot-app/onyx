@@ -20,6 +20,7 @@ from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
@@ -86,6 +87,8 @@ class ToolResponse(BaseModel):
         FinalImageGenerationResponse
         # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
         | SearchDocsResponse
+        # This comes from the memory tool, memory needs to be persisted to the database
+        | MemoryToolResponse
         # This comes from open url, web content needs to be saved, maybe this can be consolidated too
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
@@ -212,6 +215,13 @@ class CustomToolRunContext(BaseModel):
     emitter: Emitter
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+class MemoryToolResponseSnapshot(BaseModel):
+    memory_text: str
+    operation: Literal["add", "update"]
+    memory_id: int | None = None
+    index: int | None = None
 
 
 class ToolCallInfo(BaseModel):

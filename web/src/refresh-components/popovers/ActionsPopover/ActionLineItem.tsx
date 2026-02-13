@@ -8,6 +8,7 @@ import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { cn, noProp } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
@@ -131,7 +132,7 @@ export default function ActionLineItem({
           rightChildren={
             <Section gap={0.25} flexDirection="row">
               {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
-                <IconButton
+                <Button
                   icon={({ className }) => (
                     <SvgKey
                       className={cn(
@@ -166,13 +167,14 @@ export default function ActionLineItem({
               )}
 
               {isUnavailable && showAdminConfigure && adminConfigureHref && (
-                <IconButton
+                <Button
                   icon={SvgSettings}
                   onClick={noProp(() => {
                     router.push(adminConfigureHref as Route);
                     onClose?.();
                   })}
-                  internal
+                  prominence="tertiary"
+                  size="sm"
                   tooltip={adminConfigureTooltip}
                 />
               )}
@@ -188,10 +190,11 @@ export default function ActionLineItem({
                     />
                   </span>
                   <span className="absolute inset-0 flex items-center justify-center invisible group-hover/LineItem:visible">
-                    <IconButton
+                    <Button
                       icon={SvgSlash}
                       onClick={noProp(onToggle)}
-                      internal
+                      prominence="tertiary"
+                      size="sm"
                       tooltip={disabled ? "Enable" : "Disable"}
                     />
                   </span>

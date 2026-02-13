@@ -20,6 +20,7 @@ from onyx.server.query_and_chat.models import AdminSearchRequest
 from onyx.server.query_and_chat.models import AdminSearchResponse
 from onyx.server.query_and_chat.models import SourceTag
 from onyx.server.query_and_chat.models import TagResponse
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -29,7 +30,7 @@ admin_router = APIRouter(prefix="/admin")
 basic_router = APIRouter(prefix="/query")
 
 
-@admin_router.post("/search")
+@admin_router.post("/search", dependencies=[Depends(require_vector_db)])
 def admin_search(
     question: AdminSearchRequest,
     user: User = Depends(current_curator_or_admin_user),
@@ -51,7 +52,7 @@ def admin_search(
     )
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None)
+    document_index = get_default_document_index(search_settings, None, db_session)
 
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)

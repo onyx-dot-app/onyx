@@ -1,4 +1,5 @@
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
+from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
 from onyx.configs.constants import KV_SETTINGS_KEY
@@ -60,6 +61,7 @@ def load_settings() -> Settings:
         settings.user_knowledge_enabled = False
 
     settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
+    settings.opensearch_indexing_enabled = ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
     return settings
 
 

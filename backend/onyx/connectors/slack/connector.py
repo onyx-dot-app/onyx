@@ -308,6 +308,18 @@ def default_msg_filter(message: MessageType) -> SlackMessageFilterReason | None:
     return None
 
 
+def _bot_inclusive_msg_filter(
+    message: MessageType,
+) -> SlackMessageFilterReason | None:
+    """Like default_msg_filter but allows bot/app messages through.
+    Only filters out disallowed subtypes (channel_join, channel_leave, etc.).
+    """
+    if message.get("subtype", "") in _DISALLOWED_MSG_SUBTYPES:
+        return SlackMessageFilterReason.DISALLOWED
+
+    return None
+
+
 def filter_channels(
     all_channels: list[ChannelType],
     channels_to_connect: list[str] | None,
@@ -654,12 +666,18 @@ class SlackConnector(
         # if specified, will treat the specified channel strings as
         # regexes, and will only index channels that fully match the regexes
         channel_regex_enabled: bool = False,
+        # if True, messages from bots/apps will be indexed instead of filtered out
+        include_bot_messages: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
         num_threads: int = SLACK_NUM_THREADS,
         use_redis: bool = True,
     ) -> None:
         self.channels = channels
         self.channel_regex_enabled = channel_regex_enabled
+        self.include_bot_messages = include_bot_messages
+        self.msg_filter_func = (
+            _bot_inclusive_msg_filter if include_bot_messages else default_msg_filter
+        )
         self.batch_size = batch_size
         self.num_threads = num_threads
         self.client: WebClient | None = None
@@ -839,6 +857,7 @@ class SlackConnector(
             client=self.client,
             channels=self.channels,
             channel_name_regex_enabled=self.channel_regex_enabled,
+            msg_filter_func=self.msg_filter_func,
             callback=callback,
             workspace_url=self._workspace_url,
         )
@@ -926,6 +945,7 @@ class SlackConnector(
 
         try:
             num_bot_filtered_messages = 0
+            num_other_filtered_messages = 0
 
             oldest = str(start) if start else None
             latest = str(end)
@@ -984,6 +1004,7 @@ class SlackConnector(
                             user_cache=self.user_cache,
                             seen_thread_ts=seen_thread_ts,
                             channel_access=checkpoint.current_channel_access,
+                            msg_filter_func=self.msg_filter_func,
                         )
                     )
 
@@ -1003,7 +1024,13 @@ class SlackConnector(
 
                         seen_thread_ts.add(thread_or_message_ts)
                     elif processed_slack_message.filter_reason:
-                        num_bot_filtered_messages += 1
+                        if (
+                            processed_slack_message.filter_reason
+                            == SlackMessageFilterReason.BOT
+                        ):
+                            num_bot_filtered_messages += 1
+                        else:
+                            num_other_filtered_messages += 1
                     elif failure:
                         yield failure
 
@@ -1023,10 +1050,14 @@ class SlackConnector(
                 range_total = 1
             range_percent_complete = range_complete / range_total * 100.0
 
-            logger.info(
+            num_filtered = num_bot_filtered_messages + num_other_filtered_messages
+            log_func = logger.warning if num_bot_filtered_messages > 0 else logger.info
+            log_func(
                 f"Message processing stats: "
                 f"batch_len={len(message_batch)} "
                 f"batch_yielded={num_threads_processed} "
+                f"filtered={num_filtered} "
+                f"(bot={num_bot_filtered_messages} other={num_other_filtered_messages}) "
                 f"total_threads_seen={len(seen_thread_ts)}"
             )
 
@@ -1040,7 +1071,8 @@ class SlackConnector(
             checkpoint.seen_thread_ts = list(seen_thread_ts)
             checkpoint.channel_completion_map[channel["id"]] = new_oldest
 
-            # bypass channels where the first set of messages seen are all bots
+            # bypass channels where the first set of messages seen are all
+            # filtered (bots + disallowed subtypes like channel_join)
             # check at least MIN_BOT_MESSAGE_THRESHOLD messages are in the batch
             # we shouldn't skip based on a small sampling of messages
             if (
@@ -1048,7 +1080,7 @@ class SlackConnector(
                 and len(message_batch) > SlackConnector.BOT_CHANNEL_MIN_BATCH_SIZE
             ):
                 if (
-                    num_bot_filtered_messages
+                    num_filtered
                     > SlackConnector.BOT_CHANNEL_PERCENTAGE_THRESHOLD
                     * len(message_batch)
                 ):

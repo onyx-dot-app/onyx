@@ -1,5 +1,5 @@
 import { Form, Formik } from "formik";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SelectorFormField, TextFormField } from "@/components/Field";
 import { createApiKey, updateApiKey } from "./lib";
 import Modal from "@/refresh-components/Modal";
@@ -10,14 +10,12 @@ import { APIKey } from "./types";
 import { SvgKey } from "@opal/icons";
 export interface OnyxApiKeyFormProps {
   onClose: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   onCreateApiKey: (apiKey: APIKey) => void;
   apiKey?: APIKey;
 }
 
 export default function OnyxApiKeyForm({
   onClose,
-  setPopup,
   onCreateApiKey,
   apiKey,
 }: OnyxApiKeyFormProps) {
@@ -54,12 +52,11 @@ export default function OnyxApiKeyForm({
               }
               formikHelpers.setSubmitting(false);
               if (response.ok) {
-                setPopup({
-                  message: isUpdate
+                toast.success(
+                  isUpdate
                     ? "Successfully updated API key!"
-                    : "Successfully created API key!",
-                  type: "success",
-                });
+                    : "Successfully created API key!"
+                );
                 if (!isUpdate) {
                   onCreateApiKey(await response.json());
                 }
@@ -67,12 +64,11 @@ export default function OnyxApiKeyForm({
               } else {
                 const responseJson = await response.json();
                 const errorMsg = responseJson.detail || responseJson.message;
-                setPopup({
-                  message: isUpdate
+                toast.error(
+                  isUpdate
                     ? `Error updating API key - ${errorMsg}`
-                    : `Error creating API key - ${errorMsg}`,
-                  type: "error",
-                });
+                    : `Error creating API key - ${errorMsg}`
+                );
               }
             }}
           >

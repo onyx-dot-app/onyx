@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   DocumentSetSummary,
   SlackChannelConfig,
@@ -34,7 +34,6 @@ export const SlackChannelConfigCreationForm = ({
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   existingSlackChannelConfig?: SlackChannelConfig;
 }) => {
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
   const isUpdate = Boolean(existingSlackChannelConfig);
   const isDefault = existingSlackChannelConfig?.is_default || false;
@@ -65,8 +64,6 @@ export const SlackChannelConfigCreationForm = ({
 
   return (
     <CardSection className="!px-12 max-w-4xl">
-      {popup}
-
       <Formik
         initialValues={{
           slack_bot_id: slack_bot_id,
@@ -221,12 +218,11 @@ export const SlackChannelConfigCreationForm = ({
           } else {
             const responseJson = await response.json();
             const errorMsg = responseJson.detail || responseJson.message;
-            setPopup({
-              message: `Error ${
+            toast.error(
+              `Error ${
                 isUpdate ? "updating" : "creating"
-              } OnyxBot config - ${errorMsg}`,
-              type: "error",
-            });
+              } OnyxBot config - ${errorMsg}`
+            );
           }
         }}
       >
@@ -241,7 +237,6 @@ export const SlackChannelConfigCreationForm = ({
                 searchEnabledAssistants={searchEnabledAssistants}
                 nonSearchAssistants={nonSearchAssistants}
                 standardAnswerCategoryResponse={standardAnswerCategoryResponse}
-                setPopup={setPopup}
                 slack_bot_id={slack_bot_id}
                 formikProps={formikProps}
               />

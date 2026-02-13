@@ -20,7 +20,6 @@ import {
 } from "../../../../components/embedding/interfaces";
 import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { SvgX } from "@opal/icons";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -32,7 +31,6 @@ export default function UpgradingPage({
 }) {
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
-  const { setPopup, popup } = usePopup();
   const { data: connectors, isLoading: isLoadingConnectors } = useSWR<
     Connector<any>[]
   >("/api/manage/connector", errorHandlingFetcher, {
@@ -127,7 +125,6 @@ export default function UpgradingPage({
 
   return (
     <>
-      {popup}
       {isCancelling && (
         <Modal open onOpenChange={() => setIsCancelling(false)}>
           <Modal.Content width="sm" height="sm">
@@ -189,7 +186,6 @@ export default function UpgradingPage({
                   {failedIndexingStatus && failedIndexingStatus.length > 0 && (
                     <FailedReIndexAttempts
                       failedIndexingStatuses={failedIndexingStatus}
-                      setPopup={setPopup}
                     />
                   )}
 

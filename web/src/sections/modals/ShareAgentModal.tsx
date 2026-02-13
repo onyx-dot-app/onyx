@@ -19,13 +19,13 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgUser } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import useUsers from "@/hooks/useUsers";
-import useGroups from "@/hooks/useGroups";
+import useShareableUsers from "@/hooks/useShareableUsers";
+import useShareableGroups from "@/hooks/useShareableGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/hooks/useAgents";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
@@ -51,21 +51,23 @@ interface ShareAgentFormContentProps {
 function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty } =
     useFormikContext<ShareAgentFormValues>();
-  const { data: usersData } = useUsers({ includeApiKeys: false });
-  const { data: groupsData } = useGroups();
+  const { data: usersData } = useShareableUsers({ includeApiKeys: false });
+  const { data: groupsData } = useShareableGroups();
   const { user: currentUser } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
 
-  const acceptedUsers = usersData?.accepted ?? [];
+  const acceptedUsers = usersData ?? [];
   const groups = groupsData ?? [];
 
   // Create options for InputComboBox from all accepted users and groups
   const comboBoxOptions = useMemo(() => {
-    const userOptions = acceptedUsers.map((user) => ({
-      value: `user-${user.id}`,
-      label: user.email,
-    }));
+    const userOptions = acceptedUsers
+      .filter((user) => user.id !== currentUser?.id)
+      .map((user) => ({
+        value: `user-${user.id}`,
+        label: user.email,
+      }));
 
     const groupOptions = groups.map((group) => ({
       value: `group-${group.id}`,
@@ -73,7 +75,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     }));
 
     return [...userOptions, ...groupOptions];
-  }, [acceptedUsers, groups]);
+  }, [acceptedUsers, groups, currentUser?.id]);
 
   // Compute owner and displayed users
   const ownerId = fullAgent?.owner?.id;
@@ -194,8 +196,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                             ) : (
                               // For all other cases (including for "self-unsharing"),
                               // we render an `IconButton SvgX` to remove a person from the list.
-                              <IconButton
-                                internal
+                              <OpalButton
+                                prominence="tertiary"
+                                size="sm"
                                 icon={SvgX}
                                 onClick={() => handleRemoveUser(user.id)}
                               />
@@ -213,8 +216,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                         key={`group-${group.id}`}
                         icon={SvgUsers}
                         rightChildren={
-                          <IconButton
-                            internal
+                          <OpalButton
+                            prominence="tertiary"
+                            size="sm"
                             icon={SvgX}
                             onClick={() => handleRemoveGroup(group.id)}
                           />

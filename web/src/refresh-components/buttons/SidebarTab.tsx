@@ -71,7 +71,7 @@ export default function SidebarTab({
           <div className="w-4 shrink-0" aria-hidden="true" />
         )}
         {LeftIcon && (
-          <div className="w-[1rem] h-[1rem] flex items-center justify-center pointer-events-auto">
+          <div className="w-[1rem] flex items-center justify-center pointer-events-auto">
             <LeftIcon
               data-state={state}
               className={`h-[1rem] w-[1rem] sidebar-tab-icon-${variant}`}

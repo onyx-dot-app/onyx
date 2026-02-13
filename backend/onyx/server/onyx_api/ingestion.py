@@ -31,6 +31,7 @@ from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.server.onyx_api.models import DocMinimalInfo
 from onyx.server.onyx_api.models import IngestionDocument
 from onyx.server.onyx_api.models import IngestionResult
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -73,7 +74,7 @@ def get_ingestion_docs(
     ]
 
 
-@router.post("/ingestion")
+@router.post("/ingestion", dependencies=[Depends(require_vector_db)])
 def upsert_ingestion_doc(
     doc_info: IngestionDocument,
     _: User = Depends(current_curator_or_admin_user),
@@ -175,7 +176,7 @@ def upsert_ingestion_doc(
     )
 
 
-@router.delete("/ingestion/{document_id}")
+@router.delete("/ingestion/{document_id}", dependencies=[Depends(require_vector_db)])
 def delete_ingestion_doc(
     document_id: str,
     _: User = Depends(current_curator_or_admin_user),

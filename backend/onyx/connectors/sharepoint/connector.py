@@ -104,21 +104,48 @@ class CertificateData(BaseModel):
     thumbprint: str
 
 
+# TODO(Evan): Remove this once we have a proper token refresh mechanism.
+def _clear_cached_token(query_obj: ClientQuery) -> bool:
+    """Clear the cached access token on the query object's ClientContext so
+    the next request re-invokes the token callback and gets a fresh token.
+
+    The office365 library's AuthenticationContext.with_access_token() caches
+    the token in ``_cached_token`` and never refreshes it.  Setting it to
+    ``None`` forces re-acquisition on the next request.
+
+    Returns True if the token was successfully cleared."""
+    ctx = getattr(query_obj, "context", query_obj)
+    auth_ctx = getattr(ctx, "authentication_context", None)
+    if auth_ctx is not None and hasattr(auth_ctx, "_cached_token"):
+        auth_ctx._cached_token = None
+        return True
+    return False
+
+
 def sleep_and_retry(
     query_obj: ClientQuery, method_name: str, max_retries: int = 3
 ) -> Any:
     """
-    Execute a SharePoint query with retry logic for rate limiting.
+    Execute a SharePoint query with retry logic for rate limiting
+    and automatic token refresh on 401 Unauthorized.
     """
     for attempt in range(max_retries + 1):
         try:
             return query_obj.execute_query()
         except ClientRequestException as e:
-            if (
-                e.response is not None
-                and e.response.status_code in [429, 503]
-                and attempt < max_retries
-            ):
+            status = e.response.status_code if e.response is not None else None
+
+            # 401 — token expired.  Clear the cached token and retry immediately.
+            if status == 401 and attempt < max_retries:
+                cleared = _clear_cached_token(query_obj)
+                logger.warning(
+                    f"Token expired on {method_name}, attempt {attempt + 1}/{max_retries + 1}, "
+                    f"cleared cached token={cleared}, retrying"
+                )
+                continue
+
+            # 429 / 503 — rate limit or transient error.  Back off and retry.
+            if status in (429, 503) and attempt < max_retries:
                 logger.warning(
                     f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
                 )
@@ -131,13 +158,15 @@ def sleep_and_retry(
 
                 logger.info(f"Sleeping for {sleep_time} seconds before retry")
                 time.sleep(sleep_time)
-            else:
-                # Either not a rate limit error, or we've exhausted retries
-                if e.response is not None and e.response.status_code == 429:
-                    logger.error(
-                        f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
-                    )
-                raise e
+                continue
+
+            # Non-retryable error or retries exhausted — log details and raise.
+            if e.response is not None:
+                logger.error(
+                    f"SharePoint request failed for {method_name}: "
+                    f"status={status}, "
+                )
+            raise e
 
 
 class SharepointConnectorCheckpoint(ConnectorCheckpoint):

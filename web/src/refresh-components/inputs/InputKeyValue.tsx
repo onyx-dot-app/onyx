@@ -78,7 +78,7 @@ import React, {
 } from "react";
 import { cn } from "@/lib/utils";
 import InputTypeIn from "./InputTypeIn";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { FieldContext } from "../form/FieldContext";
@@ -178,8 +178,9 @@ const KeyValueInputItem = ({
         </div>
       </div>
       <div className="flex items-start pt-[2px]">
-        <IconButton
-          internal
+        <OpalButton
+          prominence="tertiary"
+          size="sm"
           icon={SvgMinusCircle}
           onClick={onRemove}
           disabled={disabled || !canRemove}
