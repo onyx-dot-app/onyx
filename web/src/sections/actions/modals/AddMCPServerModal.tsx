@@ -17,7 +17,7 @@ import {
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Separator from "@/refresh-components/Separator";
 import { Button as OpalButton } from "@opal/components";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
@@ -31,7 +31,6 @@ interface AddMCPServerModalProps {
   manageServerModal: ModalCreationInterface;
   onServerCreated?: (server: MCPServer) => void;
   handleAuthenticate: (serverId: number) => void;
-  setPopup?: (spec: PopupSpec) => void;
   mutateMcpServers?: () => Promise<void>;
 }
 
@@ -50,7 +49,6 @@ export default function AddMCPServerModal({
   manageServerModal,
   onServerCreated,
   handleAuthenticate,
-  setPopup,
   mutateMcpServers,
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
@@ -84,19 +82,13 @@ export default function AddMCPServerModal({
       if (isEditMode && server) {
         // Update existing server
         await updateMCPServer(server.id, values);
-        setPopup?.({
-          message: "MCP Server updated successfully",
-          type: "success",
-        });
+        toast.success("MCP Server updated successfully");
         await mutateMcpServers?.();
       } else {
         // Create new server
         const createdServer = await createMCPServer(values);
 
-        setPopup?.({
-          message: "MCP Server created successfully",
-          type: "success",
-        });
+        toast.success("MCP Server created successfully");
 
         await mutateMcpServers?.();
 
@@ -113,13 +105,11 @@ export default function AddMCPServerModal({
         `Error ${isEditMode ? "updating" : "creating"} MCP server:`,
         error
       );
-      setPopup?.({
-        message:
-          error instanceof Error
-            ? error.message
-            : `Failed to ${isEditMode ? "update" : "create"} MCP server`,
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Failed to ${isEditMode ? "update" : "create"} MCP server`
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
   Table,
   TableHead,
@@ -19,21 +18,13 @@ const USERS_PER_PAGE = 10;
 
 interface Props {
   users: InvitedUserSnapshot[];
-  setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
   error: FetchError | null;
   isLoading: boolean;
   q: string;
 }
 
-const InvitedUserTable = ({
-  users,
-  setPopup,
-  mutate,
-  error,
-  isLoading,
-  q,
-}: Props) => {
+const InvitedUserTable = ({ users, mutate, error, isLoading, q }: Props) => {
   const [currentPageNum, setCurrentPageNum] = useState<number>(1);
 
   if (!users.length)
@@ -86,7 +77,6 @@ const InvitedUserTable = ({
                     <InviteUserButton
                       user={user}
                       invited={true}
-                      setPopup={setPopup}
                       mutate={mutate}
                     />
                   </div>

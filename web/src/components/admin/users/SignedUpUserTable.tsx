@@ -8,7 +8,7 @@ import {
 } from "@/lib/types";
 import { ReactNode, useEffect, useState } from "react";
 import CenteredPageSelector from "./CenteredPageSelector";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   Table,
   TableHead,
@@ -46,7 +46,6 @@ const PAGES_PER_BATCH = 2;
 interface ActionMenuProps {
   user: User;
   currentUser: User | null;
-  setPopup: (spec: PopupSpec) => void;
   refresh: () => void;
   invitedUsersMutate: () => void;
   handleResetPassword: (user: User) => void;
@@ -54,7 +53,6 @@ interface ActionMenuProps {
 
 export interface SignedUpUserTableProps {
   invitedUsers: InvitedUserSnapshot[];
-  setPopup: (spec: PopupSpec) => void;
   q: string;
   invitedUsersMutate: () => void;
   countDisplay?: ReactNode;
@@ -64,7 +62,6 @@ export interface SignedUpUserTableProps {
 
 export default function SignedUpUserTable({
   invitedUsers,
-  setPopup,
   q = "",
   invitedUsersMutate,
   countDisplay,
@@ -120,7 +117,11 @@ export default function SignedUpUserTable({
 
   const handlePopup = (message: string, type: "success" | "error") => {
     if (type === "success") refresh();
-    setPopup({ message, type });
+    if (type === "success") {
+      toast.success(message);
+    } else {
+      toast.error(message);
+    }
   };
 
   const onRoleChangeSuccess = () =>
@@ -248,7 +249,6 @@ export default function SignedUpUserTable({
   const ActionMenu: React.FC<ActionMenuProps> = ({
     user,
     currentUser,
-    setPopup,
     refresh,
     invitedUsersMutate,
     handleResetPassword,
@@ -265,7 +265,6 @@ export default function SignedUpUserTable({
             {NEXT_PUBLIC_CLOUD_ENABLED && user.id === currentUser?.id ? (
               <LeaveOrganizationButton
                 user={user}
-                setPopup={setPopup}
                 mutate={refresh}
                 className={buttonClassName}
               >
@@ -277,7 +276,6 @@ export default function SignedUpUserTable({
                 {!user.is_active && (
                   <DeleteUserButton
                     user={user}
-                    setPopup={setPopup}
                     mutate={refresh}
                     className={buttonClassName}
                   >
@@ -288,7 +286,6 @@ export default function SignedUpUserTable({
                 <DeactivateUserButton
                   user={user}
                   deactivate={user.is_active}
-                  setPopup={setPopup}
                   mutate={refresh}
                   className={buttonClassName}
                 >
@@ -318,7 +315,6 @@ export default function SignedUpUserTable({
         <InviteUserButton
           user={user}
           invited={invitedEmails.includes(user.email.toLowerCase())}
-          setPopup={setPopup}
           mutate={[refresh, invitedUsersMutate]}
         />
       );
@@ -327,7 +323,6 @@ export default function SignedUpUserTable({
       <ActionMenu
         user={user}
         currentUser={currentUser}
-        setPopup={setPopup}
         refresh={refresh}
         invitedUsersMutate={invitedUsersMutate}
         handleResetPassword={handleResetPassword}
@@ -401,7 +396,6 @@ export default function SignedUpUserTable({
         <ResetPasswordModal
           user={resetPasswordUser}
           onClose={() => setResetPasswordUser(null)}
-          setPopup={setPopup}
         />
       )}
     </>

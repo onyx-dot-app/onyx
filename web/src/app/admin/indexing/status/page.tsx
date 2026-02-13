@@ -7,7 +7,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import Link from "next/link";
 import Text from "@/components/ui/text";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
-import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
+import { useToastFromQuery } from "@/hooks/useToast";
 import Button from "@/refresh-components/buttons/Button";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
@@ -201,7 +201,7 @@ function Main() {
 }
 
 export default function Status() {
-  const { popup } = usePopupFromQuery({
+  useToastFromQuery({
     "connector-created": {
       message: "Connector created successfully",
       type: "success",
@@ -214,7 +214,6 @@ export default function Status() {
 
   return (
     <>
-      {popup}
       <AdminPageTitle
         icon={<NotebookIcon size={32} />}
         title="Existing Connectors"

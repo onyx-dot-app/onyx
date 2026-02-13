@@ -9,7 +9,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useAgents } from "@/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
@@ -37,7 +37,6 @@ interface DefaultAssistantUpdateRequest {
 
 function DefaultAssistantConfig() {
   const router = useRouter();
-  const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
   const combinedSettings = useSettingsContext();
 
@@ -93,7 +92,6 @@ function DefaultAssistantConfig() {
   if (combinedSettings?.settings?.disable_default_assistant) {
     return (
       <div>
-        {popup}
         <Callout type="notice">
           <p className="mb-3">
             The default assistant is currently disabled in your workspace
@@ -124,7 +122,6 @@ function DefaultAssistantConfig() {
 
   return (
     <div>
-      {popup}
       <Formik
         enableReinitialize
         initialValues={{
@@ -169,15 +166,9 @@ function DefaultAssistantConfig() {
             router.refresh();
             await refreshAgents();
 
-            setPopup({
-              message: "Default assistant updated successfully!",
-              type: "success",
-            });
+            toast.success("Default assistant updated successfully!");
           } catch (error: any) {
-            setPopup({
-              message: error.message || "Failed to update assistant",
-              type: "error",
-            });
+            toast.error(error.message || "Failed to update assistant");
           } finally {
             setIsSubmitting(false);
           }

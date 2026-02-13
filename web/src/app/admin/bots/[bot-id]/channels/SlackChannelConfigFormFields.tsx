@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { FieldArray, useFormikContext, ErrorMessage } from "formik";
 import { DocumentSetSummary } from "@/lib/types";
+import { toast } from "@/hooks/useToast";
 import {
   Label,
   SelectorFormField,
@@ -47,10 +48,6 @@ export interface SlackChannelConfigFormFieldsProps {
   searchEnabledAssistants: MinimalPersonaSnapshot[];
   nonSearchAssistants: MinimalPersonaSnapshot[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
-  setPopup: (popup: {
-    message: string;
-    type: "error" | "success" | "warning";
-  }) => void;
   slack_bot_id: number;
   formikProps: any;
 }
@@ -62,7 +59,6 @@ export function SlackChannelConfigFormFields({
   searchEnabledAssistants,
   nonSearchAssistants,
   standardAnswerCategoryResponse,
-  setPopup,
   slack_bot_id,
   formikProps,
 }: SlackChannelConfigFormFieldsProps) {
@@ -142,13 +138,11 @@ export function SlackChannelConfigFormFields({
           (dsId: number) => !invalidSelected.includes(dsId)
         )
       );
-      setPopup({
-        message:
-          "We removed one or more document sets from your selection because they are no longer valid. Please review and update your configuration.",
-        type: "warning",
-      });
+      toast.warning(
+        "We removed one or more document sets from your selection because they are no longer valid. Please review and update your configuration."
+      );
     }
-  }, [unselectableSets, values.document_sets, setFieldValue, setPopup]);
+  }, [unselectableSets, values.document_sets, setFieldValue]);
 
   const shouldShowPrivacyAlert = useMemo(() => {
     if (values.knowledge_source === "document_sets") {

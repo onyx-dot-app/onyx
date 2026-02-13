@@ -35,8 +35,6 @@ const Main = () => {
 
   return (
     <div className="mb-8">
-      {/* {popup} */}
-
       <p className="mb-2 text-sm text-muted-foreground">
         Setup Slack bots that connect to Onyx. Once setup, you will be able to
         ask questions to Onyx directly from Slack. Additionally, you can:

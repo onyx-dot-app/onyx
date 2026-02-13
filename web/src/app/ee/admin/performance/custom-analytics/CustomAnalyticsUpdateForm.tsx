@@ -1,7 +1,7 @@
 "use client";
 
 import { Label, SubLabel } from "@/components/Field";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import Button from "@/refresh-components/buttons/Button";
 import { Callout } from "@/components/ui/callout";
@@ -17,15 +17,12 @@ export function CustomAnalyticsUpdateForm() {
     useState<string>(customAnalyticsScript || "");
   const [secretKey, setSecretKey] = useState<string>("");
 
-  const { popup, setPopup } = usePopup();
-
   if (!settings) {
     return <Callout type="danger" title="Failed to fetch settings"></Callout>;
   }
 
   return (
     <div>
-      {popup}
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -44,16 +41,12 @@ export function CustomAnalyticsUpdateForm() {
             }
           );
           if (response.ok) {
-            setPopup({
-              type: "success",
-              message: "Custom analytics script updated successfully!",
-            });
+            toast.success("Custom analytics script updated successfully!");
           } else {
             const errorMsg = (await response.json()).detail;
-            setPopup({
-              type: "error",
-              message: `Failed to update custom analytics script: "${errorMsg}"`,
-            });
+            toast.error(
+              `Failed to update custom analytics script: "${errorMsg}"`
+            );
           }
           setSecretKey("");
         }}

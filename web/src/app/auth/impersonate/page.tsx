@@ -7,7 +7,7 @@ import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
@@ -20,8 +20,6 @@ const ImpersonateSchema = Yup.object().shape({
 export default function ImpersonatePage() {
   const router = useRouter();
   const { user, isCloudSuperuser } = useUser();
-  const { popup, setPopup } = usePopup();
-
   if (!user) {
     redirect("/auth/login");
   }
@@ -47,28 +45,22 @@ export default function ImpersonatePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        setPopup({
-          message: errorData.detail || "Failed to impersonate user",
-          type: "error",
-        });
+        toast.error(errorData.detail || "Failed to impersonate user");
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
         router.push("/app" as Route);
       }
     } catch (error) {
-      setPopup({
-        message:
-          error instanceof Error ? error.message : "Failed to impersonate user",
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error ? error.message : "Failed to impersonate user"
+      );
       helpers.setSubmitting(false);
     }
   };
 
   return (
     <AuthFlowContainer>
-      {popup}
       <div className="absolute top-10x w-full">
         <HealthCheckBanner />
       </div>

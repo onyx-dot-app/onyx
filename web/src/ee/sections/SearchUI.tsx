@@ -24,7 +24,7 @@ import FilterButton from "@/refresh-components/buttons/FilterButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import useFilter from "@/hooks/useFilter";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 
 // ============================================================================
 // Types
@@ -64,16 +64,15 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     error,
     refineSearch: onRefineSearch,
   } = useQueryController();
-  const { popup, setPopup } = usePopup();
   const prevErrorRef = useRef<string | null>(null);
 
-  // Show a popup notification when a new error occurs
+  // Show a toast notification when a new error occurs
   useEffect(() => {
     if (error && error !== prevErrorRef.current) {
-      setPopup({ message: error, type: "error" });
+      toast.error(error);
     }
     prevErrorRef.current = error;
-  }, [error, setPopup]);
+  }, [error]);
 
   // Filter state
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
@@ -195,7 +194,6 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   return (
     <>
-      {popup}
       <div
         className="flex-1 min-h-0 w-full grid gap-x-4"
         style={{

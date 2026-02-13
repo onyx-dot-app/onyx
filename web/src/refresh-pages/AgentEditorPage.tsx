@@ -41,7 +41,7 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import UserFilesModal from "@/components/modals/UserFilesModal";
 import {
   ProjectFile,
@@ -447,7 +447,6 @@ export default function AgentEditorPage({
 }: AgentEditorPageProps) {
   const router = useRouter();
   const appRouter = useAppRouter();
-  const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
@@ -857,23 +856,19 @@ export default function AgentEditorPage({
         const error = personaResponse
           ? await personaResponse.text()
           : "No response received";
-        setPopup({
-          type: "error",
-          message: `Failed to ${
-            existingAgent ? "update" : "create"
-          } agent - ${error}`,
-        });
+        toast.error(
+          `Failed to ${existingAgent ? "update" : "create"} agent - ${error}`
+        );
         return;
       }
 
       // Success
       const agent = await personaResponse.json();
-      setPopup({
-        type: "success",
-        message: `Agent "${agent.name}" ${
+      toast.success(
+        `Agent "${agent.name}" ${
           existingAgent ? "updated" : "created"
-        } successfully`,
-      });
+        } successfully`
+      );
 
       // Refresh agents list and the specific agent
       await refreshAgents();
@@ -885,10 +880,7 @@ export default function AgentEditorPage({
       appRouter({ agentId: agent.id });
     } catch (error) {
       console.error("Submit error:", error);
-      setPopup({
-        type: "error",
-        message: `An error occurred: ${error}`,
-      });
+      toast.error(`An error occurred: ${error}`);
     }
   }
 
@@ -899,15 +891,9 @@ export default function AgentEditorPage({
     const error = await deleteAgent(existingAgent.id);
 
     if (error) {
-      setPopup({
-        type: "error",
-        message: `Failed to delete agent: ${error}`,
-      });
+      toast.error(`Failed to delete agent: ${error}`);
     } else {
-      setPopup({
-        type: "success",
-        message: "Agent deleted successfully",
-      });
+      toast.success("Agent deleted successfully");
 
       deleteAgentModal.toggle(false);
       await refreshAgents();
@@ -956,7 +942,6 @@ export default function AgentEditorPage({
       const optimistic = await beginUpload(
         Array.from(files),
         null,
-        setPopup,
         (result) => {
           const uploadedFiles = result.user_files || [];
           if (uploadedFiles.length === 0) return;
@@ -992,8 +977,6 @@ export default function AgentEditorPage({
 
   return (
     <>
-      {popup}
-
       <div
         data-testid="AgentsEditorPage/container"
         aria-label="Agents Editor Page"

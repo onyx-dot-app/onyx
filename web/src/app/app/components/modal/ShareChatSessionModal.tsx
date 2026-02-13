@@ -6,7 +6,7 @@ import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { structureValue } from "@/lib/llm/utils";
 import { LlmDescriptor, useLlmManager } from "@/lib/hooks";
 import Separator from "@/refresh-components/Separator";
@@ -96,7 +96,6 @@ export default function ShareChatSessionModal({
       ? buildShareLink(chatSession.id)
       : ""
   );
-  const { popup, setPopup } = usePopup();
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const currentAgent = useCurrentAgent();
   const searchParams = useSearchParams();
@@ -108,8 +107,6 @@ export default function ShareChatSessionModal({
 
   return (
     <>
-      {popup}
-
       <ConfirmationModalLayout
         icon={SvgShare}
         title="Share Chat"
@@ -222,17 +219,11 @@ export default function ShareChatSessionModal({
                     llmManager.currentLlm
                   );
                   if (!seedLink) {
-                    setPopup({
-                      message: "Failed to generate seed link",
-                      type: "error",
-                    });
+                    toast.error("Failed to generate seed link");
                   } else {
                     navigator.clipboard.writeText(seedLink);
                     copyAll(seedLink);
-                    setPopup({
-                      message: "Link copied to clipboard!",
-                      type: "success",
-                    });
+                    toast.success("Link copied to clipboard!");
                   }
                 } catch (e) {
                   console.error(e);

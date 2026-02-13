@@ -5,7 +5,7 @@ import useSWR from "swr";
 import Text from "@/refresh-components/texts/Text";
 import { Select } from "@/refresh-components/cards";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LLMProviderView } from "@/app/admin/configuration/llm/interfaces";
 import {
@@ -22,8 +22,6 @@ import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
 import Message from "@/refresh-components/messages/Message";
 
 export default function ImageGenerationContent() {
-  const { popup, setPopup } = usePopup();
-
   const {
     data: llmProviders = [],
     error: llmError,
@@ -80,17 +78,12 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await setDefaultImageGenerationConfig(config.image_provider_id);
-        setPopup({
-          message: `${provider.title} set as default`,
-          type: "success",
-        });
+        toast.success(`${provider.title} set as default`);
         refetchConfigs();
       } catch (error) {
-        setPopup({
-          message:
-            error instanceof Error ? error.message : "Failed to set default",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error ? error.message : "Failed to set default"
+        );
       }
     }
   };
@@ -102,17 +95,12 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await unsetDefaultImageGenerationConfig(config.image_provider_id);
-        setPopup({
-          message: `${provider.title} deselected`,
-          type: "success",
-        });
+        toast.success(`${provider.title} deselected`);
         refetchConfigs();
       } catch (error) {
-        setPopup({
-          message:
-            error instanceof Error ? error.message : "Failed to deselect",
-          type: "error",
-        });
+        toast.error(
+          error instanceof Error ? error.message : "Failed to deselect"
+        );
       }
     }
   };
@@ -127,7 +115,7 @@ export default function ImageGenerationContent() {
   };
 
   const handleModalSuccess = () => {
-    setPopup({ message: "Provider configured successfully", type: "success" });
+    toast.success("Provider configured successfully");
     setEditConfig(null);
     refetchConfigs();
     refetchProviders();
@@ -143,7 +131,6 @@ export default function ImageGenerationContent() {
 
   return (
     <>
-      {popup}
       <div className="flex flex-col gap-6">
         {/* Section Header */}
         <div className="flex flex-col gap-0.5">
@@ -201,7 +188,6 @@ export default function ImageGenerationContent() {
             existingProviders={llmProviders}
             existingConfig={editConfig || undefined}
             onSuccess={handleModalSuccess}
-            setPopup={setPopup}
           />
         </modal.Provider>
       )}
