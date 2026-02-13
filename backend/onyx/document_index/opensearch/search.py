@@ -292,8 +292,8 @@ class DocumentQuery:
             "highlight": match_highlights_configuration,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
-        if not OPENSEARCH_PROFILING_DISABLED:
-            final_hybrid_search_body["profile"] = True
+        # WARNING: Profiling does not work with hybrid search; do not add it at
+        # this level. We'll add it in each of the subqueries. See https://github.com/opensearch-project/neural-search/issues/1255
 
         return final_hybrid_search_body
 

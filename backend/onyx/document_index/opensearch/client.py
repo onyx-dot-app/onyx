@@ -56,6 +56,30 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     match_highlights: dict[str, list[str]] = {}
 
 
+def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
+    """Recursively replaces vectors in the body with their length.
+
+    TODO(andrei): Do better.
+
+    Args:
+        body: The body to replace the vectors.
+
+    Returns:
+        A copy of body with vectors replaced with their length.
+    """
+    new_body: dict[str, Any] = {}
+    for k, v in body.items():
+        if k == "vector":
+            new_body[k] = len(v)
+        elif isinstance(v, dict):
+            new_body[k] = get_new_body_without_vectors(v)
+        elif isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+            new_body[k] = [get_new_body_without_vectors(item) for item in v]
+        else:
+            new_body[k] = v
+    return new_body
+
+
 class OpenSearchClient:
     """Client for interacting with OpenSearch.
 
@@ -647,12 +671,18 @@ class OpenSearchClient:
             f"Trying to search index {self._index_name} with search pipeline {search_pipeline_id}."
         )
         result: dict[str, Any]
+        params = {"phase_took": "true"}
         if search_pipeline_id:
             result = self._client.search(
-                index=self._index_name, search_pipeline=search_pipeline_id, body=body
+                index=self._index_name,
+                search_pipeline=search_pipeline_id,
+                body=body,
+                params=params,
             )
         else:
-            result = self._client.search(index=self._index_name, body=body)
+            result = self._client.search(
+                index=self._index_name, body=body, params=params
+            )
 
         hits, time_took, timed_out, phase_took, profile = (
             self._get_hits_and_profile_from_search_result(result)
@@ -721,7 +751,10 @@ class OpenSearchClient:
                 '"_source": False. This query will therefore be inefficient.'
             )
 
-        result: dict[str, Any] = self._client.search(index=self._index_name, body=body)
+        params = {"phase_took": "true"}
+        result: dict[str, Any] = self._client.search(
+            index=self._index_name, body=body, params=params
+        )
 
         hits, time_took, timed_out, phase_took, profile = (
             self._get_hits_and_profile_from_search_result(result)
@@ -873,7 +906,7 @@ class OpenSearchClient:
         if time_took and time_took > CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS:
             logger.warning(
                 f"OpenSearch client warning: Search for index {self._index_name} took {time_took} milliseconds.\n"
-                f"Body: {body}\n"
+                f"Body: {get_new_body_without_vectors(body)}\n"
                 f"Search pipeline ID: {search_pipeline_id}\n"
                 f"Phase took: {phase_took}\n"
                 f"Profile: {profile}\n"
