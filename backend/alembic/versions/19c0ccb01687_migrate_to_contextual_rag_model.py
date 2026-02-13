@@ -1,7 +1,7 @@
 """Migrate to contextual rag model
 
 Revision ID: 19c0ccb01687
-Revises: b51c6844d1df
+Revises: 9c54986124c6
 Create Date: 2026-02-12 11:21:41.798037
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "19c0ccb01687"
-down_revision = "b51c6844d1df"
+down_revision = "9c54986124c6"
 branch_labels = None
 depends_on = None
 
