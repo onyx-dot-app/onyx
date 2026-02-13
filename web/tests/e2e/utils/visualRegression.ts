@@ -1,4 +1,4 @@
-import type { Page, PageScreenshotOptions } from "@playwright/test";
+import type { Locator, Page, PageScreenshotOptions } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 /**
@@ -58,6 +58,30 @@ interface ScreenshotOptions {
    * Additional Playwright screenshot options.
    */
   screenshotOptions?: PageScreenshotOptions;
+}
+
+interface ElementScreenshotOptions {
+  /**
+   * Name for the screenshot file. If omitted, Playwright auto-generates one
+   * from the test title.
+   */
+  name?: string;
+
+  /**
+   * Additional CSS selectors to mask (on top of the defaults).
+   * The selectors are resolved relative to the page the locator belongs to.
+   */
+  mask?: string[];
+
+  /**
+   * Override the max diff pixel ratio for this specific screenshot.
+   */
+  maxDiffPixelRatio?: number;
+
+  /**
+   * Override the per-channel threshold for this specific screenshot.
+   */
+  threshold?: number;
 }
 
 /**
@@ -120,6 +144,61 @@ export async function expectScreenshot(
       fullPage,
       mask: maskLocators.length > 0 ? maskLocators : undefined,
       ...options.screenshotOptions,
+    });
+  }
+}
+
+/**
+ * Take a screenshot of a specific element and optionally assert it matches
+ * the stored baseline.
+ *
+ * Works like {@link expectScreenshot} but scopes the screenshot to a single
+ * `Locator` instead of the full page.
+ *
+ * Usage:
+ * ```ts
+ * import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+ *
+ * test("sidebar looks right", async ({ page }) => {
+ *   await page.goto("/app");
+ *   const sidebar = page.getByTestId("AppSidebar/new-session");
+ *   await expectElementScreenshot(sidebar, { name: "sidebar-new-session" });
+ * });
+ * ```
+ */
+export async function expectElementScreenshot(
+  locator: Locator,
+  options: ElementScreenshotOptions = {}
+): Promise<void> {
+  const { name, mask = [], maxDiffPixelRatio, threshold } = options;
+
+  // Combine default masks with per-call masks
+  const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
+  const maskLocators = allMaskSelectors.map((selector) =>
+    locator.page().locator(selector)
+  );
+
+  // Build the screenshot name array (Playwright expects string[])
+  const nameArg = name ? [name + ".png"] : undefined;
+
+  if (VISUAL_REGRESSION_ENABLED) {
+    const screenshotOpts = {
+      mask: maskLocators.length > 0 ? maskLocators : undefined,
+      ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
+      ...(threshold !== undefined && { threshold }),
+    };
+
+    if (nameArg) {
+      await expect(locator).toHaveScreenshot(nameArg, screenshotOpts);
+    } else {
+      await expect(locator).toHaveScreenshot(screenshotOpts);
+    }
+  } else {
+    // Capture-only mode — save the screenshot without asserting
+    const screenshotPath = name ? `output/screenshots/${name}.png` : undefined;
+    await locator.screenshot({
+      path: screenshotPath,
+      mask: maskLocators.length > 0 ? maskLocators : undefined,
     });
   }
 }
