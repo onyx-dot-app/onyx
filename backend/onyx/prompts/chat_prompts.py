@@ -1,13 +1,11 @@
 # ruff: noqa: E501, W605 start
 
-from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
 from onyx.prompts.constants import REMINDER_TAG_NO_HEADER
 
 
 DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
 CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
-ALT_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
-ALT_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
+REMINDER_TAG_REPLACEMENT_PAT = "{{REMINDER_TAG_DESCRIPTION}}"
 
 
 # Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
@@ -27,7 +25,7 @@ For code you prefer to use Markdown and specify the language.
 You can use horizontal rules (---) to separate sections of your responses.
 You can use Markdown tables to format your responses for data, lists, and other structured information.
 
-{REMINDER_TAG_DESCRIPTION}
+{REMINDER_TAG_REPLACEMENT_PAT}
 """.lstrip()
 
 

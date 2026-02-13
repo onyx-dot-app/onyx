@@ -233,6 +233,13 @@ function DefaultAssistantConfig() {
                           found from search tools. This is not included if no
                           search tools are called.
                         </div>
+                        <div>
+                          <span className="font-mono font-semibold">
+                            {"{{REMINDER_TAG_DESCRIPTION}}"}
+                          </span>{" "}
+                          - Injects instructions for how the Agent should handle
+                          system reminder tags.
+                        </div>
                       </div>
                     }
                     direction="bottom"

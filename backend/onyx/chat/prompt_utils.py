@@ -15,6 +15,7 @@ from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.prompts.prompt_utils import replace_citation_guidance_tag
+from onyx.prompts.prompt_utils import replace_reminder_tag
 from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import MEMORY_GUIDANCE
@@ -208,8 +209,12 @@ def build_system_prompt(
         include_all_guidance=include_all_guidance,
     )
 
+    # Replace reminder tag placeholder if present
+    system_prompt = replace_reminder_tag(system_prompt)
+
+    company_context = get_company_context()
     user_info_section = _build_user_information_section(
-        user_memory_context, get_company_context()
+        user_memory_context, company_context
     )
     system_prompt += user_info_section
 
