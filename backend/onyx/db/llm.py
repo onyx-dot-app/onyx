@@ -693,12 +693,14 @@ def update_default_contextual_model(
         return
 
     if not contextual_rag_llm_name or not contextual_rag_llm_provider:
+        update_no_default_contextual_rag_provider(db_session=db_session)
         return
 
     provider = fetch_existing_llm_provider(
         name=contextual_rag_llm_provider, db_session=db_session
     )
     if not provider:
+        update_no_default_contextual_rag_provider(db_session=db_session)
         return
 
     model_config = next(
@@ -710,6 +712,7 @@ def update_default_contextual_model(
         None,
     )
     if not model_config:
+        update_no_default_contextual_rag_provider(db_session=db_session)
         return
 
     add_model_to_flow(
@@ -839,8 +842,17 @@ def create_new_flow_mapping__no_commit(
 
     flow = result.scalar()
     if not flow:
+        # Row already exists — fetch it
+        flow = db_session.scalar(
+            select(LLMModelFlow).where(
+                LLMModelFlow.model_configuration_id == model_configuration_id,
+                LLMModelFlow.llm_model_flow_type == flow_type,
+            )
+        )
+    if not flow:
         raise ValueError(
-            f"Failed to create new flow mapping for model_configuration_id={model_configuration_id} and flow_type={flow_type}"
+            f"Failed to create or find flow mapping for "
+            f"model_configuration_id={model_configuration_id} and flow_type={flow_type}"
         )
 
     return flow

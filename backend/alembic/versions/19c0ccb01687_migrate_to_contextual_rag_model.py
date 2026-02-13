@@ -6,6 +6,7 @@ Create Date: 2026-02-12 11:21:41.798037
 
 """
 
+import sqlalchemy as sa
 from alembic import op
 
 
@@ -17,6 +18,16 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Widen the column to fit 'CONTEXTUAL_RAG' (15 chars); was varchar(10)
+    # when the table was created with only CHAT/VISION values.
+    op.alter_column(
+        "llm_model_flow",
+        "llm_model_flow_type",
+        type_=sa.String(length=20),
+        existing_type=sa.String(length=10),
+        existing_nullable=False,
+    )
+
     # For every search_settings row that has contextual rag configured,
     # create an llm_model_flow entry with is_default=False.
     op.execute(
