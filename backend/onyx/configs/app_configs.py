@@ -86,7 +86,7 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 # Auth Configs
 #####
 # Upgrades users from disabled auth to basic auth and shows warning.
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
+_auth_type_str = (os.environ.get("AUTH_TYPE") or "basic").lower()
 if _auth_type_str == "disabled":
     logger.warning(
         "AUTH_TYPE='disabled' is no longer supported. "
@@ -236,10 +236,31 @@ DOCUMENT_INDEX_NAME = "danswer_index"
 # OpenSearch Configs
 OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
+# TODO(andrei): 60 seconds is too much, we're just setting a high default
+# timeout for now to examine why queries are slow.
+# NOTE: This timeout applies to all requests the client makes, including bulk
+# indexing.
+DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S = int(
+    os.environ.get("DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S") or 60
+)
+# TODO(andrei): 50 seconds is too much, we're just setting a high default
+# timeout for now to examine why queries are slow.
+# NOTE: To get useful partial results, this value should be less than the client
+# timeout above.
+DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S = int(
+    os.environ.get("DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S") or 50
+)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
+)
+# Profiling adds some overhead to OpenSearch operations. This overhead is
+# unknown right now. It is enabled by default so we can get useful logs for
+# investigating slow queries. We may never disable it if the overhead is
+# minimal.
+OPENSEARCH_PROFILING_DISABLED = (
+    os.environ.get("OPENSEARCH_PROFILING_DISABLED", "").lower() == "true"
 )
 
 # This is the "base" config for now, the idea is that at least for our dev
@@ -910,6 +931,9 @@ IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
 MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
+
+# Limit on number of users a free trial tenant can invite (cloud only)
+NUM_FREE_TRIAL_USER_INVITES = int(os.environ.get("NUM_FREE_TRIAL_USER_INVITES", "10"))
 
 # Security and authentication
 DATA_PLANE_SECRET = os.environ.get(

@@ -9,13 +9,13 @@ from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import CITATION_REMINDER
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.prompt_utils import get_company_context
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 from onyx.prompts.prompt_utils import replace_citation_guidance_tag
+from onyx.prompts.prompt_utils import replace_reminder_tag
 from onyx.prompts.tool_prompts import GENERATE_IMAGE_GUIDANCE
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import MEMORY_GUIDANCE
@@ -25,7 +25,12 @@ from onyx.prompts.tool_prompts import TOOL_DESCRIPTION_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
+from onyx.prompts.user_info import BASIC_INFORMATION_PROMPT
+from onyx.prompts.user_info import TEAM_INFORMATION_PROMPT
 from onyx.prompts.user_info import USER_INFORMATION_HEADER
+from onyx.prompts.user_info import USER_MEMORIES_PROMPT
+from onyx.prompts.user_info import USER_PREFERENCES_PROMPT
+from onyx.prompts.user_info import USER_ROLE_PROMPT
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -131,6 +136,59 @@ def build_reminder_message(
     return reminder if reminder else None
 
 
+def _build_user_information_section(
+    user_memory_context: UserMemoryContext | None,
+    company_context: str | None,
+) -> str:
+    """Build the complete '# User Information' section with all sub-sections
+    in the correct order: Basic Info → Team Info → Preferences → Memories."""
+    sections: list[str] = []
+
+    if user_memory_context:
+        ctx = user_memory_context
+        has_basic_info = ctx.user_info.name or ctx.user_info.email or ctx.user_info.role
+
+        if has_basic_info:
+            role_line = (
+                USER_ROLE_PROMPT.format(user_role=ctx.user_info.role).strip()
+                if ctx.user_info.role
+                else ""
+            )
+            if role_line:
+                role_line = "\n" + role_line
+            sections.append(
+                BASIC_INFORMATION_PROMPT.format(
+                    user_name=ctx.user_info.name or "",
+                    user_email=ctx.user_info.email or "",
+                    user_role=role_line,
+                )
+            )
+
+    if company_context:
+        sections.append(
+            TEAM_INFORMATION_PROMPT.format(team_information=company_context.strip())
+        )
+
+    if user_memory_context:
+        ctx = user_memory_context
+
+        if ctx.user_preferences:
+            sections.append(
+                USER_PREFERENCES_PROMPT.format(user_preferences=ctx.user_preferences)
+            )
+
+        if ctx.memories:
+            formatted_memories = "\n".join(f"- {memory}" for memory in ctx.memories)
+            sections.append(
+                USER_MEMORIES_PROMPT.format(user_memories=formatted_memories)
+            )
+
+    if not sections:
+        return ""
+
+    return USER_INFORMATION_HEADER + "".join(sections)
+
+
 def build_system_prompt(
     base_system_prompt: str,
     datetime_aware: bool = False,
@@ -138,17 +196,11 @@ def build_system_prompt(
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
-    open_ai_formatting_enabled: bool = False,
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
     system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
-
-    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
-    # for OpenAI reasoning models to have correct markdown generation
-    if open_ai_formatting_enabled:
-        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
     # Replace citation guidance placeholder if present
     system_prompt, should_append_citation_guidance = replace_citation_guidance_tag(
@@ -157,16 +209,14 @@ def build_system_prompt(
         include_all_guidance=include_all_guidance,
     )
 
+    # Replace reminder tag placeholder if present
+    system_prompt = replace_reminder_tag(system_prompt)
+
     company_context = get_company_context()
-    formatted_user_context = (
-        user_memory_context.as_formatted_prompt() if user_memory_context else ""
+    user_info_section = _build_user_information_section(
+        user_memory_context, company_context
     )
-    if company_context or formatted_user_context:
-        system_prompt += USER_INFORMATION_HEADER
-        if company_context:
-            system_prompt += company_context
-        if formatted_user_context:
-            system_prompt += formatted_user_context
+    system_prompt += user_info_section
 
     # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed

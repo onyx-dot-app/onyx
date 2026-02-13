@@ -18,6 +18,7 @@ import {
   ImageGenSubmitPayload,
   FormValues,
 } from "./types";
+import { toast } from "@/hooks/useToast";
 
 export function ImageGenFormWrapper<T extends FormValues>({
   modal,
@@ -25,7 +26,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
   existingProviders,
   existingConfig,
   onSuccess,
-  setPopup,
   title,
   description,
   initialValues,
@@ -243,7 +243,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
         error instanceof Error ? error.message : "Unknown error occurred";
       setApiStatus("error");
       setErrorMessage(message);
-      setPopup({ message, type: "error" });
+      toast.error(message);
       setIsSubmitting(false);
     }
   };

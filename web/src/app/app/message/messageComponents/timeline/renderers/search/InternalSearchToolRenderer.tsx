@@ -1,4 +1,3 @@
-import React from "react";
 import { SvgSearch, SvgSearchMenu } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {

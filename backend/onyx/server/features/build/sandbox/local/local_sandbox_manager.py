@@ -71,7 +71,7 @@ class LocalSandboxManager(SandboxManager):
         """Initialize managers."""
         # Paths for templates
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
-        skills_path = build_dir / "skills"
+        skills_path = build_dir / "sandbox" / "kubernetes" / "docker" / "skills"
         agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         self._directory_manager = DirectoryManager(
@@ -1180,6 +1180,115 @@ class LocalSandboxManager(SandboxManager):
             URL to access the webapp (e.g., http://localhost:3015)
         """
         return f"http://localhost:{port}"
+
+    def generate_pptx_preview(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        pptx_path: str,
+        cache_dir: str,
+    ) -> tuple[list[str], bool]:
+        """Convert PPTX to slide images using soffice + pdftoppm.
+
+        Uses local filesystem and subprocess for conversion.
+        """
+        session_path = self._get_session_path(sandbox_id, session_id)
+        clean_pptx = self._sanitize_path(pptx_path)
+        clean_cache = self._sanitize_path(cache_dir)
+        pptx_abs = session_path / clean_pptx
+        cache_abs = session_path / clean_cache
+
+        if not pptx_abs.is_file():
+            raise ValueError(f"File not found: {pptx_path}")
+
+        # Check cache - if slides exist and are newer than the PPTX, use them
+        cached = False
+        if cache_abs.is_dir():
+            existing = sorted(cache_abs.glob("slide-*.jpg"))
+            if existing:
+                pptx_mtime = pptx_abs.stat().st_mtime
+                cache_mtime = existing[0].stat().st_mtime
+                if cache_mtime >= pptx_mtime:
+                    cached = True
+                    return (
+                        [str(f.relative_to(session_path)) for f in existing],
+                        cached,
+                    )
+                # Stale cache - remove old slides
+                for f in existing:
+                    f.unlink()
+
+        cache_abs.mkdir(parents=True, exist_ok=True)
+
+        # Convert PPTX -> PDF using soffice
+        try:
+            import os
+
+            env = os.environ.copy()
+            env["SAL_USE_VCLPLUGIN"] = "svp"
+            subprocess.run(
+                [
+                    "soffice",
+                    "--headless",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    str(cache_abs),
+                    str(pptx_abs),
+                ],
+                env=env,
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+        except FileNotFoundError:
+            raise ValueError(
+                "LibreOffice (soffice) is not installed. "
+                "PPTX preview requires LibreOffice."
+            )
+        except subprocess.TimeoutExpired:
+            raise ValueError("PPTX conversion timed out")
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"PPTX conversion failed: {e.stderr.decode()}")
+
+        # Find the generated PDF
+        pdf_files = list(cache_abs.glob("*.pdf"))
+        if not pdf_files:
+            raise ValueError("soffice did not produce a PDF file")
+        pdf_path = pdf_files[0]
+
+        # Convert PDF -> JPEG slides using pdftoppm
+        try:
+            subprocess.run(
+                [
+                    "pdftoppm",
+                    "-jpeg",
+                    "-r",
+                    "150",
+                    str(pdf_path),
+                    str(cache_abs / "slide"),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+        except FileNotFoundError:
+            raise ValueError(
+                "pdftoppm (poppler-utils) is not installed. "
+                "PPTX preview requires poppler."
+            )
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"PDF to image conversion failed: {e.stderr.decode()}")
+
+        # Clean up PDF
+        pdf_path.unlink(missing_ok=True)
+
+        # Collect slide images
+        slides = sorted(cache_abs.glob("slide-*.jpg"))
+        return (
+            [str(f.relative_to(session_path)) for f in slides],
+            False,
+        )
 
     def sync_files(
         self,

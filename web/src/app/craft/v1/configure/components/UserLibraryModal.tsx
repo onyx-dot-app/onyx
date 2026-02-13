@@ -11,7 +11,6 @@ import {
   deleteLibraryFile,
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
-import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import Modal from "@/refresh-components/Modal";
@@ -22,7 +21,6 @@ import {
   SvgFolderOpen,
   SvgChevronRight,
   SvgUploadCloud,
-  SvgPlus,
   SvgTrash,
   SvgFileText,
   SvgFolderPlus,
@@ -227,9 +225,15 @@ export default function UserLibraryModal({
             <Section flexDirection="column" gap={1} alignItems="stretch">
               {/* Upload error */}
               {uploadError && (
-                <div className="p-2 bg-status-error-01 rounded-08">
+                <Section
+                  flexDirection="row"
+                  alignItems="center"
+                  justifyContent="start"
+                  padding={0.5}
+                  height="fit"
+                >
                   <Text secondaryBody>{uploadError}</Text>
-                </div>
+                </Section>
               )}
 
               {/* File explorer */}
@@ -251,7 +255,7 @@ export default function UserLibraryModal({
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    className="hidden"
+                    style={{ display: "none" }}
                     onChange={handleFileUpload}
                     disabled={isUploading}
                     accept=".xlsx,.xls,.docx,.doc,.pptx,.ppt,.csv,.json,.txt,.pdf,.zip"
@@ -279,18 +283,18 @@ export default function UserLibraryModal({
                     </Text>
                   </Section>
                 ) : fileCount === 0 ? (
-                  <Section padding={2} height="fit" gap={0.25}>
-                    <SvgFileText size={32} className="mb-3 stroke-text-02" />
+                  <Section padding={2} height="fit" gap={0.5}>
+                    <SvgFileText size={32} className="stroke-text-02" />
                     <Text secondaryBody text03>
                       No files uploaded yet
                     </Text>
-                    <Text secondaryBody text02 className="mt-1 text-center">
+                    <Text secondaryBody text02>
                       Upload Excel, Word, PowerPoint, or other files for your
                       agent to work with
                     </Text>
                   </Section>
                 ) : (
-                  <ShadowDiv className="max-h-[400px] p-2">
+                  <ShadowDiv style={{ maxHeight: "400px", padding: "0.5rem" }}>
                     <LibraryTreeView
                       entries={hierarchicalTree}
                       expandedPaths={expandedPaths}
@@ -424,83 +428,116 @@ function LibraryTreeView({
         const isExpanded = expandedPaths.has(entry.path);
 
         return (
-          <div key={entry.id}>
-            <div
-              className={cn(
-                "flex items-center py-2 px-3 hover:bg-background-tint-02 rounded-08 transition-colors",
-                "group"
-              )}
-              style={{ paddingLeft: `${depth * 20 + 12}px` }}
+          <Section
+            key={entry.id}
+            flexDirection="column"
+            alignItems="stretch"
+            gap={0}
+            height="fit"
+          >
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              justifyContent="start"
+              gap={0.25}
+              height="fit"
+              padding={0.5}
             >
+              {/* Indent spacer - inline style needed for dynamic depth */}
+              {depth > 0 && (
+                <span
+                  aria-hidden
+                  style={{
+                    display: "inline-block",
+                    width: `${depth * 1.25}rem`,
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+
               {/* Expand/collapse for directories */}
               {entry.is_directory ? (
-                <button
+                <IconButton
+                  icon={SvgChevronRight}
                   onClick={() => onToggleFolder(entry.path)}
-                  className="p-0.5 rounded hover:bg-background-tint-03"
-                >
-                  <SvgChevronRight
-                    size={14}
-                    className={cn(
-                      "stroke-text-03 transition-transform",
-                      isExpanded && "rotate-90"
-                    )}
-                  />
-                </button>
+                  small
+                  tooltip={isExpanded ? "Collapse" : "Expand"}
+                  style={{
+                    transform: isExpanded ? "rotate(90deg)" : undefined,
+                    transition: "transform 150ms ease",
+                  }}
+                />
               ) : (
-                <span className="w-5" />
+                <Section width="fit" height="fit" gap={0} padding={0}>
+                  <SvgChevronRight size={12} style={{ visibility: "hidden" }} />
+                </Section>
               )}
 
               {/* Icon */}
               {entry.is_directory ? (
                 isExpanded ? (
-                  <SvgFolderOpen size={16} className="stroke-text-03 mx-1.5" />
+                  <SvgFolderOpen size={16} className="stroke-text-03" />
                 ) : (
-                  <SvgFolder size={16} className="stroke-text-03 mx-1.5" />
+                  <SvgFolder size={16} className="stroke-text-03" />
                 )
               ) : (
-                <SvgFileText size={16} className="stroke-text-03 mx-1.5" />
+                <SvgFileText size={16} className="stroke-text-03" />
               )}
 
               {/* Name */}
-              <Text secondaryBody text04 className="flex-1 truncate">
-                {entry.name}
-              </Text>
+              <Section
+                flexDirection="row"
+                alignItems="center"
+                justifyContent="start"
+                gap={0}
+                height="fit"
+              >
+                <Text secondaryBody text04 className="truncate">
+                  {entry.name}
+                </Text>
+              </Section>
 
               {/* File size */}
               {!entry.is_directory && entry.file_size !== null && (
-                <Text secondaryBody text02 className="mx-2 flex-shrink-0">
-                  {formatFileSize(entry.file_size)}
-                </Text>
+                <Section width="fit" height="fit" gap={0} padding={0}>
+                  <Text secondaryBody text02 style={{ whiteSpace: "nowrap" }}>
+                    {formatFileSize(entry.file_size)}
+                  </Text>
+                </Section>
               )}
 
-              {/* Actions - show on hover */}
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                {/* Upload to folder button - only for directories */}
+              {/* Actions */}
+              <Section
+                flexDirection="row"
+                alignItems="center"
+                justifyContent="end"
+                gap={0.25}
+                width="fit"
+                height="fit"
+              >
                 {entry.is_directory && (
-                  <SimpleTooltip tooltip="Upload to this folder">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Strip "user_library" prefix from path for upload API
-                        const uploadPath =
-                          entry.path.replace(/^user_library/, "") || "/";
-                        onUploadToFolder(uploadPath);
-                      }}
-                      className="p-1 rounded hover:bg-background-tint-03 transition-colors"
-                    >
-                      <SvgUploadCloud size={14} className="stroke-text-03" />
-                    </button>
-                  </SimpleTooltip>
+                  <IconButton
+                    icon={SvgUploadCloud}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const uploadPath =
+                        entry.path.replace(/^user_library/, "") || "/";
+                      onUploadToFolder(uploadPath);
+                    }}
+                    small
+                    tooltip="Upload to this folder"
+                  />
                 )}
-                <button
+                <IconButton
+                  icon={SvgTrash}
                   onClick={() => onDelete(entry)}
-                  className="p-1 rounded hover:bg-status-error-01 transition-colors"
-                >
-                  <SvgTrash size={14} className="stroke-text-03" />
-                </button>
-              </div>
+                  small
+                  danger
+                  tooltip="Delete"
+                />
+              </Section>
 
-              {/* Sync toggle - always visible, rightmost */}
+              {/* Sync toggle */}
               <SimpleTooltip
                 tooltip={
                   entry.sync_enabled
@@ -513,7 +550,7 @@ function LibraryTreeView({
                   onCheckedChange={(checked) => onToggleSync(entry, checked)}
                 />
               </SimpleTooltip>
-            </div>
+            </Section>
 
             {/* Children */}
             {entry.is_directory && isExpanded && entry.children && (
@@ -528,7 +565,7 @@ function LibraryTreeView({
                 depth={depth + 1}
               />
             )}
-          </div>
+          </Section>
         );
       })}
     </>

@@ -1,7 +1,7 @@
 "use client";
 
 import { Label, SubLabel } from "@/components/Field";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import Title from "@/components/ui/title";
 import Button from "@/refresh-components/buttons/Button";
 import { Settings } from "./interfaces";
@@ -86,16 +86,14 @@ export function SettingsForm() {
   const [chatRetention, setChatRetention] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [companyDescription, setCompanyDescription] = useState("");
-  const { popup, setPopup } = usePopup();
   const isEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  // Pass setPopup to the hook
   const {
     visionProviders,
     visionLLM,
     setVisionLLM,
     updateDefaultVisionProvider,
-  } = useVisionProviders(setPopup);
+  } = useVisionProviders();
 
   const combinedSettings = useContext(SettingsContext);
 
@@ -147,18 +145,12 @@ export function SettingsForm() {
       }
 
       router.refresh();
-      setPopup({
-        message: "Settings updated successfully!",
-        type: "success",
-      });
+      toast.success("Settings updated successfully!");
     } catch (error) {
       // Revert the optimistic update
       setSettings(settings);
       console.error("Error updating settings:", error);
-      setPopup({
-        message: `Failed to update settings`,
-        type: "error",
-      });
+      toast.error("Failed to update settings");
     }
   }
 
@@ -221,7 +213,6 @@ export function SettingsForm() {
 
   return (
     <>
-      {popup}
       <Title className="mb-4">Workspace Settings</Title>
       <label className="flex flex-col text-sm mb-4">
         <Label>Company Name</Label>
@@ -304,7 +295,7 @@ export function SettingsForm() {
       />
 
       {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
-        <AnonymousUserPath setPopup={setPopup} />
+        <AnonymousUserPath />
       )}
       {showConfirmModal && (
         <Modal open onOpenChange={() => setShowConfirmModal(false)}>

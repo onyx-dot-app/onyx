@@ -42,6 +42,9 @@ from onyx.tools.tool_implementations.web_search.providers import (
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
+from onyx.tools.tool_implementations.web_search.providers import (
+    provider_requires_api_key,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.enums import WebContentProviderType
@@ -181,11 +184,11 @@ def test_search_provider(
     _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    provider_requires_api_key = request.provider_type != WebSearchProviderType.SEARXNG
+    requires_key = provider_requires_api_key(request.provider_type)
 
     # Determine which API key to use
     api_key = request.api_key
-    if request.use_stored_key and provider_requires_api_key:
+    if request.use_stored_key and requires_key:
         existing_provider = fetch_web_search_provider_by_type(
             request.provider_type, db_session
         )
@@ -196,7 +199,7 @@ def test_search_provider(
             )
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
-    if provider_requires_api_key and not api_key:
+    if requires_key and not api_key:
         raise HTTPException(
             status_code=400,
             detail="API key is required. Either provide api_key or set use_stored_key to true.",
@@ -205,7 +208,7 @@ def test_search_provider(
     try:
         provider = build_search_provider_from_config(
             provider_type=request.provider_type,
-            api_key=api_key or "",
+            api_key=api_key,
             config=request.config or {},
         )
     except ValueError as exc:

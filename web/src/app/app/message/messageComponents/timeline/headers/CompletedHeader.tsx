@@ -1,13 +1,14 @@
+"use client";
+
 import React from "react";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import Text from "@/refresh-components/texts/Text";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import { formatDurationSeconds } from "@/lib/time";
 import { noProp } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
@@ -50,11 +51,12 @@ function MemoryTagWithTooltip({
         <span>{tag}</span>
       ) : (
         <SimpleTooltip
+          delayDuration={0}
           side="bottom"
           className="bg-background-neutral-00 text-text-01 shadow-md max-w-[17.5rem] p-1"
           tooltip={
             <Section flexDirection="column" gap={0.25} height="auto">
-              <div className="p-1">
+              <div className="p-1 w-full">
                 <Text as="p" secondaryBody text03>
                   {memoryText}
                 </Text>
@@ -64,8 +66,9 @@ function MemoryTagWithTooltip({
                 icon={SvgAddLines}
                 title={operationLabel}
                 rightChildren={
-                  <IconButton
-                    small
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
                     icon={SvgMaximize2}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -129,14 +132,14 @@ export const CompletedHeader = React.memo(function CompletedHeader({
         </div>
         {collapsible && totalSteps > 0 && isExpanded && (
           <Button
+            prominence="tertiary"
             size="md"
-            tertiary
             onClick={noProp(onToggle)}
             rightIcon={isExpanded ? SvgFold : SvgExpand}
             aria-label="Expand timeline"
             aria-expanded={isExpanded}
           >
-            {totalSteps} {totalSteps === 1 ? "step" : "steps"}
+            {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
           </Button>
         )}
       </div>
@@ -176,14 +179,14 @@ export const CompletedHeader = React.memo(function CompletedHeader({
 
       {collapsible && totalSteps > 0 && (
         <Button
+          prominence="tertiary"
           size="md"
-          tertiary
           onClick={noProp(onToggle)}
           rightIcon={isExpanded ? SvgFold : SvgExpand}
           aria-label="Expand timeline"
           aria-expanded={isExpanded}
         >
-          {totalSteps} {totalSteps === 1 ? "step" : "steps"}
+          {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
         </Button>
       )}
     </div>

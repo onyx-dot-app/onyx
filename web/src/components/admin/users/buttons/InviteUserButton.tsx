@@ -3,7 +3,7 @@ import {
   type AcceptedUserSnapshot,
 } from "@/lib/types";
 
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import useSWRMutation from "swr/mutation";
 import Button from "@/refresh-components/buttons/Button";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
@@ -12,12 +12,10 @@ import { useState } from "react";
 export const InviteUserButton = ({
   user,
   invited,
-  setPopup,
   mutate,
 }: {
   user: AcceptedUserSnapshot | InvitedUserSnapshot;
   invited: boolean;
-  setPopup: (spec: PopupSpec) => void;
   mutate: (() => void) | (() => void)[];
 }) => {
   const { trigger: inviteTrigger, isMutating: isInviting } = useSWRMutation(
@@ -43,17 +41,11 @@ export const InviteUserButton = ({
         } else {
           mutate.forEach((fn) => fn());
         }
-        setPopup({
-          message: "User invited successfully!",
-          type: "success",
-        });
+        toast.success("User invited successfully!");
       },
       onError: (errorMsg) => {
         setShowInviteModal(false);
-        setPopup({
-          message: `Unable to invite user - ${errorMsg}`,
-          type: "error",
-        });
+        toast.error(`Unable to invite user - ${errorMsg}`);
       },
     }
   );
@@ -81,17 +73,11 @@ export const InviteUserButton = ({
         } else {
           mutate.forEach((fn) => fn());
         }
-        setPopup({
-          message: "User uninvited successfully!",
-          type: "success",
-        });
+        toast.success("User uninvited successfully!");
       },
       onError: (errorMsg) => {
         setShowInviteModal(false);
-        setPopup({
-          message: `Unable to uninvite user - ${errorMsg}`,
-          type: "error",
-        });
+        toast.error(`Unable to uninvite user - ${errorMsg}`);
       },
     }
   );

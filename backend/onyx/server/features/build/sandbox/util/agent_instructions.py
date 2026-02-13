@@ -182,22 +182,41 @@ def build_org_info_section(include_org_info: bool) -> str:
 def extract_skill_description(skill_md_path: Path) -> str:
     """Extract a brief description from a SKILL.md file.
 
-    Looks for the first paragraph or heading content.
+    If the file has YAML frontmatter (delimited by ---), uses the
+    ``description`` field. Otherwise falls back to the first paragraph.
 
     Args:
         skill_md_path: Path to the SKILL.md file
 
     Returns:
-        Brief description (truncated to ~100 chars)
+        Brief description (truncated to ~120 chars)
     """
     try:
         content = skill_md_path.read_text()
         lines = content.strip().split("\n")
 
-        # Skip empty lines and the first heading
+        # Try YAML frontmatter first
+        if lines and lines[0].strip() == "---":
+            for line in lines[1:]:
+                if line.strip() == "---":
+                    break
+                if line.startswith("description:"):
+                    desc = line.split(":", 1)[1].strip().strip('"').strip("'")
+                    if desc:
+                        if len(desc) > 120:
+                            desc = desc[:117] + "..."
+                        return desc
+
+        # Fallback: first non-heading paragraph after frontmatter
+        in_frontmatter = lines[0].strip() == "---" if lines else False
         description_lines: list[str] = []
-        for line in lines:
+        for line in lines[1:] if in_frontmatter else lines:
             stripped = line.strip()
+            # Skip until end of frontmatter
+            if in_frontmatter:
+                if stripped == "---":
+                    in_frontmatter = False
+                continue
             if not stripped:
                 if description_lines:
                     break

@@ -20,6 +20,8 @@ strict_equality = true
 exclude = [
   "^generated/.*",
   "^\\.venv/",
+  "^onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx/",
+  "^onyx/server/features/build/sandbox/kubernetes/docker/templates/venv/",
 ]
 
 [[tool.mypy.overrides]]

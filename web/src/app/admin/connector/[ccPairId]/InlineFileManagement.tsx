@@ -16,7 +16,7 @@ import {
   updateConnectorFiles,
   type ConnectorFileInfo,
 } from "@/lib/fileConnector";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -41,7 +41,6 @@ export default function InlineFileManagement({
   connectorId,
   onRefresh,
 }: InlineFileManagementProps) {
-  const { setPopup } = usePopup();
   const [isEditing, setIsEditing] = useState(false);
   const [selectedFilesToRemove, setSelectedFilesToRemove] = useState<
     Set<string>
@@ -98,11 +97,9 @@ export default function InlineFileManagement({
     ).length;
 
     if (remainingFiles === 0 && filesToAdd.length === 0) {
-      setPopup({
-        message:
-          "Cannot remove all files from a connector. Delete the connector if this is desired.",
-        type: "error",
-      });
+      toast.error(
+        "Cannot remove all files from a connector. Delete the connector if this is desired."
+      );
       return;
     }
 
@@ -120,12 +117,10 @@ export default function InlineFileManagement({
         filesToAdd
       );
 
-      setPopup({
-        message:
-          "Files updated successfully! Document index is being updated in the background. " +
-          "New files are being indexed and removed files will be pruned from the search results.",
-        type: "success",
-      });
+      toast.success(
+        "Files updated successfully! Document index is being updated in the background. " +
+          "New files are being indexed and removed files will be pruned from the search results."
+      );
 
       // Reset editing state
       setIsEditing(false);
@@ -136,11 +131,9 @@ export default function InlineFileManagement({
       refreshFiles();
       onRefresh();
     } catch (error) {
-      setPopup({
-        message:
-          error instanceof Error ? error.message : "Failed to update files",
-        type: "error",
-      });
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update files"
+      );
     } finally {
       setIsSaving(false);
     }

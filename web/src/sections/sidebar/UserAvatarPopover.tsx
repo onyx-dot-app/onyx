@@ -23,7 +23,7 @@ import {
   SvgNotificationBubble,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 
 function getDisplayName(email?: string, personalName?: string): string {
@@ -58,8 +58,6 @@ function SettingsPopover({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { popup, setPopup } = usePopup();
-
   const undismissedCount =
     notifications?.filter((n) => !n.dismissed).length ?? 0;
   const isAnonymousUser =
@@ -95,14 +93,12 @@ function SettingsPopover({
       })
 
       .catch(() => {
-        setPopup({ message: "Failed to logout", type: "error" });
+        toast.error("Failed to logout");
       });
   };
 
   return (
     <>
-      {popup}
-
       <PopoverMenu>
         {[
           <div key="user-settings" data-testid="Settings/user-settings">

@@ -7,10 +7,6 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Memory
 from onyx.db.models import User
-from onyx.prompts.user_info import BASIC_INFORMATION_PROMPT
-from onyx.prompts.user_info import USER_MEMORIES_PROMPT
-from onyx.prompts.user_info import USER_PREFERENCES_PROMPT
-from onyx.prompts.user_info import USER_ROLE_PROMPT
 
 MAX_MEMORIES_PER_USER = 10
 
@@ -36,6 +32,15 @@ class UserMemoryContext(BaseModel):
     user_preferences: str | None = None
     memories: tuple[str, ...] = ()
 
+    def without_memories(self) -> "UserMemoryContext":
+        """Return a copy with memories cleared but user info/preferences intact."""
+        return UserMemoryContext(
+            user_id=self.user_id,
+            user_info=self.user_info,
+            user_preferences=self.user_preferences,
+            memories=(),
+        )
+
     def as_formatted_list(self) -> list[str]:
         """Returns combined list of user info, preferences, and memories."""
         result = []
@@ -49,45 +54,6 @@ class UserMemoryContext(BaseModel):
             result.append(f"User preferences: {self.user_preferences}")
         result.extend(self.memories)
         return result
-
-    def as_formatted_prompt(self) -> str:
-        """Returns structured prompt sections for the system prompt."""
-        has_basic_info = (
-            self.user_info.name or self.user_info.email or self.user_info.role
-        )
-        if not has_basic_info and not self.user_preferences and not self.memories:
-            return ""
-
-        sections: list[str] = []
-
-        if has_basic_info:
-            role_line = (
-                USER_ROLE_PROMPT.format(user_role=self.user_info.role).strip()
-                if self.user_info.role
-                else ""
-            )
-            if role_line:
-                role_line = "\n" + role_line
-            sections.append(
-                BASIC_INFORMATION_PROMPT.format(
-                    user_name=self.user_info.name or "",
-                    user_email=self.user_info.email or "",
-                    user_role=role_line,
-                )
-            )
-
-        if self.user_preferences:
-            sections.append(
-                USER_PREFERENCES_PROMPT.format(user_preferences=self.user_preferences)
-            )
-
-        if self.memories:
-            formatted_memories = "\n".join(f"- {memory}" for memory in self.memories)
-            sections.append(
-                USER_MEMORIES_PROMPT.format(user_memories=formatted_memories)
-            )
-
-        return "".join(sections)
 
 
 def get_memories(user: User, db_session: Session) -> UserMemoryContext:

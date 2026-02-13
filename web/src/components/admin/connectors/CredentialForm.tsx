@@ -1,7 +1,7 @@
-import React, { useState, JSX } from "react";
+import React, { JSX } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { Popup } from "./Popup";
+import { toast } from "@/hooks/useToast";
 import { ValidSources } from "@/lib/types";
 
 import {
@@ -62,14 +62,8 @@ export function CredentialForm<T extends Yup.AnyObject>({
   source,
   onSubmit,
 }: Props<T>): JSX.Element {
-  const [popup, setPopup] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
-
   return (
     <>
-      {popup && <Popup message={popup.message} type={popup.type} />}
       <Formik
         initialValues={initialValues}
         validationSchema={validationSchema}
@@ -82,11 +76,12 @@ export function CredentialForm<T extends Yup.AnyObject>({
             groups: [],
             source: source,
           }).then(({ message, isSuccess }) => {
-            setPopup({ message, type: isSuccess ? "success" : "error" });
+            if (isSuccess) {
+              toast.success(message);
+            } else {
+              toast.error(message);
+            }
             formikHelpers.setSubmitting(false);
-            setTimeout(() => {
-              setPopup(null);
-            }, 4000);
             onSubmit(isSuccess);
           });
         }}

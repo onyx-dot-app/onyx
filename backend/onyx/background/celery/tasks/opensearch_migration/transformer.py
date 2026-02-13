@@ -1,3 +1,4 @@
+import traceback
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -302,6 +303,7 @@ def transform_vespa_chunks_to_opensearch_chunks(
 
             result.append(opensearch_chunk)
         except Exception:
+            traceback.print_exc()
             logger.exception(
                 f"Migration error: Error transforming Vespa chunk with document ID {vespa_chunk.get(DOCUMENT_ID)} "
                 f"and chunk index {vespa_chunk.get(CHUNK_ID)} into an OpenSearch chunk. Continuing with "

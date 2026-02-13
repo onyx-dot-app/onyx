@@ -41,7 +41,7 @@ export function ReprovisionWarningOverlay({
   return (
     <div
       className={cn(
-        "transition-all duration-300 ease-in-out",
+        "fixed bottom-16 left-1/2 -translate-x-1/2 z-toast transition-all duration-300 ease-in-out",
         visible
           ? "opacity-100 translate-y-0"
           : "opacity-0 translate-y-4 pointer-events-none"

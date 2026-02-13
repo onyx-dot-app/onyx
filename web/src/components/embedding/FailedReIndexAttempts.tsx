@@ -18,14 +18,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { FiLink, FiMaximize2, FiTrash } from "react-icons/fi";
 import { mutate } from "swr";
-import { PopupSpec } from "../admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SvgTrash } from "@opal/icons";
 export function FailedReIndexAttempts({
   failedIndexingStatuses,
-  setPopup,
 }: {
   failedIndexingStatuses: FailedConnectorIndexingStatus[];
-  setPopup: (popupSpec: PopupSpec | null) => void;
 }) {
   const numToDisplay = 10;
   const [page, setPage] = useState(1);
@@ -56,16 +54,12 @@ export function FailedReIndexAttempts({
               await deleteCCPair(
                 pendingConnectorDeletion.connectorId,
                 pendingConnectorDeletion.credentialId,
-                setPopup,
                 () =>
                   mutate(buildCCPairInfoUrl(pendingConnectorDeletion.ccPairId))
               );
             } catch (error) {
               console.error("Error deleting connector:", error);
-              setPopup({
-                message: "Failed to delete connector. Please try again.",
-                type: "error",
-              });
+              toast.error("Failed to delete connector. Please try again.");
             } finally {
               setPendingConnectorDeletion(null);
             }
@@ -151,7 +145,6 @@ export function FailedReIndexAttempts({
                             await deleteCCPair(
                               reindexingProgress.connector_id,
                               reindexingProgress.credential_id,
-                              setPopup,
                               () =>
                                 mutate(
                                   buildCCPairInfoUrl(
@@ -161,11 +154,9 @@ export function FailedReIndexAttempts({
                             );
                           } catch (error) {
                             console.error("Error deleting connector:", error);
-                            setPopup({
-                              message:
-                                "Failed to delete connector. Please try again.",
-                              type: "error",
-                            });
+                            toast.error(
+                              "Failed to delete connector. Please try again."
+                            );
                           }
                         }}
                         leftIcon={SvgTrash}

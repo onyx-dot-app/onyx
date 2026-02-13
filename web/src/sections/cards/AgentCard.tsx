@@ -25,7 +25,7 @@ import {
 } from "@opal/icons";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
@@ -48,7 +48,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
-  const { popup, setPopup } = usePopup();
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -70,23 +69,18 @@ export default function AgentCard({ agent }: AgentCardProps) {
       );
 
       if (error) {
-        setPopup({
-          type: "error",
-          message: `Failed to share agent: ${error}`,
-        });
+        toast.error(`Failed to share agent: ${error}`);
       } else {
         // Revalidate the agent data to reflect the changes
         refreshAgent();
         shareAgentModal.toggle(false);
       }
     },
-    [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent, setPopup]
+    [agent.id, isPaidEnterpriseFeaturesEnabled, refreshAgent]
   );
 
   return (
     <>
-      {popup}
-
       <shareAgentModal.Provider>
         <ShareAgentModal
           agentId={agent.id}

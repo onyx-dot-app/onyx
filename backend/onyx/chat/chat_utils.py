@@ -688,28 +688,34 @@ def convert_chat_history(
 
 
 def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
-    """Get the custom agent prompt from persona or project instructions.
+    """Get the custom agent prompt from persona or project instructions. If it's replacing the base system prompt,
+    it does not count as a custom agent prompt (logic exists later also to drop it in this case).
 
     Chat Sessions in Projects that are using a custom agent will retain the custom agent prompt.
-    Priority: persona.system_prompt > chat_session.project.instructions > None
+    Priority: persona.system_prompt (if not default Agent) > chat_session.project.instructions
+
+    # NOTE: Logic elsewhere allows saving empty strings for potentially other purposes but for constructing the prompts
+    # we never want to return an empty string for a prompt so it's translated into an explicit None.
 
     Args:
         persona: The Persona object
         chat_session: The ChatSession object
 
     Returns:
-        The custom agent prompt string, or None if neither persona nor project has one
+        The prompt to use for the custom Agent part of the prompt.
     """
-    # Not considered a custom agent if it's the default behavior persona
-    if persona.id == DEFAULT_PERSONA_ID:
-        return None
+    # If using a custom Agent, always respect its prompt, even if in a Project, and even if it's an empty custom prompt.
+    if persona.id != DEFAULT_PERSONA_ID:
+        # Logic exists later also to drop it in this case but this is strictly correct anyhow.
+        if persona.replace_base_system_prompt:
+            return None
+        return persona.system_prompt or None
 
-    if persona.system_prompt:
-        return persona.system_prompt
-    elif chat_session.project and chat_session.project.instructions:
+    # If in a project and using the default Agent, respect the project instructions.
+    if chat_session.project and chat_session.project.instructions:
         return chat_session.project.instructions
-    else:
-        return None
+
+    return None
 
 
 def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:

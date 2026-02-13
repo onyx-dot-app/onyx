@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
@@ -27,7 +27,6 @@ export default function NewTenantModal({
   onClose,
 }: NewTenantModalProps) {
   const router = useRouter();
-  const { setPopup } = usePopup();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,16 +51,10 @@ export default function NewTenantModal({
           throw new Error(errorData.message || "Failed to accept invitation");
         }
 
-        setPopup({
-          message: "You have accepted the invitation.",
-          type: "success",
-        });
+        toast.success("You have accepted the invitation.");
       } else {
         // For non-invite flow, just show success message
-        setPopup({
-          message: "Processing your team join request...",
-          type: "success",
-        });
+        toast.success("Processing your team join request...");
       }
 
       // Common logout and redirect for both flows
@@ -75,10 +68,7 @@ export default function NewTenantModal({
           : "Failed to join the team. Please try again.";
 
       setError(message);
-      setPopup({
-        message,
-        type: "error",
-      });
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -105,10 +95,7 @@ export default function NewTenantModal({
         throw new Error(errorData.message || "Failed to decline invitation");
       }
 
-      setPopup({
-        message: "You have declined the invitation.",
-        type: "info",
-      });
+      toast.info("You have declined the invitation.");
       onClose?.();
     } catch (error) {
       const message =
@@ -117,10 +104,7 @@ export default function NewTenantModal({
           : "Failed to decline the invitation. Please try again.";
 
       setError(message);
-      setPopup({
-        message,
-        type: "error",
-      });
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

@@ -56,7 +56,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
           </div>
           <ButtonTile
             title="View/Add"
-            description="All notes"
+            description="All Memories"
             icon={SvgAddLines}
             onClick={() => {
               setTargetMemoryId(null);

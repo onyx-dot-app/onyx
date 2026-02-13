@@ -9,7 +9,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { Spinner } from "@/components/Spinner";
 import { redirect, useSearchParams } from "next/navigation";
 import {
@@ -19,7 +19,6 @@ import {
 import Cookies from "js-cookie";
 
 const ResetPasswordPage: React.FC = () => {
-  const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
@@ -46,7 +45,6 @@ const ResetPasswordPage: React.FC = () => {
           <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
         </div>
         {isWorking && <Spinner />}
-        {popup}
         <Formik
           initialValues={{
             password: "",
@@ -60,34 +58,25 @@ const ResetPasswordPage: React.FC = () => {
           })}
           onSubmit={async (values) => {
             if (!token) {
-              setPopup({
-                type: "error",
-                message: "Invalid or missing reset token.",
-              });
+              toast.error("Invalid or missing reset token.");
               return;
             }
             setIsWorking(true);
             try {
               await resetPassword(token, values.password);
-              setPopup({
-                type: "success",
-                message: "Password reset successfully. Redirecting to login...",
-              });
+              toast.success(
+                "Password reset successfully. Redirecting to login..."
+              );
               setTimeout(() => {
                 redirect("/auth/login");
               }, 1000);
             } catch (error) {
               if (error instanceof Error) {
-                setPopup({
-                  type: "error",
-                  message:
-                    error.message || "An error occurred during password reset.",
-                });
+                toast.error(
+                  error.message || "An error occurred during password reset."
+                );
               } else {
-                setPopup({
-                  type: "error",
-                  message: "An unexpected error occurred. Please try again.",
-                });
+                toast.error("An unexpected error occurred. Please try again.");
               }
             } finally {
               setIsWorking(false);

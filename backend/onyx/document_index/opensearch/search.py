@@ -5,6 +5,8 @@ from datetime import timezone
 from typing import Any
 from uuid import UUID
 
+from onyx.configs.app_configs import DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S
+from onyx.configs.app_configs import OPENSEARCH_PROFILING_DISABLED
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
@@ -154,7 +156,10 @@ class DocumentQuery:
             # return size.
             "size": DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
             "_source": get_full_document,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_get_ids_query["profile"] = True
 
         return final_get_ids_query
 
@@ -202,7 +207,10 @@ class DocumentQuery:
         )
         final_delete_query: dict[str, Any] = {
             "query": {"bool": {"filter": filter_clauses}},
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_delete_query["profile"] = True
 
         return final_delete_query
 
@@ -282,7 +290,10 @@ class DocumentQuery:
             "query": hybrid_search_query,
             "size": num_hits,
             "highlight": match_highlights_configuration,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
+        # WARNING: Profiling does not work with hybrid search; do not add it at
+        # this level. See https://github.com/opensearch-project/neural-search/issues/1255
 
         return final_hybrid_search_body
 
@@ -335,7 +346,10 @@ class DocumentQuery:
                 }
             },
             "size": num_to_retrieve,
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_random_search_query["profile"] = True
 
         return final_random_search_query
 

@@ -21,16 +21,15 @@ import {
   deleteGuildConfig,
   updateGuildConfig,
 } from "@/app/admin/discord-bot/lib";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 interface Props {
   guilds: DiscordGuildConfig[];
   onRefresh: () => void;
-  setPopup: (popup: PopupSpec) => void;
 }
 
-export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
+export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
   const router = useRouter();
   const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
     null
@@ -43,13 +42,11 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
     try {
       await deleteGuildConfig(guildId);
       onRefresh();
-      setPopup({ type: "success", message: "Server configuration deleted" });
+      toast.success("Server configuration deleted");
     } catch (err) {
-      setPopup({
-        type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to delete server config",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete server config"
+      );
     } finally {
       setGuildToDelete(null);
     }
@@ -57,10 +54,7 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
 
   const handleToggleEnabled = async (guild: DiscordGuildConfig) => {
     if (!guild.guild_id) {
-      setPopup({
-        type: "error",
-        message: "Server must be registered before it can be enabled",
-      });
+      toast.error("Server must be registered before it can be enabled");
       return;
     }
 
@@ -71,15 +65,11 @@ export function DiscordGuildsTable({ guilds, onRefresh, setPopup }: Props) {
         default_persona_id: guild.default_persona_id,
       });
       onRefresh();
-      setPopup({
-        type: "success",
-        message: `Server ${!guild.enabled ? "enabled" : "disabled"}`,
-      });
+      toast.success(`Server ${!guild.enabled ? "enabled" : "disabled"}`);
     } catch (err) {
-      setPopup({
-        type: "error",
-        message: err instanceof Error ? err.message : "Failed to update server",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update server"
+      );
     } finally {
       setUpdatingGuildIds((prev) => {
         const next = new Set(prev);

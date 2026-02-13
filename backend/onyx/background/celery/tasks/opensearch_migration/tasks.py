@@ -1,6 +1,7 @@
 """Celery tasks for migrating documents from Vespa to OpenSearch."""
 
 import time
+import traceback
 
 from celery import shared_task
 from celery import Task
@@ -220,6 +221,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                     task_logger.info("Vespa reported no more chunks to migrate.")
                     break
     except Exception:
+        traceback.print_exc()
         task_logger.exception("Error in the OpenSearch migration task.")
         return False
     finally:

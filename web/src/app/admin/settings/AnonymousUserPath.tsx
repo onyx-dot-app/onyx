@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { useContext, useState } from "react";
 
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import Button from "@/refresh-components/buttons/Button";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { Card } from "@/refresh-components/cards";
@@ -13,11 +13,7 @@ import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
-export function AnonymousUserPath({
-  setPopup,
-}: {
-  setPopup: (popup: PopupSpec) => void;
-}) {
+export function AnonymousUserPath() {
   const settings = useContext(SettingsContext);
   const [customPath, setCustomPath] = useState<string | null>(null);
 
@@ -44,18 +40,14 @@ export function AnonymousUserPath({
     try {
       // Validate custom path
       if (!customPath || !customPath.trim()) {
-        setPopup({
-          message: "Custom path cannot be empty",
-          type: "error",
-        });
+        toast.error("Custom path cannot be empty");
         return;
       }
 
       if (!/^[a-zA-Z0-9-]+$/.test(customPath)) {
-        setPopup({
-          message: "Custom path can only contain letters, numbers, and hyphens",
-          type: "error",
-        });
+        toast.error(
+          "Custom path can only contain letters, numbers, and hyphens"
+        );
         return;
       }
       const response = await fetch(
@@ -71,22 +63,13 @@ export function AnonymousUserPath({
       );
       if (!response.ok) {
         const detail = await response.json();
-        setPopup({
-          message: detail.detail || "Failed to update anonymous user path",
-          type: "error",
-        });
+        toast.error(detail.detail || "Failed to update anonymous user path");
         return;
       }
       mutate(); // Revalidate the SWR cache
-      setPopup({
-        message: "Anonymous user path updated successfully!",
-        type: "success",
-      });
+      toast.success("Anonymous user path updated successfully!");
     } catch (error) {
-      setPopup({
-        message: `Failed to update anonymous user path: ${error}`,
-        type: "error",
-      });
+      toast.error(`Failed to update anonymous user path: ${error}`);
       console.error("Error updating anonymous user path:", error);
     }
   }

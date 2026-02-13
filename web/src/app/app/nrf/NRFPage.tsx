@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { AuthType } from "@/lib/constants";
 import Button from "@/refresh-components/buttons/Button";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -63,8 +63,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { user, authTypeMetadata } = useUser();
   const { setFolded } = useAppSidebarContext();
 
-  const { popup, setPopup } = usePopup();
-
   // Hide sidebar when in side panel mode
   useEffect(() => {
     if (isSidePanel) {
@@ -87,20 +85,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     clearLastFailedFiles,
   } = useProjectsContext();
 
-  // Show popup if any files failed
+  // Show toast if any files failed
   useEffect(() => {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
-      setPopup({
-        type: "error",
-        message:
-          lastFailedFiles.length === 1
-            ? `File failed and was removed: ${names}`
-            : `Files failed and were removed: ${names}`,
-      });
+      toast.error(
+        lastFailedFiles.length === 1
+          ? `File failed and was removed: ${names}`
+          : `Files failed and were removed: ${names}`
+      );
       clearLastFailedFiles();
     }
-  }, [lastFailedFiles, setPopup, clearLastFailedFiles]);
+  }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
   const { selectedAssistant, setSelectedAssistantFromId, liveAssistant } =
@@ -222,7 +218,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       existingChatSessionId,
       selectedDocuments: [],
       searchParams: searchParams!,
-      setPopup,
       resetInputBar,
       setSelectedAssistantFromId,
     });
@@ -273,10 +268,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      setPopup({
-        message: "No previously-submitted user message found.",
-        type: "error",
-      });
+      toast.error("No previously-submitted user message found.");
       return;
     }
 
@@ -286,13 +278,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       deepResearch: deepResearchEnabled,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }, [
-    messageHistory,
-    onSubmit,
-    currentMessageFiles,
-    deepResearchEnabled,
-    setPopup,
-  ]);
+  }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
 
   const handleOpenInOnyx = () => {
     window.open(`${window.location.origin}/app`, "_blank");
@@ -312,8 +298,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           : undefined
       }
     >
-      {popup}
-
       {/* Semi-transparent overlay for readability when background is set */}
       {!isSidePanel && hasBackground && (
         <div className="absolute inset-0 bg-background/80 pointer-events-none" />

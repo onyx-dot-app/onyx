@@ -8,7 +8,7 @@ import { Form, Formik } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
 import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SvgSettings } from "@opal/icons";
 interface CreateRateLimitModalProps {
   isOpen: boolean;
@@ -19,7 +19,6 @@ interface CreateRateLimitModalProps {
     token_budget: number,
     group_id: number
   ) => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   forSpecificScope?: Scope;
   forSpecificUserGroup?: number;
 }
@@ -28,7 +27,6 @@ export default function CreateRateLimitModal({
   isOpen,
   setIsOpen,
   onSubmit,
-  setPopup,
   forSpecificScope,
   forSpecificUserGroup,
 }: CreateRateLimitModalProps) {
@@ -49,17 +47,14 @@ export default function CreateRateLimitModal({
         setModalUserGroups(options);
         setShouldFetchUserGroups(false);
       } catch (error) {
-        setPopup({
-          type: "error",
-          message: `Failed to fetch user groups: ${error}`,
-        });
+        toast.error(`Failed to fetch user groups: ${error}`);
       }
     };
 
     if (shouldFetchUserGroups) {
       fetchData();
     }
-  }, [shouldFetchUserGroups, setPopup]);
+  }, [shouldFetchUserGroups]);
 
   return (
     <Modal open={isOpen} onOpenChange={() => setIsOpen(false)}>

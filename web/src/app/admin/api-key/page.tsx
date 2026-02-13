@@ -15,7 +15,7 @@ import {
   Table,
 } from "@/components/ui/table";
 import Title from "@/components/ui/title";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
 import Modal from "@/refresh-components/Modal";
@@ -33,8 +33,6 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 
 function Main() {
-  const { popup, setPopup } = usePopup();
-
   const {
     data: apiKeys,
     isLoading,
@@ -84,7 +82,6 @@ function Main() {
   if (filteredApiKeys.length === 0) {
     return (
       <div>
-        {popup}
         {introSection}
 
         {showCreateUpdateForm && (
@@ -97,7 +94,6 @@ function Main() {
               setSelectedApiKey(undefined);
               mutate("/api/admin/api-key");
             }}
-            setPopup={setPopup}
             apiKey={selectedApiKey}
           />
         )}
@@ -107,8 +103,6 @@ function Main() {
 
   return (
     <>
-      {popup}
-
       <Modal open={!!fullApiKey}>
         <Modal.Content width="sm" height="sm">
           <Modal.Header
@@ -171,10 +165,7 @@ function Main() {
                     setKeyIsGenerating(false);
                     if (!response.ok) {
                       const errorMsg = await response.text();
-                      setPopup({
-                        type: "error",
-                        message: `Failed to regenerate API Key: ${errorMsg}`,
-                      });
+                      toast.error(`Failed to regenerate API Key: ${errorMsg}`);
                       return;
                     }
                     const newKey = (await response.json()) as APIKey;
@@ -191,10 +182,7 @@ function Main() {
                     const response = await deleteApiKey(apiKey.api_key_id);
                     if (!response.ok) {
                       const errorMsg = await response.text();
-                      setPopup({
-                        type: "error",
-                        message: `Failed to delete API Key: ${errorMsg}`,
-                      });
+                      toast.error(`Failed to delete API Key: ${errorMsg}`);
                       return;
                     }
                     mutate("/api/admin/api-key");
@@ -216,7 +204,6 @@ function Main() {
             setSelectedApiKey(undefined);
             mutate("/api/admin/api-key");
           }}
-          setPopup={setPopup}
           apiKey={selectedApiKey}
         />
       )}

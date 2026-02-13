@@ -9,7 +9,7 @@ import {
 } from "./AppearanceThemeSettings";
 import { useContext, useRef, useState } from "react";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
@@ -30,7 +30,6 @@ export default function ThemePage() {
   const settings = useContext(SettingsContext);
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);
-  const { popup, setPopup } = usePopup();
 
   if (!settings) {
     return null;
@@ -191,10 +190,7 @@ export default function ThemePage() {
         // dirty comparisons reflect the newly-saved values.
         if (success) {
           formikHelpers.resetForm({ values });
-          setPopup({
-            type: "success",
-            message: "Appearance settings saved successfully!",
-          });
+          toast.success("Appearance settings saved successfully!");
         }
 
         formikHelpers.setSubmitting(false);
@@ -213,7 +209,6 @@ export default function ThemePage() {
 
         return (
           <Form className="w-full h-full">
-            {popup}
             <SettingsLayouts.Root>
               <SettingsLayouts.Header
                 title="Appearance & Theming"

@@ -1,6 +1,6 @@
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { ConnectorStatus, User, UserGroup } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import { createUserGroup } from "./lib";
@@ -13,7 +13,6 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgUsers } from "@opal/icons";
 export interface UserGroupCreationFormProps {
   onClose: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   users: User[];
   ccPairs: ConnectorStatus<any, any>[];
   existingUserGroup?: UserGroup;
@@ -21,7 +20,6 @@ export interface UserGroupCreationFormProps {
 
 export default function UserGroupCreationForm({
   onClose,
-  setPopup,
   users,
   ccPairs,
   existingUserGroup,
@@ -61,22 +59,20 @@ export default function UserGroupCreationForm({
               response = await createUserGroup(values);
               formikHelpers.setSubmitting(false);
               if (response.ok) {
-                setPopup({
-                  message: isUpdate
+                toast.success(
+                  isUpdate
                     ? "Successfully updated user group!"
-                    : "Successfully created user group!",
-                  type: "success",
-                });
+                    : "Successfully created user group!"
+                );
                 onClose();
               } else {
                 const responseJson = await response.json();
                 const errorMsg = responseJson.detail || responseJson.message;
-                setPopup({
-                  message: isUpdate
+                toast.error(
+                  isUpdate
                     ? `Error updating user group - ${errorMsg}`
-                    : `Error creating user group - ${errorMsg}`,
-                  type: "error",
-                });
+                    : `Error creating user group - ${errorMsg}`
+                );
               }
             }}
           >
