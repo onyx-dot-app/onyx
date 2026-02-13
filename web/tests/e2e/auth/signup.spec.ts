@@ -102,6 +102,55 @@ test.describe("Signup flow", () => {
     expect(me.ok()).toBe(false);
   });
 
+  test("Signup fails with invalid email format", async ({ page }) => {
+    await page.goto("/auth/signup");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByTestId("email").fill("notavalidemail");
+    await page.getByTestId("password").fill("ValidPassword123!");
+
+    // Trigger validation by blurring the email field
+    await page.getByTestId("email").blur();
+
+    // Verify submit button is disabled
+    await expect(
+      page.getByRole("button", { name: "Create account" })
+    ).toBeDisabled();
+
+    // Capture the validation error state
+    await expectScreenshot(page, { name: "signup-invalid-email-error" });
+
+    // Should stay on the signup page
+    await expect(page).toHaveURL(/\/auth\/signup/);
+  });
+
+  test("Signup fails with disposable email address", async ({ page }) => {
+    // Use a disposable email domain from the fallback list
+    const disposableEmail = `testuser_${Date.now()}@mailinator.com`;
+
+    await page.goto("/auth/signup");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByTestId("email").fill(disposableEmail);
+    await page.getByTestId("password").fill("ValidPassword123!");
+    await page.getByRole("button", { name: "Create account" }).click();
+
+    // Wait for error message to appear
+    await expect(
+      page.getByText("Unknown error", { exact: true })
+    ).toBeVisible();
+
+    // Capture the error state
+    await expectScreenshot(page, { name: "signup-disposable-email-error" });
+
+    // Should stay on the signup page
+    await expect(page).toHaveURL(/\/auth\/signup/);
+
+    // Should not be authenticated
+    const me = await page.request.get("/api/me");
+    expect(me.ok()).toBe(false);
+  });
+
   test("Login link navigates to login page", async ({ page }) => {
     await page.goto("/auth/signup");
     await page.waitForLoadState("networkidle");
