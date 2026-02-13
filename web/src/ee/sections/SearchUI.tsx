@@ -339,7 +339,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         </div>
 
         {/* Pagination */}
-        <div className="row-start-3 col-start-1 pt-3">
+        <div className="row-start-3 col-start-1 col-span-2 pt-3">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
