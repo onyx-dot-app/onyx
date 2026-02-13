@@ -61,3 +61,11 @@ def downgrade() -> None:
         WHERE llm_model_flow_type = 'CONTEXTUAL_RAG'
         """
     )
+
+    op.alter_column(
+        "llm_model_flow",
+        "llm_model_flow_type",
+        type_=sa.String(length=10),
+        existing_type=sa.String(length=20),
+        existing_nullable=False,
+    )
