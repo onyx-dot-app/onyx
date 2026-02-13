@@ -128,6 +128,9 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
     timeout: 5000,
   });
 
+  // Store tool name for cleanup now that the tool is confirmed created
+  createdToolName = toolName;
+
   // OAuth should be selected by default, fill in OAuth config details
   await getAuthorizationUrlInput(page).fill(authorizationUrl);
   await getTokenUrlInput(page).fill(tokenUrl);
@@ -206,9 +209,6 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   // Navigate to the assistant creation page
   await page.goto("/app/agents/create");
   await page.waitForLoadState("networkidle");
-
-  // Store tool name for cleanup
-  createdToolName = toolName;
 
   // Fill in basic assistant details
   const assistantName = `Test Assistant ${Date.now()}`;
