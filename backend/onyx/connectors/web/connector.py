@@ -32,9 +32,12 @@ from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
@@ -440,7 +443,7 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
         )
 
 
-class WebConnector(LoadConnector):
+class WebConnector(LoadConnector, SlimConnector):
     MAX_RETRIES = 3
 
     def __init__(
@@ -490,6 +493,96 @@ class WebConnector(LoadConnector):
         if credentials:
             logger.warning("Unexpected credentials provided for Web Connector")
         return None
+
+    def retrieve_all_slim_docs(self) -> GenerateSlimDocumentOutput:
+        """Lightweight URL enumeration for pruning — no Playwright needed.
+
+        For RECURSIVE mode, uses requests + BeautifulSoup to discover URLs
+        instead of launching a full browser crawl.
+        """
+        if not self.to_visit_list:
+            return
+
+        # SINGLE mode: just return the one URL
+        if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value:
+            yield [SlimDocument(id=self.to_visit_list[0])]
+            return
+
+        # SITEMAP mode: parse sitemap XML (already lightweight)
+        if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value:
+            urls = extract_urls_from_sitemap(self.to_visit_list[0])
+            slim_doc_batch: list[SlimDocument] = []
+            for url in urls:
+                slim_doc_batch.append(SlimDocument(id=url))
+                if len(slim_doc_batch) >= self.batch_size:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+            if slim_doc_batch:
+                yield slim_doc_batch
+            return
+
+        # UPLOAD mode: URLs already loaded from file in __init__
+        if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD.value:
+            slim_doc_batch = []
+            for url in self.to_visit_list:
+                slim_doc_batch.append(SlimDocument(id=url))
+                if len(slim_doc_batch) >= self.batch_size:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+            if slim_doc_batch:
+                yield slim_doc_batch
+            return
+
+        # RECURSIVE mode: lightweight HTTP crawl to discover URLs
+        base_url = self.to_visit_list[0]
+        to_visit = list(self.to_visit_list)
+        visited: set[str] = set()
+        slim_doc_batch = []
+
+        while to_visit:
+            url = to_visit.pop()
+            if url in visited:
+                continue
+            visited.add(url)
+
+            try:
+                protected_url_check(url)
+            except Exception:
+                logger.debug(f"Slim crawl: skipping protected URL {url}")
+                continue
+
+            try:
+                resp = requests.get(url, headers=DEFAULT_HEADERS, timeout=10)
+                resp.raise_for_status()
+            except Exception:
+                logger.debug(f"Slim crawl: failed to fetch {url}")
+                continue
+
+            content_type = resp.headers.get("content-type", "")
+            if (
+                "text/html" not in content_type
+                and "application/xhtml" not in content_type
+            ):
+                # Still include non-HTML resources (PDFs, etc.) as documents
+                slim_doc_batch.append(SlimDocument(id=url))
+                if len(slim_doc_batch) >= self.batch_size:
+                    yield slim_doc_batch
+                    slim_doc_batch = []
+                continue
+
+            soup = BeautifulSoup(resp.content, "html.parser")
+            internal_links = get_internal_links(base_url, url, soup)
+            for link in internal_links:
+                if link not in visited:
+                    to_visit.append(link)
+
+            slim_doc_batch.append(SlimDocument(id=url))
+            if len(slim_doc_batch) >= self.batch_size:
+                yield slim_doc_batch
+                slim_doc_batch = []
+
+        if slim_doc_batch:
+            yield slim_doc_batch
 
     def _do_scrape(
         self,
