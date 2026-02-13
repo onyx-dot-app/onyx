@@ -87,7 +87,7 @@ for (const theme of THEMES) {
       await expect(newSessionBtn).toBeVisible({ timeout: 10000 });
     });
 
-    test.skip("send button is visible in the input bar", async ({ page }) => {
+    test("send button is visible in the input bar", async ({ page }) => {
       const sendButton = page.locator("#onyx-chat-input-send-button");
       await expect(sendButton).toBeVisible({ timeout: 10000 });
 
