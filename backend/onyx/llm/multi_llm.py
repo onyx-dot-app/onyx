@@ -1,4 +1,8 @@
+import os
+import threading
 from collections.abc import Iterator
+from contextlib import contextmanager
+from contextlib import nullcontext
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -48,6 +52,8 @@ from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_env_lock = threading.Lock()
 
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper
@@ -378,23 +384,30 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            response = litellm.completion(
-                mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
-                model=model,
-                base_url=self._api_base or None,
-                api_version=self._api_version or None,
-                custom_llm_provider=self._custom_llm_provider or None,
-                messages=_prompt_to_dicts(prompt),
-                tools=tools,
-                tool_choice=tool_choice,
-                stream=stream,
-                temperature=temperature,
-                timeout=timeout_override or self._timeout,
-                max_tokens=max_tokens,
-                client=client,
-                **optional_kwargs,
-                **passthrough_kwargs,
+            # We only need to set environment variables if custom config is set
+            env_ctx = (
+                temporary_env_and_lock(self._custom_config)
+                if self._custom_config
+                else nullcontext()
             )
+            with env_ctx:
+                response = litellm.completion(
+                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                    model=model,
+                    base_url=self._api_base or None,
+                    api_version=self._api_version or None,
+                    custom_llm_provider=self._custom_llm_provider or None,
+                    messages=_prompt_to_dicts(prompt),
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=stream,
+                    temperature=temperature,
+                    timeout=timeout_override or self._timeout,
+                    max_tokens=max_tokens,
+                    client=client,
+                    **optional_kwargs,
+                    **passthrough_kwargs,
+                )
             return response
         except Exception as e:
             # for break pointing
@@ -475,13 +488,21 @@ class LitellmLLM(LLM):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
         try:
-            response = cast(
-                LiteLLMModelResponse,
+            # When custom_config is set, env vars are temporarily injected
+            # under a global lock. Using stream=True here means the lock is
+            # only held during connection setup (not the full inference).
+            # The chunks are then collected outside the lock and reassembled
+            # into a single ModelResponse via stream_chunk_builder.
+            from litellm import stream_chunk_builder
+            from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
+
+            stream_response = cast(
+                LiteLLMCustomStreamWrapper,
                 self._completion(
                     prompt=prompt,
                     tools=tools,
                     tool_choice=tool_choice,
-                    stream=False,
+                    stream=True,
                     structured_response_format=structured_response_format,
                     timeout_override=timeout_override,
                     max_tokens=max_tokens,
@@ -490,6 +511,11 @@ class LitellmLLM(LLM):
                     user_identity=user_identity,
                     client=client,
                 ),
+            )
+            chunks = list(stream_response)
+            response = cast(
+                LiteLLMModelResponse,
+                stream_chunk_builder(chunks),
             )
 
             model_response = from_litellm_model_response(response)
@@ -581,3 +607,29 @@ class LitellmLLM(LLM):
         finally:
             if client is not None:
                 client.close()
+
+
+@contextmanager
+def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
+    """
+    Temporarily sets the environment variables to the given values.
+    Code path is locked while the environment variables are set.
+    Then cleans up the environment and frees the lock.
+    """
+    with _env_lock:
+        logger.debug("Acquired lock in temporary_env_and_lock")
+        # Store original values (None if key didn't exist)
+        original_values: dict[str, str | None] = {
+            key: os.environ.get(key) for key in env_variables
+        }
+        try:
+            os.environ.update(env_variables)
+            yield
+        finally:
+            for key, original_value in original_values.items():
+                if original_value is None:
+                    os.environ.pop(key, None)  # Remove if it didn't exist before
+                else:
+                    os.environ[key] = original_value  # Restore original value
+
+    logger.debug("Released lock in temporary_env_and_lock")
