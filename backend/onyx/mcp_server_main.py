@@ -3,6 +3,7 @@
 import uvicorn
 
 from onyx.configs.app_configs import MCP_SERVER_ENABLED
+from onyx.configs.app_configs import MCP_SERVER_HOST
 from onyx.configs.app_configs import MCP_SERVER_PORT
 from onyx.utils.logger import setup_logger
 
@@ -15,13 +16,13 @@ def main() -> None:
         logger.info("MCP server is disabled (MCP_SERVER_ENABLED=false)")
         return
 
-    logger.info(f"Starting MCP server on 0.0.0.0:{MCP_SERVER_PORT}")
+    logger.info(f"Starting MCP server on {MCP_SERVER_HOST}:{MCP_SERVER_PORT}")
 
     from onyx.mcp_server.api import mcp_app
 
     uvicorn.run(
         mcp_app,
-        host="0.0.0.0",
+        host=MCP_SERVER_HOST,
         port=MCP_SERVER_PORT,
         log_config=None,
     )
