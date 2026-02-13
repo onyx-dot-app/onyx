@@ -293,7 +293,7 @@ class DocumentQuery:
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
         # WARNING: Profiling does not work with hybrid search; do not add it at
-        # this level. We'll add it in each of the subqueries. See https://github.com/opensearch-project/neural-search/issues/1255
+        # this level. See https://github.com/opensearch-project/neural-search/issues/1255
 
         return final_hybrid_search_body
 
