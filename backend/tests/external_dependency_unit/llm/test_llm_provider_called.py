@@ -64,7 +64,6 @@ def _create_provider(
             name=name,
             provider=provider,
             api_key="sk-ant-api03-...",
-            default_model_name="claude-3-5-sonnet-20240620",
             is_public=is_public,
             model_configurations=[
                 ModelConfigurationUpsertRequest(
@@ -154,7 +153,9 @@ def test_user_sends_message_to_private_provider(
     )
     _create_provider(db_session, LlmProviderNames.GOOGLE, "private-provider", False)
 
-    update_default_provider(public_provider_id, db_session)
+    update_default_provider(
+        public_provider_id, "claude-3-5-sonnet-20240620", db_session
+    )
 
     try:
         # Create chat session
