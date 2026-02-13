@@ -5,8 +5,6 @@ import { IconProps } from "@opal/types";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { TimelineTopSpacer } from "./TimelineTopSpacer";
-import { TimelineTopSpacerVariant } from "./tokens";
 
 export interface TimelineStepContentProps {
   children?: React.ReactNode;
@@ -65,7 +63,7 @@ export function TimelineStepContent({
               ) : (
                 <OpalButton
                   prominence="tertiary"
-                  size="sm"
+                  size="md"
                   onClick={onToggle}
                   icon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand

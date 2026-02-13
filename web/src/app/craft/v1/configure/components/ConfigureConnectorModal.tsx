@@ -11,7 +11,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import CredentialStep from "@/app/craft/v1/configure/components/CredentialStep";
 import ConnectorConfigStep from "@/app/craft/v1/configure/components/ConnectorConfigStep";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { OAUTH_STATE_KEY } from "@/app/craft/v1/constants";
 import { connectorConfigs } from "@/lib/connectors/connectors";
 import Button from "@/refresh-components/buttons/Button";
@@ -51,7 +50,6 @@ export default function ConfigureConnectorModal({
   onClose,
   onSuccess,
 }: ConfigureConnectorModalProps) {
-  const { popup, setPopup } = usePopup();
   const [step, setStep] = useState<ModalStep>("credential");
   const [selectedCredential, setSelectedCredential] =
     useState<Credential<any> | null>(null);
@@ -189,7 +187,6 @@ export default function ConfigureConnectorModal({
                 refresh={refreshCredentials}
                 isSingleStep={isSingleStep}
                 onConnectorSuccess={onSuccess}
-                setPopup={setPopup}
               />
             ) : selectedCredential ? (
               <ConnectorConfigStep
@@ -197,13 +194,11 @@ export default function ConfigureConnectorModal({
                 credential={selectedCredential}
                 onSuccess={onSuccess}
                 onBack={handleBack}
-                setPopup={setPopup}
               />
             ) : null}
           </Modal.Body>
         </Modal.Content>
       </Modal>
-      {popup}
     </>
   );
 }

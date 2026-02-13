@@ -1,6 +1,6 @@
 import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { cn, noProp } from "@/lib/utils";
 
@@ -38,14 +38,14 @@ export const StoppedHeader = React.memo(function StoppedHeader({
 
       {isInteractive && (
         <Button
+          prominence="tertiary"
           size="md"
-          tertiary
           onClick={noProp(onToggle)}
           rightIcon={isExpanded ? SvgFold : SvgExpand}
           aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
           aria-expanded={isExpanded}
         >
-          {totalSteps} {totalSteps === 1 ? "step" : "steps"}
+          {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
         </Button>
       )}
     </div>

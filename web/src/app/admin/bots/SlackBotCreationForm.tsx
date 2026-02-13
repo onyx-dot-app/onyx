@@ -1,7 +1,6 @@
 "use client";
 
 import CardSection from "@/components/admin/CardSection";
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SlackTokensForm } from "./SlackTokensForm";
@@ -17,7 +16,6 @@ export const NewSlackBotForm = () => {
     app_token: "",
     user_token: "",
   });
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
 
   return (
@@ -27,12 +25,10 @@ export const NewSlackBotForm = () => {
         title="New Slack Bot"
       />
       <CardSection>
-        {popup}
         <div className="p-4">
           <SlackTokensForm
             isUpdate={false}
             initialValues={formValues}
-            setPopup={setPopup}
             router={router}
           />
         </div>

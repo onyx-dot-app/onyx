@@ -68,6 +68,7 @@ import { AppSidebarProvider } from "@/providers/AppSidebarProvider";
 import { AppModeProvider } from "@/providers/AppModeProvider";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
+import ToastProvider from "@/providers/ToastProvider";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -96,7 +97,9 @@ export default function AppProvider({
             <ModalProvider user={user}>
               <AppSidebarProvider folded={!!folded}>
                 <AppModeProvider>
-                  <QueryControllerProvider>{children}</QueryControllerProvider>
+                  <QueryControllerProvider>
+                    <ToastProvider>{children}</ToastProvider>
+                  </QueryControllerProvider>
                 </AppModeProvider>
               </AppSidebarProvider>
             </ModalProvider>

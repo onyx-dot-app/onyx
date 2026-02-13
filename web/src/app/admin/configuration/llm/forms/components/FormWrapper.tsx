@@ -2,7 +2,7 @@
 
 import { useState, ReactNode } from "react";
 import useSWR, { useSWRConfig, KeyedMutator } from "swr";
-import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import {
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
@@ -19,8 +19,6 @@ import { LLM_PROVIDERS_ADMIN_URL } from "../../constants";
 export interface ProviderFormContext {
   onClose: () => void;
   mutate: KeyedMutator<any>;
-  popup: ReactNode;
-  setPopup: (popup: PopupSpec) => void;
   isTesting: boolean;
   setIsTesting: (testing: boolean) => void;
   testError: string;
@@ -51,7 +49,6 @@ export function ProviderFormEntrypointWrapper({
 
   // Shared hooks
   const { mutate } = useSWRConfig();
-  const { popup, setPopup } = usePopup();
 
   // Shared state for testing
   const [isTesting, setIsTesting] = useState(false);
@@ -78,25 +75,17 @@ export function ProviderFormEntrypointWrapper({
     );
     if (!response.ok) {
       const errorMsg = (await response.json()).detail;
-      setPopup({
-        type: "error",
-        message: `Failed to set provider as default: ${errorMsg}`,
-      });
+      toast.error(`Failed to set provider as default: ${errorMsg}`);
       return;
     }
 
     await mutate(LLM_PROVIDERS_ADMIN_URL);
-    setPopup({
-      type: "success",
-      message: "Provider set as default successfully!",
-    });
+    toast.success("Provider set as default successfully!");
   }
 
   const context: ProviderFormContext = {
     onClose,
     mutate,
-    popup,
-    setPopup,
     isTesting,
     setIsTesting,
     testError,
@@ -108,7 +97,6 @@ export function ProviderFormEntrypointWrapper({
   if (buttonMode && !existingLlmProvider) {
     return (
       <>
-        {popup}
         <Button action onClick={() => setFormIsVisible(true)}>
           {buttonText ?? `Add ${providerName}`}
         </Button>
@@ -132,7 +120,6 @@ export function ProviderFormEntrypointWrapper({
   // Card mode: card-based UI with modal
   return (
     <div>
-      {popup}
       <div className="border p-3 bg-background-neutral-01 rounded-16 w-96 flex shadow-md">
         {existingLlmProvider ? (
           <>

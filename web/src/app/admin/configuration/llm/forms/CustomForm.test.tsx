@@ -8,6 +8,7 @@
 import React from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { CustomForm } from "./CustomForm";
+import { toast } from "@/hooks/useToast";
 
 // Mock SWR's mutate function and useSWR
 const mockMutate = jest.fn();
@@ -21,15 +22,28 @@ jest.mock("swr", () => {
   };
 });
 
-// Mock usePopup
-const mockSetPopup = jest.fn();
-jest.mock("@/components/admin/connectors/Popup", () => ({
-  ...jest.requireActual("@/components/admin/connectors/Popup"),
-  usePopup: () => ({
-    popup: null,
-    setPopup: mockSetPopup,
-  }),
-}));
+// Mock toast
+jest.mock("@/hooks/useToast", () => {
+  const success = jest.fn();
+  const error = jest.fn();
+  const toastFn = Object.assign(jest.fn(), {
+    success,
+    error,
+    info: jest.fn(),
+    warning: jest.fn(),
+    dismiss: jest.fn(),
+    clearAll: jest.fn(),
+    _markLeaving: jest.fn(),
+  });
+  return {
+    toast: toastFn,
+    useToast: () => ({
+      toast: toastFn,
+      dismiss: toastFn.dismiss,
+      clearAll: toastFn.clearAll,
+    }),
+  };
+});
 
 // Mock usePaidEnterpriseFeaturesEnabled
 jest.mock("@/components/settings/usePaidEnterpriseFeaturesEnabled", () => ({
@@ -142,12 +156,11 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       );
     });
 
-    // Verify success popup
+    // Verify success toast
     await waitFor(() => {
-      expect(mockSetPopup).toHaveBeenCalledWith({
-        type: "success",
-        message: "Provider enabled successfully!",
-      });
+      expect(toast.success).toHaveBeenCalledWith(
+        "Provider enabled successfully!"
+      );
     });
 
     // Verify SWR cache was invalidated
@@ -278,10 +291,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Verify success message says "updated"
     await waitFor(() => {
-      expect(mockSetPopup).toHaveBeenCalledWith({
-        type: "success",
-        message: "Provider updated successfully!",
-      });
+      expect(toast.success).toHaveBeenCalledWith(
+        "Provider updated successfully!"
+      );
     });
   });
 
@@ -464,12 +476,11 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     const submitButton = screen.getByRole("button", { name: /enable/i });
     await user.click(submitButton);
 
-    // Verify error popup
+    // Verify error toast
     await waitFor(() => {
-      expect(mockSetPopup).toHaveBeenCalledWith({
-        type: "error",
-        message: "Failed to enable provider: Database error",
-      });
+      expect(toast.error).toHaveBeenCalledWith(
+        "Failed to enable provider: Database error"
+      );
     });
   });
 

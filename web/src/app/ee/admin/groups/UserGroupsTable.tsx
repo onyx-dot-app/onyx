@@ -7,7 +7,7 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { LoadingAnimation } from "@/components/Loading";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteUserGroup } from "./lib";
@@ -31,13 +31,11 @@ const SimpleUserDisplay = ({ user }: { user: User }) => {
 
 interface UserGroupsTableProps {
   userGroups: UserGroup[];
-  setPopup: (popupSpec: PopupSpec | null) => void;
   refresh: () => void;
 }
 
 export const UserGroupsTable = ({
   userGroups,
-  setPopup,
   refresh,
 }: UserGroupsTableProps) => {
   const router = useRouter();
@@ -155,16 +153,14 @@ export const UserGroupsTable = ({
                         event.stopPropagation();
                         const response = await deleteUserGroup(userGroup.id);
                         if (response.ok) {
-                          setPopup({
-                            message: `User Group "${userGroup.name}" deleted`,
-                            type: "success",
-                          });
+                          toast.success(
+                            `User Group "${userGroup.name}" deleted`
+                          );
                         } else {
                           const errorMsg = (await response.json()).detail;
-                          setPopup({
-                            message: `Failed to delete User Group - ${errorMsg}`,
-                            type: "error",
-                          });
+                          toast.error(
+                            `Failed to delete User Group - ${errorMsg}`
+                          );
                         }
                         refresh();
                       }}

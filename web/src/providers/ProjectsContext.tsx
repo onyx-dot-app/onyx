@@ -41,7 +41,7 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useProjects } from "@/lib/hooks/useProjects";
 
 export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
@@ -93,7 +93,6 @@ interface ProjectsContextType {
   beginUpload: (
     files: File[],
     projectId?: number | null,
-    setPopup?: (popup: PopupSpec) => void,
     onSuccess?: (uploaded: CategorizedFiles) => void,
     onFailure?: (failedTempIds: string[]) => void
   ) => Promise<ProjectFile[]>;
@@ -334,7 +333,6 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     async (
       files: File[],
       projectId?: number | null,
-      setPopup?: (popup: PopupSpec) => void,
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
@@ -392,12 +390,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
             );
             const detailsParts = Array.from(uniqueReasons);
 
-            setPopup?.({
-              type: "warning",
-              message: `Some files were not uploaded. ${detailsParts.join(
-                " | "
-              )}`,
-            });
+            toast.warning(
+              `Some files were not uploaded. ${detailsParts.join(" | ")}`
+            );
 
             const failedNameSet = new Set<string>(
               rejected_files.map((file) => file.file_name)
@@ -433,10 +428,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
           removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
 
-          setPopup?.({
-            type: "error",
-            message: "Failed to upload files",
-          });
+          toast.error("Failed to upload files");
 
           onFailure?.(Array.from(optimisticTempIds));
         })

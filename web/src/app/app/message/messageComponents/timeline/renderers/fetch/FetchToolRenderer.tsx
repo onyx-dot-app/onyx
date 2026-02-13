@@ -1,4 +1,3 @@
-import React from "react";
 import { FetchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,

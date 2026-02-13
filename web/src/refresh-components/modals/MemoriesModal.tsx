@@ -11,7 +11,7 @@ import Button from "@/refresh-components/buttons/Button";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import Separator from "@/refresh-components/Separator";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
@@ -136,7 +136,6 @@ export default function MemoriesModal({
   highlightFirstOnOpen = false,
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
-  const { popup, setPopup } = usePopup();
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
 
   // Self-fetching: when no props provided, fetch from UserProvider
@@ -145,10 +144,8 @@ export default function MemoriesModal({
     user,
     updateUserPersonalization,
     {
-      onSuccess: () =>
-        setPopup({ message: "Preferences saved", type: "success" }),
-      onError: () =>
-        setPopup({ message: "Failed to save preferences", type: "error" }),
+      onSuccess: () => toast.success("Preferences saved"),
+      onError: () => toast.error("Failed to save preferences"),
     }
   );
 
@@ -215,7 +212,7 @@ export default function MemoriesModal({
   } = useMemoryManager({
     memories: effectiveMemories,
     onSaveMemories: effectiveSave,
-    onNotify: (message, type) => setPopup({ message, type }),
+    onNotify: (message, type) => toast[type](message),
   });
 
   const onAddLine = () => {
@@ -227,7 +224,6 @@ export default function MemoriesModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && close?.()}>
-      {popup}
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgAddLines}
