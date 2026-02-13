@@ -237,8 +237,8 @@ function DefaultAssistantConfig() {
                           <span className="font-mono font-semibold">
                             {"{{REMINDER_TAG_DESCRIPTION}}"}
                           </span>{" "}
-                          - Injects instructions for how the assistant should
-                          handle system reminder tags in user messages.
+                          - Injects instructions for how the Agent should handle
+                          system reminder tags.
                         </div>
                       </div>
                     }
