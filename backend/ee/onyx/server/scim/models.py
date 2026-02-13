@@ -11,6 +11,7 @@ from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 
 
@@ -197,6 +198,8 @@ class ScimServiceProviderConfig(BaseModel):
 class ScimSchemaExtension(BaseModel):
     """Schema extension reference within ResourceType (RFC 7643 §6)."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     schema_: str = Field(alias="schema")
     required: bool
 
@@ -207,6 +210,8 @@ class ScimResourceType(BaseModel):
     Served at GET /scim/v2/ResourceTypes. Tells the IdP which resource
     types are available (Users, Groups) and their respective endpoints.
     """
+
+    model_config = ConfigDict(populate_by_name=True)
 
     schemas: list[str] = Field(default_factory=lambda: [SCIM_RESOURCE_TYPE_SCHEMA])
     id: str
