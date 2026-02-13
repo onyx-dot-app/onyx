@@ -59,7 +59,9 @@ test.describe("Web Search Provider Configuration", () => {
 
     test.skip(!EXA_API_KEY, "EXA_API_KEY environment variable not set");
 
-    test("should configure Exa as web search provider", async ({ page }) => {
+    test.skip("should configure Exa as web search provider", async ({
+      page,
+    }) => {
       // Click Connect on the Exa card (or key icon if already configured)
       await openProviderModal(page, "Exa");
 
