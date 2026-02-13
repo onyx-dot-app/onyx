@@ -32,7 +32,7 @@ for (const theme of THEMES) {
 
       await expectScreenshot(page, {
         name: `welcome-${theme}-full-page`,
-        mask: ['[data-testid="onyx-logo"]'], // greeting text is random
+        hide: ['[data-testid="onyx-logo"]'], // greeting text is random, hide to prevent size variation
       });
     });
 

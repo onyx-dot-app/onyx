@@ -39,6 +39,13 @@ interface ScreenshotOptions {
   mask?: string[];
 
   /**
+   * CSS selectors for elements to hide (visibility: hidden) before taking
+   * the screenshot. This removes elements from the visual output while
+   * preserving their layout space, preventing size-related inconsistencies.
+   */
+  hide?: string[];
+
+  /**
    * If true, capture the full scrollable page instead of just the viewport.
    * Defaults to false.
    */
@@ -72,6 +79,13 @@ interface ElementScreenshotOptions {
    * The selectors are resolved relative to the page the locator belongs to.
    */
   mask?: string[];
+
+  /**
+   * CSS selectors for elements to hide (visibility: hidden) before taking
+   * the screenshot. This removes elements from the visual output while
+   * preserving their layout space, preventing size-related inconsistencies.
+   */
+  hide?: string[];
 
   /**
    * Override the max diff pixel ratio for this specific screenshot.
@@ -108,43 +122,63 @@ export async function expectScreenshot(
   const {
     name,
     mask = [],
+    hide = [],
     fullPage = false,
     maxDiffPixelRatio,
     threshold,
   } = options;
 
-  // Combine default masks with per-call masks
-  const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
-  const maskLocators = allMaskSelectors.map((selector) =>
-    page.locator(selector)
-  );
-
-  // Build the screenshot name array (Playwright expects string[])
-  const nameArg = name ? [name + ".png"] : undefined;
-
-  if (VISUAL_REGRESSION_ENABLED) {
-    // Assert mode — fail the test if the screenshot differs from baseline
-    const screenshotOpts = {
-      fullPage,
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
-      ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
-      ...(threshold !== undefined && { threshold }),
-    };
-
-    if (nameArg) {
-      await expect(page).toHaveScreenshot(nameArg, screenshotOpts);
-    } else {
-      await expect(page).toHaveScreenshot(screenshotOpts);
-    }
-  } else {
-    // Capture-only mode — save the screenshot without asserting
-    const screenshotPath = name ? `output/screenshots/${name}.png` : undefined;
-    await page.screenshot({
-      path: screenshotPath,
-      fullPage,
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
-      ...options.screenshotOptions,
+  // Hide elements by setting visibility: hidden
+  let styleHandle;
+  if (hide.length > 0) {
+    styleHandle = await page.addStyleTag({
+      content: hide
+        .map((selector) => `${selector} { visibility: hidden !important; }`)
+        .join("\n"),
     });
+  }
+
+  try {
+    // Combine default masks with per-call masks
+    const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
+    const maskLocators = allMaskSelectors.map((selector) =>
+      page.locator(selector)
+    );
+
+    // Build the screenshot name array (Playwright expects string[])
+    const nameArg = name ? [name + ".png"] : undefined;
+
+    if (VISUAL_REGRESSION_ENABLED) {
+      // Assert mode — fail the test if the screenshot differs from baseline
+      const screenshotOpts = {
+        fullPage,
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+        ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
+        ...(threshold !== undefined && { threshold }),
+      };
+
+      if (nameArg) {
+        await expect(page).toHaveScreenshot(nameArg, screenshotOpts);
+      } else {
+        await expect(page).toHaveScreenshot(screenshotOpts);
+      }
+    } else {
+      // Capture-only mode — save the screenshot without asserting
+      const screenshotPath = name
+        ? `output/screenshots/${name}.png`
+        : undefined;
+      await page.screenshot({
+        path: screenshotPath,
+        fullPage,
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+        ...options.screenshotOptions,
+      });
+    }
+  } finally {
+    // Remove the injected style tag to avoid affecting subsequent screenshots/assertions
+    if (styleHandle) {
+      await styleHandle.evaluate((el: HTMLStyleElement) => el.remove());
+    }
   }
 }
 
@@ -170,35 +204,56 @@ export async function expectElementScreenshot(
   locator: Locator,
   options: ElementScreenshotOptions = {}
 ): Promise<void> {
-  const { name, mask = [], maxDiffPixelRatio, threshold } = options;
+  const { name, mask = [], hide = [], maxDiffPixelRatio, threshold } = options;
 
-  // Combine default masks with per-call masks
-  const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
-  const maskLocators = allMaskSelectors.map((selector) =>
-    locator.page().locator(selector)
-  );
+  const page = locator.page();
 
-  // Build the screenshot name array (Playwright expects string[])
-  const nameArg = name ? [name + ".png"] : undefined;
-
-  if (VISUAL_REGRESSION_ENABLED) {
-    const screenshotOpts = {
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
-      ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
-      ...(threshold !== undefined && { threshold }),
-    };
-
-    if (nameArg) {
-      await expect(locator).toHaveScreenshot(nameArg, screenshotOpts);
-    } else {
-      await expect(locator).toHaveScreenshot(screenshotOpts);
-    }
-  } else {
-    // Capture-only mode — save the screenshot without asserting
-    const screenshotPath = name ? `output/screenshots/${name}.png` : undefined;
-    await locator.screenshot({
-      path: screenshotPath,
-      mask: maskLocators.length > 0 ? maskLocators : undefined,
+  // Hide elements by setting visibility: hidden
+  let styleHandle;
+  if (hide.length > 0) {
+    styleHandle = await page.addStyleTag({
+      content: hide
+        .map((selector) => `${selector} { visibility: hidden !important; }`)
+        .join("\n"),
     });
+  }
+
+  try {
+    // Combine default masks with per-call masks
+    const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
+    const maskLocators = allMaskSelectors.map((selector) =>
+      page.locator(selector)
+    );
+
+    // Build the screenshot name array (Playwright expects string[])
+    const nameArg = name ? [name + ".png"] : undefined;
+
+    if (VISUAL_REGRESSION_ENABLED) {
+      const screenshotOpts = {
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+        ...(maxDiffPixelRatio !== undefined && { maxDiffPixelRatio }),
+        ...(threshold !== undefined && { threshold }),
+      };
+
+      if (nameArg) {
+        await expect(locator).toHaveScreenshot(nameArg, screenshotOpts);
+      } else {
+        await expect(locator).toHaveScreenshot(screenshotOpts);
+      }
+    } else {
+      // Capture-only mode — save the screenshot without asserting
+      const screenshotPath = name
+        ? `output/screenshots/${name}.png`
+        : undefined;
+      await locator.screenshot({
+        path: screenshotPath,
+        mask: maskLocators.length > 0 ? maskLocators : undefined,
+      });
+    }
+  } finally {
+    // Remove the injected style tag to avoid affecting subsequent screenshots/assertions
+    if (styleHandle) {
+      await styleHandle.evaluate((el: HTMLStyleElement) => el.remove());
+    }
   }
 }
