@@ -1,8 +1,9 @@
+"use client";
+
 import React from "react";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { Button as OpalButton } from "@opal/components";
 import { useStreamingDuration } from "../hooks/useStreamingDuration";
 import { formatDurationSeconds } from "@/lib/time";
 
@@ -52,8 +53,8 @@ export const StreamingHeader = React.memo(function StreamingHeader({
       {collapsible &&
         (buttonTitle ? (
           <Button
+            prominence="tertiary"
             size="md"
-            tertiary
             onClick={onToggle}
             rightIcon={isExpanded ? SvgFold : SvgExpand}
             aria-expanded={isExpanded}
@@ -62,8 +63,8 @@ export const StreamingHeader = React.memo(function StreamingHeader({
           </Button>
         ) : showElapsedTime ? (
           <Button
+            prominence="tertiary"
             size="md"
-            tertiary
             onClick={onToggle}
             rightIcon={SvgFold}
             aria-label="Collapse timeline"
@@ -72,8 +73,9 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             {formatDurationSeconds(elapsedSeconds)}
           </Button>
         ) : (
-          <OpalButton
+          <Button
             prominence="tertiary"
+            size="md"
             onClick={onToggle}
             icon={isExpanded ? SvgFold : SvgExpand}
             aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}

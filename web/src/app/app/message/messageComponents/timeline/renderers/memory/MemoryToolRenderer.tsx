@@ -1,4 +1,5 @@
-import React from "react";
+"use client";
+
 import { MemoryToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -9,7 +10,7 @@ import { constructCurrentMemoryState } from "./memoryStateUtils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
 import { cn } from "@/lib/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
@@ -112,8 +113,9 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
           </div>
           {/* Expand button */}
           <div className="flex justify-end items-end mt-1 w-8">
-            <IconButton
-              internal
+            <Button
+              prominence="tertiary"
+              size="md"
               icon={SvgMaximize2}
               tooltip="View Memories"
               onClick={(e) => {
