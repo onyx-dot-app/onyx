@@ -384,6 +384,29 @@ class TestWhitelistBehavior:
         verify_email_is_invited("Allowed@Example.Com")
 
 
+class TestSeatLimitEnforcement:
+    """Seat limits block new user creation on self-hosted deployments."""
+
+    def test_adding_user_fails_when_seats_full(self) -> None:
+        from onyx.auth.users import enforce_seat_limit
+
+        seat_result = MagicMock(available=False, error_message="Seat limit reached")
+        with patch(
+            "onyx.auth.users.fetch_ee_implementation_or_noop",
+            return_value=lambda *_a, **_kw: seat_result,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                enforce_seat_limit(MagicMock())
+
+            assert exc.value.status_code == 402
+
+    def test_seat_limit_only_enforced_for_self_hosted(self) -> None:
+        from onyx.auth.users import enforce_seat_limit
+
+        with patch("onyx.auth.users.MULTI_TENANT", True):
+            enforce_seat_limit(MagicMock())  # should not raise
+
+
 class TestCaseInsensitiveEmailMatching:
     """Test case-insensitive email matching for existing user checks."""
 
