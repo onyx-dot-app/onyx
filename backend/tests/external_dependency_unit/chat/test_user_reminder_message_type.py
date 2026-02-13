@@ -5,6 +5,7 @@ These tests verify that:
 1. USER_REMINDER messages are wrapped with <system-reminder> tags
 2. The wrapped messages are converted to UserMessage type for the LLM
 3. The tags are properly applied around the message content
+4. CODE_BLOCK_MARKDOWN is prepended to system messages for models that need it
 """
 
 import pytest
@@ -14,7 +15,9 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
+from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
 
@@ -175,3 +178,161 @@ class TestUserReminderMessageType:
         assert SYSTEM_REMINDER_TAG_OPEN not in msg.content
         assert SYSTEM_REMINDER_TAG_CLOSE not in msg.content
         assert msg.content == "This is a normal user message."
+
+
+def _create_llm_config(model_name: str) -> LLMConfig:
+    """Create a LLMConfig with the specified model name."""
+    return LLMConfig(
+        model_provider="openai",
+        model_name=model_name,
+        temperature=0.7,
+        api_key="test-key",
+        api_base=None,
+        api_version=None,
+        max_input_tokens=128000,
+    )
+
+
+class TestCodeBlockMarkdownFormatting:
+    """Tests for CODE_BLOCK_MARKDOWN prefix handling in translate_history_to_llm_format.
+
+    OpenAI reasoning models (o1, o3, gpt-5) need a "Formatting re-enabled. " prefix
+    in their system messages for correct markdown generation.
+    """
+
+    def test_o1_model_prepends_markdown_to_string(self) -> None:
+        """Test that o1 model prepends CODE_BLOCK_MARKDOWN to string system message."""
+        llm_config = _create_llm_config("o1")
+        history = [
+            ChatMessageSimple(
+                message="You are a helpful assistant.",
+                token_count=10,
+                message_type=MessageType.SYSTEM,
+            )
+        ]
+
+        raw_result = translate_history_to_llm_format(history, llm_config)
+        result = _ensure_list(raw_result)
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        assert msg.content == CODE_BLOCK_MARKDOWN + "You are a helpful assistant."
+
+    def test_o3_model_prepends_markdown(self) -> None:
+        """Test that o3 model prepends CODE_BLOCK_MARKDOWN to system message."""
+        llm_config = _create_llm_config("o3-mini")
+        history = [
+            ChatMessageSimple(
+                message="System prompt here.",
+                token_count=10,
+                message_type=MessageType.SYSTEM,
+            )
+        ]
+
+        raw_result = translate_history_to_llm_format(history, llm_config)
+        result = _ensure_list(raw_result)
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
+
+    def test_gpt5_model_prepends_markdown(self) -> None:
+        """Test that gpt-5 model prepends CODE_BLOCK_MARKDOWN to system message."""
+        llm_config = _create_llm_config("gpt-5")
+        history = [
+            ChatMessageSimple(
+                message="System prompt here.",
+                token_count=10,
+                message_type=MessageType.SYSTEM,
+            )
+        ]
+
+        raw_result = translate_history_to_llm_format(history, llm_config)
+        result = _ensure_list(raw_result)
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        assert msg.content.startswith(CODE_BLOCK_MARKDOWN)
+
+    def test_gpt4o_does_not_prepend(self) -> None:
+        """Test that gpt-4o model does NOT prepend CODE_BLOCK_MARKDOWN."""
+        llm_config = _create_llm_config("gpt-4o")
+        history = [
+            ChatMessageSimple(
+                message="You are a helpful assistant.",
+                token_count=10,
+                message_type=MessageType.SYSTEM,
+            )
+        ]
+
+        raw_result = translate_history_to_llm_format(history, llm_config)
+        result = _ensure_list(raw_result)
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, SystemMessage)
+        assert isinstance(msg.content, str)
+        # Should NOT have the prefix
+        assert msg.content == "You are a helpful assistant."
+        assert not msg.content.startswith(CODE_BLOCK_MARKDOWN)
+
+    def test_no_system_message_no_crash(self) -> None:
+        """Test that history without system message doesn't crash."""
+        llm_config = _create_llm_config("o1")
+        history = [
+            ChatMessageSimple(
+                message="Hello!",
+                token_count=5,
+                message_type=MessageType.USER,
+            )
+        ]
+
+        raw_result = translate_history_to_llm_format(history, llm_config)
+        result = _ensure_list(raw_result)
+
+        assert len(result) == 1
+        msg = result[0]
+        assert isinstance(msg, UserMessage)
+        assert msg.content == "Hello!"
+
+    def test_only_first_system_message_modified(self) -> None:
+        """Test that only the first system message gets the prefix."""
+        llm_config = _create_llm_config("o1")
+        history = [
+            ChatMessageSimple(
+                message="First system prompt.",
+                token_count=10,
+                message_type=MessageType.SYSTEM,
+            ),
+            ChatMessageSimple(
+                message="Hello!",
+                token_count=5,
+                message_type=MessageType.USER,
+            ),
+            ChatMessageSimple(
+                message="Second system prompt.",
+                token_count=10,
+                message_type=MessageType.SYSTEM,
+            ),
+        ]
+
+        raw_result = translate_history_to_llm_format(history, llm_config)
+        result = _ensure_list(raw_result)
+
+        assert len(result) == 3
+        # First system message should have prefix
+        first_sys = result[0]
+        assert isinstance(first_sys, SystemMessage)
+        assert isinstance(first_sys.content, str)
+        assert first_sys.content.startswith(CODE_BLOCK_MARKDOWN)
+        # Second system message should NOT have prefix (only first one is modified)
+        second_sys = result[2]
+        assert isinstance(second_sys, SystemMessage)
+        assert isinstance(second_sys.content, str)
+        assert not second_sys.content.startswith(CODE_BLOCK_MARKDOWN)

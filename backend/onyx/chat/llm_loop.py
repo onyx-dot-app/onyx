@@ -38,7 +38,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
@@ -594,6 +593,7 @@ def run_llm_loop(
 
         reasoning_cycles = 0
         for llm_cycle_count in range(MAX_LLM_CYCLES):
+            # Handling tool calls based on cycle count and past cycle conditions
             out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
             if forced_tool_id:
                 # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
@@ -615,6 +615,7 @@ def run_llm_loop(
                 tool_choice = ToolChoiceOptions.AUTO
                 final_tools = tools
 
+            # Handling the system prompt and custom agent prompt
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
             if persona and persona.replace_base_system_prompt:
@@ -632,10 +633,6 @@ def run_llm_loop(
             else:
                 # If it's an empty string, we assume the user does not want to include it as an empty System message
                 if default_base_system_prompt:
-                    open_ai_formatting_enabled = model_needs_formatting_reenabled(
-                        llm.config.model_name
-                    )
-
                     prompt_memory_context = (
                         user_memory_context if inject_memories_in_prompt else None
                     )
@@ -646,7 +643,6 @@ def run_llm_loop(
                         tools=tools,
                         should_cite_documents=should_cite_documents
                         or always_cite_documents,
-                        open_ai_formatting_enabled=open_ai_formatting_enabled,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,

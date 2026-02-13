@@ -9,7 +9,6 @@ from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import CITATION_REMINDER
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.chat_prompts import DEFAULT_SYSTEM_PROMPT
 from onyx.prompts.chat_prompts import LAST_CYCLE_CITATION_REMINDER
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
@@ -138,17 +137,11 @@ def build_system_prompt(
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
-    open_ai_formatting_enabled: bool = False,
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
     """
     system_prompt = handle_onyx_date_awareness(base_system_prompt, datetime_aware)
-
-    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
-    # for OpenAI reasoning models to have correct markdown generation
-    if open_ai_formatting_enabled:
-        system_prompt = CODE_BLOCK_MARKDOWN + system_prompt
 
     # Replace citation guidance placeholder if present
     system_prompt, should_append_citation_guidance = replace_citation_guidance_tag(

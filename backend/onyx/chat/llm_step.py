@@ -36,6 +36,8 @@ from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.utils import model_needs_formatting_reenabled
+from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
 from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
@@ -622,6 +624,17 @@ def translate_history_to_llm_format(
             logger.warning(
                 f"Unknown message type {msg.message_type} in history. Skipping message."
             )
+
+    # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
+    # reasoning models need CODE_BLOCK_MARKDOWN prefix for correct markdown generation)
+    if model_needs_formatting_reenabled(llm_config.model_name):
+        for i, m in enumerate(messages):
+            if isinstance(m, SystemMessage):
+                messages[i] = SystemMessage(
+                    role="system",
+                    content=CODE_BLOCK_MARKDOWN + m.content,
+                )
+                break
 
     # prompt caching: rely on should_cache in ChatMessageSimple to
     # pick the split point for the cacheable prefix and suffix
