@@ -112,7 +112,7 @@ class ScimListResponse(BaseModel):
     Resources: list[ScimUserResource | ScimGroupResource] = Field(default_factory=list)
 
 
-class ScimPatchOp(str, Enum):
+class ScimPatchOperationType(str, Enum):
     """Supported PATCH operations (RFC 7644 §3.5.2)."""
 
     ADD = "add"
@@ -123,9 +123,9 @@ class ScimPatchOp(str, Enum):
 class ScimPatchOperation(BaseModel):
     """Single PATCH operation (RFC 7644 §3.5.2)."""
 
-    op: ScimPatchOp
+    op: ScimPatchOperationType
     path: str | None = None
-    value: str | list[dict[str, str]] | dict[str, str] | bool | None = None
+    value: str | list[dict[str, str]] | dict[str, str | bool] | bool | None = None
 
 
 class ScimPatchRequest(BaseModel):
