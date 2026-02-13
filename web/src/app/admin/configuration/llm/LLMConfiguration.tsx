@@ -11,6 +11,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { OpenAIForm } from "./forms/OpenAIForm";
 import { AnthropicForm } from "./forms/AnthropicForm";
 import { OllamaForm } from "./forms/OllamaForm";
+import { LMStudioForm } from "./forms/LMStudioForm";
 import { AzureForm } from "./forms/AzureForm";
 import { BedrockForm } from "./forms/BedrockForm";
 import { VertexAIForm } from "./forms/VertexAIForm";
@@ -76,6 +77,7 @@ export function LLMConfiguration() {
         <BedrockForm shouldMarkAsDefault={isFirstProvider} />
         <VertexAIForm shouldMarkAsDefault={isFirstProvider} />
         <OpenRouterForm shouldMarkAsDefault={isFirstProvider} />
+        <LMStudioForm shouldMarkAsDefault={isFirstProvider} />
 
         <CustomForm shouldMarkAsDefault={isFirstProvider} />
       </div>
