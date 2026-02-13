@@ -34,9 +34,7 @@ export function useCaptchaV2() {
   const [token, setToken] = useState<string | null>(null);
   const widgetIdRef = useRef<number | null>(null);
 
-  // Only enabled for cloud deployments with key configured
-  const isCaptchaEnabled =
-    NEXT_PUBLIC_CLOUD_ENABLED && Boolean(RECAPTCHA_V2_SITE_KEY);
+  const isCaptchaEnabled = Boolean(RECAPTCHA_V2_SITE_KEY);
 
   useEffect(() => {
     if (!isCaptchaEnabled) {
