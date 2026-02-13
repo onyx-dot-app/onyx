@@ -39,6 +39,13 @@ interface ScreenshotOptions {
   mask?: string[];
 
   /**
+   * CSS selectors for elements to hide (visibility: hidden) before taking
+   * the screenshot. This removes elements from the visual output while
+   * preserving their layout space, preventing size-related inconsistencies.
+   */
+  hide?: string[];
+
+  /**
    * If true, capture the full scrollable page instead of just the viewport.
    * Defaults to false.
    */
@@ -72,6 +79,13 @@ interface ElementScreenshotOptions {
    * The selectors are resolved relative to the page the locator belongs to.
    */
   mask?: string[];
+
+  /**
+   * CSS selectors for elements to hide (visibility: hidden) before taking
+   * the screenshot. This removes elements from the visual output while
+   * preserving their layout space, preventing size-related inconsistencies.
+   */
+  hide?: string[];
 
   /**
    * Override the max diff pixel ratio for this specific screenshot.
@@ -108,10 +122,20 @@ export async function expectScreenshot(
   const {
     name,
     mask = [],
+    hide = [],
     fullPage = false,
     maxDiffPixelRatio,
     threshold,
   } = options;
+
+  // Hide elements by setting visibility: hidden
+  if (hide.length > 0) {
+    await page.addStyleTag({
+      content: hide
+        .map((selector) => `${selector} { visibility: hidden !important; }`)
+        .join("\n"),
+    });
+  }
 
   // Combine default masks with per-call masks
   const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
@@ -170,12 +194,23 @@ export async function expectElementScreenshot(
   locator: Locator,
   options: ElementScreenshotOptions = {}
 ): Promise<void> {
-  const { name, mask = [], maxDiffPixelRatio, threshold } = options;
+  const { name, mask = [], hide = [], maxDiffPixelRatio, threshold } = options;
+
+  const page = locator.page();
+
+  // Hide elements by setting visibility: hidden
+  if (hide.length > 0) {
+    await page.addStyleTag({
+      content: hide
+        .map((selector) => `${selector} { visibility: hidden !important; }`)
+        .join("\n"),
+    });
+  }
 
   // Combine default masks with per-call masks
   const allMaskSelectors = [...DEFAULT_MASK_SELECTORS, ...mask];
   const maskLocators = allMaskSelectors.map((selector) =>
-    locator.page().locator(selector)
+    page.locator(selector)
   );
 
   // Build the screenshot name array (Playwright expects string[])
