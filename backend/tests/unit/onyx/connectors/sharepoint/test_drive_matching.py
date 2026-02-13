@@ -36,11 +36,38 @@ class _FakeFolder:
         return _FakeQuery(self._items)
 
 
+class _FakeItemRequest:
+    """Mimics drive.items[item_id].get().execute_query() returning the DriveItem."""
+
+    def __init__(self, item: Any) -> None:
+        self._item = item
+
+    def get(self) -> _FakeItemRequest:
+        return self
+
+    def execute_query(self) -> Any:
+        return self._item
+
+
+class _FakeDriveItems:
+    """Mimics drive.items[item_id] for SDK-style item fetch in streaming path."""
+
+    def __init__(self, items: Sequence[Any]) -> None:
+        self._by_id = {getattr(i, "id", f"item-{i!r}"): i for i in items}
+        if items and not self._by_id:
+            self._by_id = {"item-0": items[0]}
+
+    def __getitem__(self, item_id: str) -> _FakeItemRequest:
+        return _FakeItemRequest(self._by_id[item_id])
+
+
 class _FakeDrive:
     def __init__(self, name: str, items: Sequence[Any]) -> None:
         self.name = name
+        self.id = "test-drive-id"
         self.root = _FakeFolder(items)
         self.web_url = f"https://example.sharepoint.com/sites/sample/{name}"
+        self.items = _FakeDriveItems(items)
 
 
 class _FakeDrivesCollection:
@@ -83,38 +110,10 @@ def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
         ("Documentos compartidos", "Documentos"),
     ],
 )
-def test_fetch_driveitems_matches_international_drive_names(
-    requested_drive_name: str, graph_drive_name: str
-) -> None:
-    item = SimpleNamespace(parent_reference=SimpleNamespace(path=None))
-    connector = _build_connector([_FakeDrive(graph_drive_name, [item])])
-    site_descriptor = SiteDescriptor(
-        url="https://example.sharepoint.com/sites/sample",
-        drive_name=requested_drive_name,
-        folder_path=None,
-    )
-
-    results = connector._fetch_driveitems(site_descriptor=site_descriptor)
-
-    assert len(results) == 1
-    drive_item, returned_drive_name, drive_web_url = results[0]
-    assert drive_item is item
-    assert returned_drive_name == requested_drive_name
-    assert drive_web_url is not None
-
-
-@pytest.mark.parametrize(
-    ("requested_drive_name", "graph_drive_name"),
-    [
-        ("Shared Documents", "Documents"),
-        ("Freigegebene Dokumente", "Dokumente"),
-        ("Documentos compartidos", "Documentos"),
-    ],
-)
 def test_get_drive_items_for_drive_name_matches_map(
-    requested_drive_name: str, graph_drive_name: str
+    requested_drive_name: str, graph_drive_name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    item = SimpleNamespace()
+    item = SimpleNamespace(id="item-1")
     connector = _build_connector([_FakeDrive(graph_drive_name, [item])])
     site_descriptor = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
@@ -122,13 +121,30 @@ def test_get_drive_items_for_drive_name_matches_map(
         folder_path=None,
     )
 
-    results, drive_web_url = connector._get_drive_items_for_drive_name(
+    def fake_iter_graph_items(
+        drive_id: str,  # noqa: ARG001
+        folder_path: str | None,  # noqa: ARG001
+        start: Any = None,  # noqa: ARG001
+        end: Any = None,  # noqa: ARG001
+        delta_link: str | None = None,  # noqa: ARG001
+        on_delta_link: Any = None,  # noqa: ARG001
+    ) -> Any:
+        yield {"id": "item-1", "name": "test.pdf"}
+
+    monkeypatch.setattr(
+        connector,
+        "_iter_graph_drive_file_items",
+        fake_iter_graph_items,
+    )
+
+    results_generator, drive_web_url = connector._get_drive_items_for_drive_name(
         site_descriptor=site_descriptor,
         drive_name=requested_drive_name,
     )
 
-    assert len(results) == 1
-    assert results[0] is item
+    results_list = list(results_generator)
+    assert len(results_list) == 1
+    assert results_list[0] is item
     assert drive_web_url is not None
 
 
@@ -145,6 +161,7 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         drive_name: str,
         start: datetime | None,  # noqa: ARG001
         end: datetime | None,  # noqa: ARG001
+        checkpoint: SharepointConnectorCheckpoint | None = None,  # noqa: ARG001
     ) -> tuple[list[SimpleNamespace], str | None]:
         assert drive_name == "Documents"
         return (
