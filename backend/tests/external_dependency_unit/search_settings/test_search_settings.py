@@ -147,7 +147,7 @@ def baseline_search_settings(
     )
 
 
-# @pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
 @patch("onyx.db.swap_index.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
@@ -197,7 +197,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     )
 
 
-# @pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
 @patch("onyx.db.swap_index.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
@@ -267,7 +267,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     )
 
 
-# @pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
+@pytest.mark.skip(reason="Set new search settings is temporarily disabled.")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
