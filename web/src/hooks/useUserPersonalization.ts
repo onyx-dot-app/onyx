@@ -175,7 +175,7 @@ export default function useUserPersonalization(
   }, []);
 
   const handleSavePersonalization = useCallback(
-    async (overrides?: Partial<UserPersonalization>) => {
+    async (overrides?: Partial<UserPersonalization>, silent?: boolean) => {
       setIsSavingPersonalization(true);
 
       const valuesToSave = { ...personalizationValues, ...overrides };
@@ -191,11 +191,15 @@ export default function useUserPersonalization(
       try {
         await persistPersonalization(updatedPersonalization);
         setPersonalizationValues(updatedPersonalization);
-        onSuccess?.(updatedPersonalization);
+        if (!silent) {
+          onSuccess?.(updatedPersonalization);
+        }
         return updatedPersonalization;
       } catch (error) {
         setPersonalizationValues(basePersonalization);
-        onError?.(error);
+        if (!silent) {
+          onError?.(error);
+        }
         return null;
       } finally {
         setIsSavingPersonalization(false);

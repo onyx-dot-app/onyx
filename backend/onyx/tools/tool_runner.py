@@ -343,7 +343,13 @@ def run_tool_calls(
                 raise ValueError("No user message found in message history")
 
             search_memory_context = (
-                user_memory_context if inject_memories_in_prompt else None
+                user_memory_context
+                if inject_memories_in_prompt
+                else (
+                    user_memory_context.without_memories()
+                    if user_memory_context
+                    else None
+                )
             )
             override_kwargs = SearchToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,

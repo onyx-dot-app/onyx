@@ -634,7 +634,13 @@ def run_llm_loop(
                 # If it's an empty string, we assume the user does not want to include it as an empty System message
                 if default_base_system_prompt:
                     prompt_memory_context = (
-                        user_memory_context if inject_memories_in_prompt else None
+                        user_memory_context
+                        if inject_memories_in_prompt
+                        else (
+                            user_memory_context.without_memories()
+                            if user_memory_context
+                            else None
+                        )
                     )
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,

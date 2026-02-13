@@ -794,7 +794,10 @@ function ChatPreferencesSettings() {
   // Wrapper to save memories and return success/failure
   const handleSaveMemories = useCallback(
     async (newMemories: MemoryItem[]): Promise<boolean> => {
-      const result = await handleSavePersonalization({ memories: newMemories });
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
       return !!result;
     },
     [handleSavePersonalization]
@@ -856,10 +859,10 @@ function ChatPreferencesSettings() {
       <Section gap={0.75}>
         <InputLayouts.Vertical
           title="Personal Preferences"
-          description="Describe how you prefer to interact with Onyx. Onyx uses these preferences to tailor responses."
+          description="Provide your custom preferences in natural language."
         >
           <InputTextArea
-            placeholder="Add your work style, technical level, search habits, response format preferences."
+            placeholder="Describe how you want the system to behave and the tone it should use."
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
             onBlur={() => void handleSavePersonalization()}
@@ -903,7 +906,8 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           {(personalizationValues.use_memories ||
-            personalizationValues.enable_memory_tool) && (
+            personalizationValues.enable_memory_tool ||
+            personalizationValues.memories.length > 0) && (
             <Memories
               memories={personalizationValues.memories}
               onSaveMemories={handleSaveMemories}
