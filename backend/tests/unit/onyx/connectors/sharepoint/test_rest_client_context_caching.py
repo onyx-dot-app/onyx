@@ -26,11 +26,11 @@ def _make_connector() -> SharepointConnector:
 def _noop_load_credentials(connector: SharepointConnector) -> MagicMock:
     """Patch load_credentials to just swap in a fresh MagicMock for msal_app."""
 
-    def _fake_load(creds: dict) -> None:  # type: ignore[type-arg] # noqa: ARG001
+    def _fake_load(creds: dict) -> None:  # noqa: ARG001, ARG002
         connector.msal_app = MagicMock()
 
     mock = MagicMock(side_effect=_fake_load)
-    connector.load_credentials = mock  # type: ignore[assignment]
+    connector.load_credentials = mock
     return mock
 
 

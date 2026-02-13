@@ -111,7 +111,6 @@ class CertificateData(BaseModel):
     thumbprint: str
 
 
-# TODO(Evan): Remove this once we have a proper token refresh mechanism.
 def sleep_and_retry(
     query_obj: ClientQuery, method_name: str, max_retries: int = 3
 ) -> Any:
