@@ -718,6 +718,8 @@ def update_default_contextual_model(
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
 
+    return None
+
 
 def fetch_auto_mode_providers(db_session: Session) -> list[LLMProviderModel]:
     """Fetch all LLM providers that are in Auto mode."""
