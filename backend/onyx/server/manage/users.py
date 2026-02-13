@@ -372,16 +372,6 @@ def bulk_invite_users(
     invited and an exception is raised."""
     tenant_id = get_current_tenant_id()
 
-    # Limit bulk invites for trial tenants to prevent email spam
-    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
-        current_invited = len(get_invited_users())
-        if current_invited + len(emails) > NUM_FREE_TRIAL_USER_INVITES:
-            raise HTTPException(
-                status_code=403,
-                detail="You have hit your invite limit. "
-                "Please upgrade for unlimited invites.",
-            )
-
     new_invited_emails = []
     email: str
 
@@ -406,6 +396,17 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
+    # Limit bulk invites for trial tenants to prevent email spam
+    # Only count new invites, not re-invites of existing users
+    if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
+        current_invited = len(already_invited)
+        if current_invited + len(emails_needing_seats) > NUM_FREE_TRIAL_USER_INVITES:
+            raise HTTPException(
+                status_code=403,
+                detail="You have hit your invite limit. "
+                "Please upgrade for unlimited invites.",
+            )
+
     # Check seat availability for new users
     # Only for self-hosted (non-multi-tenant) deployments
     if not MULTI_TENANT and emails_needing_seats:
@@ -429,10 +430,10 @@ def bulk_invite_users(
     all_emails = list(set(new_invited_emails) | set(initial_invited_users))
     number_of_invited_users = write_invited_users(all_emails)
 
-    # send out email invitations if enabled
+    # send out email invitations only to new users (not already invited or existing)
     if ENABLE_EMAIL_INVITES:
         try:
-            for email in new_invited_emails:
+            for email in emails_needing_seats:
                 send_user_email_invite(email, current_user, AUTH_TYPE)
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
