@@ -19,7 +19,7 @@ import {
 import { deleteCredential } from "@/lib/credential";
 import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
-import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
+import CreateStdOAuthCredential from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import CardSection from "@/components/admin/CardSection";
 import { Spinner } from "@/components/Spinner";
