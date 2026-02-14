@@ -94,11 +94,11 @@ export default function AgentCard({ agent }: AgentCardProps) {
       </shareAgentModal.Provider>
 
       <agentViewerModal.Provider>
-        <AgentViewerModal agent={fullAgent!} />
+        {fullAgent && <AgentViewerModal agent={fullAgent} />}
       </agentViewerModal.Provider>
 
       <Interactive.Base
-        onClick={handleStartChat}
+        onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}

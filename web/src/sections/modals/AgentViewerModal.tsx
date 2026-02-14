@@ -32,7 +32,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useFilters, useLlmManager } from "@/lib/hooks";
-import { formatMmDdYyyy } from "@/lib/utils";
+import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
