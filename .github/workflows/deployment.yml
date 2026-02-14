@@ -424,7 +424,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -498,7 +497,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
