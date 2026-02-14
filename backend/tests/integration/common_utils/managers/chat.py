@@ -134,7 +134,7 @@ class ChatSessionManager:
         cookies = user_performing_action.cookies if user_performing_action else None
 
         response = requests.post(
-            f"{API_SERVER_URL}/chat/send-message",
+            f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=headers,
             stream=True,
@@ -218,7 +218,7 @@ class ChatSessionManager:
         packets_received = 0
 
         with requests.post(
-            f"{API_SERVER_URL}/chat/send-message",
+            f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=headers,
             stream=True,
