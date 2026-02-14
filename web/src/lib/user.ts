@@ -47,7 +47,8 @@ export const basicSignup = async (
   email: string,
   password: string,
   referralSource?: string,
-  captchaToken?: string
+  captchaToken?: string,
+  captchaV2Token?: string
 ) => {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -56,6 +57,9 @@ export const basicSignup = async (
   // Add captcha token to headers if provided
   if (captchaToken) {
     headers["X-Captcha-Token"] = captchaToken;
+  }
+  if (captchaV2Token) {
+    headers["X-Captcha-V2-Token"] = captchaV2Token;
   }
 
   const response = await fetch("/api/auth/register", {
