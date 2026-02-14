@@ -22,7 +22,7 @@ aiolimiter==1.2.1
     # via voyageai
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.10.4
+alembic==1.18.1
     # via pytest-alembic
 annotated-doc==0.0.4
     # via fastapi
