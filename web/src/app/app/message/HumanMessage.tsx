@@ -214,7 +214,7 @@ const HumanMessage = React.memo(function HumanMessage({
                 </Text>
               </div>
             </div>
-            {onEdit && !isEditing && (!files || files.length === 0) && (
+            {onEdit && !isEditing && (
               <div className="flex flex-row p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyIconButton
                   getCopyText={() => content}
@@ -236,7 +236,7 @@ const HumanMessage = React.memo(function HumanMessage({
             <div
               className={cn(
                 "my-auto",
-                onEdit && !isEditing && (!files || files.length === 0)
+                onEdit && !isEditing
                   ? "opacity-0 group-hover:opacity-100 transition-opacity"
                   : "invisible"
               )}
