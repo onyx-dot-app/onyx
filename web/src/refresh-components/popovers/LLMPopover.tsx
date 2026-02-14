@@ -8,6 +8,7 @@ import {
   getProviderIcon,
   AGGREGATOR_PROVIDERS,
 } from "@/app/admin/configuration/llm/utils";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -28,7 +29,7 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { OpenButton } from "@opal/components";
-import { buildLlmOptions, groupLlmOptions, LLMOption } from "./llmPopoverUtils";
+import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 export interface LLMPopoverProps {
   llmManager: LlmManager;
@@ -37,6 +38,104 @@ export interface LLMPopoverProps {
   onSelect?: (value: string) => void;
   currentModelName?: string;
   disabled?: boolean;
+}
+
+export function buildLlmOptions(
+  llmProviders: LLMProviderDescriptor[] | undefined,
+  currentModelName?: string
+): LLMOption[] {
+  if (!llmProviders) {
+    return [];
+  }
+
+  // Track seen combinations of provider + exact model name to avoid true duplicates
+  // (same model appearing from multiple LLM provider configs with same provider type)
+  const seenKeys = new Set<string>();
+  const options: LLMOption[] = [];
+
+  llmProviders.forEach((llmProvider) => {
+    llmProvider.model_configurations
+      .filter(
+        (modelConfiguration) =>
+          modelConfiguration.is_visible ||
+          modelConfiguration.name === currentModelName
+      )
+      .forEach((modelConfiguration) => {
+        // Deduplicate by exact provider + model name combination
+        const key = `${llmProvider.provider}:${modelConfiguration.name}`;
+        if (seenKeys.has(key)) {
+          return;
+        }
+        seenKeys.add(key);
+
+        options.push({
+          name: llmProvider.name,
+          provider: llmProvider.provider,
+          providerDisplayName:
+            llmProvider.provider_display_name || llmProvider.provider,
+          modelName: modelConfiguration.name,
+          displayName:
+            modelConfiguration.display_name || modelConfiguration.name,
+          vendor: modelConfiguration.vendor || null,
+          maxInputTokens: modelConfiguration.max_input_tokens,
+          region: modelConfiguration.region || null,
+          version: modelConfiguration.version || null,
+          supportsReasoning: modelConfiguration.supports_reasoning || false,
+          supportsImageInput: modelConfiguration.supports_image_input || false,
+        });
+      });
+  });
+
+  return options;
+}
+
+export function groupLlmOptions(
+  filteredOptions: LLMOption[]
+): LLMOptionGroup[] {
+  const groups = new Map<string, Omit<LLMOptionGroup, "key">>();
+
+  filteredOptions.forEach((option) => {
+    const provider = option.provider.toLowerCase();
+    const isAggregator = AGGREGATOR_PROVIDERS.has(provider);
+    const groupKey =
+      isAggregator && option.vendor
+        ? `${provider}/${option.vendor.toLowerCase()}`
+        : provider;
+
+    if (!groups.has(groupKey)) {
+      let displayName: string;
+
+      if (isAggregator && option.vendor) {
+        const vendorDisplayName =
+          option.vendor.charAt(0).toUpperCase() + option.vendor.slice(1);
+        displayName = `${option.providerDisplayName}/${vendorDisplayName}`;
+      } else {
+        displayName = option.providerDisplayName;
+      }
+
+      groups.set(groupKey, {
+        displayName,
+        options: [],
+        Icon: getProviderIcon(provider),
+      });
+    }
+
+    groups.get(groupKey)!.options.push(option);
+  });
+
+  const sortedKeys = Array.from(groups.keys()).sort((a, b) =>
+    groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
+  );
+
+  return sortedKeys.map((key) => {
+    const group = groups.get(key)!;
+    return {
+      key,
+      displayName: group.displayName,
+      options: group.options,
+      Icon: group.Icon,
+    };
+  });
 }
 
 export default function LLMPopover({

@@ -1,18 +1,7 @@
-import { buildLlmOptions, groupLlmOptions, LLMOption } from "./llmPopoverUtils";
+import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
+import { LLMOption } from "./interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-
-function makeProvider(
-  overrides: Partial<LLMProviderDescriptor>
-): LLMProviderDescriptor {
-  return {
-    name: overrides.name ?? "Provider",
-    provider: overrides.provider ?? "openai",
-    default_model_name: overrides.default_model_name ?? "default-model",
-    is_default_provider: overrides.is_default_provider ?? false,
-    model_configurations: overrides.model_configurations ?? [],
-    ...overrides,
-  };
-}
+import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 describe("LLMPopover helpers", () => {
   test("deduplicates identical provider+model combinations across provider entries", () => {

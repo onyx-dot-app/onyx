@@ -4,19 +4,7 @@ import {
 } from "@/lib/hooks";
 import { structureValue } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-
-function makeProvider(
-  overrides: Partial<LLMProviderDescriptor>
-): LLMProviderDescriptor {
-  return {
-    name: overrides.name ?? "Provider",
-    provider: overrides.provider ?? "openai",
-    default_model_name: overrides.default_model_name ?? "default-model",
-    is_default_provider: overrides.is_default_provider ?? false,
-    model_configurations: overrides.model_configurations ?? [],
-    ...overrides,
-  };
-}
+import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 describe("LLM resolver helpers", () => {
   test("chooses provider-specific descriptor when model names collide", () => {
