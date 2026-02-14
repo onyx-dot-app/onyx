@@ -15,6 +15,12 @@ EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
     ("/scim/v2/Users/{user_id}", {"PUT"}),
     ("/scim/v2/Users/{user_id}", {"PATCH"}),
     ("/scim/v2/Users/{user_id}", {"DELETE"}),
+    ("/scim/v2/Groups", {"GET"}),
+    ("/scim/v2/Groups", {"POST"}),
+    ("/scim/v2/Groups/{group_id}", {"GET"}),
+    ("/scim/v2/Groups/{group_id}", {"PUT"}),
+    ("/scim/v2/Groups/{group_id}", {"PATCH"}),
+    ("/scim/v2/Groups/{group_id}", {"DELETE"}),
     # needs to be accessible prior to user login
     ("/enterprise-settings", {"GET"}),
     ("/enterprise-settings/logo", {"GET"}),

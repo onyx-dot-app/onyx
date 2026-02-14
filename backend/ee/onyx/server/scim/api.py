@@ -1,8 +1,8 @@
 """SCIM 2.0 API endpoints (RFC 7644).
 
-This module provides the FastAPI router for SCIM service discovery and
-User resource CRUD. Identity providers (Okta, Azure AD) call these
-endpoints to provision and manage users.
+This module provides the FastAPI router for SCIM service discovery,
+User CRUD, and Group CRUD. Identity providers (Okta, Azure AD) call
+these endpoints to provision and manage users and groups.
 
 Service discovery endpoints are unauthenticated — IdPs may probe them
 before bearer token configuration is complete. All other endpoints
@@ -19,8 +19,10 @@ from fastapi import Query
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
@@ -31,6 +33,7 @@ from ee.onyx.server.scim.models import SCIM_GROUP_SCHEMA
 from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
 from ee.onyx.server.scim.models import ScimEmail
 from ee.onyx.server.scim.models import ScimError
+from ee.onyx.server.scim.models import ScimGroupMember
 from ee.onyx.server.scim.models import ScimGroupResource
 from ee.onyx.server.scim.models import ScimListResponse
 from ee.onyx.server.scim.models import ScimMeta
@@ -39,11 +42,14 @@ from ee.onyx.server.scim.models import ScimPatchRequest
 from ee.onyx.server.scim.models import ScimResourceType
 from ee.onyx.server.scim.models import ScimServiceProviderConfig
 from ee.onyx.server.scim.models import ScimUserResource
+from ee.onyx.server.scim.patch import apply_group_patch
 from ee.onyx.server.scim.patch import apply_user_patch
 from ee.onyx.server.scim.patch import ScimPatchError
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import ScimToken
 from onyx.db.models import User
+from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
 from onyx.db.users import fetch_user_by_id
 from onyx.db.users import get_user_by_email
@@ -459,6 +465,389 @@ def delete_user(
     if mapping:
         dal.delete_user_mapping(mapping.id)
 
+    db_session.commit()
+
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Group helpers
+# ---------------------------------------------------------------------------
+
+
+def _group_to_scim(
+    group: UserGroup,
+    db_session: Session,
+    external_id: str | None = None,
+) -> ScimGroupResource:
+    """Convert an Onyx UserGroup to a SCIM Group resource."""
+    members: list[ScimGroupMember] = []
+    relationships = db_session.scalars(
+        select(User__UserGroup).where(User__UserGroup.user_group_id == group.id)
+    ).all()
+    for rel in relationships:
+        user = fetch_user_by_id(db_session, rel.user_id) if rel.user_id else None
+        members.append(
+            ScimGroupMember(
+                value=str(rel.user_id),
+                display=user.email if user else None,
+            )
+        )
+
+    return ScimGroupResource(
+        id=str(group.id),
+        externalId=external_id,
+        displayName=group.name,
+        members=members,
+        meta=ScimMeta(resourceType="Group"),
+    )
+
+
+def _parse_member_uuids(
+    members: list[ScimGroupMember],
+) -> tuple[list[UUID], str | None]:
+    """Parse member value strings to UUIDs.
+
+    Returns (uuid_list, error_message). error_message is None on success.
+    """
+    uuids: list[UUID] = []
+    for m in members:
+        try:
+            uuids.append(UUID(m.value))
+        except ValueError:
+            return [], f"Invalid member ID: {m.value}"
+    return uuids, None
+
+
+# ---------------------------------------------------------------------------
+# Group CRUD (RFC 7644 §3)
+# ---------------------------------------------------------------------------
+
+
+@scim_router.get("/Groups", response_model=None)
+def list_groups(
+    filter: str | None = Query(None),
+    startIndex: int = Query(1, ge=1),
+    count: int = Query(100, ge=0, le=500),
+    _token: ScimToken = Depends(verify_scim_token),
+    db_session: Session = Depends(get_session),
+) -> ScimListResponse | JSONResponse:
+    """List groups with optional SCIM filter and pagination."""
+    dal = ScimDAL(db_session)
+
+    try:
+        scim_filter = parse_scim_filter(filter)
+    except ValueError as e:
+        return _scim_error_response(400, str(e))
+
+    query = select(UserGroup).where(UserGroup.is_up_for_deletion.is_(False))
+
+    if scim_filter:
+        attr = scim_filter.attribute.lower()
+        if attr == "displayname":
+            if scim_filter.operator == ScimFilterOperator.EQUAL:
+                query = query.where(UserGroup.name == scim_filter.value)
+            elif scim_filter.operator == ScimFilterOperator.CONTAINS:
+                query = query.where(UserGroup.name.ilike(f"%{scim_filter.value}%"))
+            elif scim_filter.operator == ScimFilterOperator.STARTS_WITH:
+                query = query.where(UserGroup.name.ilike(f"{scim_filter.value}%"))
+        elif attr == "externalid":
+            mapping = dal.get_group_mapping_by_external_id(scim_filter.value)
+            if not mapping:
+                return ScimListResponse(
+                    totalResults=0,
+                    startIndex=startIndex,
+                    itemsPerPage=count,
+                )
+            query = query.where(UserGroup.id == mapping.user_group_id)
+        else:
+            return _scim_error_response(
+                400, f"Unsupported filter attribute: {scim_filter.attribute}"
+            )
+
+    total = db_session.scalar(select(func.count()).select_from(query.subquery())) or 0
+
+    offset = max(startIndex - 1, 0)
+    groups = list(
+        db_session.scalars(
+            query.order_by(UserGroup.id).offset(offset).limit(count)
+        ).all()
+    )
+
+    resources: list[ScimUserResource | ScimGroupResource] = []
+    for group in groups:
+        mapping = dal.get_group_mapping_by_group_id(group.id)
+        resources.append(
+            _group_to_scim(group, db_session, mapping.external_id if mapping else None)
+        )
+
+    return ScimListResponse(
+        totalResults=total,
+        startIndex=startIndex,
+        itemsPerPage=count,
+        Resources=resources,
+    )
+
+
+@scim_router.get("/Groups/{group_id}", response_model=None)
+def get_group(
+    group_id: str,
+    _token: ScimToken = Depends(verify_scim_token),
+    db_session: Session = Depends(get_session),
+) -> ScimGroupResource | JSONResponse:
+    """Get a single group by ID."""
+    try:
+        gid = int(group_id)
+    except ValueError:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    group = db_session.get(UserGroup, gid)
+    if not group or group.is_up_for_deletion:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    dal = ScimDAL(db_session)
+    mapping = dal.get_group_mapping_by_group_id(gid)
+
+    return _group_to_scim(group, db_session, mapping.external_id if mapping else None)
+
+
+@scim_router.post("/Groups", status_code=201, response_model=None)
+def create_group(
+    group_resource: ScimGroupResource,
+    _token: ScimToken = Depends(verify_scim_token),
+    db_session: Session = Depends(get_session),
+) -> ScimGroupResource | JSONResponse:
+    """Create a new group from a SCIM provisioning request."""
+    # Check for name conflict
+    existing = db_session.scalar(
+        select(UserGroup).where(UserGroup.name == group_resource.displayName)
+    )
+    if existing:
+        return _scim_error_response(
+            409, f"Group with name '{group_resource.displayName}' already exists"
+        )
+
+    # Validate member UUIDs
+    member_uuids, err = _parse_member_uuids(group_resource.members)
+    if err:
+        return _scim_error_response(400, err)
+
+    # Create group directly (is_up_to_date=True since SCIM groups have no cc_pairs)
+    db_group = UserGroup(
+        name=group_resource.displayName,
+        is_up_to_date=True,
+        time_last_modified_by_user=func.now(),
+    )
+    db_session.add(db_group)
+    db_session.flush()
+
+    # Add member relationships
+    if member_uuids:
+        db_session.execute(
+            pg_insert(User__UserGroup)
+            .values(
+                [{"user_id": uid, "user_group_id": db_group.id} for uid in member_uuids]
+            )
+            .on_conflict_do_nothing(
+                index_elements=[
+                    User__UserGroup.user_group_id,
+                    User__UserGroup.user_id,
+                ]
+            )
+        )
+
+    # Create SCIM mapping
+    dal = ScimDAL(db_session)
+    external_id = group_resource.externalId
+    if external_id:
+        dal.create_group_mapping(external_id=external_id, user_group_id=db_group.id)
+
+    db_session.commit()
+
+    return _group_to_scim(db_group, db_session, external_id)
+
+
+@scim_router.put("/Groups/{group_id}", response_model=None)
+def replace_group(
+    group_id: str,
+    group_resource: ScimGroupResource,
+    _token: ScimToken = Depends(verify_scim_token),
+    db_session: Session = Depends(get_session),
+) -> ScimGroupResource | JSONResponse:
+    """Replace a group entirely (RFC 7644 §3.5.1)."""
+    try:
+        gid = int(group_id)
+    except ValueError:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    group = db_session.get(UserGroup, gid)
+    if not group or group.is_up_for_deletion:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    member_uuids, err = _parse_member_uuids(group_resource.members)
+    if err:
+        return _scim_error_response(400, err)
+
+    group.name = group_resource.displayName
+    group.time_last_modified_by_user = func.now()
+
+    # Replace members: remove all, then add new
+    db_session.execute(
+        sa_delete(User__UserGroup).where(User__UserGroup.user_group_id == gid)
+    )
+
+    if member_uuids:
+        db_session.execute(
+            pg_insert(User__UserGroup)
+            .values([{"user_id": uid, "user_group_id": gid} for uid in member_uuids])
+            .on_conflict_do_nothing(
+                index_elements=[
+                    User__UserGroup.user_group_id,
+                    User__UserGroup.user_id,
+                ]
+            )
+        )
+
+    # Update external ID mapping
+    dal = ScimDAL(db_session)
+    mapping = dal.get_group_mapping_by_group_id(gid)
+    new_external_id = group_resource.externalId
+
+    if new_external_id:
+        if mapping:
+            if mapping.external_id != new_external_id:
+                mapping.external_id = new_external_id
+        else:
+            dal.create_group_mapping(external_id=new_external_id, user_group_id=gid)
+    elif mapping:
+        dal.delete_group_mapping(mapping.id)
+
+    db_session.commit()
+
+    return _group_to_scim(group, db_session, new_external_id)
+
+
+@scim_router.patch("/Groups/{group_id}", response_model=None)
+def patch_group(
+    group_id: str,
+    patch_request: ScimPatchRequest,
+    _token: ScimToken = Depends(verify_scim_token),
+    db_session: Session = Depends(get_session),
+) -> ScimGroupResource | JSONResponse:
+    """Partially update a group (RFC 7644 §3.5.2).
+
+    Handles member add/remove operations from Okta and Azure AD.
+    """
+    try:
+        gid = int(group_id)
+    except ValueError:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    group = db_session.get(UserGroup, gid)
+    if not group or group.is_up_for_deletion:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    dal = ScimDAL(db_session)
+    mapping = dal.get_group_mapping_by_group_id(gid)
+    external_id = mapping.external_id if mapping else None
+
+    current = _group_to_scim(group, db_session, external_id)
+
+    try:
+        patched, added_ids, removed_ids = apply_group_patch(
+            patch_request.Operations, current
+        )
+    except ScimPatchError as e:
+        return _scim_error_response(e.status, e.detail)
+
+    # Apply name change
+    if patched.displayName != group.name:
+        group.name = patched.displayName
+
+    # Apply member additions
+    if added_ids:
+        add_uuids: list[UUID] = []
+        for mid in added_ids:
+            uid = _parse_user_id(mid)
+            if uid:
+                add_uuids.append(uid)
+        if add_uuids:
+            db_session.execute(
+                pg_insert(User__UserGroup)
+                .values([{"user_id": uid, "user_group_id": gid} for uid in add_uuids])
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        User__UserGroup.user_group_id,
+                        User__UserGroup.user_id,
+                    ]
+                )
+            )
+
+    # Apply member removals
+    if removed_ids:
+        remove_uuids: list[UUID] = []
+        for mid in removed_ids:
+            uid = _parse_user_id(mid)
+            if uid:
+                remove_uuids.append(uid)
+        if remove_uuids:
+            db_session.execute(
+                sa_delete(User__UserGroup).where(
+                    User__UserGroup.user_group_id == gid,
+                    User__UserGroup.user_id.in_(remove_uuids),
+                )
+            )
+
+    # Handle externalId changes
+    if patched.externalId != external_id:
+        if patched.externalId:
+            if mapping:
+                mapping.external_id = patched.externalId
+            else:
+                dal.create_group_mapping(
+                    external_id=patched.externalId, user_group_id=gid
+                )
+        elif mapping:
+            dal.delete_group_mapping(mapping.id)
+
+    group.time_last_modified_by_user = func.now()
+    db_session.commit()
+
+    return _group_to_scim(
+        group,
+        db_session,
+        patched.externalId if patched.externalId else external_id,
+    )
+
+
+@scim_router.delete("/Groups/{group_id}", status_code=204, response_model=None)
+def delete_group(
+    group_id: str,
+    _token: ScimToken = Depends(verify_scim_token),
+    db_session: Session = Depends(get_session),
+) -> Response | JSONResponse:
+    """Delete a group (RFC 7644 §3.6)."""
+    try:
+        gid = int(group_id)
+    except ValueError:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    group = db_session.get(UserGroup, gid)
+    if not group or group.is_up_for_deletion:
+        return _scim_error_response(404, f"Group {group_id} not found")
+
+    # Remove SCIM mapping
+    dal = ScimDAL(db_session)
+    mapping = dal.get_group_mapping_by_group_id(gid)
+    if mapping:
+        dal.delete_group_mapping(mapping.id)
+
+    # Remove member relationships and delete group
+    db_session.execute(
+        sa_delete(User__UserGroup).where(User__UserGroup.user_group_id == gid)
+    )
+
+    db_session.delete(group)
     db_session.commit()
 
     return Response(status_code=204)
