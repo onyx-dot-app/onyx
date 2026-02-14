@@ -36,6 +36,9 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.connectors.web.image_extraction import add_images_to_pdf_document
+from onyx.connectors.web.image_extraction import add_images_to_web_document
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
@@ -536,6 +539,8 @@ class WebConnector(LoadConnector):
                     else None
                 ),
             )
+            if get_image_extraction_and_analysis_enabled():
+                result.doc = add_images_to_pdf_document(result.doc, response.content, initial_url)
 
             return result
 
@@ -656,6 +661,11 @@ class WebConnector(LoadConnector):
                     else None
                 ),
             )
+
+            if get_image_extraction_and_analysis_enabled():
+                result.doc = add_images_to_web_document(
+                    result.doc, content, initial_url
+                )
         finally:
             page.close()
 
