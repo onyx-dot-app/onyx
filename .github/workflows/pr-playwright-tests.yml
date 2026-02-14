@@ -241,14 +241,13 @@ jobs:
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
-    name: Playwright Tests (${{ matrix.project }})
+    name: Playwright Tests (${{ matrix.project }}, shard ${{ matrix.shard }}/2)
     permissions:
-      id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
       contents: read
     runs-on:
       - runs-on
       - runner=8cpu-linux-arm64
-      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}"
+      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}-shard-${{ matrix.shard }}"
       - "extras=ecr-cache"
       - volume=50gb
     timeout-minutes: 45
@@ -256,6 +255,7 @@ jobs:
       fail-fast: false
       matrix:
         project: [admin, exclusive]
+        shard: [1, 2]
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
@@ -433,14 +433,15 @@ jobs:
         working-directory: ./web
         env:
           PROJECT: ${{ matrix.project }}
+          SHARD: ${{ matrix.shard }}
         run: |
-          npx playwright test --project ${PROJECT}
+          npx playwright test --project ${PROJECT} --shard=${SHARD}/2
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
           # Includes test results and trace.zip files
-          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
+          name: playwright-test-results-${{ matrix.project }}-shard-${{ matrix.shard }}-${{ github.run_id }}
           path: ./web/output/playwright/
           retention-days: 30
 
@@ -448,27 +449,73 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
+          name: playwright-screenshots-${{ matrix.project }}-shard-${{ matrix.shard }}-${{ github.run_id }}
           path: ./web/output/screenshots/
           retention-days: 30
 
-      # --- Visual Regression Diff ---
+      # save before stopping the containers so the logs can be captured
+      - name: Save Docker logs
+        if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          cd deployment/docker_compose
+          docker compose logs > docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
+
+      - name: Upload logs
+        if: success() || failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: docker-logs-${{ matrix.project }}-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ github.workspace }}/docker-compose.log
+
+  # Merge screenshots from all shards and run visual regression comparison
+  playwright-visual-regression:
+    needs: [playwright-tests]
+    if: always()
+    name: Visual Regression (${{ matrix.project }})
+    permissions:
+      id-token: write
+      contents: read
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-visual-regression-${{ matrix.project }}"
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [admin, exclusive]
+    steps:
+      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Download screenshot artifacts from all shards
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # ratchet:actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: playwright-screenshots-${{ matrix.project }}-shard-*-${{ github.run_id }}
+          path: web/output/screenshots/
+          merge-multiple: true
+
       - name: Configure AWS credentials
-        if: always()
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Install the latest version of uv
-        if: always()
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # ratchet:astral-sh/setup-uv@v7
         with:
           enable-cache: false
           version: "0.9.9"
 
       - name: Determine baseline revision
-        if: always()
         id: baseline-rev
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -492,7 +539,6 @@ jobs:
           fi
 
       - name: Generate screenshot diff report
-        if: always()
         env:
           PROJECT: ${{ matrix.project }}
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
@@ -503,7 +549,6 @@ jobs:
             --rev "${BASELINE_REV}"
 
       - name: Upload visual diff report to S3
-        if: always()
         env:
           PROJECT: ${{ matrix.project }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -569,26 +614,9 @@ jobs:
             echo "No screenshots to upload for ${PROJECT} — skipping baseline update."
           fi
 
-      # save before stopping the containers so the logs can be captured
-      - name: Save Docker logs
-        if: success() || failure()
-        env:
-          WORKSPACE: ${{ github.workspace }}
-        run: |
-          cd deployment/docker_compose
-          docker compose logs > docker-compose.log
-          mv docker-compose.log ${WORKSPACE}/docker-compose.log
-
-      - name: Upload logs
-        if: success() || failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
-        with:
-          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
-          path: ${{ github.workspace }}/docker-compose.log
-
   # Post a single combined visual regression comment after all matrix jobs finish
   visual-regression-comment:
-    needs: [playwright-tests]
+    needs: [playwright-visual-regression]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-slim
     timeout-minutes: 5
@@ -679,7 +707,7 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 45
-    needs: [playwright-tests]
+    needs: [playwright-tests, playwright-visual-regression]
     if: ${{ always() }}
     steps:
       - name: Check job status
