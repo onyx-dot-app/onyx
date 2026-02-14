@@ -3,6 +3,7 @@ import { render, RenderOptions } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+export { makeProvider } from "./llmProviderTestUtils";
 
 /**
  * Custom render function that wraps components with common providers

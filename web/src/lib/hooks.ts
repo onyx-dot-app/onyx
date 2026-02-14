@@ -524,7 +524,7 @@ This approach ensures that user preferences are maintained for existing chats wh
 providing appropriate defaults for new conversations based on the available tools.
 */
 
-function getDefaultLlmDescriptor(
+export function getDefaultLlmDescriptor(
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
   const defaultProvider = llmProviders.find(
@@ -548,6 +548,77 @@ function getDefaultLlmDescriptor(
     };
   }
   return null;
+}
+
+export function getValidLlmDescriptorForProviders(
+  modelName: string | null | undefined,
+  llmProviders: LLMProviderDescriptor[] | undefined | null
+): LlmDescriptor {
+  // Return early if providers haven't loaded yet (undefined/null)
+  // Empty arrays are valid (user has no provider access for this assistant)
+  if (llmProviders === undefined || llmProviders === null) {
+    return { name: "", provider: "", modelName: "" };
+  }
+
+  if (modelName) {
+    const model = parseLlmDescriptor(modelName);
+    // If we have no parsed modelName, try to find the provider by the raw modelName string
+    if (!(model.modelName && model.modelName.length > 0)) {
+      const provider = llmProviders.find((p) =>
+        p.model_configurations
+          .map((modelConfiguration) => modelConfiguration.name)
+          .includes(modelName)
+      );
+      if (provider) {
+        return {
+          modelName: modelName,
+          name: provider.name,
+          provider: provider.provider,
+        };
+      }
+    }
+
+    // If we have parsed provider info, try to find that specific provider.
+    // This ensures we don't incorrectly match a model to the wrong provider
+    // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
+    if (model.provider && model.provider.length > 0) {
+      const matchingProvider = llmProviders.find(
+        (p) =>
+          p.provider === model.provider &&
+          p.model_configurations
+            .map((modelConfiguration) => modelConfiguration.name)
+            .includes(model.modelName)
+      );
+      if (matchingProvider) {
+        return {
+          ...model,
+          name: matchingProvider.name,
+          provider: matchingProvider.provider,
+        };
+      }
+      // Provider info was present but not found - fall through to default
+    } else {
+      // Only search by model name when no provider info was parsed
+      const provider = llmProviders.find((p) =>
+        p.model_configurations
+          .map((modelConfiguration) => modelConfiguration.name)
+          .includes(model.modelName)
+      );
+
+      if (provider) {
+        return { ...model, provider: provider.provider, name: provider.name };
+      }
+    }
+  }
+
+  // Model not found in available providers - fall back to default model
+  return (
+    getDefaultLlmDescriptor(llmProviders) ?? {
+      name: "",
+      provider: "",
+      modelName: "",
+    }
+  );
 }
 
 export function useLlmManager(
@@ -643,71 +714,7 @@ export function useLlmManager(
   function getValidLlmDescriptor(
     modelName: string | null | undefined
   ): LlmDescriptor {
-    // Return early if providers haven't loaded yet (undefined/null)
-    // Empty arrays are valid (user has no provider access for this assistant)
-    if (llmProviders === undefined || llmProviders === null) {
-      return { name: "", provider: "", modelName: "" };
-    }
-
-    if (modelName) {
-      const model = parseLlmDescriptor(modelName);
-      // If we have no parsed modelName, try to find the provider by the raw modelName string
-      if (!(model.modelName && model.modelName.length > 0)) {
-        const provider = llmProviders.find((p) =>
-          p.model_configurations
-            .map((modelConfiguration) => modelConfiguration.name)
-            .includes(modelName)
-        );
-        if (provider) {
-          return {
-            modelName: modelName,
-            name: provider.name,
-            provider: provider.provider,
-          };
-        }
-      }
-
-      // If we have parsed provider info, try to find that specific provider.
-      // This ensures we don't incorrectly match a model to the wrong provider
-      // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
-      if (model.provider && model.provider.length > 0) {
-        const matchingProvider = llmProviders.find(
-          (p) =>
-            p.provider === model.provider &&
-            p.model_configurations
-              .map((modelConfiguration) => modelConfiguration.name)
-              .includes(model.modelName)
-        );
-        if (matchingProvider) {
-          return {
-            ...model,
-            name: matchingProvider.name,
-            provider: matchingProvider.provider,
-          };
-        }
-        // Provider info was present but not found - fall through to default
-      } else {
-        // Only search by model name when no provider info was parsed
-        const provider = llmProviders.find((p) =>
-          p.model_configurations
-            .map((modelConfiguration) => modelConfiguration.name)
-            .includes(model.modelName)
-        );
-
-        if (provider) {
-          return { ...model, provider: provider.provider, name: provider.name };
-        }
-      }
-    }
-
-    // Model not found in available providers - fall back to default model
-    return (
-      getDefaultLlmDescriptor(llmProviders) ?? {
-        name: "",
-        provider: "",
-        modelName: "",
-      }
-    );
+    return getValidLlmDescriptorForProviders(modelName, llmProviders);
   }
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
