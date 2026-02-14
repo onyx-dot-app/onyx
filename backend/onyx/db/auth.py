@@ -106,7 +106,6 @@ class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
             create_dict["role"] = UserRole.ADMIN
         else:
             create_dict["role"] = UserRole.BASIC
-
         return await super().create(create_dict)
 
 
