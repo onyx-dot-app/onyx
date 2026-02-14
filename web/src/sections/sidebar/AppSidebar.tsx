@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
+  FEATURE_FLAGS,
   LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
@@ -223,7 +224,7 @@ const MemoizedAppSidebarInner = memo(
     // Gated by PostHog feature flag: if `craft-animation-disabled` is true (or
     // PostHog is unavailable), skip the auto-show entirely.
     const isCraftAnimationDisabled =
-      posthog?.isFeatureEnabled("craft-animation-disabled") ?? true;
+      posthog?.isFeatureEnabled(FEATURE_FLAGS.CRAFT_ANIMATION_DISABLED) ?? true;
     const hasTenantModal = !!(newTenantInfo || invitationInfo);
     useEffect(() => {
       if (
