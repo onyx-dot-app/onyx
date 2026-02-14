@@ -299,7 +299,7 @@ export interface SuggestionBubble {
 }
 
 /** Output panel tab types */
-export type OutputTabType = "preview" | "files" | "artifacts";
+export type OutputTabType = "preview" | "files" | "attachments";
 
 export interface BuildSessionData {
   id: string;

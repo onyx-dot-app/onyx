@@ -267,11 +267,11 @@ const InputBar = memo(
         if (hasMessage) {
           onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
           setMessage("");
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
         } else if (hasFiles) {
           // User hit Enter with only files attached: remove files from input bar
           // (File stays in session; no way to delete from session for now)
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
         }
       }, [
         message,
