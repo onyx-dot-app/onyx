@@ -240,7 +240,7 @@ export interface SendSearchQueryRequest {
   filters?: BaseFilters | null;
   num_docs_fed_to_llm_selection?: number | null;
   run_query_expansion?: boolean;
-  num_hits?: number; // default 50
+  num_hits?: number; // default 30
   include_content?: boolean;
   stream?: boolean;
 }
