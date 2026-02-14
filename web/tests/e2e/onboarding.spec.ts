@@ -119,12 +119,9 @@ for (const theme of THEMES) {
       await expect(nameInput).toBeVisible({ timeout: 10000 });
       await nameInput.fill("Ada Lovelace");
 
-      // Allow debounce to settle
-      await page.waitForTimeout(700);
-
-      // "Next" should now be enabled
+      // Wait for the Next button to become enabled (debounce + validation)
       const nextBtn = page.getByRole("button", { name: "Next" });
-      await expect(nextBtn).toBeEnabled();
+      await expect(nextBtn).toBeEnabled({ timeout: 5000 });
 
       await expectScreenshot(page, {
         name: `onboarding-${theme}-name-step-filled`,
@@ -144,10 +141,13 @@ for (const theme of THEMES) {
       const nameInput = page.getByPlaceholder("Your name");
       await expect(nameInput).toBeVisible({ timeout: 10000 });
       await nameInput.fill("Ada Lovelace");
-      await page.waitForTimeout(700);
+
+      // Wait for the Next button to become enabled (debounce + validation)
+      const nextBtn = page.getByRole("button", { name: "Next" });
+      await expect(nextBtn).toBeEnabled({ timeout: 5000 });
 
       // Name → LLM Setup
-      await page.getByRole("button", { name: "Next" }).click();
+      await nextBtn.click();
 
       // LLM setup header (use .first() — Truncated renders a hidden copy)
       await expect(
@@ -187,8 +187,9 @@ for (const theme of THEMES) {
       const nameInput = page.getByPlaceholder("Your name");
       await expect(nameInput).toBeVisible({ timeout: 10000 });
       await nameInput.fill("Ada Lovelace");
-      await page.waitForTimeout(700);
-      await page.getByRole("button", { name: "Next" }).click();
+      const nextBtn = page.getByRole("button", { name: "Next" });
+      await expect(nextBtn).toBeEnabled({ timeout: 5000 });
+      await nextBtn.click();
 
       await expect(
         page.getByText("Connect your LLM models").first()
@@ -237,8 +238,9 @@ for (const theme of THEMES) {
       const nameInput = page.getByPlaceholder("Your name");
       await expect(nameInput).toBeVisible({ timeout: 10000 });
       await nameInput.fill("Ada Lovelace");
-      await page.waitForTimeout(700);
-      await page.getByRole("button", { name: "Next" }).click();
+      const nextBtn = page.getByRole("button", { name: "Next" });
+      await expect(nextBtn).toBeEnabled({ timeout: 5000 });
+      await nextBtn.click();
 
       await expect(
         page.getByText("Connect your LLM models").first()
@@ -426,8 +428,9 @@ test.describe("Onboarding persistence", () => {
     const nameInput = page.getByPlaceholder("Your name");
     await expect(nameInput).toBeVisible({ timeout: 10000 });
     await nameInput.fill("Ada Lovelace");
-    await page.waitForTimeout(700);
-    await page.getByRole("button", { name: "Next" }).click();
+    const nextBtn = page.getByRole("button", { name: "Next" });
+    await expect(nextBtn).toBeEnabled({ timeout: 5000 });
+    await nextBtn.click();
 
     await expect(page.getByText("Connect your LLM models").first()).toBeVisible(
       {
@@ -489,9 +492,10 @@ test.describe("Onboarding — keyboard interaction", () => {
     const nameInput = page.getByPlaceholder("Your name");
     await expect(nameInput).toBeVisible({ timeout: 10000 });
     await nameInput.fill("Ada Lovelace");
-    await page.waitForTimeout(700);
 
-    // Press Enter — should advance to LLM step
+    // Wait for name validation to enable the action, then press Enter
+    const nextBtn = page.getByRole("button", { name: "Next" });
+    await expect(nextBtn).toBeEnabled({ timeout: 5000 });
     await nameInput.press("Enter");
 
     await expect(page.getByText("Connect your LLM models").first()).toBeVisible(
