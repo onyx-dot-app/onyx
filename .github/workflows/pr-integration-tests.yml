@@ -46,6 +46,7 @@ jobs:
     timeout-minutes: 45
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
+      editions: ${{ steps.set-editions.outputs.editions }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -71,6 +72,16 @@ jobs:
           # Remove trailing comma and wrap in array
           all_dirs="[${all_dirs%,}]"
           echo "test-dirs=$all_dirs" >> $GITHUB_OUTPUT
+
+      - name: Determine editions to test
+        id: set-editions
+        run: |
+          # On PRs, only run EE tests. On merge_group and tags, run both EE and MIT.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo 'editions=["ee"]' >> $GITHUB_OUTPUT
+          else
+            echo 'editions=["ee","mit"]' >> $GITHUB_OUTPUT
+          fi
 
   build-backend-image:
     runs-on:
@@ -267,7 +278,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
-      - ${{ format('run-id={0}-integration-tests-job-{1}', github.run_id, strategy['job-index']) }}
+      - ${{ format('run-id={0}-integration-tests-{1}-job-{2}', github.run_id, matrix.edition, strategy['job-index']) }}
       - extras=ecr-cache
     timeout-minutes: 45
 
@@ -275,6 +286,7 @@ jobs:
       fail-fast: false
       matrix:
         test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
+        edition: ${{ fromJson(needs.discover-test-dirs.outputs.editions) }}
 
     steps:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
@@ -298,12 +310,11 @@ jobs:
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
+          EDITION: ${{ matrix.edition }}
         run: |
+          # Base config shared by both editions
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -312,11 +323,20 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
-          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
-          AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           MCP_SERVER_ENABLED=true
+          AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
+          EOF
+
+          # EE-only config
+          if [ "$EDITION" = "ee" ]; then
+            cat <<EOF >> deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+          LICENSE_ENFORCEMENT_ENABLED=false
+          CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
           USE_LIGHTWEIGHT_BACKGROUND_WORKER=false
           EOF
+          fi
 
       - name: Start Docker containers
         run: |
@@ -379,14 +399,14 @@ jobs:
           docker compose -f docker-compose.mock-it-services.yml \
             -p mock-it-services-stack up -d
 
-      - name: Run Integration Tests for ${{ matrix.test-dir.name }}
+      - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
           timeout_minutes: 20
           max_attempts: 3
           retry_wait_seconds: 10
           command: |
-            echo "Running integration tests for ${{ matrix.test-dir.path }}..."
+            echo "Running ${{ matrix.edition }} integration tests for ${{ matrix.test-dir.path }}..."
             docker run --rm --network onyx_default \
               --name test-runner \
               -e POSTGRES_HOST=relational_db \
@@ -444,7 +464,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
-          name: docker-all-logs-${{ matrix.test-dir.name }}
+          name: docker-all-logs-${{ matrix.edition }}-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
       # ------------------------------------------------------------
 
