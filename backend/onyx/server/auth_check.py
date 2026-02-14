@@ -102,6 +102,9 @@ def check_router_auth(
     current_cloud_superuser = fetch_ee_implementation_or_noop(
         "onyx.auth.users", "current_cloud_superuser"
     )
+    verify_scim_token = fetch_ee_implementation_or_noop(
+        "onyx.server.scim.auth", "verify_scim_token"
+    )
 
     for route in application.routes:
         # explicitly marked as public
@@ -125,6 +128,7 @@ def check_router_auth(
                     or depends_fn == current_chat_accessible_user
                     or depends_fn == control_plane_dep
                     or depends_fn == current_cloud_superuser
+                    or depends_fn == verify_scim_token
                 ):
                     found_auth = True
                     break
