@@ -18,6 +18,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.users import get_user_by_email
+from onyx.evals.models import ChatFullEvalResult
 from onyx.evals.models import EvalationAck
 from onyx.evals.models import EvalConfigurationOptions
 from onyx.evals.models import EvalMessage
@@ -31,7 +32,6 @@ from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -77,7 +77,7 @@ def isolated_ephemeral_session_factory(
 def _chat_full_response_to_eval_result(
     full: ChatFullResponse,
     stream_start_time: float,
-) -> tuple[str, list[str], list[dict[str, Any]], list[CitationInfo], EvalTimings]:
+) -> ChatFullEvalResult:
     """Map ChatFullResponse from gather_stream_full to eval result components."""
     tools_called = [tc.tool_name for tc in full.tool_calls]
     tool_call_details: list[dict[str, Any]] = [
@@ -92,12 +92,12 @@ def _chat_full_response_to_eval_result(
         tool_execution_ms={},
         stream_processing_ms=total_ms,
     )
-    return (
-        full.answer,
-        tools_called,
-        tool_call_details,
-        full.citation_info,
-        timings,
+    return ChatFullEvalResult(
+        answer=full.answer,
+        tools_called=tools_called,
+        tool_call_details=tool_call_details,
+        citations=full.citation_info,
+        timings=timings,
     )
 
 
@@ -246,32 +246,26 @@ def _get_answer_with_tools(
             )
             full = gather_stream_full(packets, state_container)
 
-            (
-                answer,
-                tools_called,
-                tool_call_details,
-                citations,
-                timings,
-            ) = _chat_full_response_to_eval_result(full, stream_start_time)
+            result = _chat_full_response_to_eval_result(full, stream_start_time)
 
             # Evaluate tool assertions
             assertion_passed, assertion_details = evaluate_tool_assertions(
-                tools_called, tool_assertions
+                result.tools_called, tool_assertions
             )
 
             logger.info(
-                f"Eval completed. Tools called: {tools_called}.\n"
+                f"Eval completed. Tools called: {result.tools_called}.\n"
                 f"Assertion passed: {assertion_passed}. Details: {assertion_details}\n"
             )
 
             return EvalToolResult(
-                answer=answer,
-                tools_called=tools_called,
-                tool_call_details=tool_call_details,
-                citations=citations,
+                answer=result.answer,
+                tools_called=result.tools_called,
+                tool_call_details=result.tool_call_details,
+                citations=result.citations,
                 assertion_passed=assertion_passed,
                 assertion_details=assertion_details,
-                timings=timings,
+                timings=result.timings,
             )
 
 
@@ -406,33 +400,27 @@ def _get_multi_turn_answer_with_tools(
                 )
                 full = gather_stream_full(packets, state_container)
 
-                (
-                    answer,
-                    tools_called,
-                    tool_call_details,
-                    citations,
-                    timings,
-                ) = _chat_full_response_to_eval_result(full, stream_start_time)
+                result = _chat_full_response_to_eval_result(full, stream_start_time)
 
                 # Evaluate tool assertions for this turn
                 assertion_passed, assertion_details = evaluate_tool_assertions(
-                    tools_called, tool_assertions
+                    result.tools_called, tool_assertions
                 )
 
                 logger.info(
-                    f"Turn {turn_idx + 1} completed. Tools called: {tools_called}.\n"
+                    f"Turn {turn_idx + 1} completed. Tools called: {result.tools_called}.\n"
                     f"Assertion passed: {assertion_passed}. Details: {assertion_details}\n"
                 )
 
                 turn_results.append(
                     EvalToolResult(
-                        answer=answer,
-                        tools_called=tools_called,
-                        tool_call_details=tool_call_details,
-                        citations=citations,
+                        answer=result.answer,
+                        tools_called=result.tools_called,
+                        tool_call_details=result.tool_call_details,
+                        citations=result.citations,
                         assertion_passed=assertion_passed,
                         assertion_details=assertion_details,
-                        timings=timings,
+                        timings=result.timings,
                     )
                 )
 

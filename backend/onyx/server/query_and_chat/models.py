@@ -80,6 +80,8 @@ class ChatFeedbackRequest(BaseModel):
         return self
 
 
+# NOTE: This model is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
+# experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 class SendMessageRequest(BaseModel):
     message: str
 

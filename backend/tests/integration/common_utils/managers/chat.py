@@ -135,7 +135,7 @@ class ChatSessionManager:
 
         response = requests.post(
             f"{API_SERVER_URL}/chat/send-message",
-            json=chat_message_req.model_dump(),
+            json=chat_message_req.model_dump(mode="json"),
             headers=headers,
             stream=True,
             cookies=cookies,
@@ -219,7 +219,7 @@ class ChatSessionManager:
 
         with requests.post(
             f"{API_SERVER_URL}/chat/send-message",
-            json=chat_message_req.model_dump(),
+            json=chat_message_req.model_dump(mode="json"),
             headers=headers,
             stream=True,
             cookies=cookies,

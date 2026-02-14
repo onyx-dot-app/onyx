@@ -31,6 +31,16 @@ class EvalTimings(BaseModel):
     stream_processing_ms: float | None = None  # Time to process the stream
 
 
+class ChatFullEvalResult(BaseModel):
+    """Raw eval components from ChatFullResponse (before tool assertions)."""
+
+    answer: str
+    tools_called: list[str]
+    tool_call_details: list[dict[str, Any]]
+    citations: list[CitationInfo]
+    timings: EvalTimings
+
+
 class EvalToolResult(BaseModel):
     """Result of a single eval with tool call information."""
 
