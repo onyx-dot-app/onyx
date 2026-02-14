@@ -1,6 +1,10 @@
 import { expect, Page, test } from "@playwright/test";
 import { loginAs, loginAsRandomUser } from "../utils/auth";
-import { sendMessage, verifyCurrentModel } from "../utils/chatActions";
+import {
+  sendMessage,
+  startNewChat,
+  verifyCurrentModel,
+} from "../utils/chatActions";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 
 const PROVIDER_API_KEY =
@@ -78,18 +82,19 @@ async function selectModelFromInputPopover(
   });
 
   const dialog = page.locator('[role="dialog"]');
+  const searchInput = dialog.getByPlaceholder("Search models...");
 
   for (const modelName of preferredModels) {
-    if (currentModelText.includes(modelName)) {
-      continue;
-    }
+    await searchInput.fill(modelName);
+    const modelOptions = dialog.locator("button[data-selected]");
+    const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
 
-    const candidate = dialog
-      .locator("button[data-selected]")
-      .filter({ hasText: modelName })
-      .first();
+    if ((await modelOptions.count()) > 0) {
+      const candidate =
+        (await nonSelectedOptions.count()) > 0
+          ? nonSelectedOptions.first()
+          : modelOptions.first();
 
-    if (await candidate.isVisible()) {
       await candidate.click();
       await page.waitForSelector('[role="dialog"]', { state: "hidden" });
       const selectedText =
@@ -260,6 +265,20 @@ test.describe("LLM Runtime Selection", () => {
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
+
+    const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
+    const persistenceModelName = `persist-runtime-model-${Date.now()}`;
+    const persistenceProviderId = await createLlmProvider(page, {
+      name: persistenceProviderName,
+      provider: "openai",
+      defaultModelName: persistenceModelName,
+      isPublic: true,
+    });
+    providersToCleanup.push(persistenceProviderId);
+    await waitForModelOnProvider(page, persistenceModelName, [
+      persistenceProviderName,
+    ]);
+
     await openChat(page);
 
     let turn = 0;
@@ -273,9 +292,7 @@ test.describe("LLM Runtime Selection", () => {
     });
 
     const selectedModelDisplay = await selectModelFromInputPopover(page, [
-      "GPT-4.1",
-      "GPT-4o Mini",
-      "GPT-4o",
+      persistenceModelName,
     ]);
     await verifyCurrentModel(page, selectedModelDisplay);
 
@@ -288,6 +305,7 @@ test.describe("LLM Runtime Selection", () => {
 
     expect(firstModelVersion).toBeTruthy();
     expect(firstModelProvider).toBeTruthy();
+    expect(firstModelProvider).toBe(persistenceProviderName);
     expect(page.url()).toContain("chatId=");
 
     await page.reload();
@@ -302,8 +320,7 @@ test.describe("LLM Runtime Selection", () => {
     );
 
     expect(secondPayload.llm_override?.model_version).toBe(firstModelVersion);
-    expect(secondPayload.llm_override?.model_provider).toBeTruthy();
-    expect(firstModelProvider).toBeTruthy();
+    expect(secondPayload.llm_override?.model_provider).toBe(firstModelProvider);
   });
 
   test("regenerate with alternate model preserves version history semantics", async ({
@@ -352,16 +369,12 @@ test.describe("LLM Runtime Selection", () => {
       .locator('button[data-selected="false"]')
       .first();
 
-    if (
+    test.skip(
       (await regenerateDialog
         .locator('button[data-selected="false"]')
-        .count()) === 0
-    ) {
-      test.skip(
-        true,
-        "Regenerate model picker requires at least two runtime model options"
-      );
-    }
+        .count()) === 0,
+      "Regenerate model picker requires at least two runtime model options"
+    );
 
     const regenerateRequestPromise = page.waitForRequest(
       (request) =>
@@ -464,12 +477,21 @@ test.describe("LLM Runtime Selection", () => {
 
     const sharedModelOptions = dialog.locator("button[data-selected]");
     await expect(sharedModelOptions).toHaveCount(2);
-
-    await sharedModelOptions.first().click();
+    const openAiModelOption = dialog
+      .getByRole("region", { name: /openai/i })
+      .locator("button[data-selected]")
+      .first();
+    await expect(openAiModelOption).toBeVisible();
+    await openAiModelOption.click();
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
     await sendMessage(page, "Collision payload check one.");
     await expect.poll(() => capturedPayloads.length).toBe(1);
+
+    // Use a new session so runtime selection is not overwritten by the previous
+    // chat session's persisted model override.
+    await startNewChat(page);
+    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
 
     await page.getByTestId("AppInputBar/llm-popover-trigger").click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
@@ -478,11 +500,26 @@ test.describe("LLM Runtime Selection", () => {
       .getByPlaceholder("Search models...")
       .fill(sharedModelName);
 
-    const alternateOption = secondDialog
-      .locator('button[data-selected="false"]')
+    const secondSharedModelOptions = secondDialog.locator(
+      "button[data-selected]"
+    );
+    await expect(secondSharedModelOptions).toHaveCount(2);
+    const anthropicModelOption = secondDialog
+      .getByRole("region", { name: /anthropic/i })
+      .locator("button[data-selected]")
       .first();
-    await expect(alternateOption).toBeVisible();
-    await alternateOption.click();
+    await expect(anthropicModelOption).toBeVisible();
+    await anthropicModelOption.click();
+    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
+
+    await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+    await page.waitForSelector('[role="dialog"]', { state: "visible" });
+    const verifyDialog = page.locator('[role="dialog"]');
+    const selectedAnthropicOption = verifyDialog
+      .getByRole("region", { name: /anthropic/i })
+      .locator('button[data-selected="true"]');
+    await expect(selectedAnthropicOption).toHaveCount(1);
+    await page.keyboard.press("Escape");
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
     await sendMessage(page, "Collision payload check two.");
@@ -497,9 +534,9 @@ test.describe("LLM Runtime Selection", () => {
       (payload) => payload.llm_override?.model_provider
     );
 
-    for (const provider of providersUsed) {
-      expect([openAiProviderName, anthropicProviderName]).toContain(provider);
-    }
+    expect(new Set(providersUsed)).toEqual(
+      new Set([openAiProviderName, anthropicProviderName])
+    );
   });
 
   test("restricted provider model is unavailable to unauthorized runtime user selection", async ({
@@ -518,15 +555,13 @@ test.describe("LLM Runtime Selection", () => {
       groupId = await client.createUserGroup(restrictedGroupName);
     } catch (error) {
       const errorText = String(error);
-      if (
+      const requiresEnterpriseLicense =
         errorText.includes("enterprise_license_required") ||
-        errorText.includes("This feature requires an Enterprise license")
-      ) {
-        test.skip(
-          true,
-          "Restricted provider test requires Enterprise license-enabled environment"
-        );
-      }
+        errorText.includes("This feature requires an Enterprise license");
+      test.skip(
+        requiresEnterpriseLicense,
+        "Restricted provider test requires Enterprise license-enabled environment"
+      );
       throw error;
     }
     groupsToCleanup.push(groupId);
