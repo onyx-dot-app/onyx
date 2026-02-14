@@ -570,10 +570,12 @@ export default function useChatController({
         ? messageToResend?.message || message
         : message;
 
-      // When editing a message that had files attached, preserve the original files
+      // When editing a message that had files attached, preserve the original files.
+      // Skip for regeneration — the regeneration path reuses the existing user node
+      // (and its files), so merging here would send duplicates.
       const effectiveFileDescriptors = [
         ...projectFilesToFileDescriptors(currentMessageFiles),
-        ...(messageToResend?.files ?? []),
+        ...(!regenerationRequest ? messageToResend?.files ?? [] : []),
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
