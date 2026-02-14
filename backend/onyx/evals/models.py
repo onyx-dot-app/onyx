@@ -7,9 +7,6 @@ from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.models import PromptOverrideConfig
-from onyx.chat.models import ToolConfig
 from onyx.db.tools import get_builtin_tool
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
@@ -72,8 +69,6 @@ class MultiTurnEvalResult(BaseModel):
 
 
 class EvalConfiguration(BaseModel):
-    builtin_tool_types: list[str] = Field(default_factory=list)
-    persona_override_config: PersonaOverrideConfig | None = None
     llm: LLMOverride = Field(default_factory=LLMOverride)
     search_permissions_email: str
     allowed_tool_ids: list[int]
@@ -81,7 +76,6 @@ class EvalConfiguration(BaseModel):
 
 class EvalConfigurationOptions(BaseModel):
     builtin_tool_types: list[str] = list(BUILT_IN_TOOL_MAP.keys())
-    persona_override_config: PersonaOverrideConfig | None = None
     llm: LLMOverride = LLMOverride(
         model_provider=None,
         model_version="gpt-4o",
@@ -96,26 +90,7 @@ class EvalConfigurationOptions(BaseModel):
     experiment_name: str | None = None
 
     def get_configuration(self, db_session: Session) -> EvalConfiguration:
-        persona_override_config = self.persona_override_config or PersonaOverrideConfig(
-            name="Eval",
-            description="A persona for evaluation",
-            tools=[
-                ToolConfig(id=get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[tool]).id)
-                for tool in self.builtin_tool_types
-            ],
-            prompts=[
-                PromptOverrideConfig(
-                    name="Default",
-                    description="Default prompt for evaluation",
-                    system_prompt="You are a helpful assistant.",
-                    task_prompt="",
-                    datetime_aware=True,
-                )
-            ],
-        )
-
         return EvalConfiguration(
-            persona_override_config=persona_override_config,
             llm=self.llm,
             search_permissions_email=self.search_permissions_email,
             allowed_tool_ids=[

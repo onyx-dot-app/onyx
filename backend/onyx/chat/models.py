@@ -5,10 +5,8 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import Field
 
 from onyx.configs.constants import MessageType
-from onyx.context.search.enums import SearchType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
@@ -91,43 +89,11 @@ class CustomToolResponse(BaseModel):
     tool_name: str
 
 
-class ToolConfig(BaseModel):
-    id: int
-
-
 class ProjectSearchConfig(BaseModel):
     """Configuration for search tool availability in project context."""
 
     search_usage: SearchToolUsage
     disable_forced_tool: bool
-
-
-class PromptOverrideConfig(BaseModel):
-    name: str
-    description: str = ""
-    system_prompt: str
-    task_prompt: str = ""
-    datetime_aware: bool = True
-    include_citations: bool = True
-
-
-class PersonaOverrideConfig(BaseModel):
-    name: str
-    description: str
-    search_type: SearchType = SearchType.SEMANTIC
-    num_chunks: float | None = None
-    llm_relevance_filter: bool = False
-    llm_filter_extraction: bool = False
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
-
-    prompts: list[PromptOverrideConfig] = Field(default_factory=list)
-    # Note: prompt_ids removed - prompts are now embedded in personas
-
-    document_set_ids: list[int] = Field(default_factory=list)
-    tools: list[ToolConfig] = Field(default_factory=list)
-    tool_ids: list[int] = Field(default_factory=list)
-    custom_tools_openapi: list[dict[str, Any]] = Field(default_factory=list)
 
 
 AnswerQuestionPossibleReturn = (

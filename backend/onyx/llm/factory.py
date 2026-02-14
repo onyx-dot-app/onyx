@@ -2,7 +2,6 @@ from collections.abc import Callable
 from typing import Any
 
 from onyx.auth.schemas import UserRole
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
@@ -77,7 +76,7 @@ def _build_model_kwargs(
 
 
 def get_llm_for_persona(
-    persona: Persona | PersonaOverrideConfig | None,
+    persona: Persona | None,
     user: User,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
@@ -102,20 +101,16 @@ def get_llm_for_persona(
         if not provider_model:
             raise ValueError("No LLM provider found")
 
-        # Only check access control for database Persona entities, not PersonaOverrideConfig
-        # PersonaOverrideConfig is used for temporary overrides and doesn't have access restrictions
-        persona_model = persona if isinstance(persona, Persona) else None
-
         # Fetch user group IDs for access control check
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
-            provider_model, user_group_ids, persona_model, user.role == UserRole.ADMIN
+            provider_model, user_group_ids, persona, user.role == UserRole.ADMIN
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",
                 user.id,
-                getattr(persona_model, "id", None),
+                persona.id,
                 provider_model.name,
             )
             return get_default_llm(
