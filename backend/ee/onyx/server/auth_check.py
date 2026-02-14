@@ -5,6 +5,10 @@ from onyx.server.auth_check import PUBLIC_ENDPOINT_SPECS
 
 
 EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
+    # SCIM 2.0 service discovery — IdPs probe these before auth setup
+    ("/scim/v2/ServiceProviderConfig", {"GET"}),
+    ("/scim/v2/ResourceTypes", {"GET"}),
+    ("/scim/v2/Schemas", {"GET"}),
     # needs to be accessible prior to user login
     ("/enterprise-settings", {"GET"}),
     ("/enterprise-settings/logo", {"GET"}),
