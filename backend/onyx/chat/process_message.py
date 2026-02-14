@@ -37,7 +37,6 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ProjectSearchConfig
 from onyx.chat.models import StreamingError
@@ -81,6 +80,7 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart

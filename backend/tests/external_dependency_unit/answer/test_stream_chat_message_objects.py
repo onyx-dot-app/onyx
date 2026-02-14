@@ -6,13 +6,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.models import RecencyBiasSetting
 from onyx.db.models import User
 from onyx.db.persona import upsert_persona
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import Packet

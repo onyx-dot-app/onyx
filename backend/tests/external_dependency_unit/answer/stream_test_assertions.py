@@ -4,8 +4,8 @@ from typing import cast
 
 from onyx.chat.models import AnswerStreamPart
 from onyx.chat.models import CreateChatSessionID
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.context.search.models import SearchDoc
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
 from onyx.server.query_and_chat.streaming_models import OpenUrlDocuments

@@ -495,6 +495,8 @@ def delete_chat_session_by_id(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
+# team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 @router.post(
     "/send-chat-message",
     response_model=ChatFullResponse,

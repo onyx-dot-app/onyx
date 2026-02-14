@@ -1,7 +1,6 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -37,8 +36,9 @@ class MessageOrigin(str, Enum):
     UNSET = "unset"
 
 
-if TYPE_CHECKING:
-    pass
+class MessageResponseIDInfo(BaseModel):
+    user_message_id: int | None
+    reserved_assistant_message_id: int
 
 
 class SourceTag(Tag):
@@ -253,13 +253,3 @@ class ChatSearchResponse(BaseModel):
     groups: list[ChatSessionGroup]
     has_more: bool
     next_page: int | None = None
-
-
-class ChatSearchRequest(BaseModel):
-    query: str | None = None
-    page: int = 1
-    page_size: int = 10
-
-
-class CreateChatResponse(BaseModel):
-    chat_session_id: str
