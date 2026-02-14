@@ -200,7 +200,12 @@ export default function Text({
         className
       )}
     >
-      {children}
+      {/* NOTE: We want a small, horizontal padding applied to text components to visually
+        complement the white-space implicit with line-height. We apply it internally such that
+        padding applied to the tag directly is additive making the likelihood of 2px offsets with
+        other text elements much lower.
+        */}
+      <span className="px-[2px] box-decoration-clone">{children}</span>
     </Tag>
   );
 }
