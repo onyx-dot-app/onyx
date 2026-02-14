@@ -171,9 +171,11 @@ const SourceTagDetailsCardInner = ({
 
         {/* Description */}
         {currentSource.description && (
-          <Text secondaryBody text03 as="span" className="line-clamp-4">
-            {currentSource.description}
-          </Text>
+          <div className="px-1.5 pb-1">
+            <Text secondaryBody text03 as="span" className="line-clamp-4">
+              {currentSource.description}
+            </Text>
+          </div>
         )}
       </div>
     </div>
