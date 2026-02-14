@@ -377,12 +377,15 @@ test.describe("Default Assistant MCP Integration", () => {
     }
 
     // Select the MCP server checkbox (to enable all tools)
-    const serverCheckbox = page.getByLabel(
-      "mcp-server-select-all-tools-checkbox"
-    );
+    const serverCheckbox = mcpServerSection.getByRole("checkbox", {
+      name: "mcp-server-select-all-tools-checkbox",
+    });
     await expect(serverCheckbox).toBeVisible({ timeout: 5000 });
     await serverCheckbox.scrollIntoViewIfNeeded();
-    await serverCheckbox.check();
+    if ((await serverCheckbox.getAttribute("aria-checked")) !== "true") {
+      await serverCheckbox.click();
+    }
+    await expect(serverCheckbox).toHaveAttribute("aria-checked", "true");
     console.log(`[test] Checked MCP server checkbox`);
 
     // Scroll to bottom to find Save button
@@ -588,6 +591,7 @@ test.describe("Default Assistant MCP Integration", () => {
           forced_tool_id: assertedToolId,
           forced_tool_ids: [assertedToolId],
         },
+        waitForAiMessage: false,
       }
     );
     const invocationCounts = getToolPacketCounts(

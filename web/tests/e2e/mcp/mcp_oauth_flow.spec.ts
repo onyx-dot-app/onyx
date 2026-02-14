@@ -160,6 +160,7 @@ async function verifyToolInvocationFromChat(
       name: toolName,
       arguments: { name: `playwright-${Date.now()}` },
     }),
+    waitForAiMessage: false,
   });
   const startPackets = getPacketObjectsByType(
     packets,
@@ -799,6 +800,10 @@ async function logActionPopoverHtml(page: Page, context: string) {
 }
 
 async function closeActionsPopover(page: Page) {
+  if (page.isClosed()) {
+    return;
+  }
+
   const popover = page.locator(ACTION_POPOVER_SELECTOR);
   if ((await popover.count()) === 0) {
     return;
@@ -811,10 +816,12 @@ async function closeActionsPopover(page: Page) {
   const backButton = popover.getByRole("button", { name: /Back/i }).first();
   if ((await backButton.count()) > 0) {
     await backButton.click().catch(() => {});
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(200).catch(() => {});
   }
 
-  await page.keyboard.press("Escape").catch(() => {});
+  if (!page.isClosed()) {
+    await page.keyboard.press("Escape").catch(() => {});
+  }
 }
 
 function getServerRowLocator(page: Page, serverName: string) {
