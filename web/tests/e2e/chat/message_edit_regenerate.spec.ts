@@ -214,4 +214,109 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("2/2");
   });
+
+  test("Message editing with files", async ({ page }) => {
+    // Set up: log in and navigate to chat
+    await page.context().clearCookies();
+    await loginAsRandomUser(page);
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+
+    const testFileName = `test-edit-${Date.now()}.txt`;
+    const testFileContent = "This is a test file for editing with attachments.";
+    const buffer = Buffer.from(testFileContent, "utf-8");
+
+    // Click the attach files button to open the file picker popover
+    const attachButton = page.locator('button[aria-label="Attach Files"]');
+    await expect(attachButton).toBeVisible();
+
+    // Set up file chooser listener before clicking "Upload Files"
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await attachButton.click();
+    await page.getByText("Upload Files").click();
+    const fileChooser = await fileChooserPromise;
+
+    // Wait for upload API response
+    const uploadResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/user/projects/file/upload") &&
+        response.request().method() === "POST"
+    );
+
+    await fileChooser.setFiles({
+      name: testFileName,
+      mimeType: "text/plain",
+      buffer: buffer,
+    });
+
+    const uploadResponse = await uploadResponsePromise;
+    expect(uploadResponse.ok()).toBeTruthy();
+
+    // Wait for the file card to appear in the input area
+    await expect(page.getByText(testFileName)).toBeVisible({ timeout: 10000 });
+
+    // Type and send a message with the file attached
+    await page.locator("#onyx-chat-input-textarea").click();
+    await page.locator("#onyx-chat-input-textarea").fill("Summarize this file");
+    await page.locator("#onyx-chat-input-send-button").click();
+
+    // Wait for the AI response to complete
+    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
+      state: "visible",
+      timeout: 30000,
+    });
+
+    // Verify the file is displayed in the sent human message
+    const humanMessage = page.locator("#onyx-human-message").first();
+    const fileDisplay = humanMessage.locator("#onyx-file");
+    await expect(fileDisplay).toBeVisible();
+    await expect(fileDisplay.getByText(testFileName)).toBeVisible();
+
+    // Verify message text is displayed
+    const messageContent = await humanMessage.textContent();
+    expect(messageContent).toContain("Summarize this file");
+
+    // Hover and click the edit button
+    await humanMessage.hover();
+    const editButton = humanMessage
+      .locator('[data-testid="HumanMessage/edit-button"]')
+      .first();
+    await expect(editButton).toBeVisible();
+    await editButton.click();
+
+    // Edit the message text
+    const textarea = humanMessage.locator("textarea");
+    await textarea.fill("What does this file contain?");
+
+    // Submit the edit
+    const submitButton = humanMessage.locator('button:has-text("Submit")');
+    await submitButton.click();
+
+    // Wait for the new AI response to complete
+    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
+      state: "detached",
+    });
+    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
+      state: "visible",
+      timeout: 30000,
+    });
+
+    // Verify the edited message text is displayed
+    const editedHumanMessage = page.locator("#onyx-human-message").first();
+    const editedMessageContent = await editedHumanMessage.textContent();
+    expect(editedMessageContent).toContain("What does this file contain?");
+    expect(editedMessageContent).not.toContain("Summarize this file");
+
+    // Verify the file is still attached after editing
+    const editedFileDisplay = editedHumanMessage.locator("#onyx-file");
+    await expect(editedFileDisplay).toBeVisible();
+    await expect(editedFileDisplay.getByText(testFileName)).toBeVisible();
+
+    // Verify the version switcher shows 2/2 (original + edited)
+    const messageSwitcher = page
+      .getByTestId("MessageSwitcher/container")
+      .first();
+    await expect(messageSwitcher).toBeVisible();
+    await expect(messageSwitcher).toContainText("2/2");
+  });
 });
