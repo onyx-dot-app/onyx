@@ -5,6 +5,10 @@ import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpOauthServer, McpServerProcess } from "../utils/mcpServer";
 import { TEST_ADMIN_CREDENTIALS } from "../constants";
 import { logPageState } from "../utils/pageStateLogger";
+import {
+  getPacketObjectsByType,
+  sendMessageAndCaptureStreamPackets,
+} from "../utils/chatStream";
 
 const REQUIRED_ENV_VARS = [
   "MCP_OAUTH_CLIENT_ID",
@@ -133,6 +137,50 @@ function createStepLogger(testName: string) {
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
     console.log(`[mcp-oauth-step][${testName}] ${message} (+${elapsed}s)`);
   };
+}
+
+const getToolName = (packetObject: Record<string, unknown>): string | null => {
+  const value = packetObject.tool_name;
+  return typeof value === "string" ? value : null;
+};
+
+async function verifyToolInvocationFromChat(
+  page: Page,
+  toolName: string,
+  contextLabel: string
+) {
+  const prompt = [
+    `Call the MCP tool "${toolName}" now.`,
+    `Pass {"name":"playwright-${Date.now()}"} as the arguments.`,
+    "Return the exact tool output.",
+  ].join(" ");
+
+  const packets = await sendMessageAndCaptureStreamPackets(page, prompt, {
+    mockLlmResponse: JSON.stringify({
+      name: toolName,
+      arguments: { name: `playwright-${Date.now()}` },
+    }),
+  });
+  const startPackets = getPacketObjectsByType(
+    packets,
+    "custom_tool_start"
+  ).filter((packetObject) => getToolName(packetObject) === toolName);
+  const deltaPackets = getPacketObjectsByType(
+    packets,
+    "custom_tool_delta"
+  ).filter((packetObject) => getToolName(packetObject) === toolName);
+  const debugPackets = getPacketObjectsByType(
+    packets,
+    "tool_call_debug"
+  ).filter((packetObject) => getToolName(packetObject) === toolName);
+
+  expect(startPackets.length).toBeGreaterThan(0);
+  expect(deltaPackets.length).toBeGreaterThan(0);
+  expect(debugPackets.length).toBeGreaterThan(0);
+
+  console.log(
+    `[mcp-oauth-test] ${contextLabel}: tool invocation packets received for ${toolName}`
+  );
 }
 
 async function logoutSession(page: Page, contextLabel: string) {
@@ -1289,8 +1337,7 @@ test.describe("MCP OAuth flows", () => {
 
     logStep("Tools auto-fetched and enabled via UI");
 
-    const assistantEditorUrl =
-      "http://localhost:3000/app/agents/create?admin=true";
+    const assistantEditorUrl = `${APP_BASE_URL}/app/agents/create?admin=true`;
     let assistantPageLoaded = false;
     for (let attempt = 0; attempt < 2 && !assistantPageLoaded; attempt++) {
       await page.goto(assistantEditorUrl);
@@ -1381,6 +1428,12 @@ test.describe("MCP OAuth flows", () => {
     await ensureServerVisibleInActions(page, serverName);
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible before reauth");
+    await verifyToolInvocationFromChat(
+      page,
+      TOOL_NAMES.admin,
+      "AdminFlow pre-reauth"
+    );
+    logStep("Verified admin MCP tool invocation before reauth");
 
     await reauthenticateFromChat(
       page,
@@ -1390,6 +1443,12 @@ test.describe("MCP OAuth flows", () => {
     await ensureServerVisibleInActions(page, serverName);
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible after reauth");
+    await verifyToolInvocationFromChat(
+      page,
+      TOOL_NAMES.admin,
+      "AdminFlow post-reauth"
+    );
+    logStep("Verified admin MCP tool invocation after reauth");
 
     // Verify server card still shows the server and tools
     await page.goto("/admin/actions/mcp");
@@ -1613,7 +1672,7 @@ test.describe("MCP OAuth flows", () => {
           assistantName
         );
         assistantId = assistantRecord.id;
-        await page.goto(`http://localhost:3000/app?assistantId=${assistantId}`);
+        await page.goto(`${APP_BASE_URL}/app?assistantId=${assistantId}`);
         await page.waitForURL(/\/app\?assistantId=\d+/, { timeout: 20000 });
       }
       if (assistantId === null) {
@@ -1671,7 +1730,7 @@ test.describe("MCP OAuth flows", () => {
       await expect(serverLocator).not.toHaveCount(0, { timeout: 15000 });
 
       const editResponse = await curatorTwoPage.request.get(
-        `http://localhost:3000/api/admin/mcp/servers/${serverId}`
+        `${APP_BASE_URL}/api/admin/mcp/servers/${serverId}`
       );
       expect(editResponse.status()).toBe(403);
       await curatorTwoContext.close();
@@ -1742,5 +1801,7 @@ test.describe("MCP OAuth flows", () => {
 
     await verifyMcpToolRowVisible(page, serverName, toolName);
     logStep("Verified user MCP tool row visible after reauth");
+    await verifyToolInvocationFromChat(page, toolName, "UserFlow post-reauth");
+    logStep("Verified user MCP tool invocation after reauth");
   });
 });
