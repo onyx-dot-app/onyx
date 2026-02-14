@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import {
   DRAG_TYPES,
   DEFAULT_PERSONA_ID,
+  FEATURE_FLAGS,
   LOCAL_STORAGE_KEYS,
 } from "@/sections/sidebar/constants";
 import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
@@ -220,18 +221,28 @@ const MemoizedAppSidebarInner = memo(
 
     // Auto-show intro once when there's an undismissed notification
     // Don't show if tenant/invitation modal is open (e.g., "join existing team" modal)
+    // Gated by PostHog feature flag: if `craft-animation-disabled` is true (or
+    // PostHog is unavailable), skip the auto-show entirely.
+    const isCraftAnimationDisabled =
+      posthog?.isFeatureEnabled(FEATURE_FLAGS.CRAFT_ANIMATION_DISABLED) ?? true;
     const hasTenantModal = !!(newTenantInfo || invitationInfo);
     useEffect(() => {
       if (
         isOnyxCraftEnabled &&
         buildModeNotification &&
         !hasAutoTriggeredRef.current &&
-        !hasTenantModal
+        !hasTenantModal &&
+        !isCraftAnimationDisabled
       ) {
         hasAutoTriggeredRef.current = true;
         setShowIntroAnimation(true);
       }
-    }, [buildModeNotification, isOnyxCraftEnabled, hasTenantModal]);
+    }, [
+      buildModeNotification,
+      isOnyxCraftEnabled,
+      hasTenantModal,
+      isCraftAnimationDisabled,
+    ]);
 
     // Dismiss the build mode notification
     const dismissBuildModeNotification = useCallback(async () => {
