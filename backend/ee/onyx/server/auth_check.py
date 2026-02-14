@@ -5,6 +5,16 @@ from onyx.server.auth_check import PUBLIC_ENDPOINT_SPECS
 
 
 EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
+    # SCIM 2.0 — uses its own bearer token auth, not Onyx user auth
+    ("/scim/v2/ServiceProviderConfig", {"GET"}),
+    ("/scim/v2/ResourceTypes", {"GET"}),
+    ("/scim/v2/Schemas", {"GET"}),
+    ("/scim/v2/Users", {"GET"}),
+    ("/scim/v2/Users", {"POST"}),
+    ("/scim/v2/Users/{user_id}", {"GET"}),
+    ("/scim/v2/Users/{user_id}", {"PUT"}),
+    ("/scim/v2/Users/{user_id}", {"PATCH"}),
+    ("/scim/v2/Users/{user_id}", {"DELETE"}),
     # needs to be accessible prior to user login
     ("/enterprise-settings", {"GET"}),
     ("/enterprise-settings/logo", {"GET"}),
