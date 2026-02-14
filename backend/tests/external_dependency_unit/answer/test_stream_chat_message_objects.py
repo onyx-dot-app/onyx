@@ -6,15 +6,14 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import StreamingError
-from onyx.chat.process_message import stream_chat_message_objects
+from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import create_chat_session
 from onyx.db.models import RecencyBiasSetting
 from onyx.db.models import User
 from onyx.db.persona import upsert_persona
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import RetrievalDetails
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import Packet
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
@@ -100,18 +99,12 @@ def test_stream_chat_message_objects_without_web_search(
         persona_id=test_persona.id,
     )
     # Create the chat message request with a query that attempts to force web search
-    chat_request = CreateChatMessageRequest(
-        chat_session_id=chat_session.id,
-        parent_message_id=None,
+    chat_request = SendMessageRequest(
         message="run a web search for 'Onyx'",
-        file_descriptors=[],
-        prompt_override=None,
-        search_doc_ids=None,
-        retrieval_options=RetrievalDetails(),
-        query_override=None,
+        chat_session_id=chat_session.id,
     )
-    # Call stream_chat_message_objects
-    response_generator = stream_chat_message_objects(
+    # Call handle_stream_message_objects
+    response_generator = handle_stream_message_objects(
         new_msg_req=chat_request,
         user=test_user,
         db_session=db_session,

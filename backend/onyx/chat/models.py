@@ -1,71 +1,19 @@
-from collections.abc import Callable
 from collections.abc import Iterator
-from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import Field
 
 from onyx.configs.constants import MessageType
-from onyx.context.search.enums import SearchType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
-
-
-class StreamStopReason(Enum):
-    CONTEXT_LENGTH = "context_length"
-    CANCELLED = "cancelled"
-    FINISHED = "finished"
-
-
-class StreamType(Enum):
-    SUB_QUESTIONS = "sub_questions"
-    SUB_ANSWER = "sub_answer"
-    MAIN_ANSWER = "main_answer"
-
-
-class StreamStopInfo(BaseModel):
-    stop_reason: StreamStopReason
-
-    stream_type: StreamType = StreamType.MAIN_ANSWER
-
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        data = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
-        data["stop_reason"] = self.stop_reason.name
-        return data
-
-
-class UserKnowledgeFilePacket(BaseModel):
-    user_files: list[FileDescriptor]
-
-
-class RelevanceAnalysis(BaseModel):
-    relevant: bool
-    content: str | None = None
-
-
-class DocumentRelevance(BaseModel):
-    """Contains all relevance information for a given search"""
-
-    relevance_summaries: dict[str, RelevanceAnalysis]
-
-
-class OnyxAnswerPiece(BaseModel):
-    # A small piece of a complete answer. Used for streaming back answers.
-    answer_piece: str | None  # if None, specifies the end of an Answer
-
-
-class MessageResponseIDInfo(BaseModel):
-    user_message_id: int | None
-    reserved_assistant_message_id: int
 
 
 class StreamingError(BaseModel):
@@ -78,21 +26,9 @@ class StreamingError(BaseModel):
     details: dict | None = None  # Additional context (tool name, model name, etc.)
 
 
-class OnyxAnswer(BaseModel):
-    answer: str | None
-
-
-class FileChatDisplay(BaseModel):
-    file_ids: list[str]
-
-
 class CustomToolResponse(BaseModel):
     response: ToolResultType
     tool_name: str
-
-
-class ToolConfig(BaseModel):
-    id: int
 
 
 class ProjectSearchConfig(BaseModel):
@@ -102,81 +38,13 @@ class ProjectSearchConfig(BaseModel):
     disable_forced_tool: bool
 
 
-class PromptOverrideConfig(BaseModel):
-    name: str
-    description: str = ""
-    system_prompt: str
-    task_prompt: str = ""
-    datetime_aware: bool = True
-    include_citations: bool = True
-
-
-class PersonaOverrideConfig(BaseModel):
-    name: str
-    description: str
-    search_type: SearchType = SearchType.SEMANTIC
-    num_chunks: float | None = None
-    llm_relevance_filter: bool = False
-    llm_filter_extraction: bool = False
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
-
-    prompts: list[PromptOverrideConfig] = Field(default_factory=list)
-    # Note: prompt_ids removed - prompts are now embedded in personas
-
-    document_set_ids: list[int] = Field(default_factory=list)
-    tools: list[ToolConfig] = Field(default_factory=list)
-    tool_ids: list[int] = Field(default_factory=list)
-    custom_tools_openapi: list[dict[str, Any]] = Field(default_factory=list)
-
-
-AnswerQuestionPossibleReturn = (
-    OnyxAnswerPiece
-    | CitationInfo
-    | FileChatDisplay
-    | CustomToolResponse
-    | StreamingError
-    | StreamStopInfo
-)
-
-
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
 
 
-AnswerQuestionStreamReturn = Iterator[AnswerQuestionPossibleReturn]
-
-
-class LLMMetricsContainer(BaseModel):
-    prompt_tokens: int
-    response_tokens: int
-
-
-StreamProcessor = Callable[[Iterator[str]], AnswerQuestionStreamReturn]
-
-
-AnswerStreamPart = (
-    Packet
-    | StreamStopInfo
-    | MessageResponseIDInfo
-    | StreamingError
-    | UserKnowledgeFilePacket
-    | CreateChatSessionID
-)
+AnswerStreamPart = Packet | MessageResponseIDInfo | StreamingError | CreateChatSessionID
 
 AnswerStream = Iterator[AnswerStreamPart]
-
-
-class ChatBasicResponse(BaseModel):
-    # This is built piece by piece, any of these can be None as the flow could break
-    answer: str
-    answer_citationless: str
-
-    top_documents: list[SearchDoc]
-
-    error_msg: str | None
-    message_id: int
-    citation_info: list[CitationInfo]
 
 
 class ToolCallResponse(BaseModel):
@@ -191,8 +59,23 @@ class ToolCallResponse(BaseModel):
     pre_reasoning: str | None = None
 
 
+class ChatBasicResponse(BaseModel):
+    # This is built piece by piece, any of these can be None as the flow could break
+    answer: str
+    answer_citationless: str
+
+    top_documents: list[SearchDoc]
+
+    error_msg: str | None
+    message_id: int
+    citation_info: list[CitationInfo]
+
+
 class ChatFullResponse(BaseModel):
-    """Complete non-streaming response with all available data."""
+    """Complete non-streaming response with all available data.
+    NOTE: This model is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
+    experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
+    """
 
     # Core response fields
     answer: str

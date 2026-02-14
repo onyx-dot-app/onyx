@@ -17,11 +17,12 @@ disallow_untyped_defs = true
 warn_unused_ignores = true
 enable_error_code = ["possibly-undefined"]
 strict_equality = true
+# Patterns match paths whether mypy is run from backend/ (CI) or repo root (e.g. VS Code extension with target ./backend)
 exclude = [
-  "^generated/.*",
-  "^\\.venv/",
-  "^onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx/",
-  "^onyx/server/features/build/sandbox/kubernetes/docker/templates/venv/",
+  "(?:^|/)generated/",
+  "(?:^|/)\\.venv/",
+  "(?:^|/)onyx/server/features/build/sandbox/kubernetes/docker/skills/",
+  "(?:^|/)onyx/server/features/build/sandbox/kubernetes/docker/templates/",
 ]
 
 [[tool.mypy.overrides]]

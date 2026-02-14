@@ -67,6 +67,8 @@ def search_flow_classification(
     return SearchFlowClassificationResponse(is_search_flow=is_search_flow)
 
 
+# NOTE: This endpoint is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
+# experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 @router.post(
     "/send-search-message",
     response_model=None,

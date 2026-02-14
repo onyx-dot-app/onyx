@@ -7,8 +7,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import CreateChatSessionID
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.configs.constants import DocumentSource
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal

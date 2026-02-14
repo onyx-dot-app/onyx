@@ -37,7 +37,6 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.models import ExtractedProjectFiles
 from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import ProjectFileMetadata
 from onyx.chat.models import ProjectSearchConfig
 from onyx.chat.models import StreamingError
@@ -81,8 +80,7 @@ from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import OptionalSearchSetting
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -1025,68 +1023,6 @@ def llm_loop_completion_handle(
             compression_params=compression_params,
             tool_id_to_name=tool_id_to_name,
         )
-
-
-def stream_chat_message_objects(
-    new_msg_req: CreateChatMessageRequest,
-    user: User,
-    db_session: Session,
-    # if specified, uses the last user message and does not create a new user message based
-    # on the `new_msg_req.message`. Currently, requires a state where the last message is a
-    litellm_additional_headers: dict[str, str] | None = None,
-    custom_tool_additional_headers: dict[str, str] | None = None,
-    bypass_acl: bool = False,
-    # Additional context that should be included in the chat history, for example:
-    # Slack threads where the conversation cannot be represented by a chain of User/Assistant
-    # messages. Both of the below are used for Slack
-    # NOTE: is not stored in the database, only passed in to the LLM as context
-    additional_context: str | None = None,
-    # Slack context for federated Slack search
-    slack_context: SlackContext | None = None,
-) -> AnswerStream:
-    forced_tool_id = (
-        new_msg_req.forced_tool_ids[0] if new_msg_req.forced_tool_ids else None
-    )
-    if (
-        new_msg_req.retrieval_options
-        and new_msg_req.retrieval_options.run_search == OptionalSearchSetting.ALWAYS
-    ):
-        all_tools = get_tools(db_session)
-
-        search_tool_id = next(
-            (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
-            None,
-        )
-        forced_tool_id = search_tool_id
-
-    translated_new_msg_req = SendMessageRequest(
-        message=new_msg_req.message,
-        llm_override=new_msg_req.llm_override,
-        mock_llm_response=new_msg_req.mock_llm_response,
-        allowed_tool_ids=new_msg_req.allowed_tool_ids,
-        forced_tool_id=forced_tool_id,
-        file_descriptors=new_msg_req.file_descriptors,
-        internal_search_filters=(
-            new_msg_req.retrieval_options.filters
-            if new_msg_req.retrieval_options
-            else None
-        ),
-        deep_research=new_msg_req.deep_research,
-        parent_message_id=new_msg_req.parent_message_id,
-        chat_session_id=new_msg_req.chat_session_id,
-        origin=new_msg_req.origin,
-        include_citations=new_msg_req.include_citations,
-    )
-    return handle_stream_message_objects(
-        new_msg_req=translated_new_msg_req,
-        user=user,
-        db_session=db_session,
-        litellm_additional_headers=litellm_additional_headers,
-        custom_tool_additional_headers=custom_tool_additional_headers,
-        bypass_acl=bypass_acl,
-        additional_context=additional_context,
-        slack_context=slack_context,
-    )
 
 
 def remove_answer_citations(answer: str) -> str:
