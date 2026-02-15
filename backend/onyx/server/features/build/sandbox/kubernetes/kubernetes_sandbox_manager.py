@@ -353,6 +353,10 @@ class KubernetesSandboxManager(SandboxManager):
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
         self._skills_path = Path(__file__).parent / "docker" / "skills"
 
+        # Track ACP exec clients in memory - keyed by (sandbox_id, session_id) tuple
+        # Each session within a sandbox has its own ACP client (WebSocket connection)
+        self._acp_clients: dict[tuple[UUID, UUID], ACPExecClient] = {}
+
         logger.info(
             f"KubernetesSandboxManager initialized: "
             f"namespace={self._namespace}, image={self._image}"
@@ -1161,6 +1165,20 @@ done
         Args:
             sandbox_id: The sandbox ID to terminate
         """
+        # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
+        clients_to_stop = [
+            (key, cl) for key, cl in self._acp_clients.items() if key[0] == sandbox_id
+        ]
+        for key, cl in clients_to_stop:
+            try:
+                cl.stop()
+                del self._acp_clients[key]
+            except Exception as e:
+                logger.warning(
+                    f"Failed to stop ACP client for sandbox {sandbox_id}, "
+                    f"session {key[1]}: {e}"
+                )
+
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
 
@@ -1403,6 +1421,18 @@ echo "Session workspace setup complete"
             nextjs_port: Optional port where Next.js server is running (unused in K8s,
                         we use PID file instead)
         """
+        # Stop ACP client for this session
+        client_key = (sandbox_id, session_id)
+        acp_client = self._acp_clients.pop(client_key, None)
+        if acp_client:
+            try:
+                acp_client.stop()
+                logger.debug(f"Stopped ACP client for session {session_id}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to stop ACP client for session {session_id}: {e}"
+                )
+
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
@@ -1830,24 +1860,41 @@ echo "Session config regeneration complete"
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
-        # Log ACP client creation
-        packet_logger.log_acp_client_start(
-            sandbox_id, session_id, session_path, context="k8s"
-        )
+        # Get or create ACP client for this session
+        client_key = (sandbox_id, session_id)
+        client = self._acp_clients.get(client_key)
 
-        exec_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
+        if client is None or not client.is_running:
+            # Clean up stale client if it exists but is no longer running
+            if client is not None:
+                try:
+                    client.stop()
+                except Exception:
+                    pass
+
+            # Log ACP client creation
+            packet_logger.log_acp_client_start(
+                sandbox_id, session_id, session_path, context="k8s"
+            )
+            logger.info(
+                f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
+            )
+
+            # Create and start ACP client for this session
+            client = ACPExecClient(
+                pod_name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+            )
+            client.start(cwd=session_path)
+            self._acp_clients[client_key] = client
 
         # Log the send_message call at sandbox manager level
         packet_logger.log_session_start(session_id, sandbox_id, message)
 
         events_count = 0
         try:
-            exec_client.start(cwd=session_path)
-            for event in exec_client.send_message(message):
+            for event in client.send_message(message):
                 events_count += 1
                 yield event
 
@@ -1884,10 +1931,6 @@ echo "Session config regeneration complete"
                 events_count=events_count,
             )
             raise
-        finally:
-            exec_client.stop()
-            # Log client stop
-            packet_logger.log_acp_client_stop(sandbox_id, session_id, context="k8s")
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
