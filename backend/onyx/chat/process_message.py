@@ -4,7 +4,6 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
-import time
 import traceback
 from collections.abc import Callable
 from contextvars import Token
@@ -431,7 +430,6 @@ def handle_stream_message_objects(
     external_state_container: ChatStateContainer | None = None,
 ) -> AnswerStream:
     tenant_id = get_current_tenant_id()
-    processing_start_time = time.monotonic()
     mock_response_token: Token[str | None] | None = None
 
     llm: LLM | None = None
@@ -829,7 +827,6 @@ def handle_stream_message_objects(
                 assistant_message=assistant_response,
                 llm=llm,
                 reserved_tokens=reserved_token_count,
-                processing_start_time=processing_start_time,
             )
 
         # The stream generator can resume on a different worker thread after early yields.
@@ -962,7 +959,6 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
-    processing_start_time: float | None = None,  # noqa: ARG001
 ) -> None:
     chat_session_id = assistant_message.chat_session_id
 
