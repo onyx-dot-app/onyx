@@ -63,7 +63,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
           alignItems="center"
           height="fit"
         >
-          <Text secondaryBody text03 className="break-all">
+          <Text secondaryBody text03 className="break-words">
             {displayedItems
               .map((item) => convertObjectToString(item))
               .join(", ")}
@@ -74,8 +74,8 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
       return (
         <Section gap={0.25} alignItems="end" height="fit">
           {Object.entries(value).map(([key, val]) => (
-            <Text key={key} secondaryBody text03 className="break-all">
-              <Text as="span" mainContentEmphasis text03>
+            <Text key={key} secondaryBody text03 className="break-words">
+              <Text mainContentEmphasis text03>
                 {key}:
               </Text>{" "}
               {convertObjectToString(val)}
@@ -152,11 +152,13 @@ export function AdvancedConfigDisplay({
     if (seconds === null) return "-";
     const totalMinutes = seconds / 60;
 
+    // If it's 60 minutes or more and evenly divisible by 60, show in hours
     if (totalMinutes >= 60 && totalMinutes % 60 === 0) {
       const hours = totalMinutes / 60;
       return `${hours} hour${hours !== 1 ? "s" : ""}`;
     }
 
+    // Otherwise show in minutes
     const minutes = Math.round(totalMinutes);
     return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
   };
@@ -164,6 +166,7 @@ export function AdvancedConfigDisplay({
     if (seconds === null) return "-";
     const totalHours = seconds / 3600;
 
+    // If less than 1 hour, show in minutes
     if (totalHours < 1) {
       const minutes = Math.round(seconds / 60);
       return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
@@ -171,11 +174,13 @@ export function AdvancedConfigDisplay({
 
     const hours = Math.round(totalHours);
 
+    // If it's 24 hours or more and evenly divisible by 24, show in days
     if (hours >= 24 && hours % 24 === 0) {
       const days = hours / 24;
       return `${days} day${days !== 1 ? "s" : ""}`;
     }
 
+    // Otherwise show in hours
     return `${hours} hour${hours !== 1 ? "s" : ""}`;
   };
 
