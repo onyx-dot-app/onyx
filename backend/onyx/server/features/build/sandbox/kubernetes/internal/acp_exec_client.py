@@ -218,59 +218,76 @@ class ACPExecClient:
         buffer = ""
         packet_logger = get_packet_logger()
 
-        while not self._stop_reader.is_set():
-            if self._ws_client is None:
-                break
-
-            try:
-                if self._ws_client.is_open():
-                    # Read available data
-                    self._ws_client.update(timeout=0.1)
-
-                    # Read stdout (channel 1)
-                    data = self._ws_client.read_stdout(timeout=0.1)
-                    if data:
-                        buffer += data
-
-                        # Process complete lines
-                        while "\n" in buffer:
-                            line, buffer = buffer.split("\n", 1)
-                            line = line.strip()
-                            if line:
-                                try:
-                                    message = json.loads(line)
-                                    # Log the raw incoming message
-                                    packet_logger.log_jsonrpc_raw_message(
-                                        "IN", message, context="k8s"
-                                    )
-                                    self._response_queue.put(message)
-                                except json.JSONDecodeError:
-                                    packet_logger.log_raw(
-                                        "JSONRPC-PARSE-ERROR-K8S",
-                                        {
-                                            "raw_line": line[:500],
-                                            "error": "JSON decode failed",
-                                        },
-                                    )
-                                    logger.warning(
-                                        f"Invalid JSON from agent: {line[:100]}"
-                                    )
-
-                else:
-                    packet_logger.log_raw(
-                        "K8S-WEBSOCKET-CLOSED",
-                        {"pod": self._pod_name, "namespace": self._namespace},
-                    )
+        try:
+            while not self._stop_reader.is_set():
+                if self._ws_client is None:
                     break
 
-            except Exception as e:
-                if not self._stop_reader.is_set():
-                    packet_logger.log_raw(
-                        "K8S-READER-ERROR",
-                        {"error": str(e), "pod": self._pod_name},
+                try:
+                    if self._ws_client.is_open():
+                        # Read available data
+                        self._ws_client.update(timeout=0.1)
+
+                        # Read stdout (channel 1)
+                        data = self._ws_client.read_stdout(timeout=0.1)
+                        if data:
+                            buffer += data
+
+                            # Process complete lines
+                            while "\n" in buffer:
+                                line, buffer = buffer.split("\n", 1)
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        message = json.loads(line)
+                                        # Log the raw incoming message
+                                        packet_logger.log_jsonrpc_raw_message(
+                                            "IN", message, context="k8s"
+                                        )
+                                        self._response_queue.put(message)
+                                    except json.JSONDecodeError:
+                                        packet_logger.log_raw(
+                                            "JSONRPC-PARSE-ERROR-K8S",
+                                            {
+                                                "raw_line": line[:500],
+                                                "error": "JSON decode failed",
+                                            },
+                                        )
+                                        logger.warning(
+                                            f"Invalid JSON from agent: {line[:100]}"
+                                        )
+
+                    else:
+                        packet_logger.log_raw(
+                            "K8S-WEBSOCKET-CLOSED",
+                            {"pod": self._pod_name, "namespace": self._namespace},
+                        )
+                        break
+
+                except Exception as e:
+                    if not self._stop_reader.is_set():
+                        packet_logger.log_raw(
+                            "K8S-READER-ERROR",
+                            {"error": str(e), "pod": self._pod_name},
+                        )
+                        logger.debug(f"Reader error: {e}")
+                    break
+        finally:
+            # Flush any remaining data in buffer (e.g., PromptResponse without
+            # trailing newline when the WebSocket closes)
+            remaining = buffer.strip()
+            if remaining:
+                try:
+                    message = json.loads(remaining)
+                    packet_logger.log_jsonrpc_raw_message(
+                        "IN", message, context="k8s-flush"
                     )
-                    logger.debug(f"Reader error: {e}")
-                break
+                    self._response_queue.put(message)
+                except json.JSONDecodeError:
+                    packet_logger.log_raw(
+                        "K8S-BUFFER-FLUSH-FAILED",
+                        {"remaining": remaining[:500]},
+                    )
 
     def stop(self) -> None:
         """Stop the exec session and clean up."""
@@ -465,7 +482,63 @@ class ACPExecClient:
             try:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
                 last_event_time = time.time()  # Reset keepalive timer on event
+
+                # Diagnostic: log every dequeued message with id comparison
+                msg_id = message_data.get("id")
+                msg_method = message_data.get("method")
+                msg_keys = list(message_data.keys())
+                logger.debug(
+                    f"[ACP-DIAG] Dequeued message: id={msg_id} (type={type(msg_id).__name__}), "
+                    f"method={msg_method}, keys={msg_keys}, "
+                    f"request_id={request_id} (type={type(request_id).__name__}), "
+                    f"id_match={msg_id == request_id}"
+                )
             except Empty:
+                # Check if reader thread is still alive (equivalent to
+                # process.poll() in the local agent client). If the reader
+                # thread died, the WebSocket connection is gone and no more
+                # data will arrive — break instead of emitting keepalives
+                # forever.
+                if (
+                    self._reader_thread is not None
+                    and not self._reader_thread.is_alive()
+                ):
+                    # Drain any final messages the reader flushed before dying
+                    while not self._response_queue.empty():
+                        try:
+                            final_msg = self._response_queue.get_nowait()
+                            if final_msg.get("id") == request_id:
+                                if "error" in final_msg:
+                                    error_data = final_msg["error"]
+                                    yield Error(
+                                        code=error_data.get("code", -1),
+                                        message=error_data.get(
+                                            "message", "Unknown error"
+                                        ),
+                                    )
+                                else:
+                                    result = final_msg.get("result", {})
+                                    try:
+                                        yield PromptResponse.model_validate(result)
+                                    except ValidationError:
+                                        pass
+                                break
+                        except Empty:
+                            break
+
+                    packet_logger.log_raw(
+                        "ACP-CONNECTION-LOST-K8S",
+                        {
+                            "session_id": session_id,
+                            "events_yielded": events_yielded,
+                        },
+                    )
+                    logger.warning(
+                        f"Reader thread died for session {session_id}, "
+                        "ending message stream"
+                    )
+                    break
+
                 # Check if we need to send an SSE keepalive
                 idle_time = time.time() - last_event_time
                 if idle_time >= SSE_KEEPALIVE_INTERVAL:
@@ -480,8 +553,21 @@ class ACPExecClient:
                     last_event_time = time.time()  # Reset after yielding keepalive
                 continue
 
-            # Check for response to our prompt request
-            if message_data.get("id") == request_id:
+            # Check for response to our prompt request.
+            # A JSON-RPC response has "id" but no "method" field.
+            # Use str() comparison as a fallback — some ACP servers may echo
+            # the id back as a string even though we sent it as an integer.
+            msg_id = message_data.get("id")
+            is_response = "method" not in message_data and (
+                msg_id == request_id
+                or (msg_id is not None and str(msg_id) == str(request_id))
+            )
+            if is_response and msg_id != request_id:
+                logger.warning(
+                    f"[ACP] ID type mismatch: got {type(msg_id).__name__}({msg_id}), "
+                    f"expected {type(request_id).__name__}({request_id})"
+                )
+            if is_response:
                 if "error" in message_data:
                     error_data = message_data["error"]
                     packet_logger.log_jsonrpc_response(
@@ -533,12 +619,31 @@ class ACPExecClient:
                     context="k8s",
                 )
 
+                prompt_complete = False
                 for event in self._process_session_update(update):
                     events_yielded += 1
                     # Log each yielded event
                     event_type = self._get_event_type_name(event)
                     packet_logger.log_acp_event_yielded(event_type, event)
                     yield event
+                    # If PromptResponse arrived via notification, break
+                    if isinstance(event, PromptResponse):
+                        prompt_complete = True
+                        break
+
+                if prompt_complete:
+                    # Log completion summary
+                    elapsed_ms = (time.time() - start_time) * 1000
+                    packet_logger.log_raw(
+                        "ACP-SEND-MESSAGE-COMPLETE-K8S",
+                        {
+                            "session_id": session_id,
+                            "events_yielded": events_yielded,
+                            "elapsed_ms": elapsed_ms,
+                            "via": "session_update_notification",
+                        },
+                    )
+                    break
 
             # Handle requests from agent - send error response
             elif "method" in message_data and "id" in message_data:
@@ -550,6 +655,15 @@ class ACPExecClient:
                     message_data["id"],
                     -32601,
                     f"Method not supported: {message_data['method']}",
+                )
+
+            else:
+                # Message didn't match any handler — silently dropped
+                logger.warning(
+                    f"[ACP-DIAG] Dropped message: id={message_data.get('id')}, "
+                    f"method={message_data.get('method')}, "
+                    f"keys={list(message_data.keys())}, "
+                    f"request_id={request_id}"
                 )
 
     def _get_event_type_name(self, event: ACPEvent) -> str:
@@ -635,6 +749,20 @@ class ACPExecClient:
         elif update_type == "current_mode_update":
             try:
                 yield CurrentModeUpdate.model_validate(update)
+            except ValidationError as e:
+                packet_logger.log_raw(
+                    "ACP-VALIDATION-ERROR-K8S",
+                    {"update_type": update_type, "error": str(e), "update": update},
+                )
+
+        elif update_type == "prompt_response":
+            # Some ACP versions send PromptResponse as a session/update notification
+            # rather than (or in addition to) a JSON-RPC response.
+            logger.info(
+                "[ACP] Received prompt_response via session/update notification"
+            )
+            try:
+                yield PromptResponse.model_validate(update)
             except ValidationError as e:
                 packet_logger.log_raw(
                     "ACP-VALIDATION-ERROR-K8S",
