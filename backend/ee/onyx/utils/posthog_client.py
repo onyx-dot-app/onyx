@@ -18,25 +18,25 @@ def posthog_on_error(error: Any, items: Any) -> None:
     logger.error(f"PostHog error: {error}, items: {items}")
 
 
-posthog = Posthog(
-    project_api_key=POSTHOG_API_KEY,
-    host=POSTHOG_HOST,
-    debug=POSTHOG_DEBUG_LOGS_ENABLED,
-    on_error=posthog_on_error,
-)
+def _build_posthog_client(project_api_key: str | None) -> Posthog | None:
+    if not project_api_key:
+        return None
+
+    return Posthog(
+        project_api_key=project_api_key,
+        host=POSTHOG_HOST,
+        debug=POSTHOG_DEBUG_LOGS_ENABLED,
+        on_error=posthog_on_error,
+    )
+
+
+posthog = _build_posthog_client(POSTHOG_API_KEY)
 
 # For cross referencing between cloud and www Onyx sites
 # NOTE: These clients are separate because they are separate posthog projects.
 # We should eventually unify them into a single posthog project,
 # which would no longer require this workaround
-marketing_posthog = None
-if MARKETING_POSTHOG_API_KEY:
-    marketing_posthog = Posthog(
-        project_api_key=MARKETING_POSTHOG_API_KEY,
-        host=POSTHOG_HOST,
-        debug=POSTHOG_DEBUG_LOGS_ENABLED,
-        on_error=posthog_on_error,
-    )
+marketing_posthog = _build_posthog_client(MARKETING_POSTHOG_API_KEY)
 
 
 def capture_and_sync_with_alternate_posthog(
@@ -61,6 +61,9 @@ def capture_and_sync_with_alternate_posthog(
 
     try:
         if cloud_user_id := props.get("onyx_cloud_user_id"):
+            if not posthog:
+                return
+
             cloud_props = props.copy()
             cloud_props.pop("onyx_cloud_user_id", None)
 
