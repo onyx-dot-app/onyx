@@ -303,7 +303,7 @@ def test__build_llm_messages_for_summarization_skips_tool_responses() -> None:
         create_mock_message(3, "Assistant answer", 20, MessageType.ASSISTANT),
     ]
 
-    result = _build_llm_messages_for_summarization(messages, {})
+    result = _build_llm_messages_for_summarization(messages, {})  # type: ignore[arg-type]
 
     assert len(result) == 2
     assert isinstance(result[0], UserMessage)
