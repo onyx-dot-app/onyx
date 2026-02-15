@@ -18,7 +18,7 @@ IMPORTANT: Do not explicitly mention anything about the cutoff in your response.
 - The summary should be information dense and detailed.
 - The summary should be in paragraph format and long enough to capture all of the most prominent details.
 
-# Focus on:
+# Focus on
 - Key topics discussed.
 - Decisions made, tools used, and conclusions reached.
 - Open questions or unresolved items.
