@@ -33,7 +33,7 @@ There is a previous summary of the conversation. Build on top of this when const
 {previous_summary}
 """.rstrip()
 
-USER_REMINDER = f"Help summarize the conversation up to the cutoff point (do not mention anything related to the cutoff direclty in your response). It should be a long form summary of the conversation up to the cutoff point as marked by {CONTEXT_CUTOFF_START_MARKER}. Be thorough."
+USER_REMINDER = f"Help summarize the conversation up to the cutoff point (do not mention anything related to the cutoff directly in your response). It should be a long form summary of the conversation up to the cutoff point as marked by {CONTEXT_CUTOFF_START_MARKER}. Be thorough."
 
-PROGRESSIVE_USER_REMINDER = f"Update the existing summary by incorporating the new messages up to the cutoff point as marked by {CONTEXT_CUTOFF_START_MARKER} (do not mention anything related to the cutoff direclty in your response). Be thorough and maintain the long form summary format."
+PROGRESSIVE_USER_REMINDER = f"Update the existing summary by incorporating the new messages up to the cutoff point as marked by {CONTEXT_CUTOFF_START_MARKER} (do not mention anything related to the cutoff directly in your response). Be thorough and maintain the long form summary format."
 # ruff: noqa: E501, W605 end
