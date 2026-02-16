@@ -67,6 +67,8 @@ const OnboardingFlowInner = ({
         )}
       </div>
     ) : (
+      // When showOnboarding is false, the parent only renders this component
+      // if the admin hasn't set their name.
       <NonAdminStep />
     )
   ) : !user?.personalization?.name ? (

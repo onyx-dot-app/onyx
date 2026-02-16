@@ -854,6 +854,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         selectedAssistant={selectedAssistant || liveAssistant}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
+                        // Intentionally enabled during name-only onboarding (showOnboarding=false)
+                        // since LLM providers are already configured and the user can chat.
                         disabled={
                           (!llmManager.isLoadingProviders &&
                             llmManager.hasAnyProvider === false) ||
