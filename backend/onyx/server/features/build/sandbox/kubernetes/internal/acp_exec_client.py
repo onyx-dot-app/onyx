@@ -721,8 +721,15 @@ class ACPExecClient:
                 completion_reason = "timeout"
                 logger.warning(
                     f"[ACP] Prompt #{prompt_num} timeout: "
-                    f"acp_session={session_id} events={events_yielded}"
+                    f"acp_session={session_id} events={events_yielded}, "
+                    f"sending session/cancel"
                 )
+                try:
+                    self.cancel(session_id=session_id)
+                except Exception as cancel_err:
+                    logger.warning(
+                        f"[ACP] session/cancel failed on timeout: {cancel_err}"
+                    )
                 yield Error(code=-1, message="Timeout waiting for response")
                 break
 

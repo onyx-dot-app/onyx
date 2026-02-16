@@ -1994,8 +1994,15 @@ echo "Session config regeneration complete"
         except GeneratorExit:
             logger.warning(
                 f"[SANDBOX-ACP] GeneratorExit: session={session_id} "
-                f"events={events_count}"
+                f"events={events_count}, sending session/cancel"
             )
+            try:
+                acp_client.cancel(session_id=acp_session_id)
+            except Exception as cancel_err:
+                logger.warning(
+                    f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: "
+                    f"{cancel_err}"
+                )
             packet_logger.log_session_end(
                 session_id,
                 success=False,
@@ -2006,8 +2013,15 @@ echo "Session config regeneration complete"
         except Exception as e:
             logger.error(
                 f"[SANDBOX-ACP] Exception: session={session_id} "
-                f"events={events_count} error={e}"
+                f"events={events_count} error={e}, sending session/cancel"
             )
+            try:
+                acp_client.cancel(session_id=acp_session_id)
+            except Exception as cancel_err:
+                logger.warning(
+                    f"[SANDBOX-ACP] session/cancel failed on Exception: "
+                    f"{cancel_err}"
+                )
             packet_logger.log_session_end(
                 session_id,
                 success=False,
