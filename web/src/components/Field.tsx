@@ -693,6 +693,7 @@ interface BooleanFormFieldProps {
   optional?: boolean;
   tooltip?: string;
   disabledTooltip?: string;
+  disabledTooltipSide?: "top" | "bottom" | "left" | "right";
   onChange?: (checked: boolean) => void;
 }
 
@@ -707,6 +708,7 @@ export const BooleanFormField = memo(function BooleanFormField({
   disabled,
   tooltip,
   disabledTooltip,
+  disabledTooltipSide,
   onChange,
 }: BooleanFormFieldProps) {
   // Generate a stable, valid id from the field name for label association
@@ -714,48 +716,66 @@ export const BooleanFormField = memo(function BooleanFormField({
 
   return (
     <div>
-      <div className="flex items-center text-sm">
-        <FastField name={name} type="checkbox">
-          {({ field, form }: any) => (
+      <FastField
+        name={name}
+        type="checkbox"
+        disabled={disabled}
+        shouldUpdate={(next: any, prev: any) =>
+          next.disabled !== prev.disabled ||
+          next.formik.values !== prev.formik.values
+        }
+      >
+        {({ field, form }: any) => {
+          const toggle = () => {
+            if (!disabled) {
+              const newValue = !field.value;
+              form.setFieldValue(name, newValue);
+              if (onChange) onChange(newValue);
+            }
+          };
+
+          return (
             <SimpleTooltip
               // This may seem confusing, but we only want to show the `disabledTooltip` if and only if the `BooleanFormField` is disabled.
               // If it disabled, then we "enable" the showing of the tooltip. Thus, `disabled={!disabled}` is not a mistake.
               disabled={!disabled}
               tooltip={disabledTooltip}
+              side={disabledTooltipSide}
             >
-              <Checkbox
-                aria-label={`${label.toLowerCase().replace(" ", "-")}-checkbox`}
-                id={checkboxId}
-                className={`
-                     ${disabled ? "opacity-50" : ""}
-                     ${removeIndent ? "mr-2" : "mx-3"}`}
-                checked={Boolean(field.value)}
-                onCheckedChange={(checked) => {
-                  if (!disabled) form.setFieldValue(name, checked === true);
-                  if (onChange) onChange(checked === true);
-                }}
-              />
+              <div className="flex w-fit items-center text-sm">
+                <Checkbox
+                  aria-label={`${label
+                    .toLowerCase()
+                    .replace(" ", "-")}-checkbox`}
+                  id={checkboxId}
+                  className={`
+                       ${disabled ? "opacity-50" : ""}
+                       ${removeIndent ? "mr-2" : "mx-3"}`}
+                  checked={Boolean(field.value)}
+                  onCheckedChange={(checked) => {
+                    if (!disabled) form.setFieldValue(name, checked === true);
+                    if (onChange) onChange(checked === true);
+                  }}
+                />
+                {!noLabel && (
+                  <div
+                    className={disabled ? "" : "cursor-pointer"}
+                    onClick={toggle}
+                  >
+                    <div className="flex items-center gap-x-2">
+                      <Label small={small}>{`${label}${
+                        optional ? " (Optional)" : ""
+                      }`}</Label>
+                      {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+                    </div>
+                    {subtext && <SubLabel>{subtext}</SubLabel>}
+                  </div>
+                )}
+              </div>
             </SimpleTooltip>
-          )}
-        </FastField>
-        {!noLabel && (
-          <div>
-            <div className="flex items-center gap-x-2">
-              <Label
-                htmlFor={checkboxId}
-                small={small}
-                className="cursor-pointer"
-              >{`${label}${optional ? " (Optional)" : ""}`}</Label>
-              {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
-            </div>
-            {subtext && (
-              <label htmlFor={checkboxId} className="cursor-pointer">
-                <SubLabel>{subtext}</SubLabel>
-              </label>
-            )}
-          </div>
-        )}
-      </div>
+          );
+        }}
+      </FastField>
 
       <ErrorMessage
         name={name}

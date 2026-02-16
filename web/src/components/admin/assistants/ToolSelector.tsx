@@ -183,36 +183,8 @@ export function ToolSelector({
                 valid base URL.
               </div>
               <div>
-                <div>
-                  <span className="font-semibold">Open URL:</span> Open and read
-                  the content of URLs provided in the conversation.
-                </div>
-                {openUrlTool && setFieldValue && (
-                  <label className="flex items-center gap-2 cursor-pointer mt-1.5 ml-1">
-                    <input
-                      type="checkbox"
-                      checked={enabledToolsMap[openUrlTool.id] || false}
-                      onChange={(e) => {
-                        if (!isOpenUrlForced) {
-                          setFieldValue(
-                            `enabled_tools_map.${openUrlTool.id}`,
-                            e.target.checked
-                          );
-                        }
-                      }}
-                      disabled={isOpenUrlForced}
-                      className="h-3.5 w-3.5 rounded border-border-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    <span className="text-xs">
-                      Enable Open URL
-                      {isOpenUrlForced && (
-                        <span className="text-text-500 ml-1">
-                          (required for Web Search)
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                )}
+                <span className="font-semibold">Open URL:</span> Open and read
+                the content of URLs provided in the conversation.
               </div>
             </div>
           }
@@ -226,6 +198,7 @@ export function ToolSelector({
           subtext="Search through your organization's knowledge base and documents"
           disabled={searchToolDisabled}
           disabledTooltip={searchToolDisabledTooltip}
+          disabledTooltipSide="bottom"
         />
       )}
 
@@ -243,6 +216,17 @@ export function ToolSelector({
         />
       )}
 
+      {openUrlTool && setFieldValue && (
+        <BooleanFormField
+          name={`enabled_tools_map.${openUrlTool.id}`}
+          label="Open URL"
+          subtext="Open and read the content of URLs provided in the conversation"
+          disabled={isOpenUrlForced}
+          disabledTooltip="Required for Web Search"
+          disabledTooltipSide="bottom"
+        />
+      )}
+
       {imageGenerationTool && (
         <BooleanFormField
           name={`enabled_tools_map.${imageGenerationTool.id}`}
@@ -250,6 +234,7 @@ export function ToolSelector({
           subtext="Generate and manipulate images using AI-powered tools."
           disabled={imageGenerationDisabled}
           disabledTooltip={imageGenerationDisabledTooltip}
+          disabledTooltipSide="bottom"
         />
       )}
 
