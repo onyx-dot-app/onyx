@@ -7,11 +7,6 @@
 .zed
 .cursor
 !/.cursor/mcp.json
-.claude
-!/.claude/mcp.json
-
-# worktrees
-.worktrees
 
 # macos
 .DS_store
