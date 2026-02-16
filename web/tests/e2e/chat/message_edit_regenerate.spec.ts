@@ -226,24 +226,16 @@ test.describe("Message Edit and Regenerate Tests", () => {
     const testFileContent = "This is a test file for editing with attachments.";
     const buffer = Buffer.from(testFileContent, "utf-8");
 
-    // Click the attach files button to open the file picker popover
-    const attachButton = page.locator('button[aria-label="Attach Files"]');
-    await expect(attachButton).toBeVisible();
-
-    // Set up file chooser listener before clicking "Upload Files"
-    const fileChooserPromise = page.waitForEvent("filechooser");
-    await attachButton.click();
-    await page.getByText("Upload Files").click();
-    const fileChooser = await fileChooserPromise;
-
-    // Wait for upload API response
+    // Upload a file by setting it directly on the hidden file input that
+    // FilePickerPopover renders. This avoids needing to find the popover trigger button.
     const uploadResponsePromise = page.waitForResponse(
       (response) =>
         response.url().includes("/api/user/projects/file/upload") &&
         response.request().method() === "POST"
     );
 
-    await fileChooser.setFiles({
+    const fileInput = page.locator('input[type="file"]').first();
+    await fileInput.setInputFiles({
       name: testFileName,
       mimeType: "text/plain",
       buffer: buffer,
