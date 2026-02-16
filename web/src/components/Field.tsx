@@ -27,7 +27,7 @@ import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 
-import { transformLinkUri } from "@/lib/utils";
+import { cn, transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
 import { RichTextSubtext } from "./RichTextSubtext";
@@ -748,13 +748,16 @@ export const BooleanFormField = memo(function BooleanFormField({
                     .toLowerCase()
                     .replace(" ", "-")}-checkbox`}
                   id={checkboxId}
-                  className={`
-                       ${disabled ? "opacity-50" : ""}
-                       ${removeIndent ? "mr-2" : "mx-3"}`}
+                  className={cn(
+                    disabled && "opacity-50",
+                    removeIndent ? "mr-2" : "mx-3"
+                  )}
                   checked={Boolean(field.value)}
                   onCheckedChange={(checked) => {
-                    if (!disabled) form.setFieldValue(name, checked === true);
-                    if (onChange) onChange(checked === true);
+                    if (!disabled) {
+                      form.setFieldValue(name, checked === true);
+                      if (onChange) onChange(checked === true);
+                    }
                   }}
                 />
                 {!noLabel && (
