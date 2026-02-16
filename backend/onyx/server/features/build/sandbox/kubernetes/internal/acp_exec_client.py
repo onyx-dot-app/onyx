@@ -630,37 +630,10 @@ class ACPExecClient:
             "prompt": prompt_content,
         }
 
-        # Drain stale messages left over from previous prompts.
-        # These are typically usage_update or session_info_update notifications
-        # that arrived after the previous prompt completed. Without draining,
-        # a stale usage_update can be mistaken for the current prompt's end signal.
-        drained = 0
-        while not self._response_queue.empty():
-            try:
-                stale = self._response_queue.get_nowait()
-                drained += 1
-                update_type = (
-                    stale.get("params", {}).get("update", {}).get("sessionUpdate", "")
-                )
-                logger.info(
-                    f"[ACP] Drained stale message: "
-                    f"method={stale.get('method')} "
-                    f"id={stale.get('id')} "
-                    f"update={update_type} "
-                    f"keys={list(stale.keys())}"
-                )
-            except Empty:
-                break
-        if drained:
-            logger.info(f"[ACP] Drained {drained} stale messages before prompt")
-
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
         last_event_time = time.time()
         events_yielded = 0
-        content_events = (
-            0  # Track real content events (message chunks, tool calls, etc.)
-        )
         keepalive_count = 0
         completion_reason = "unknown"
 
@@ -772,59 +745,10 @@ class ACPExecClient:
             if message_data.get("method") == "session/update":
                 params_data = message_data.get("params", {})
                 update = params_data.get("update", {})
-                update_type = update.get("sessionUpdate")
 
-                # usage_update as implicit end-of-turn: ACP sometimes sends
-                # usage_update as the final packet without a prompt_response.
-                # Only treat it as completion if we've already received real
-                # content — otherwise it's likely a stale leftover.
-                if update_type == "usage_update":
-                    if content_events > 0:
-                        completion_reason = "usage_update_after_content"
-                        elapsed_ms = (time.time() - start_time) * 1000
-                        logger.info(
-                            f"[ACP] Prompt complete: "
-                            f"reason={completion_reason} acp_session={session_id} "
-                            f"events={events_yielded} "
-                            f"content_events={content_events} "
-                            f"elapsed={elapsed_ms:.0f}ms"
-                        )
-                        yield PromptResponse(stopReason="end_turn")
-                        break
-                    else:
-                        logger.info(
-                            "[ACP] Ignoring usage_update — no content events yet"
-                        )
-                        continue
-
-                prompt_complete = False
                 for event in self._process_session_update(update):
                     events_yielded += 1
-                    # Count real content events
-                    if isinstance(
-                        event,
-                        (
-                            AgentMessageChunk,
-                            AgentThoughtChunk,
-                            ToolCallStart,
-                            ToolCallProgress,
-                        ),
-                    ):
-                        content_events += 1
                     yield event
-                    if isinstance(event, PromptResponse):
-                        prompt_complete = True
-                        break
-
-                if prompt_complete:
-                    completion_reason = "prompt_response_via_notification"
-                    elapsed_ms = (time.time() - start_time) * 1000
-                    logger.info(
-                        f"[ACP] Prompt complete: "
-                        f"reason={completion_reason} acp_session={session_id} "
-                        f"events={events_yielded} elapsed={elapsed_ms:.0f}ms"
-                    )
-                    break
 
             # Handle requests from agent - send error response
             elif "method" in message_data and "id" in message_data:
@@ -852,7 +776,10 @@ class ACPExecClient:
         """Process a session/update notification and yield typed ACP schema objects."""
         update_type = update.get("sessionUpdate")
 
-        # Map update types to their ACP schema classes
+        # Map update types to their ACP schema classes.
+        # Note: prompt_response is intentionally excluded here — turn completion
+        # is determined by the JSON-RPC response to session/prompt, not by a
+        # session/update notification. This matches the ACP spec and Zed's impl.
         type_map: dict[str, type] = {
             "agent_message_chunk": AgentMessageChunk,
             "agent_thought_chunk": AgentThoughtChunk,
@@ -860,7 +787,6 @@ class ACPExecClient:
             "tool_call_update": ToolCallProgress,
             "plan": AgentPlanUpdate,
             "current_mode_update": CurrentModeUpdate,
-            "prompt_response": PromptResponse,
         }
 
         model_class = type_map.get(update_type)  # type: ignore[arg-type]
@@ -874,6 +800,7 @@ class ACPExecClient:
             "available_commands_update",
             "session_info_update",
             "usage_update",
+            "prompt_response",
         ):
             logger.debug(f"[ACP] Unknown update type: {update_type}")
 
