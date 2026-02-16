@@ -89,7 +89,7 @@ def _make_hierarchy_nodes() -> list[PydanticHierarchyNode]:
     ]
 
 
-def _make_slim_docs() -> list[SlimDocument]:
+def _make_slim_docs() -> list[SlimDocument | PydanticHierarchyNode]:
     return [SlimDocument(id=doc_id) for doc_id in SLIM_DOC_IDS]
 
 
