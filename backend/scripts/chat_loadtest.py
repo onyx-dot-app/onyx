@@ -88,7 +88,7 @@ class ChatLoadTester:
         token_count = 0
 
         async with session.post(
-            f"{self.base_url}/chat/send-message",
+            f"{self.base_url}/chat/send-chat-message",
             headers=self.headers,
             json={
                 "chat_session_id": chat_session_id,

@@ -1,18 +1,15 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import model_validator
 
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SessionType
 from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import ChunkContext
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import Tag
@@ -20,7 +17,6 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import Packet
 
 
@@ -40,8 +36,9 @@ class MessageOrigin(str, Enum):
     UNSET = "unset"
 
 
-if TYPE_CHECKING:
-    pass
+class MessageResponseIDInfo(BaseModel):
+    user_message_id: int | None
+    reserved_assistant_message_id: int
 
 
 class SourceTag(Tag):
@@ -83,6 +80,8 @@ class ChatFeedbackRequest(BaseModel):
         return self
 
 
+# NOTE: This model is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
+# experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 class SendMessageRequest(BaseModel):
     message: str
 
@@ -139,115 +138,6 @@ class SendMessageRequest(BaseModel):
                 "Only one of chat_session_id or chat_session_info should be provided, not both."
             )
         return self
-
-
-class OptionalSearchSetting(str, Enum):
-    ALWAYS = "always"
-    NEVER = "never"
-    # Determine whether to run search based on history and latest query
-    AUTO = "auto"
-
-
-class RetrievalDetails(ChunkContext):
-    # Use LLM to determine whether to do a retrieval or only rely on existing history
-    # If the Persona is configured to not run search (0 chunks), this is bypassed
-    # If no Prompt is configured, the only search results are shown, this is bypassed
-    run_search: OptionalSearchSetting = OptionalSearchSetting.AUTO
-    # Is this a real-time/streaming call or a question where Onyx can take more time?
-    # Used to determine reranking flow
-    real_time: bool = True
-    # The following have defaults in the Persona settings which can be overridden via
-    # the query, if None, then use Persona settings
-    filters: BaseFilters | None = None
-    enable_auto_detect_filters: bool | None = None
-    # if None, no offset / limit
-    offset: int | None = None
-    limit: int | None = None
-
-    # If this is set, only the highest matching chunk (or merged chunks) is returned
-    dedupe_docs: bool = False
-
-
-class CreateChatMessageRequest(ChunkContext):
-    """Before creating messages, be sure to create a chat_session and get an id"""
-
-    chat_session_id: UUID
-    # This is the primary-key (unique identifier) for the previous message of the tree
-    parent_message_id: int | None
-
-    # New message contents
-    message: str
-    # Files that we should attach to this message
-    file_descriptors: list[FileDescriptor] = []
-    # Prompts are embedded in personas, so no separate prompt_id needed
-    # If search_doc_ids provided, it should use those docs explicitly
-    search_doc_ids: list[int] | None
-    retrieval_options: RetrievalDetails | None
-    # allows the caller to specify the exact search query they want to use
-    # will disable Query Rewording if specified
-    query_override: str | None = None
-
-    # enables additional handling to ensure that we regenerate with a given user message ID
-    regenerate: bool | None = None
-
-    # allows the caller to override the Persona / Prompt
-    # these do not persist in the chat thread details
-    llm_override: LLMOverride | None = None
-    # Test-only override for deterministic LiteLLM mock responses.
-    mock_llm_response: str | None = None
-    prompt_override: PromptOverride | None = None
-
-    # Allows the caller to override the temperature for the chat session
-    # this does persist in the chat thread details
-    temperature_override: float | None = None
-
-    # allow user to specify an alternate assistant
-    alternate_assistant_id: int | None = None
-
-    # This takes the priority over the prompt_override
-    # This won't be a type that's passed in directly from the API
-    persona_override_config: PersonaOverrideConfig | None = None
-
-    # used for seeded chats to kick off the generation of an AI answer
-    use_existing_user_message: bool = False
-
-    # used for "OpenAI Assistants API"
-    existing_assistant_message_id: int | None = None
-
-    # forces the LLM to return a structured response, see
-    # https://platform.openai.com/docs/guides/structured-outputs/introduction
-    structured_response_format: dict | None = None
-
-    skip_gen_ai_answer_generation: bool = False
-
-    # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
-    allowed_tool_ids: list[int] | None = None
-
-    # List of tool IDs we MUST use.
-    # TODO: make this a single one since unclear how to force this for multiple at a time.
-    forced_tool_ids: list[int] | None = None
-
-    deep_research: bool = False
-
-    # When True (default), enables citation generation with markers and CitationInfo packets
-    # When False, disables citations: removes markers like [1], [2] and skips CitationInfo packets
-    include_citations: bool = True
-
-    # Origin of the message for telemetry tracking
-    origin: MessageOrigin = MessageOrigin.UNKNOWN
-
-    @model_validator(mode="after")
-    def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
-        if self.search_doc_ids is None and self.retrieval_options is None:
-            raise ValueError(
-                "Either search_doc_ids or retrieval_options must be provided, but not both or neither."
-            )
-        return self
-
-    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        data = super().model_dump(*args, **kwargs)
-        data["chat_session_id"] = str(data["chat_session_id"])
-        return data
 
 
 class ChatMessageIdentifier(BaseModel):
@@ -365,13 +255,3 @@ class ChatSearchResponse(BaseModel):
     groups: list[ChatSessionGroup]
     has_more: bool
     next_page: int | None = None
-
-
-class ChatSearchRequest(BaseModel):
-    query: str | None = None
-    page: int = 1
-    page_size: int = 10
-
-
-class CreateChatResponse(BaseModel):
-    chat_session_id: str

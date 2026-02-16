@@ -1,12 +1,17 @@
-import { ValidSources } from "@/lib/types";
-import { EditIcon } from "@/components/icons/icons";
+"use client";
 
 import { useState } from "react";
-import { ChevronUpIcon } from "lucide-react";
-import { ChevronDownIcon } from "@/components/icons/icons";
+
+import { ValidSources } from "@/lib/types";
+import { Section } from "@/layouts/general-layouts";
+import Text from "@/refresh-components/texts/Text";
+import IconButton from "@/refresh-components/buttons/IconButton";
+import Button from "@/refresh-components/buttons/Button";
+import Separator from "@/refresh-components/Separator";
+import { SvgChevronUp, SvgChevronDown, SvgEdit } from "@opal/icons";
+import Truncated from "@/refresh-components/texts/Truncated";
 
 function convertObjectToString(obj: any): string | any {
-  // Check if obj is an object and not an array or null
   if (typeof obj === "object" && obj !== null) {
     if (!Array.isArray(obj)) {
       return JSON.stringify(obj);
@@ -28,8 +33,6 @@ export function buildConfigEntries(
   sourceType: ValidSources
 ): { [key: string]: string } {
   if (sourceType === ValidSources.File) {
-    // File connectors show files in the InlineFileManagement component
-    // Don't show file_names or file_locations in the config display
     return {};
   } else if (sourceType === ValidSources.GoogleSites) {
     return {
@@ -39,15 +42,13 @@ export function buildConfigEntries(
   return obj;
 }
 
-function ConfigItem({
-  label,
-  value,
-  onEdit,
-}: {
+interface ConfigItemProps {
   label: string;
   value: any;
   onEdit?: () => void;
-}) {
+}
+
+function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isExpandable = Array.isArray(value) && value.length > 5;
 
@@ -55,69 +56,82 @@ function ConfigItem({
     if (Array.isArray(value)) {
       const displayedItems = isExpanded ? value : value.slice(0, 5);
       return (
-        <ul className="list-disc pl-4 overflow-x-auto">
-          {displayedItems.map((item, index) => (
-            <li
-              key={index}
-              className="mb-1 overflow-hidden text-ellipsis whitespace-nowrap"
-            >
-              {convertObjectToString(item)}
-            </li>
-          ))}
-        </ul>
+        <Section
+          flexDirection="row"
+          gap={0.25}
+          justifyContent="end"
+          alignItems="center"
+          height="fit"
+        >
+          <Text secondaryBody text03 className="break-words">
+            {displayedItems
+              .map((item) => convertObjectToString(item))
+              .join(", ")}
+          </Text>
+        </Section>
       );
     } else if (typeof value === "object" && value !== null) {
       return (
-        <div className="overflow-x-auto">
+        <Section gap={0.25} alignItems="end" height="fit">
           {Object.entries(value).map(([key, val]) => (
-            <div key={key} className="mb-1">
-              <span className="font-semibold">{key}:</span>{" "}
+            <Text key={key} secondaryBody text03 className="break-words">
+              <Text mainContentEmphasis text03>
+                {key}:
+              </Text>{" "}
               {convertObjectToString(val)}
-            </div>
+            </Text>
           ))}
-        </div>
+        </Section>
+      );
+    } else if (typeof value === "boolean") {
+      return (
+        <Text secondaryBody text03 className="text-right">
+          {value ? "True" : "False"}
+        </Text>
       );
     }
-    // TODO: figure out a nice way to display boolean values
-    else if (typeof value === "boolean") {
-      return value ? "True" : "False";
-    }
-    return convertObjectToString(value) || "-";
+    return (
+      <Truncated secondaryBody text03 className="text-right">
+        {convertObjectToString(value) || "-"}
+      </Truncated>
+    );
   };
 
   return (
-    <li className="w-full py-4 px-1">
-      <div className="flex items-center w-full">
-        <span className="text-sm">{label}</span>
-        <div className="text-right overflow-x-auto max-w-[60%] text-sm font-normal ml-auto">
-          {renderValue()}
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      alignItems="center"
+      gap={1}
+    >
+      <Section alignItems="start">
+        <Text mainUiBody text04>
+          {label}
+        </Text>
+      </Section>
+      <Section
+        flexDirection="row"
+        justifyContent="end"
+        alignItems="center"
+        gap={0.5}
+      >
+        {renderValue()}
 
-          {isExpandable && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="mt-2 text-sm text-text-600 hover:text-text-800 flex items-center ml-auto"
-            >
-              {isExpanded ? (
-                <>
-                  <ChevronUpIcon className="h-4 w-4 mr-1" />
-                  Show less
-                </>
-              ) : (
-                <>
-                  <ChevronDownIcon className="h-4 w-4 mr-1" />
-                  Show all ({value.length} items)
-                </>
-              )}
-            </button>
-          )}
-        </div>
-        {onEdit && (
-          <button onClick={onEdit} className="ml-4">
-            <EditIcon size={12} />
-          </button>
+        {isExpandable && (
+          <Button
+            tertiary
+            size="md"
+            leftIcon={isExpanded ? SvgChevronUp : SvgChevronDown}
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? "Show less" : `Show all (${value.length} items)`}
+          </Button>
         )}
-      </div>
-    </li>
+        {onEdit && (
+          <IconButton icon={SvgEdit} tertiary onClick={onEdit} tooltip="Edit" />
+        )}
+      </Section>
+    </Section>
   );
 }
 
@@ -182,31 +196,38 @@ export function AdvancedConfigDisplay({
     });
   };
 
+  const items = [
+    pruneFreq !== null && {
+      label: "Pruning Frequency",
+      value: formatPruneFrequency(pruneFreq),
+      onEdit: onPruningEdit,
+    },
+    refreshFreq && {
+      label: "Refresh Frequency",
+      value: formatRefreshFrequency(refreshFreq),
+      onEdit: onRefreshEdit,
+    },
+    indexingStart && {
+      label: "Indexing Start",
+      value: formatDate(indexingStart),
+    },
+  ].filter(Boolean) as ConfigItemProps[];
+
   return (
-    <div>
-      <ul className="w-full divide-y divide-neutral-200 dark:divide-neutral-700">
-        {pruneFreq !== null && (
-          <ConfigItem
-            label="Pruning Frequency"
-            value={formatPruneFrequency(pruneFreq)}
-            onEdit={onPruningEdit}
-          />
-        )}
-        {refreshFreq && (
-          <ConfigItem
-            label="Refresh Frequency"
-            value={formatRefreshFrequency(refreshFreq)}
-            onEdit={onRefreshEdit}
-          />
-        )}
-        {indexingStart && (
-          <ConfigItem
-            label="Indexing Start"
-            value={formatDate(indexingStart)}
-          />
-        )}
-      </ul>
-    </div>
+    <Section gap={0} height="fit">
+      {items.map((item, index) => (
+        <div key={item.label} className="w-full">
+          <div className="py-4">
+            <ConfigItem
+              label={item.label}
+              value={item.value}
+              onEdit={item.onEdit}
+            />
+          </div>
+          {index < items.length - 1 && <Separator noPadding />}
+        </div>
+      ))}
+    </Section>
   );
 }
 
@@ -217,16 +238,22 @@ export function ConfigDisplay({
   configEntries: { [key: string]: string };
   onEdit?: (key: string) => void;
 }) {
+  const entries = Object.entries(configEntries);
+
   return (
-    <ul className="w-full divide-y divide-background-200 dark:divide-background-700">
-      {Object.entries(configEntries).map(([key, value]) => (
-        <ConfigItem
-          key={key}
-          label={key}
-          value={value}
-          onEdit={onEdit ? () => onEdit(key) : undefined}
-        />
+    <Section gap={0} height="fit">
+      {entries.map(([key, value], index) => (
+        <div key={key} className="w-full">
+          <div className="py-4">
+            <ConfigItem
+              label={key}
+              value={value}
+              onEdit={onEdit ? () => onEdit(key) : undefined}
+            />
+          </div>
+          {index < entries.length - 1 && <Separator noPadding />}
+        </div>
       ))}
-    </ul>
+    </Section>
   );
 }

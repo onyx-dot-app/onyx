@@ -3,34 +3,26 @@ from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import is_user_admin
 from onyx.chat.models import ChatHistoryResult
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import FileToolMetadata
-from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
-from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
-from onyx.db.llm import fetch_existing_doc_sets
-from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.models import Tool
-from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.projects import check_project_ownership
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -47,9 +39,6 @@ from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ToolCallKickoff
-from onyx.tools.tool_implementations.custom.custom_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
-)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
@@ -276,70 +265,6 @@ def extract_headers(
             if lowercase_key in headers:
                 extracted_headers[lowercase_key] = headers[lowercase_key]
     return extracted_headers
-
-
-def create_temporary_persona(
-    persona_config: PersonaOverrideConfig, db_session: Session, user: User
-) -> Persona:
-    if not is_user_admin(user):
-        raise HTTPException(
-            status_code=403,
-            detail="User is not authorized to create a persona in one shot queries",
-        )
-
-    """Create a temporary Persona object from the provided configuration."""
-    persona = Persona(
-        name=persona_config.name,
-        description=persona_config.description,
-        num_chunks=persona_config.num_chunks,
-        llm_relevance_filter=persona_config.llm_relevance_filter,
-        llm_filter_extraction=persona_config.llm_filter_extraction,
-        recency_bias=RecencyBiasSetting.BASE_DECAY,
-        llm_model_provider_override=persona_config.llm_model_provider_override,
-        llm_model_version_override=persona_config.llm_model_version_override,
-    )
-
-    if persona_config.prompts:
-        # Use the first prompt from the override config for embedded prompt fields
-        first_prompt = persona_config.prompts[0]
-        persona.system_prompt = first_prompt.system_prompt
-        persona.task_prompt = first_prompt.task_prompt
-        persona.datetime_aware = first_prompt.datetime_aware
-
-    persona.tools = []
-    if persona_config.custom_tools_openapi:
-        from onyx.chat.emitter import get_default_emitter
-
-        for schema in persona_config.custom_tools_openapi:
-            tools = cast(
-                list[Tool],
-                build_custom_tools_from_openapi_schema_and_headers(
-                    tool_id=0,  # dummy tool id
-                    openapi_schema=schema,
-                    emitter=get_default_emitter(),
-                ),
-            )
-            persona.tools.extend(tools)
-
-    if persona_config.tools:
-        tool_ids = [tool.id for tool in persona_config.tools]
-        persona.tools.extend(
-            fetch_existing_tools(db_session=db_session, tool_ids=tool_ids)
-        )
-
-    if persona_config.tool_ids:
-        persona.tools.extend(
-            fetch_existing_tools(
-                db_session=db_session, tool_ids=persona_config.tool_ids
-            )
-        )
-
-    fetched_docs = fetch_existing_doc_sets(
-        db_session=db_session, doc_ids=persona_config.document_set_ids
-    )
-    persona.document_sets = fetched_docs
-
-    return persona
 
 
 def process_kg_commands(

@@ -8,7 +8,6 @@ import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import MessageResponseIDInfo
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
@@ -21,6 +20,7 @@ from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.chat_backend import create_new_chat_session
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from tests.external_dependency_unit.answer.stream_test_assertions import (
     assert_answer_stream_part_correct,
 )

@@ -1,7 +1,5 @@
 from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
-from onyx.server.query_and_chat.models import OptionalSearchSetting
-from onyx.server.query_and_chat.models import RetrievalDetails
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -172,7 +170,7 @@ def test_run_search_always_maps_to_forced_search_tool(admin_user: DATestUser) ->
         chat_session_id=chat_session.id,
         message="always run search",
         user_performing_action=admin_user,
-        retrieval_options=RetrievalDetails(run_search=OptionalSearchSetting.ALWAYS),
+        forced_tool_ids=[search_tool_id],
         mock_llm_response='{"name":"internal_search","arguments":{"queries":["gamma"]}}',
     )
 

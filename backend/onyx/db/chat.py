@@ -19,7 +19,6 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
@@ -669,27 +668,6 @@ def set_as_latest_chat_message(
 
     parent_message.latest_child_message_id = chat_message.id
 
-    db_session.commit()
-
-
-def update_search_docs_table_with_relevance(
-    db_session: Session,
-    reference_db_search_docs: list[DBSearchDoc],
-    relevance_summary: DocumentRelevance,
-) -> None:
-    for search_doc in reference_db_search_docs:
-        relevance_data = relevance_summary.relevance_summaries.get(
-            search_doc.document_id
-        )
-        if relevance_data is not None:
-            db_session.execute(
-                update(DBSearchDoc)
-                .where(DBSearchDoc.id == search_doc.id)
-                .values(
-                    is_relevant=relevance_data.relevant,
-                    relevance_explanation=relevance_data.content,
-                )
-            )
     db_session.commit()
 
 

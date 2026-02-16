@@ -367,7 +367,6 @@ webserver:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -457,7 +456,6 @@ api:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -553,7 +551,6 @@ celery_worker_heavy:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -587,7 +584,6 @@ celery_worker_docprocessing:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -621,7 +617,6 @@ celery_worker_light:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -655,7 +650,6 @@ celery_worker_monitoring:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -689,7 +683,6 @@ celery_worker_primary:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -723,7 +716,6 @@ celery_worker_user_file_processing:
     # KEDA specific configurations
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations
@@ -868,7 +860,6 @@ celery_worker_docfetching:
     # KEDA specific configurations (only used when autoscaling.engine is set to 'keda')
     pollingInterval: 30  # seconds
     cooldownPeriod: 300  # seconds
-    idleReplicaCount: 1  # minimum replicas when idle
     failureThreshold: 3  # number of failures before fallback
     fallbackReplicas: 1  # replicas to maintain on failure
     # Custom triggers for advanced KEDA configurations

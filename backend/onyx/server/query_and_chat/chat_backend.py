@@ -30,7 +30,6 @@ from onyx.chat.models import ChatFullResponse
 from onyx.chat.models import CreateChatSessionID
 from onyx.chat.process_message import gather_stream_full
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.chat.process_message import stream_chat_message_objects
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -40,8 +39,6 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import add_chats_to_session_from_slack_thread
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import delete_all_chat_sessions_for_user
 from onyx.db.chat import delete_chat_session
 from onyx.db.chat import duplicate_chat_session_for_user_from_slack
@@ -49,7 +46,6 @@ from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
-from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
@@ -71,7 +67,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.redis.redis_pool import get_redis_client
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
@@ -86,10 +81,7 @@ from onyx.server.query_and_chat.models import ChatSessionGroup
 from onyx.server.query_and_chat.models import ChatSessionsResponse
 from onyx.server.query_and_chat.models import ChatSessionSummary
 from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import LLMOverride
 from onyx.server.query_and_chat.models import MessageOrigin
-from onyx.server.query_and_chat.models import PromptOverride
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
@@ -503,71 +495,8 @@ def delete_chat_session_by_id(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# WARNING: this endpoint is deprecated and will be removed soon. Use the new send-chat-message endpoint instead.
-@router.post("/send-message")
-def handle_new_chat_message(
-    chat_message_req: CreateChatMessageRequest,
-    request: Request,
-    user: User = Depends(current_chat_accessible_user),
-    _rate_limit_check: None = Depends(check_token_rate_limits),
-    _api_key_usage_check: None = Depends(check_api_key_usage),
-) -> StreamingResponse:
-    """
-    This endpoint is both used for all the following purposes:
-    - Sending a new message in the session
-    - Regenerating a message in the session (just send the same one again)
-    - Editing a message (similar to regenerating but sending a different message)
-    - Kicking off a seeded chat session (set `use_existing_user_message`)
-
-    Assumes that previous messages have been set as the latest to minimize overhead.
-
-    Args:
-        chat_message_req (CreateChatMessageRequest): Details about the new chat message.
-        request (Request): The current HTTP request context.
-        user (User): The current user, obtained via dependency injection.
-        _ (None): Rate limit check is run if user/group/global rate limits are enabled.
-
-    Returns:
-        StreamingResponse: Streams the response to the new chat message.
-    """
-    tenant_id = get_current_tenant_id()
-    logger.debug(f"Received new chat message: {chat_message_req.message}")
-
-    if not chat_message_req.message and not chat_message_req.use_existing_user_message:
-        raise HTTPException(status_code=400, detail="Empty chat message is invalid")
-
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=tenant_id if user.is_anonymous else user.email,
-        event=MilestoneRecordType.RAN_QUERY,
-    )
-
-    def stream_generator() -> Generator[str, None, None]:
-        try:
-            with get_session_with_current_tenant() as db_session:
-                for obj in stream_chat_message_objects(
-                    new_msg_req=chat_message_req,
-                    user=user,
-                    db_session=db_session,
-                    litellm_additional_headers=extract_headers(
-                        request.headers, LITELLM_PASS_THROUGH_HEADERS
-                    ),
-                    custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                        request.headers
-                    ),
-                ):
-                    yield get_json_line(obj.model_dump())
-
-        except Exception as e:
-            logger.exception("Error in chat message streaming")
-            yield json.dumps({"error": str(e)})
-
-        finally:
-            logger.debug("Stream generator finished")
-
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
-
+# NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
+# team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
 @router.post(
     "/send-chat-message",
     response_model=ChatFullResponse,
@@ -813,77 +742,6 @@ def get_available_context_tokens_for_session(
 
 
 """Endpoints for chat seeding"""
-
-
-class ChatSeedRequest(BaseModel):
-    # standard chat session stuff
-    persona_id: int
-
-    # overrides / seeding
-    llm_override: LLMOverride | None = None
-    prompt_override: PromptOverride | None = None
-    description: str | None = None
-    message: str | None = None
-
-    # TODO: support this
-    # initial_message_retrieval_options: RetrievalDetails | None = None
-
-
-class ChatSeedResponse(BaseModel):
-    redirect_url: str
-
-
-@router.post("/seed-chat-session", tags=PUBLIC_API_TAGS)
-def seed_chat(
-    chat_seed_request: ChatSeedRequest,
-    # NOTE: This endpoint is designed for programmatic access (API keys, external services)
-    # rather than authenticated user sessions. The user parameter is used for access control
-    # but the created chat session is "unassigned" (user_id=None) until a user visits the web UI.
-    # This allows external systems to pre-seed chat sessions that users can then access.
-    user: User = Depends(current_chat_accessible_user),
-    db_session: Session = Depends(get_session),
-) -> ChatSeedResponse:
-
-    try:
-        new_chat_session = create_chat_session(
-            db_session=db_session,
-            description=chat_seed_request.description or "",
-            user_id=None,  # this chat session is "unassigned" until a user visits the web UI
-            persona_id=chat_seed_request.persona_id,
-            llm_override=chat_seed_request.llm_override,
-            prompt_override=chat_seed_request.prompt_override,
-        )
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=400, detail="Invalid Persona provided.")
-
-    if chat_seed_request.message is not None:
-        root_message = get_or_create_root_message(
-            chat_session_id=new_chat_session.id, db_session=db_session
-        )
-        llm = get_llm_for_persona(
-            persona=new_chat_session.persona,
-            user=user,
-        )
-
-        tokenizer = get_tokenizer(
-            model_name=llm.config.model_name,
-            provider_type=llm.config.model_provider,
-        )
-        token_count = len(tokenizer.encode(chat_seed_request.message))
-
-        create_new_chat_message(
-            chat_session_id=new_chat_session.id,
-            parent_message=root_message,
-            message=chat_seed_request.message,
-            token_count=token_count,
-            message_type=MessageType.USER,
-            db_session=db_session,
-        )
-
-    return ChatSeedResponse(
-        redirect_url=f"{WEB_DOMAIN}/chat?chatId={new_chat_session.id}&seeded=true"
-    )
 
 
 class SeedChatFromSlackRequest(BaseModel):

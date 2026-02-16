@@ -196,7 +196,7 @@ members = ["backend", "tools/ods"]
 
 [tool.basedpyright]
 include = ["backend"]
-exclude = ["backend/generated"]
+exclude = ["backend/generated", "backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx", "backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv"]
 typeCheckingMode = "off"
 
 [tool.ruff]

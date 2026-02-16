@@ -523,6 +523,7 @@ def connector_pruning_generator_task(
                 redis_connector,
                 lock,
                 r,
+                timeout_seconds=JOB_TIMEOUT,
             )
 
             # a list of docs in the source

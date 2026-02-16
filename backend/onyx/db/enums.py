@@ -296,4 +296,4 @@ class HierarchyNodeType(str, PyEnum):
 class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
     VISION = "vision"
-    EMBEDDINGS = "embeddings"
+    CONTEXTUAL_RAG = "contextual_rag"
