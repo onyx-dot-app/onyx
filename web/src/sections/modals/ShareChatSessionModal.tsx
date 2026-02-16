@@ -13,14 +13,14 @@ import { useCurrentAgent } from "@/hooks/useAgents";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Separator from "@/refresh-components/Separator";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { Callout } from "@/components/ui/callout";
 import Text from "@/refresh-components/texts/Text";
-import { SvgCopy, SvgShare, SvgUsers } from "@opal/icons";
+import { SvgCopy, SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
 
@@ -164,13 +164,15 @@ export default function ShareChatSessionModal({
 
   const wantsPublic = selectedPrivacy === "public";
 
+  const isShared = shareLink && selectedPrivacy === "public";
+
   let submitButtonText = "Done";
-  if (wantsPublic && !isCurrentlyPublic) {
+  if (wantsPublic && !isCurrentlyPublic && !shareLink) {
     submitButtonText = "Create Share Link";
   } else if (!wantsPublic && isCurrentlyPublic) {
     submitButtonText = "Make Private";
-  } else if (wantsPublic && isCurrentlyPublic) {
-    submitButtonText = "Copy Share Link";
+  } else if (isShared) {
+    submitButtonText = "Copy Link";
   }
 
   async function handleSubmit() {
@@ -211,105 +213,102 @@ export default function ShareChatSessionModal({
   }
 
   return (
-    <ConfirmationModalLayout
-      icon={SvgShare}
-      title="Share this chat"
-      description="All existing and future messages in this chat will be shared."
-      onClose={onClose}
-      submit={
-        <Button onClick={handleSubmit} disabled={isLoading}>
-          {submitButtonText}
-        </Button>
-      }
-    >
-      <Section
-        justifyContent="start"
-        alignItems="stretch"
-        gap={0.25}
-        height="auto"
-      >
-        <PrivacyOption
-          icon={SvgLock}
-          title="Private"
-          description="Only you have access to this chat."
-          selected={selectedPrivacy === "private"}
-          onClick={() => setSelectedPrivacy("private")}
+    <Modal open onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Modal.Content width="sm">
+        <Modal.Header
+          icon={SvgShare}
+          title={isShared ? "Chat shared" : "Share this chat"}
+          description="All existing and future messages in this chat will be shared."
+          onClose={onClose}
         />
-        <PrivacyOption
-          icon={SvgUsers}
-          title="Your Organization"
-          description="Anyone in your organization can view this chat."
-          selected={selectedPrivacy === "public"}
-          onClick={() => setSelectedPrivacy("public")}
-        />
-      </Section>
+        <Modal.Body twoTone>
+          <Section
+            justifyContent="start"
+            alignItems="stretch"
+            gap={0.25}
+            height="auto"
+          >
+            <PrivacyOption
+              icon={SvgLock}
+              title="Private"
+              description="Only you have access to this chat."
+              selected={selectedPrivacy === "private"}
+              onClick={() => setSelectedPrivacy("private")}
+            />
+            <PrivacyOption
+              icon={SvgUsers}
+              title="Your Organization"
+              description="Anyone in your organization can view this chat."
+              selected={selectedPrivacy === "public"}
+              onClick={() => setSelectedPrivacy("public")}
+            />
+          </Section>
 
-      {shareLink && selectedPrivacy === "public" && (
-        <div className="flex items-center pt-2">
-          <CopyIconButton
-            getCopyText={() => shareLink}
-            prominence="secondary"
+          {isShared && <InputTypeIn variant="readOnly" value={shareLink} />}
+
+          <Separator className="py-0" />
+
+          <AdvancedOptionsToggle
+            showAdvancedOptions={showAdvancedOptions}
+            setShowAdvancedOptions={setShowAdvancedOptions}
+            title="Advanced Options"
           />
-          <a
-            href={shareLink}
-            target="_blank"
-            className={cn(
-              "underline ml-1 text-sm my-auto",
-              "text-action-link-05"
-            )}
-            rel="noreferrer"
-          >
-            {shareLink}
-          </a>
-        </div>
-      )}
 
-      <Separator className="py-0" />
-
-      <AdvancedOptionsToggle
-        showAdvancedOptions={showAdvancedOptions}
-        setShowAdvancedOptions={setShowAdvancedOptions}
-        title="Advanced Options"
-      />
-
-      {showAdvancedOptions && (
-        <Section
-          justifyContent="start"
-          alignItems="stretch"
-          gap={0.5}
-          height="auto"
-        >
-          <Callout type="notice" title="Seed New Chat">
-            Generate a link to a new chat session with the same settings as this
-            chat (including the assistant and model).
-          </Callout>
+          {showAdvancedOptions && (
+            <Section
+              justifyContent="start"
+              alignItems="stretch"
+              gap={0.5}
+              height="auto"
+            >
+              <Callout type="notice" title="Seed New Chat">
+                Generate a link to a new chat session with the same settings as
+                this chat (including the assistant and model).
+              </Callout>
+              <Button
+                leftIcon={SvgCopy}
+                onClick={async () => {
+                  try {
+                    const seedLink = await generateSeedLink(
+                      message,
+                      currentAgent?.id,
+                      llmManager.currentLlm
+                    );
+                    if (!seedLink) {
+                      toast.error("Failed to generate seed link");
+                    } else {
+                      navigator.clipboard.writeText(seedLink);
+                      copyAll(seedLink);
+                      toast.success("Link copied to clipboard!");
+                    }
+                  } catch (e) {
+                    console.error(e);
+                    toast.error("Failed to generate or copy link.");
+                  }
+                }}
+                secondary
+              >
+                Generate and Copy Seed Link
+              </Button>
+            </Section>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          {!isShared && (
+            <Button secondary onClick={onClose}>
+              Cancel
+            </Button>
+          )}
           <Button
-            leftIcon={SvgCopy}
-            onClick={async () => {
-              try {
-                const seedLink = await generateSeedLink(
-                  message,
-                  currentAgent?.id,
-                  llmManager.currentLlm
-                );
-                if (!seedLink) {
-                  toast.error("Failed to generate seed link");
-                } else {
-                  navigator.clipboard.writeText(seedLink);
-                  copyAll(seedLink);
-                  toast.success("Link copied to clipboard!");
-                }
-              } catch (e) {
-                console.error(e);
-                toast.error("Failed to generate or copy link.");
-              }
-            }}
-            secondary
+            onClick={handleSubmit}
+            disabled={isLoading}
+            leftIcon={isShared ? SvgLink : undefined}
+            className={isShared ? "w-full" : undefined}
           >
-            Generate and Copy Seed Link
+            {submitButtonText}
           </Button>
-        </Section>
-      )}
-    </ConfirmationModalLayout>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }
