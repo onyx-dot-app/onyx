@@ -621,7 +621,9 @@ class ACPExecClient:
         packet_logger = get_packet_logger()
 
         logger.info(
-            f"[ACP] Sending prompt: " f"acp_session={session_id} pod={self._pod_name}"
+            f"[ACP] Sending prompt: "
+            f"acp_session={session_id} pod={self._pod_name} "
+            f"queue_backlog={self._response_queue.qsize()}"
         )
 
         prompt_content = [{"type": "text", "text": message}]
@@ -658,6 +660,23 @@ class ACPExecClient:
             try:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
                 last_event_time = time.time()
+
+                # Log every dequeued message for debugging ACP behavior
+                update_type = (
+                    message_data.get("params", {})
+                    .get("update", {})
+                    .get("sessionUpdate", "")
+                )
+                logger.info(
+                    f"[ACP] Dequeued: "
+                    f"id={message_data.get('id')} "
+                    f"method={message_data.get('method')} "
+                    f"update={update_type} "
+                    f"has_result={'result' in message_data} "
+                    f"has_error={'error' in message_data} "
+                    f"request_id={request_id} "
+                    f"elapsed={(time.time() - start_time) * 1000:.0f}ms"
+                )
             except Empty:
                 # Check if reader thread is still alive
                 if (
@@ -746,9 +765,23 @@ class ACPExecClient:
                 params_data = message_data.get("params", {})
                 update = params_data.get("update", {})
 
+                prompt_complete = False
                 for event in self._process_session_update(update):
                     events_yielded += 1
                     yield event
+                    if isinstance(event, PromptResponse):
+                        prompt_complete = True
+                        break
+
+                if prompt_complete:
+                    completion_reason = "prompt_response_via_notification"
+                    elapsed_ms = (time.time() - start_time) * 1000
+                    logger.info(
+                        f"[ACP] Prompt complete: "
+                        f"reason={completion_reason} acp_session={session_id} "
+                        f"events={events_yielded} elapsed={elapsed_ms:.0f}ms"
+                    )
+                    break
 
             # Handle requests from agent - send error response
             elif "method" in message_data and "id" in message_data:
@@ -777,9 +810,9 @@ class ACPExecClient:
         update_type = update.get("sessionUpdate")
 
         # Map update types to their ACP schema classes.
-        # Note: prompt_response is intentionally excluded here — turn completion
-        # is determined by the JSON-RPC response to session/prompt, not by a
-        # session/update notification. This matches the ACP spec and Zed's impl.
+        # Note: prompt_response is included because ACP sometimes sends it as a
+        # notification WITHOUT a corresponding JSON-RPC response. We accept
+        # either signal as turn completion (first one wins).
         type_map: dict[str, type] = {
             "agent_message_chunk": AgentMessageChunk,
             "agent_thought_chunk": AgentThoughtChunk,
@@ -787,6 +820,7 @@ class ACPExecClient:
             "tool_call_update": ToolCallProgress,
             "plan": AgentPlanUpdate,
             "current_mode_update": CurrentModeUpdate,
+            "prompt_response": PromptResponse,
         }
 
         model_class = type_map.get(update_type)  # type: ignore[arg-type]
@@ -800,7 +834,6 @@ class ACPExecClient:
             "available_commands_update",
             "session_info_update",
             "usage_update",
-            "prompt_response",
         ):
             logger.debug(f"[ACP] Unknown update type: {update_type}")
 
