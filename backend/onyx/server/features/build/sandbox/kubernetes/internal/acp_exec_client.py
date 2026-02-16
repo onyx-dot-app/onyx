@@ -690,16 +690,34 @@ class ACPExecClient:
         )
 
         # Drain leftover messages from the queue (e.g., session_info_update
-        # that arrived between prompts).
+        # that arrived between prompts).  If the agent sent a JSON-RPC
+        # request between prompts (tool call, etc.), respond with an error
+        # so it doesn't hang waiting for a response we'll never send.
         drained_count = 0
+        drained_requests = 0
         while not self._response_queue.empty():
             try:
-                self._response_queue.get_nowait()
+                stale_msg = self._response_queue.get_nowait()
                 drained_count += 1
+                # Respond to any agent requests so the agent doesn't block
+                if "method" in stale_msg and "id" in stale_msg:
+                    drained_requests += 1
+                    logger.info(
+                        f"[ACP] Drain: responding to stale agent request: "
+                        f"method={stale_msg['method']} id={stale_msg['id']}"
+                    )
+                    self._send_error_response(
+                        stale_msg["id"],
+                        -32601,
+                        f"Method not supported: {stale_msg['method']}",
+                    )
             except Empty:
                 break
         if drained_count > 0:
-            logger.debug(f"[ACP] Drained {drained_count} stale messages")
+            logger.info(
+                f"[ACP] Drained {drained_count} stale messages "
+                f"(requests={drained_requests})"
+            )
 
         prompt_content = [{"type": "text", "text": message}]
         params = {
@@ -742,11 +760,16 @@ class ACPExecClient:
                 # why the response isn't being matched.
                 if prompt_num >= 2:
                     msg_id = message_data.get("id")
+                    # Extract sessionUpdate type from session/update notifications
+                    update_type = (
+                        message_data.get("params", {})
+                        .get("update", {})
+                        .get("sessionUpdate", "")
+                    )
                     logger.info(
                         f"[ACP] Prompt #{prompt_num} dequeued: "
-                        f"id={msg_id} type(id)={type(msg_id).__name__} "
-                        f"method={message_data.get('method')} "
-                        f"keys={list(message_data.keys())} "
+                        f"id={msg_id} method={message_data.get('method')} "
+                        f"update={update_type} "
                         f"request_id={request_id}"
                     )
             except Empty:
@@ -789,20 +812,18 @@ class ACPExecClient:
                 idle_time = time.time() - last_event_time
                 if idle_time >= SSE_KEEPALIVE_INTERVAL:
                     keepalive_count += 1
-                    if keepalive_count % 3 == 0:
-                        reader_alive = (
-                            self._reader_thread is not None
-                            and self._reader_thread.is_alive()
-                        )
-                        elapsed_s = time.time() - start_time
-                        logger.info(
-                            f"[ACP] Prompt #{prompt_num} waiting: "
-                            f"keepalives={keepalive_count} "
-                            f"elapsed={elapsed_s:.0f}s "
-                            f"events={events_yielded} "
-                            f"reader_alive={reader_alive} "
-                            f"queue_size={self._response_queue.qsize()}"
-                        )
+                    reader_alive = (
+                        self._reader_thread is not None
+                        and self._reader_thread.is_alive()
+                    )
+                    elapsed_s = time.time() - start_time
+                    logger.info(
+                        f"[ACP] Prompt #{prompt_num} keepalive #{keepalive_count}: "
+                        f"elapsed={elapsed_s:.0f}s "
+                        f"events={events_yielded} "
+                        f"reader_alive={reader_alive} "
+                        f"queue_size={self._response_queue.qsize()}"
+                    )
                     yield SSEKeepalive()
                     last_event_time = time.time()
                 continue
