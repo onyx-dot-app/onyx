@@ -686,38 +686,9 @@ class ACPExecClient:
 
         logger.info(
             f"[ACP] Prompt #{prompt_num} start: "
-            f"acp_session={session_id} pod={self._pod_name}"
+            f"acp_session={session_id} pod={self._pod_name} "
+            f"queue_backlog={self._response_queue.qsize()}"
         )
-
-        # Drain leftover messages from the queue (e.g., session_info_update
-        # that arrived between prompts).  If the agent sent a JSON-RPC
-        # request between prompts (tool call, etc.), respond with an error
-        # so it doesn't hang waiting for a response we'll never send.
-        drained_count = 0
-        drained_requests = 0
-        while not self._response_queue.empty():
-            try:
-                stale_msg = self._response_queue.get_nowait()
-                drained_count += 1
-                # Respond to any agent requests so the agent doesn't block
-                if "method" in stale_msg and "id" in stale_msg:
-                    drained_requests += 1
-                    logger.info(
-                        f"[ACP] Drain: responding to stale agent request: "
-                        f"method={stale_msg['method']} id={stale_msg['id']}"
-                    )
-                    self._send_error_response(
-                        stale_msg["id"],
-                        -32601,
-                        f"Method not supported: {stale_msg['method']}",
-                    )
-            except Empty:
-                break
-        if drained_count > 0:
-            logger.info(
-                f"[ACP] Drained {drained_count} stale messages "
-                f"(requests={drained_requests})"
-            )
 
         prompt_content = [{"type": "text", "text": message}]
         params = {
@@ -939,11 +910,17 @@ class ACPExecClient:
                 yield model_class.model_validate(update)
             except ValidationError as e:
                 logger.warning(f"[ACP] Validation error for {update_type}: {e}")
+        elif update_type == "usage_update":
+            # ACP frequently sends usage_update as the final packet without
+            # a subsequent prompt_response or JSON-RPC response, causing the
+            # send_message loop to hang until timeout. Treat usage_update as
+            # an implicit end-of-turn signal by synthesizing a PromptResponse.
+            logger.info("[ACP] usage_update received — treating as end-of-turn signal")
+            yield PromptResponse(stopReason="end_turn")
         elif update_type not in (
             "user_message_chunk",
             "available_commands_update",
             "session_info_update",
-            "usage_update",
         ):
             logger.debug(f"[ACP] Unknown update type: {update_type}")
 
