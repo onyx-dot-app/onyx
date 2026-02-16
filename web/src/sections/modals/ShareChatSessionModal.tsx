@@ -180,7 +180,7 @@ export default function ShareChatSessionModal({
   async function handleSubmit() {
     setIsLoading(true);
     try {
-      if (wantsPublic && !isCurrentlyPublic) {
+      if (wantsPublic && !isCurrentlyPublic && !shareLink) {
         const link = await generateShareLink(chatSession.id);
         if (link) {
           setShareLink(link);
@@ -202,7 +202,7 @@ export default function ShareChatSessionModal({
         } else {
           toast.error("Failed to make chat private");
         }
-      } else if (wantsPublic && isCurrentlyPublic && shareLink) {
+      } else if (wantsPublic && shareLink) {
         copyAll(shareLink);
         toast.success("Share link copied to clipboard!");
       } else {
@@ -311,7 +311,6 @@ export default function ShareChatSessionModal({
                       if (!seedLink) {
                         toast.error("Failed to generate seed link");
                       } else {
-                        navigator.clipboard.writeText(seedLink);
                         copyAll(seedLink);
                         toast.success("Link copied to clipboard!");
                       }

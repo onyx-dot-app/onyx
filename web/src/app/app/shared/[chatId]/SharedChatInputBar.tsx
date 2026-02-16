@@ -1,6 +1,7 @@
 "use client";
 
 import Button from "@/refresh-components/buttons/Button";
+import Text from "@/refresh-components/texts/Text";
 import { Button as OpalButton, OpenButton } from "@opal/components";
 import { OpenAISVG } from "@/components/icons/icons";
 import SvgPlusCircle from "@opal/icons/plus-circle";
@@ -15,9 +16,9 @@ export default function SharedChatInputBar() {
       <div className="w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
         {/* Textarea area */}
         <div className="flex flex-row items-center w-full">
-          <span className="w-full px-3 pt-3 pb-2 text-text-03 select-none">
+          <Text text03 className="w-full px-3 pt-3 pb-2 select-none">
             How can Onyx help you today
-          </span>
+          </Text>
         </div>
 
         {/* Bottom toolbar */}
