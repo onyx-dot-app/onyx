@@ -43,9 +43,11 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import get_documents_for_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
+from onyx.db.hierarchy import upsert_hierarchy_nodes_batch
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
@@ -53,6 +55,9 @@ from onyx.db.tag import delete_orphan_tags__no_commit
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
+from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
+from onyx.redis.redis_hierarchy import ensure_source_node_exists
+from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
@@ -526,10 +531,44 @@ def connector_pruning_generator_task(
                 timeout_seconds=JOB_TIMEOUT,
             )
 
-            # a list of docs in the source
-            all_connector_doc_ids: set[str] = extract_ids_from_runnable_connector(
+            # Extract docs and hierarchy nodes from the source
+            extraction_result = extract_ids_from_runnable_connector(
                 runnable_connector, callback
             )
+            all_connector_doc_ids = extraction_result.doc_ids
+
+            # Process hierarchy nodes (same as docfetching):
+            # upsert to Postgres and cache in Redis
+            if extraction_result.hierarchy_nodes:
+                is_connector_public = cc_pair.access_type == AccessType.PUBLIC
+
+                redis_client = get_redis_client(tenant_id=tenant_id)
+                ensure_source_node_exists(
+                    redis_client, db_session, cc_pair.connector.source
+                )
+
+                upserted_nodes = upsert_hierarchy_nodes_batch(
+                    db_session=db_session,
+                    nodes=extraction_result.hierarchy_nodes,
+                    source=cc_pair.connector.source,
+                    commit=True,
+                    is_connector_public=is_connector_public,
+                )
+
+                cache_entries = [
+                    HierarchyNodeCacheEntry.from_db_model(node)
+                    for node in upserted_nodes
+                ]
+                cache_hierarchy_nodes_batch(
+                    redis_client=redis_client,
+                    source=cc_pair.connector.source,
+                    entries=cache_entries,
+                )
+
+                task_logger.info(
+                    f"Pruning: persisted and cached {len(extraction_result.hierarchy_nodes)} "
+                    f"hierarchy nodes for cc_pair={cc_pair_id}"
+                )
 
             # a list of docs in our local index
             all_indexed_document_ids = {

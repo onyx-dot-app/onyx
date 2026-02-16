@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from collections.abc import Iterator
+from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import cast
 from typing import TypeVar
 
 import httpx
+from pydantic import BaseModel
 
 from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
 from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
@@ -22,6 +24,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
@@ -31,23 +34,28 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
-PRUNING_CHECKPOINTED_BATCH_SIZE = 32
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 
-def _checkpointed_batched_doc_ids(
+class SlimConnectorExtractionResult(BaseModel):
+    """Result of extracting document IDs and hierarchy nodes from a connector."""
+
+    doc_ids: set[str]
+    hierarchy_nodes: list[HierarchyNode]
+
+
+def _checkpointed_batched_items(
     connector: CheckpointedConnector[CT],
     start: float,
     end: float,
-    batch_size: int,
-) -> Generator[set[str], None, None]:
-    """Loop through all checkpoint steps and yield batched document IDs.
+) -> Generator[list[Document | HierarchyNode | ConnectorFailure], None, None]:
+    """Loop through all checkpoint steps and yield batched items.
 
     Some checkpointed connectors (e.g. IMAP) are multi-step: the first
     checkpoint call may only initialize internal state without yielding
     any documents. This function loops until checkpoint.has_more is False
-    to ensure all document IDs are collected across every step.
+    to ensure all items are collected across every step.
     """
     checkpoint = connector.build_dummy_checkpoint()
     while True:
@@ -55,25 +63,19 @@ def _checkpointed_batched_doc_ids(
             start=start, end=end, checkpoint=checkpoint
         )
         wrapper: CheckpointOutputWrapper[CT] = CheckpointOutputWrapper()
-        batch: set[str] = set()
-        for document, _hierarchy_node, failure, next_checkpoint in wrapper(
+        batch: list[Document | HierarchyNode | ConnectorFailure] = []
+        for document, hierarchy_node, failure, next_checkpoint in wrapper(
             checkpoint_output
         ):
             if document is not None:
-                batch.add(document.id)
-            elif (
-                failure
-                and failure.failed_document
-                and failure.failed_document.document_id
-            ):
-                batch.add(failure.failed_document.document_id)
+                batch.append(document)
+            elif hierarchy_node is not None:
+                batch.append(hierarchy_node)
+            elif failure is not None:
+                batch.append(failure)
 
             if next_checkpoint is not None:
                 checkpoint = next_checkpoint
-
-            if len(batch) >= batch_size:
-                yield batch
-                batch = set()
 
         if batch:
             yield batch
@@ -82,56 +84,79 @@ def _checkpointed_batched_doc_ids(
             break
 
 
-def document_batch_to_ids(
-    doc_batch: (
-        Iterator[list[Document | HierarchyNode]]
-        | Iterator[list[SlimDocument | HierarchyNode]]
-    ),
-) -> Generator[set[str], None, None]:
-    for doc_list in doc_batch:
-        yield {
-            doc.raw_node_id if isinstance(doc, HierarchyNode) else doc.id
-            for doc in doc_list
-        }
+def _get_failure_id(failure: ConnectorFailure) -> str | None:
+    """Extract the document/entity ID from a ConnectorFailure."""
+    if failure.failed_document:
+        return failure.failed_document.document_id
+    if failure.failed_entity:
+        return failure.failed_entity.entity_id
+    return None
+
+
+def _extract_from_batch(
+    doc_list: Sequence[Document | SlimDocument | HierarchyNode | ConnectorFailure],
+) -> tuple[set[str], list[HierarchyNode]]:
+    """Separate a batch into document IDs and hierarchy nodes.
+
+    ConnectorFailure items have their failed document/entity IDs added to the
+    ID set so that failed-to-retrieve documents are not accidentally pruned.
+    """
+    ids: set[str] = set()
+    hierarchy_nodes: list[HierarchyNode] = []
+    for item in doc_list:
+        if isinstance(item, HierarchyNode):
+            hierarchy_nodes.append(item)
+            ids.add(item.raw_node_id)
+        elif isinstance(item, ConnectorFailure):
+            failed_id = _get_failure_id(item)
+            if failed_id:
+                ids.add(failed_id)
+            logger.warning(
+                f"Failed to retrieve document {failed_id}: " f"{item.failure_message}"
+            )
+        else:
+            ids.add(item.id)
+    return ids, hierarchy_nodes
 
 
 def extract_ids_from_runnable_connector(
     runnable_connector: BaseConnector,
     callback: IndexingHeartbeatInterface | None = None,
-) -> set[str]:
+) -> SlimConnectorExtractionResult:
     """
-    If the given connector is neither a SlimConnector nor a SlimConnectorWithPermSync, just pull
-    all docs using the load_from_state and grab out the IDs.
+    Extract document IDs and hierarchy nodes from a runnable connector.
+
+    Hierarchy nodes yielded alongside documents/slim docs are collected and
+    returned in the result. ConnectorFailure items have their IDs preserved
+    so that failed-to-retrieve documents are not accidentally pruned.
 
     Optionally, a callback can be passed to handle the length of each document batch.
     """
     all_connector_doc_ids: set[str] = set()
+    all_hierarchy_nodes: list[HierarchyNode] = []
 
-    doc_batch_id_generator = None
+    # Sequence (covariant) lets all the specific list[...] iterator types unify here
+    raw_batch_generator: (
+        Iterator[Sequence[Document | SlimDocument | HierarchyNode | ConnectorFailure]]
+        | None
+    ) = None
+
     if isinstance(runnable_connector, SlimConnector):
-        doc_batch_id_generator = document_batch_to_ids(
-            runnable_connector.retrieve_all_slim_docs()
-        )
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs()
     elif isinstance(runnable_connector, SlimConnectorWithPermSync):
-        doc_batch_id_generator = document_batch_to_ids(
-            runnable_connector.retrieve_all_slim_docs_perm_sync()
-        )
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync()
     # If the connector isn't slim, fall back to running it normally to get ids
     elif isinstance(runnable_connector, LoadConnector):
-        doc_batch_id_generator = document_batch_to_ids(
-            runnable_connector.load_from_state()
-        )
+        raw_batch_generator = runnable_connector.load_from_state()
     elif isinstance(runnable_connector, PollConnector):
         start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
         end = datetime.now(timezone.utc).timestamp()
-        doc_batch_id_generator = document_batch_to_ids(
-            runnable_connector.poll_source(start=start, end=end)
-        )
+        raw_batch_generator = runnable_connector.poll_source(start=start, end=end)
     elif isinstance(runnable_connector, CheckpointedConnector):
         start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
         end = datetime.now(timezone.utc).timestamp()
-        doc_batch_id_generator = _checkpointed_batched_doc_ids(
-            runnable_connector, start, end, PRUNING_CHECKPOINTED_BATCH_SIZE
+        raw_batch_generator = _checkpointed_batched_items(
+            runnable_connector, start, end
         )
     else:
         raise RuntimeError("Pruning job could not find a valid runnable_connector.")
@@ -145,19 +170,24 @@ def extract_ids_from_runnable_connector(
         else lambda x: x
     )
 
-    for doc_batch_ids in doc_batch_id_generator:
+    # process raw batches to extract both IDs and hierarchy nodes
+    for doc_list in raw_batch_generator:
+        if callback and callback.should_stop():
+            raise RuntimeError(
+                "extract_ids_from_runnable_connector: Stop signal detected"
+            )
+
+        batch_ids, batch_nodes = _extract_from_batch(doc_list)
+        all_connector_doc_ids.update(doc_batch_processing_func(batch_ids))
+        all_hierarchy_nodes.extend(batch_nodes)
+
         if callback:
-            if callback.should_stop():
-                raise RuntimeError(
-                    "extract_ids_from_runnable_connector: Stop signal detected"
-                )
+            callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
 
-        all_connector_doc_ids.update(doc_batch_processing_func(doc_batch_ids))
-
-        if callback:
-            callback.progress("extract_ids_from_runnable_connector", len(doc_batch_ids))
-
-    return all_connector_doc_ids
+    return SlimConnectorExtractionResult(
+        doc_ids=all_connector_doc_ids,
+        hierarchy_nodes=all_hierarchy_nodes,
+    )
 
 
 def celery_is_listening_to_queue(worker: Any, name: str) -> bool:
