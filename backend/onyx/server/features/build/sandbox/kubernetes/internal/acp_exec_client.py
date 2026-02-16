@@ -145,7 +145,6 @@ class ACPExecClient:
         self._reader_thread: threading.Thread | None = None
         self._stop_reader = threading.Event()
         self._k8s_client: client.CoreV1Api | None = None
-        self._prompt_count: int = 0  # Track how many prompts sent on this client
 
     def _get_k8s_client(self) -> client.CoreV1Api:
         """Get or create kubernetes client."""
@@ -305,8 +304,7 @@ class ACPExecClient:
         """Stop the exec session and clean up."""
         session_ids = list(self._state.sessions.keys())
         logger.info(
-            f"[ACP] Stopping client: pod={self._pod_name} "
-            f"sessions={session_ids} prompts_sent={self._prompt_count}"
+            f"[ACP] Stopping client: pod={self._pod_name} " f"sessions={session_ids}"
         )
         self._stop_reader.set()
 
@@ -621,13 +619,9 @@ class ACPExecClient:
                 f"Known sessions: {list(self._state.sessions.keys())}"
             )
         packet_logger = get_packet_logger()
-        self._prompt_count += 1
-        prompt_num = self._prompt_count
 
         logger.info(
-            f"[ACP] Prompt #{prompt_num} start: "
-            f"acp_session={session_id} pod={self._pod_name} "
-            f"queue_backlog={self._response_queue.qsize()}"
+            f"[ACP] Sending prompt: " f"acp_session={session_id} pod={self._pod_name}"
         )
 
         prompt_content = [{"type": "text", "text": message}]
@@ -636,10 +630,37 @@ class ACPExecClient:
             "prompt": prompt_content,
         }
 
+        # Drain stale messages left over from previous prompts.
+        # These are typically usage_update or session_info_update notifications
+        # that arrived after the previous prompt completed. Without draining,
+        # a stale usage_update can be mistaken for the current prompt's end signal.
+        drained = 0
+        while not self._response_queue.empty():
+            try:
+                stale = self._response_queue.get_nowait()
+                drained += 1
+                update_type = (
+                    stale.get("params", {}).get("update", {}).get("sessionUpdate", "")
+                )
+                logger.info(
+                    f"[ACP] Drained stale message: "
+                    f"method={stale.get('method')} "
+                    f"id={stale.get('id')} "
+                    f"update={update_type} "
+                    f"keys={list(stale.keys())}"
+                )
+            except Empty:
+                break
+        if drained:
+            logger.info(f"[ACP] Drained {drained} stale messages before prompt")
+
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
         last_event_time = time.time()
         events_yielded = 0
+        content_events = (
+            0  # Track real content events (message chunks, tool calls, etc.)
+        )
         keepalive_count = 0
         completion_reason = "unknown"
 
@@ -648,7 +669,7 @@ class ACPExecClient:
             if remaining <= 0:
                 completion_reason = "timeout"
                 logger.warning(
-                    f"[ACP] Prompt #{prompt_num} timeout: "
+                    f"[ACP] Prompt timeout: "
                     f"acp_session={session_id} events={events_yielded}, "
                     f"sending session/cancel"
                 )
@@ -695,7 +716,7 @@ class ACPExecClient:
                             break
 
                     logger.warning(
-                        f"[ACP] Reader thread dead: prompt #{prompt_num} "
+                        f"[ACP] Reader thread dead: "
                         f"acp_session={session_id} events={events_yielded}"
                     )
                     break
@@ -719,7 +740,7 @@ class ACPExecClient:
                 if "error" in message_data:
                     error_data = message_data["error"]
                     completion_reason = "jsonrpc_error"
-                    logger.warning(f"[ACP] Prompt #{prompt_num} error: {error_data}")
+                    logger.warning(f"[ACP] Prompt error: {error_data}")
                     packet_logger.log_jsonrpc_response(
                         request_id, error=error_data, context="k8s"
                     )
@@ -741,7 +762,7 @@ class ACPExecClient:
 
                 elapsed_ms = (time.time() - start_time) * 1000
                 logger.info(
-                    f"[ACP] Prompt #{prompt_num} complete: "
+                    f"[ACP] Prompt complete: "
                     f"reason={completion_reason} acp_session={session_id} "
                     f"events={events_yielded} elapsed={elapsed_ms:.0f}ms"
                 )
@@ -751,10 +772,45 @@ class ACPExecClient:
             if message_data.get("method") == "session/update":
                 params_data = message_data.get("params", {})
                 update = params_data.get("update", {})
+                update_type = update.get("sessionUpdate")
+
+                # usage_update as implicit end-of-turn: ACP sometimes sends
+                # usage_update as the final packet without a prompt_response.
+                # Only treat it as completion if we've already received real
+                # content — otherwise it's likely a stale leftover.
+                if update_type == "usage_update":
+                    if content_events > 0:
+                        completion_reason = "usage_update_after_content"
+                        elapsed_ms = (time.time() - start_time) * 1000
+                        logger.info(
+                            f"[ACP] Prompt complete: "
+                            f"reason={completion_reason} acp_session={session_id} "
+                            f"events={events_yielded} "
+                            f"content_events={content_events} "
+                            f"elapsed={elapsed_ms:.0f}ms"
+                        )
+                        yield PromptResponse(stopReason="end_turn")
+                        break
+                    else:
+                        logger.info(
+                            "[ACP] Ignoring usage_update — no content events yet"
+                        )
+                        continue
 
                 prompt_complete = False
                 for event in self._process_session_update(update):
                     events_yielded += 1
+                    # Count real content events
+                    if isinstance(
+                        event,
+                        (
+                            AgentMessageChunk,
+                            AgentThoughtChunk,
+                            ToolCallStart,
+                            ToolCallProgress,
+                        ),
+                    ):
+                        content_events += 1
                     yield event
                     if isinstance(event, PromptResponse):
                         prompt_complete = True
@@ -764,7 +820,7 @@ class ACPExecClient:
                     completion_reason = "prompt_response_via_notification"
                     elapsed_ms = (time.time() - start_time) * 1000
                     logger.info(
-                        f"[ACP] Prompt #{prompt_num} complete: "
+                        f"[ACP] Prompt complete: "
                         f"reason={completion_reason} acp_session={session_id} "
                         f"events={events_yielded} elapsed={elapsed_ms:.0f}ms"
                     )
@@ -813,17 +869,11 @@ class ACPExecClient:
                 yield model_class.model_validate(update)
             except ValidationError as e:
                 logger.warning(f"[ACP] Validation error for {update_type}: {e}")
-        elif update_type == "usage_update":
-            # ACP frequently sends usage_update as the final packet without
-            # a subsequent prompt_response or JSON-RPC response, causing the
-            # send_message loop to hang until timeout. Treat usage_update as
-            # an implicit end-of-turn signal by synthesizing a PromptResponse.
-            logger.info("[ACP] usage_update received — treating as end-of-turn signal")
-            yield PromptResponse(stopReason="end_turn")
         elif update_type not in (
             "user_message_chunk",
             "available_commands_update",
             "session_info_update",
+            "usage_update",
         ):
             logger.debug(f"[ACP] Unknown update type: {update_type}")
 
