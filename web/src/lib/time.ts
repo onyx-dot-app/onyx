@@ -1,4 +1,4 @@
-import { User } from "./types";
+import { User } from "@/lib/types";
 
 const conditionallyAddPlural = (noun: string, cnt: number) => {
   if (cnt > 1) {

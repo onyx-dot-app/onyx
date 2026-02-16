@@ -25,6 +25,7 @@ import {
 } from "@opal/icons";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import AgentViewerModal from "@/sections/modals/AgentViewerModal";
 import { toast } from "@/hooks/useToast";
 import { LineItemLayout, CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
@@ -47,6 +48,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const isOwnedByUser = checkUserOwnsAssistant(user, agent);
   const [hovered, setHovered] = React.useState(false);
   const shareAgentModal = useCreateModal();
+  const agentViewerModal = useCreateModal();
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
 
   // Start chat and auto-pin unpinned agents to the sidebar
@@ -91,8 +93,12 @@ export default function AgentCard({ agent }: AgentCardProps) {
         />
       </shareAgentModal.Provider>
 
+      <agentViewerModal.Provider>
+        {fullAgent && <AgentViewerModal agent={fullAgent} />}
+      </agentViewerModal.Provider>
+
       <Interactive.Base
-        onClick={handleStartChat}
+        onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
