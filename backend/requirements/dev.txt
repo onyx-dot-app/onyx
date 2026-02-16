@@ -61,7 +61,7 @@ brotli==1.2.0
     # via onyx
 cachetools==6.2.2
     # via google-auth
-celery-types==0.19.0
+celery-types==0.24.0
     # via onyx
 certifi==2025.11.12
     # via
