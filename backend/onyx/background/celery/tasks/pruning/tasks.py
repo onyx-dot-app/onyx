@@ -56,6 +56,7 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
+from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
@@ -541,6 +542,11 @@ def connector_pruning_generator_task(
             if extraction_result.hierarchy_nodes:
                 is_connector_public = cc_pair.access_type == AccessType.PUBLIC
 
+                redis_client = get_redis_client(tenant_id=tenant_id)
+                ensure_source_node_exists(
+                    redis_client, db_session, cc_pair.connector.source
+                )
+
                 upserted_nodes = upsert_hierarchy_nodes_batch(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
@@ -549,7 +555,6 @@ def connector_pruning_generator_task(
                     is_connector_public=is_connector_public,
                 )
 
-                redis_client = get_redis_client(tenant_id=tenant_id)
                 cache_entries = [
                     HierarchyNodeCacheEntry.from_db_model(node)
                     for node in upserted_nodes
