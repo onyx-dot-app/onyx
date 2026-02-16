@@ -40,8 +40,6 @@ export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
 
 export const TOTAL_STEPS = 3;
 
-export const HAS_FINISHED_ONBOARDING_KEY = "hasFinishedOnboarding";
-
 export const STEP_NAVIGATION: Record<
   OnboardingStep,
   { next?: OnboardingStep; prev?: OnboardingStep }

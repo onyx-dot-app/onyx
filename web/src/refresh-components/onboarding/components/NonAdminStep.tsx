@@ -27,7 +27,7 @@ export default function NonAdminStep() {
   }, [user?.personalization?.name, savedName]);
 
   const containerClasses = cn(
-    "flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01 mb-4"
+    "flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 mb-4"
   );
 
   const handleSave = () => {

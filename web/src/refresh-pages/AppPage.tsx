@@ -792,10 +792,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {/* OnboardingUI */}
                     {(appFocus.isNewSession() || appFocus.isAgent()) &&
                       !classification &&
-                      (showOnboarding ||
-                        (user?.role !== UserRole.ADMIN &&
-                          !user?.personalization?.name)) && (
+                      (showOnboarding || !user?.personalization?.name) && (
                         <OnboardingFlow
+                          showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
                           handleFinishOnboarding={finishOnboarding}
                           state={onboardingState}
@@ -858,7 +857,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         disabled={
                           (!llmManager.isLoadingProviders &&
                             llmManager.hasAnyProvider === false) ||
-                          (!isLoadingOnboarding &&
+                          (showOnboarding &&
+                            !isLoadingOnboarding &&
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)
                         }

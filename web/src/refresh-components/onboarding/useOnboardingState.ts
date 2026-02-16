@@ -119,7 +119,7 @@ export function useOnboardingState(liveAssistant?: MinimalPersonaSnapshot): {
     });
 
     if (state.currentStep === OnboardingStep.Name) {
-      const hasProviders = state.data.llmProviders?.length || 0 > 0;
+      const hasProviders = (state.data.llmProviders?.length ?? 0) > 0;
       if (hasProviders) {
         dispatch({
           type: OnboardingActionType.SET_BUTTON_ACTIVE,
