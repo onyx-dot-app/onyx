@@ -505,6 +505,7 @@ const ChatButton = memo(
           <ShareChatSessionModal
             chatSession={chatSession}
             onClose={() => setShowShareModal(false)}
+            refreshChatSessions={refreshChatSessions}
           />
         )}
 

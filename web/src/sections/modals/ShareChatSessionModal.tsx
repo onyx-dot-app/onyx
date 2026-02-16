@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-
 import { cn } from "@/lib/utils";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -15,10 +14,11 @@ import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
+import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Separator from "@/refresh-components/Separator";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import { Callout } from "@/components/ui/callout";
+import Message from "@/refresh-components/messages/Message";
 import Text from "@/refresh-components/texts/Text";
 import { SvgCopy, SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
@@ -102,7 +102,7 @@ function PrivacyOption({
   return (
     <div
       className={cn(
-        "p-1.5 rounded-08 cursor-pointer",
+        "p-1.5 rounded-08 cursor-pointer ",
         selected ? "bg-background-tint-00" : "bg-transparent",
         "hover:bg-background-tint-02"
       )}
@@ -136,11 +136,13 @@ function PrivacyOption({
 interface ShareChatSessionModalProps {
   chatSession: ChatSession;
   onClose: () => void;
+  refreshChatSessions: () => void;
 }
 
 export default function ShareChatSessionModal({
   chatSession,
   onClose,
+  refreshChatSessions,
 }: ShareChatSessionModalProps) {
   const isCurrentlyPublic =
     chatSession.shared_status === ChatSessionSharedStatus.Public;
@@ -183,6 +185,7 @@ export default function ShareChatSessionModal({
         if (link) {
           setShareLink(link);
           updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Public);
+          await refreshChatSessions();
           copyAll(link);
           toast.success("Share link copied to clipboard!");
         } else {
@@ -193,6 +196,7 @@ export default function ShareChatSessionModal({
         if (success) {
           setShareLink("");
           updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Private);
+          await refreshChatSessions();
           toast.success("Chat is now private");
           onClose();
         } else {
@@ -225,73 +229,104 @@ export default function ShareChatSessionModal({
           <Section
             justifyContent="start"
             alignItems="stretch"
-            gap={0.25}
+            gap={1}
             height="auto"
           >
-            <PrivacyOption
-              icon={SvgLock}
-              title="Private"
-              description="Only you have access to this chat."
-              selected={selectedPrivacy === "private"}
-              onClick={() => setSelectedPrivacy("private")}
-            />
-            <PrivacyOption
-              icon={SvgUsers}
-              title="Your Organization"
-              description="Anyone in your organization can view this chat."
-              selected={selectedPrivacy === "public"}
-              onClick={() => setSelectedPrivacy("public")}
-            />
-          </Section>
-
-          {isShared && <InputTypeIn variant="readOnly" value={shareLink} />}
-
-          <Separator className="py-0" />
-
-          <AdvancedOptionsToggle
-            showAdvancedOptions={showAdvancedOptions}
-            setShowAdvancedOptions={setShowAdvancedOptions}
-            title="Advanced Options"
-          />
-
-          {showAdvancedOptions && (
             <Section
               justifyContent="start"
               alignItems="stretch"
-              gap={0.5}
               height="auto"
+              gap={0.12}
             >
-              <Callout type="notice" title="Seed New Chat">
-                Generate a link to a new chat session with the same settings as
-                this chat (including the assistant and model).
-              </Callout>
-              <Button
-                leftIcon={SvgCopy}
-                onClick={async () => {
-                  try {
-                    const seedLink = await generateSeedLink(
-                      message,
-                      currentAgent?.id,
-                      llmManager.currentLlm
-                    );
-                    if (!seedLink) {
-                      toast.error("Failed to generate seed link");
-                    } else {
-                      navigator.clipboard.writeText(seedLink);
-                      copyAll(seedLink);
-                      toast.success("Link copied to clipboard!");
-                    }
-                  } catch (e) {
-                    console.error(e);
-                    toast.error("Failed to generate or copy link.");
-                  }
-                }}
-                secondary
-              >
-                Generate and Copy Seed Link
-              </Button>
+              <PrivacyOption
+                icon={SvgLock}
+                title="Private"
+                description="Only you have access to this chat."
+                selected={selectedPrivacy === "private"}
+                onClick={() => setSelectedPrivacy("private")}
+              />
+              <PrivacyOption
+                icon={SvgUsers}
+                title="Your Organization"
+                description="Anyone in your organization can view this chat."
+                selected={selectedPrivacy === "public"}
+                onClick={() => setSelectedPrivacy("public")}
+              />
             </Section>
-          )}
+
+            {isShared && (
+              <InputTypeIn
+                readOnly
+                value={shareLink}
+                rightSection={
+                  <CopyIconButton
+                    getCopyText={() => shareLink}
+                    tooltip="Copy link"
+                    size="sm"
+                  />
+                }
+              />
+            )}
+          </Section>
+
+          <Separator className="py-0" />
+
+          <Section
+            justifyContent="start"
+            alignItems="stretch"
+            gap={0.5}
+            height="auto"
+          >
+            <AdvancedOptionsToggle
+              showAdvancedOptions={showAdvancedOptions}
+              setShowAdvancedOptions={setShowAdvancedOptions}
+              title="Advanced Options"
+            />
+
+            {showAdvancedOptions && (
+              <Section
+                justifyContent="start"
+                alignItems="stretch"
+                gap={0.5}
+                height="auto"
+              >
+                <Message
+                  static
+                  info
+                  medium
+                  className="w-full"
+                  text="Seed New Chat"
+                  description="Generate a link to a new chat session with the same settings as this chat (including the assistant and model)."
+                  close={false}
+                />
+                <Button
+                  leftIcon={SvgCopy}
+                  onClick={async () => {
+                    try {
+                      const seedLink = await generateSeedLink(
+                        message,
+                        currentAgent?.id,
+                        llmManager.currentLlm
+                      );
+                      if (!seedLink) {
+                        toast.error("Failed to generate seed link");
+                      } else {
+                        navigator.clipboard.writeText(seedLink);
+                        copyAll(seedLink);
+                        toast.success("Link copied to clipboard!");
+                      }
+                    } catch (e) {
+                      console.error(e);
+                      toast.error("Failed to generate or copy link.");
+                    }
+                  }}
+                  secondary
+                >
+                  Generate and Copy Seed Link
+                </Button>
+              </Section>
+            )}
+          </Section>
         </Modal.Body>
         <Modal.Footer>
           {!isShared && (

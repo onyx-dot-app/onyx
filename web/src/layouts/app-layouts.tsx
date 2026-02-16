@@ -250,6 +250,7 @@ function Header() {
         <ShareChatSessionModal
           chatSession={currentChatSession}
           onClose={() => setShowShareModal(false)}
+          refreshChatSessions={refreshChatSessions}
         />
       )}
 
@@ -564,7 +565,7 @@ function Root({ children, enableBackground }: AppRootProps) {
       )}
 
       <div className="z-app-layout">
-        <Header />
+        {!appFocus.isSharedChat() && <Header />}
       </div>
       <div className="z-app-layout flex-1 overflow-auto h-full w-full">
         {children}
