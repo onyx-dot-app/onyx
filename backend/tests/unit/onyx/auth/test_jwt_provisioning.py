@@ -9,6 +9,12 @@ import pytest
 from onyx.auth import users as users_module
 
 
+def _build_async_db_session_mock(in_transaction: bool) -> AsyncMock:
+    session = AsyncMock()
+    session.in_transaction = MagicMock(return_value=in_transaction)
+    return session
+
+
 def test_extract_email_requires_valid_format() -> None:
     """Helper should validate email format before returning value."""
     assert users_module._extract_email_from_jwt({"email": "invalid@"}) is None
@@ -64,8 +70,9 @@ async def test_get_or_create_user_updates_expiry(
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
+    async_db_session = _build_async_db_session_mock(in_transaction=True)
     result = await users_module._get_or_create_user_from_jwt(
-        payload, MagicMock(), MagicMock()
+        payload, MagicMock(), async_db_session
     )
 
     assert result is existing_user
@@ -77,6 +84,7 @@ async def test_get_or_create_user_updates_expiry(
         existing_user, {"oidc_expiry": expected_expiry}
     )
     assert existing_user.oidc_expiry == expected_expiry
+    async_db_session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -112,11 +120,13 @@ async def test_get_or_create_user_skips_inactive(
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
+    async_db_session = _build_async_db_session_mock(in_transaction=True)
     result = await users_module._get_or_create_user_from_jwt(
-        payload, MagicMock(), MagicMock()
+        payload, MagicMock(), async_db_session
     )
 
     assert result is None
+    async_db_session.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -160,11 +170,13 @@ async def test_get_or_create_user_handles_race_conditions(
         lambda *args, **kwargs: MagicMock(),  # noqa: ARG005
     )
 
+    async_db_session = _build_async_db_session_mock(in_transaction=True)
     result = await users_module._get_or_create_user_from_jwt(
-        payload, MagicMock(), MagicMock()
+        payload, MagicMock(), async_db_session
     )
 
     assert result is None
+    async_db_session.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -208,8 +220,9 @@ async def test_get_or_create_user_provisions_new_user(
     )
 
     request = MagicMock()
+    async_db_session = _build_async_db_session_mock(in_transaction=True)
     result = await users_module._get_or_create_user_from_jwt(
-        payload, request, MagicMock()
+        payload, request, async_db_session
     )
 
     assert result is created_user
@@ -217,12 +230,15 @@ async def test_get_or_create_user_provisions_new_user(
     assert created_payload.email == email
     assert created_payload.is_verified is True
     assert recorded["request"] is request
+    async_db_session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_get_or_create_user_requires_email_claim() -> None:
     """Tokens without a usable email claim should be ignored."""
+    async_db_session = _build_async_db_session_mock(in_transaction=True)
     result = await users_module._get_or_create_user_from_jwt(
-        {}, MagicMock(), MagicMock()
+        {}, MagicMock(), async_db_session
     )
     assert result is None
+    async_db_session.commit.assert_not_awaited()
