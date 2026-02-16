@@ -10,6 +10,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
 
@@ -66,6 +67,8 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     all_docs: list[Document] = []
     for doc_batch in salesforce_connector.load_from_state():
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             all_docs.append(doc)
             if doc.id == test_data["id"]:
                 target_test_doc = doc
@@ -147,6 +150,8 @@ def test_salesforce_connector_poll_source(
     all_docs_1: list[Document] = []
     for doc_batch in salesforce_connector.poll_source(0, intermediate_time.timestamp()):
         for doc in doc_batch:
+            if isinstance(doc, HierarchyNode):
+                continue
             all_docs_1.append(doc)
 
     len_1 = len(all_docs_1)
@@ -186,12 +191,16 @@ def test_salesforce_connector_slim(salesforce_connector: SalesforceConnector) ->
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
     for doc_batch in salesforce_connector.load_from_state():
-        all_full_doc_ids.update([doc.id for doc in doc_batch])
+        all_full_doc_ids.update(
+            [doc.id for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
     for slim_doc_batch in salesforce_connector.retrieve_all_slim_docs_perm_sync():
-        all_slim_doc_ids.update([doc.id for doc in slim_doc_batch])
+        all_slim_doc_ids.update(
+            [doc.id for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     # The set of full doc IDs should be always be a subset of the slim doc IDs
     assert all_full_doc_ids.issubset(all_slim_doc_ids)

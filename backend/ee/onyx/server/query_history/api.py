@@ -32,6 +32,7 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import QueryHistoryType
 from onyx.configs.constants import SessionType
@@ -48,7 +49,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -78,7 +78,7 @@ def fetch_and_process_chat_session_history(
     db_session: Session,
     start: datetime,
     end: datetime,
-    limit: int | None = 500,
+    limit: int | None = 500,  # noqa: ARG001
 ) -> Generator[ChatSessionSnapshot]:
     PAGE_SIZE = 100
 
@@ -153,7 +153,7 @@ def snapshot_from_chat_session(
 @router.get("/admin/chat-sessions")
 def admin_get_chat_sessions(
     user_id: UUID,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionsResponse:
     # we specifically don't allow this endpoint if "anonymized" since
@@ -196,7 +196,7 @@ def get_chat_session_history(
     feedback_type: QAFeedbackType | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -234,7 +234,7 @@ def get_chat_session_history(
 @router.get("/admin/chat-session-history/{chat_session_id}")
 def get_chat_session_admin(
     chat_session_id: UUID,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -269,7 +269,7 @@ def get_chat_session_admin(
 
 @router.get("/admin/query-history/list")
 def list_all_query_history_exports(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[QueryHistoryExport]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -297,7 +297,7 @@ def list_all_query_history_exports(
 
 @router.post("/admin/query-history/start-export", tags=PUBLIC_API_TAGS)
 def start_query_history_export(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
     start: datetime | None = None,
     end: datetime | None = None,
@@ -344,7 +344,7 @@ def start_query_history_export(
 @router.get("/admin/query-history/export-status", tags=PUBLIC_API_TAGS)
 def get_query_history_export_status(
     request_id: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
@@ -378,7 +378,7 @@ def get_query_history_export_status(
 @router.get("/admin/query-history/download", tags=PUBLIC_API_TAGS)
 def download_query_history_csv(
     request_id: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])

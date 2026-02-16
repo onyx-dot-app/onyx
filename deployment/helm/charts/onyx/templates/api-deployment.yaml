@@ -69,13 +69,25 @@ spec:
             - |
               alembic upgrade head &&
               echo "Starting Onyx Api Server" &&
-              uvicorn onyx.main:app --host 0.0.0.0 --port {{ .Values.api.containerPorts.server }}
+              uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
           ports:
             - name: api-server-port
               containerPort: {{ .Values.api.containerPorts.server }}
               protocol: TCP
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
+          {{- with .Values.api.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.api.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.api.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}

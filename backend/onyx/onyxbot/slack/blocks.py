@@ -124,7 +124,7 @@ def _build_qa_feedback_block(
 
 
 def _build_ephemeral_publication_block(
-    channel_id: str,
+    channel_id: str,  # noqa: ARG001
     chat_message_id: int,
     message_info: SlackMessageInfo,
     original_question_ts: str,

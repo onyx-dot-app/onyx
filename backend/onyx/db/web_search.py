@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import InternetContentProvider
 from onyx.db.models import InternetSearchProvider
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
@@ -72,7 +73,8 @@ def _apply_search_provider_updates(
     provider.provider_type = provider_type.value
     provider.config = config
     if api_key_changed or provider.api_key is None:
-        provider.api_key = api_key
+        # EncryptedString accepts str for writes, returns SensitiveValue for reads
+        provider.api_key = api_key  # type: ignore[assignment]
 
 
 def upsert_web_search_provider(
@@ -113,7 +115,6 @@ def upsert_web_search_provider(
     if activate:
         set_active_web_search_provider(provider_id=provider.id, db_session=db_session)
 
-    db_session.commit()
     db_session.refresh(provider)
     return provider
 
@@ -222,13 +223,14 @@ def _apply_content_provider_updates(
     provider_type: WebContentProviderType,
     api_key: str | None,
     api_key_changed: bool,
-    config: dict[str, str] | None,
+    config: WebContentProviderConfig | None,
 ) -> None:
     provider.name = name
     provider.provider_type = provider_type.value
     provider.config = config
     if api_key_changed or provider.api_key is None:
-        provider.api_key = api_key
+        # EncryptedString accepts str for writes, returns SensitiveValue for reads
+        provider.api_key = api_key  # type: ignore[assignment]
 
 
 def upsert_web_content_provider(
@@ -238,7 +240,7 @@ def upsert_web_content_provider(
     provider_type: WebContentProviderType,
     api_key: str | None,
     api_key_changed: bool,
-    config: dict[str, str] | None,
+    config: WebContentProviderConfig | None,
     activate: bool,
     db_session: Session,
 ) -> InternetContentProvider:
@@ -269,7 +271,6 @@ def upsert_web_content_provider(
     if activate:
         set_active_web_content_provider(provider_id=provider.id, db_session=db_session)
 
-    db_session.commit()
     db_session.refresh(provider)
     return provider
 

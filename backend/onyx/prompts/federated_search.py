@@ -1,29 +1,38 @@
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
 
 SLACK_QUERY_EXPANSION_PROMPT = f"""
-Rewrite the user's query and, if helpful, split it into at most {MAX_SLACK_QUERY_EXPANSIONS} \
-keyword-only queries, so that Slack's keyword search yields the best matches.
+Rewrite the user's query into at most {MAX_SLACK_QUERY_EXPANSIONS} keyword-only queries for Slack's keyword search.
 
-Keep in mind the Slack's search behavior:
-- Pure keyword AND search (no semantics).
-- Word order matters.
-- More words = fewer matches, so keep each query concise.
-- IMPORTANT: Prefer simple 1-2 word queries over longer multi-word queries.
+Slack search behavior:
+- Pure keyword AND search (no semantics)
+- More words = fewer matches, so keep queries concise (1-3 words)
 
-Critical: Extract ONLY keywords that would actually appear in Slack message content.
+ALWAYS include:
+- Person names (e.g., "Sarah Chen", "Mike Johnson") - people search for messages from/about specific people
+- Project/product names, technical terms, proper nouns
+- Actual content words: "performance", "bug", "deployment", "API", "error"
 
 DO NOT include:
-- Meta-words: "topics", "conversations", "discussed", "summary", "messages", "big", "main", "talking"
-- Temporal: "today", "yesterday", "week", "month", "recent", "past", "last"
-- Channels/Users: "general", "eng-general", "engineering", "@username"
-
-DO include:
-- Actual content: "performance", "bug", "deployment", "API", "database", "error", "feature"
+- Meta-words: "topics", "conversations", "discussed", "summary", "messages"
+- Temporal: "today", "yesterday", "week", "month", "recent", "last"
+- Channel names: "general", "eng-general", "random"
 
 Examples:
 
 Query: "what are the big topics in eng-general this week?"
 Output:
+
+Query: "messages with Sarah about the deployment"
+Output:
+Sarah deployment
+Sarah
+deployment
+
+Query: "what did Mike say about the budget?"
+Output:
+Mike budget
+Mike
+budget
 
 Query: "performance issues in eng-general"
 Output:
@@ -41,7 +50,7 @@ Now process this query:
 
 {{query}}
 
-Output:
+Output (keywords only, one per line, NO explanations or commentary):
 """
 
 SLACK_DATE_EXTRACTION_PROMPT = """

@@ -1,6 +1,6 @@
 import Modal from "@/refresh-components/Modal";
 import { updateUserGroup } from "./lib";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { User, UserGroup } from "@/lib/types";
 import { UserEditor } from "../UserEditor";
 import { useState } from "react";
@@ -9,20 +9,18 @@ export interface AddMemberFormProps {
   users: User[];
   userGroup: UserGroup;
   onClose: () => void;
-  setPopup: (popupSpec: PopupSpec) => void;
 }
 
 export default function AddMemberForm({
   users,
   userGroup,
   onClose,
-  setPopup,
 }: AddMemberFormProps) {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgUserPlus}
           title="Add New User"
@@ -49,18 +47,12 @@ export default function AddMemberForm({
                 cc_pair_ids: userGroup.cc_pairs.map((ccPair) => ccPair.id),
               });
               if (response.ok) {
-                setPopup({
-                  message: "Successfully added users to group",
-                  type: "success",
-                });
+                toast.success("Successfully added users to group");
                 onClose();
               } else {
                 const responseJson = await response.json();
                 const errorMsg = responseJson.detail || responseJson.message;
-                setPopup({
-                  message: `Failed to add users to group - ${errorMsg}`,
-                  type: "error",
-                });
+                toast.error(`Failed to add users to group - ${errorMsg}`);
                 onClose();
               }
             }}

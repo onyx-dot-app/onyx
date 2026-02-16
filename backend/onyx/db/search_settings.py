@@ -54,12 +54,6 @@ def create_search_settings(
         enable_contextual_rag=search_settings.enable_contextual_rag,
         contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
         contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
-        multilingual_expansion=search_settings.multilingual_expansion,
-        disable_rerank_for_streaming=search_settings.disable_rerank_for_streaming,
-        rerank_model_name=search_settings.rerank_model_name,
-        rerank_provider_type=search_settings.rerank_provider_type,
-        rerank_api_key=search_settings.rerank_api_key,
-        num_rerank=search_settings.num_rerank,
         switchover_type=search_settings.switchover_type,
     )
 

@@ -9,7 +9,6 @@ from sqlalchemy.sql.expression import and_
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
@@ -43,22 +42,13 @@ PUBLIC_CREDENTIAL_ID = 0
 
 def _add_user_filters(
     stmt: Select,
-    user: User | None,
+    user: User,
     get_editable: bool = True,
 ) -> Select:
     """Attaches filters to the statement to ensure that the user can only
     access the appropriate credentials"""
-    if user is None:
-        if not DISABLE_AUTH:
-            raise ValueError("Anonymous users are not allowed to access credentials")
-        # If user is None and auth is disabled, assume the user is an admin
-        return stmt.where(
-            or_(
-                Credential.user_id.is_(None),
-                Credential.admin_public == True,  # noqa: E712
-                Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
-            )
-        )
+    if user.is_anonymous:
+        raise ValueError("Anonymous users are not allowed to access credentials")
 
     if user.role == UserRole.ADMIN:
         # Admins can access all credentials that are public or owned by them
@@ -141,7 +131,7 @@ def _relate_credential_to_user_groups__no_commit(
 
 def fetch_credentials_for_user(
     db_session: Session,
-    user: User | None,
+    user: User,
     get_editable: bool = True,
 ) -> list[Credential]:
     stmt = select(Credential)
@@ -152,7 +142,7 @@ def fetch_credentials_for_user(
 
 def fetch_credential_by_id_for_user(
     credential_id: int,
-    user: User | None,
+    user: User,
     db_session: Session,
     get_editable: bool = True,
 ) -> Credential | None:
@@ -181,7 +171,7 @@ def fetch_credential_by_id(
 
 def fetch_credentials_by_source_for_user(
     db_session: Session,
-    user: User | None,
+    user: User,
     document_source: DocumentSource | None = None,
     get_editable: bool = True,
 ) -> list[Credential]:
@@ -201,7 +191,7 @@ def fetch_credentials_by_source(
 
 
 def swap_credentials_connector(
-    new_credential_id: int, connector_id: int, user: User | None, db_session: Session
+    new_credential_id: int, connector_id: int, user: User, db_session: Session
 ) -> ConnectorCredentialPair:
     # Check if the user has permission to use the new credential
     new_credential = fetch_credential_by_id_for_user(
@@ -260,12 +250,12 @@ def swap_credentials_connector(
 
 def create_credential(
     credential_data: CredentialBase,
-    user: User | None,
+    user: User,
     db_session: Session,
 ) -> Credential:
     credential = Credential(
         credential_json=credential_data.credential_json,
-        user_id=user.id if user else None,
+        user_id=user.id,
         admin_public=credential_data.admin_public,
         source=credential_data.source,
         name=credential_data.name,
@@ -280,6 +270,8 @@ def create_credential(
     )
 
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -307,14 +299,21 @@ def alter_credential(
 
     credential.name = name
 
-    # Assign a new dictionary to credential.credential_json
-    credential.credential_json = {
-        **credential.credential_json,
+    # Get existing credential_json and merge with new values
+    existing_json = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+    credential.credential_json = {  # type: ignore[assignment]
+        **existing_json,
         **credential_json,
     }
 
-    credential.user_id = user.id if user is not None else None
+    credential.user_id = user.id
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -328,10 +327,12 @@ def update_credential(
     if credential is None:
         return None
 
-    credential.credential_json = credential_data.credential_json
+    credential.credential_json = credential_data.credential_json  # type: ignore[assignment]
     credential.user_id = user.id if user is not None else None
 
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -345,8 +346,10 @@ def update_credential_json(
     if credential is None:
         return None
 
-    credential.credential_json = credential_json
+    credential.credential_json = credential_json  # type: ignore[assignment]
     db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
     return credential
 
 
@@ -356,7 +359,7 @@ def backend_update_credential_json(
     db_session: Session,
 ) -> None:
     """This should not be used in any flows involving the frontend or users"""
-    credential.credential_json = credential_json
+    credential.credential_json = credential_json  # type: ignore[assignment]
     db_session.commit()
 
 
@@ -451,7 +454,12 @@ def create_initial_public_credential(db_session: Session) -> None:
     )
 
     if first_credential is not None:
-        if first_credential.credential_json != {} or first_credential.user is not None:
+        credential_json_value = (
+            first_credential.credential_json.get_value(apply_mask=False)
+            if first_credential.credential_json
+            else {}
+        )
+        if credential_json_value != {} or first_credential.user is not None:
             raise ValueError(error_msg)
         return
 
@@ -483,12 +491,17 @@ def cleanup_google_drive_credentials(db_session: Session) -> None:
 
 
 def delete_service_account_credentials(
-    user: User | None, db_session: Session, source: DocumentSource
+    user: User, db_session: Session, source: DocumentSource
 ) -> None:
     credentials = fetch_credentials_for_user(db_session=db_session, user=user)
     for credential in credentials:
+        credential_json = (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        )
         if (
-            credential.credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
+            credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
             and credential.source == source
         ):
             db_session.delete(credential)

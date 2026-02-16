@@ -82,33 +82,52 @@ const PopoverClose = PopoverPrimitive.Close;
  *
  * The main popover container with default styling.
  *
+ * Widths:
+ * - `fit`: Fits content width (default)
+ * - `md`: Medium width (12rem)
+ * - `lg`: Large width (15rem)
+ * - `xl`: Extra large width (18rem)
+ *
+ * @param width - Width of the popover. Default: "fit"
+ *
  * @example
  * ```tsx
  * <Popover.Content align="start" sideOffset={8}>
  *   <div>Popover content here</div>
  * </Popover.Content>
  *
- * // Custom styling
- * <Popover.Content className="w-[20rem]">
- *   <div>Custom sized content</div>
+ * // Medium width
+ * <Popover.Content width="md">
+ *   <div>Medium width content</div>
+ * </Popover.Content>
+ *
+ * // Extra large width
+ * <Popover.Content width="xl">
+ *   <div>Extra large width content</div>
  * </Popover.Content>
  * ```
  */
-const widthClasses = {
-  main: "w-fit",
-  wide: "w-[280px]",
+type PopoverWidths = "fit" | "md" | "lg" | "xl";
+const widthClasses: Record<PopoverWidths, string> = {
+  fit: "w-fit",
+  md: "w-[12rem]",
+  lg: "w-[15rem]",
+  xl: "w-[18rem]",
 };
 interface PopoverContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
   > {
-  wide?: boolean;
+  width?: PopoverWidths;
+  ref?: React.Ref<React.ComponentRef<typeof PopoverPrimitive.Content>>;
 }
-const PopoverContent = React.forwardRef<
-  React.ComponentRef<typeof PopoverPrimitive.Content>,
-  PopoverContentProps
->(({ wide, align = "center", sideOffset = 4, ...props }, ref) => {
-  const width = wide ? "wide" : "main";
+function PopoverContent({
+  width = "fit",
+  align = "center",
+  sideOffset = 4,
+  ref,
+  ...props
+}: PopoverContentProps) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -123,20 +142,7 @@ const PopoverContent = React.forwardRef<
       />
     </PopoverPrimitive.Portal>
   );
-});
-PopoverContent.displayName = PopoverPrimitive.Content.displayName;
-
-/**
- * Internal helper for rendering separator lines
- */
-function SeparatorHelper() {
-  return <Separator className="py-0 px-2" />;
 }
-
-const sizeClasses = {
-  small: "w-[10rem]",
-  medium: "w-[15.5rem]",
-};
 
 export default Object.assign(PopoverRoot, {
   Trigger: PopoverTrigger,
@@ -149,6 +155,10 @@ export default Object.assign(PopoverRoot, {
 // ============================================================================
 // Common Layouts
 // ============================================================================
+
+function SeparatorHelper() {
+  return <Separator className="py-0 px-2" />;
+}
 
 /**
  * Popover Menu Component
@@ -167,7 +177,7 @@ export default Object.assign(PopoverRoot, {
  *     <button>Options</button>
  *   </Popover.Trigger>
  *   <Popover.Content>
- *     <Popover.Menu small>
+ *     <Popover.Menu>
  *       <MenuItem>Option 1</MenuItem>
  *       <MenuItem>Option 2</MenuItem>
  *       {null}  {/* Separator line *\/}
@@ -178,7 +188,6 @@ export default Object.assign(PopoverRoot, {
  *
  * // With footer
  * <Popover.Menu
- *   medium
  *   footer={<Button>Apply</Button>}
  * >
  *   <MenuItem>Item 1</MenuItem>
@@ -187,10 +196,6 @@ export default Object.assign(PopoverRoot, {
  * ```
  */
 export interface PopoverMenuProps {
-  // size variants
-  small?: boolean;
-  medium?: boolean;
-
   children?: React.ReactNode[];
   footer?: React.ReactNode;
 
@@ -198,9 +203,6 @@ export interface PopoverMenuProps {
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 export function PopoverMenu({
-  small,
-  medium,
-
   children,
   footer,
   scrollContainerRef,
@@ -214,16 +216,12 @@ export function PopoverMenu({
     if (child !== null) return true;
     return index !== 0 && index !== definedChildren.length - 1;
   });
-  const size = small ? "small" : medium ? "medium" : "small";
 
   return (
     <Section alignItems="stretch">
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
-        className={cn(
-          "flex flex-col gap-1 max-h-[20rem] !w-full",
-          sizeClasses[size]
-        )}
+        className="flex flex-col gap-1 max-h-[20rem] w-full"
       >
         {filteredChildren.map((child, index) => (
           <div key={index}>

@@ -127,7 +127,7 @@ function TableRow({ entityType }: { entityType: EntityType }) {
           <div className="col-span-10 relative">
             <InputTypeIn
               placeholder="Value"
-              disabled={!entityTypeState.active}
+              variant={!entityTypeState.active ? "disabled" : undefined}
               className="w-full px-3 py-2 border"
               defaultValue={entityType.description}
               onChange={(e) =>

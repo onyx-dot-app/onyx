@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser } from "../utils/auth";
 
@@ -146,7 +146,7 @@ test.skip("Federated Slack Connector - Create, OAuth Modal, and User Settings Fl
     await loginAsRandomUser(page);
 
     // Navigate back to main page and verify OAuth modal appears
-    await page.goto("/chat");
+    await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
     // Check if the OAuth modal appears

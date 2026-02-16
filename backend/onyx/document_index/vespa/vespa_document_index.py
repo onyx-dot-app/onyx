@@ -1,25 +1,25 @@
 import concurrent.futures
 import logging
 import random
+from typing import Any
 from uuid import UUID
 
 import httpx
 from pydantic import BaseModel
 from retry import retry
 
-from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
 from onyx.configs.app_configs import RERANK_COUNT
 from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.configs.chat_configs import HYBRID_ALPHA
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
-from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.db.enums import EmbeddingPrecision
+from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import get_document_chunk_ids
+from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -30,6 +30,8 @@ from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
+from onyx.document_index.vespa.chunk_retrieval import get_all_chunks_paginated
+from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
 )
@@ -49,7 +51,9 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
 from onyx.document_index.vespa_constants import BATCH_SIZE
+from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
@@ -58,6 +62,7 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
 
@@ -128,79 +133,6 @@ def _enrich_basic_chunk_info(
         old_version=is_old_version,
     )
     return enriched_doc_info
-
-
-def _cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk]:
-    """Removes indexing-time content additions from chunks retrieved from Vespa.
-
-    During indexing, chunks are augmented with additional text to improve search
-    quality:
-    - Title prepended to content (for better keyword/semantic matching)
-    - Metadata suffix appended to content
-    - Contextual RAG: doc_summary (beginning) and chunk_context (end)
-
-    This function strips these additions before returning chunks to users,
-    restoring the original document content. Cleaning is applied in sequence:
-    1. Title removal:
-        - Full match: Strips exact title from beginning
-        - Partial match: If content starts with title[:BLURB_SIZE], splits on
-          RETURN_SEPARATOR to remove title section
-    2. Metadata suffix removal:
-        - Strips metadata_suffix from end, plus trailing RETURN_SEPARATOR
-    3. Contextual RAG removal:
-        - Strips doc_summary from beginning (if present)
-        - Strips chunk_context from end (if present)
-
-    Args:
-        chunks: Chunks as retrieved from Vespa with indexing augmentations
-            intact.
-
-    Returns:
-        Clean InferenceChunk objects with augmentations removed, containing only
-            the original document content that should be shown to users.
-    """
-
-    def _remove_title(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.title or not chunk.content:
-            return chunk.content
-
-        if chunk.content.startswith(chunk.title):
-            return chunk.content[len(chunk.title) :].lstrip()
-
-        # BLURB SIZE is by token instead of char but each token is at least 1 char
-        # If this prefix matches the content, it's assumed the title was prepended
-        if chunk.content.startswith(chunk.title[:BLURB_SIZE]):
-            return (
-                chunk.content.split(RETURN_SEPARATOR, 1)[-1]
-                if RETURN_SEPARATOR in chunk.content
-                else chunk.content
-            )
-        return chunk.content
-
-    def _remove_metadata_suffix(chunk: InferenceChunkUncleaned) -> str:
-        if not chunk.metadata_suffix:
-            return chunk.content
-        return chunk.content.removesuffix(chunk.metadata_suffix).rstrip(
-            RETURN_SEPARATOR
-        )
-
-    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
-        # remove document summary
-        if chunk.doc_summary and chunk.content.startswith(chunk.doc_summary):
-            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
-        # remove chunk context
-        if chunk.chunk_context and chunk.content.endswith(chunk.chunk_context):
-            chunk.content = chunk.content[
-                : len(chunk.content) - len(chunk.chunk_context)
-            ].rstrip()
-        return chunk.content
-
-    for chunk in chunks:
-        chunk.content = _remove_title(chunk)
-        chunk.content = _remove_metadata_suffix(chunk)
-        chunk.content = _remove_contextual_rag(chunk)
-
-    return [chunk.to_inference_chunk() for chunk in chunks]
 
 
 @retry(
@@ -590,7 +522,7 @@ class VespaDocumentIndex(DocumentIndex):
         ]
 
         if batch_retrieval:
-            return _cleanup_chunks(
+            return cleanup_content_for_chunks(
                 batch_search_api_retrieval(
                     index_name=self._index_name,
                     chunk_requests=sanitized_chunk_requests,
@@ -600,7 +532,7 @@ class VespaDocumentIndex(DocumentIndex):
                     get_large_chunks=False,
                 )
             )
-        return _cleanup_chunks(
+        return cleanup_content_for_chunks(
             parallel_visit_api_retrieval(
                 index_name=self._index_name,
                 chunk_requests=sanitized_chunk_requests,
@@ -619,7 +551,6 @@ class VespaDocumentIndex(DocumentIndex):
         query_type: QueryType,
         filters: IndexFilters,
         num_to_retrieve: int,
-        offset: int = 0,
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the rerank-count value set in the
@@ -665,18 +596,17 @@ class VespaDocumentIndex(DocumentIndex):
             "input.query(alpha)": hybrid_alpha,
             "input.query(title_content_ratio)": TITLE_CONTENT_RATIO,
             "hits": num_to_retrieve,
-            "offset": offset,
             "ranking.profile": ranking_profile,
             "timeout": VESPA_TIMEOUT,
         }
 
-        return _cleanup_chunks(query_vespa(params))
+        return cleanup_content_for_chunks(query_vespa(params))
 
     def random_retrieval(
         self,
         filters: IndexFilters,
         num_to_retrieve: int = 100,
-        dirty: bool | None = None,
+        dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         vespa_where_clauses = build_vespa_filters(filters, remove_trailing_and=True)
 
@@ -692,4 +622,83 @@ class VespaDocumentIndex(DocumentIndex):
             "ranking.properties.random.seed": random_seed,
         }
 
-        return _cleanup_chunks(query_vespa(params))
+        return cleanup_content_for_chunks(query_vespa(params))
+
+    def get_raw_document_chunks(self, document_id: str) -> list[dict[str, Any]]:
+        """Gets all raw document chunks for a document as returned by Vespa.
+
+        Used in the Vespa migration task.
+
+        Args:
+            document_id: The ID of the document to get chunks for.
+
+        Returns:
+            List of raw document chunks.
+        """
+        # Vespa doc IDs are sanitized using replace_invalid_doc_id_characters.
+        sanitized_document_id = replace_invalid_doc_id_characters(document_id)
+        chunk_request = VespaChunkRequest(document_id=sanitized_document_id)
+        raw_chunks = get_chunks_via_visit_api(
+            chunk_request=chunk_request,
+            index_name=self._index_name,
+            filters=IndexFilters(access_control_list=None, tenant_id=self._tenant_id),
+            get_large_chunks=False,
+            short_tensor_format=True,
+        )
+        # Vespa returns other metadata around the actual document chunk. The raw
+        # chunk we're interested in is in the "fields" field.
+        raw_document_chunks = [chunk["fields"] for chunk in raw_chunks]
+        return raw_document_chunks
+
+    def get_all_raw_document_chunks_paginated(
+        self,
+        continuation_token: str | None,
+        page_size: int,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Gets all the chunks in Vespa, paginated.
+
+        Used in the chunk-level Vespa-to-OpenSearch migration task.
+
+        Args:
+            continuation_token: Token returned by Vespa representing a page
+                offset. None to start from the beginning. Defaults to None.
+            page_size: Best-effort batch size for the visit. Defaults to 1,000.
+
+        Returns:
+            Tuple of (list of chunk dicts, next continuation token or None). The
+                continuation token is None when the visit is complete.
+        """
+        raw_chunks, next_continuation_token = get_all_chunks_paginated(
+            index_name=self._index_name,
+            tenant_state=TenantState(
+                tenant_id=self._tenant_id, multitenant=MULTI_TENANT
+            ),
+            continuation_token=continuation_token,
+            page_size=page_size,
+        )
+        return raw_chunks, next_continuation_token
+
+    def index_raw_chunks(self, chunks: list[dict[str, Any]]) -> None:
+        """Indexes raw document chunks into Vespa.
+
+        To only be used in tests. Not for production.
+        """
+        json_header = {
+            "Content-Type": "application/json",
+        }
+        with self._httpx_client_context as http_client:
+            for chunk in chunks:
+                chunk_id = str(
+                    get_uuid_from_chunk_info(
+                        document_id=chunk[DOCUMENT_ID],
+                        chunk_id=chunk[CHUNK_ID],
+                        tenant_id=self._tenant_id,
+                    )
+                )
+                vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=self._index_name)}/{chunk_id}"
+                response = http_client.post(
+                    vespa_url,
+                    headers=json_header,
+                    json={"fields": chunk},
+                )
+                response.raise_for_status()

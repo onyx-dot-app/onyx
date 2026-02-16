@@ -9,7 +9,6 @@ from onyx.configs.model_configs import PROMPT_CACHE_REDIS_TTL_MULTIPLIER
 from onyx.key_value_store.store import PgRedisKVStore
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
-from onyx.llm.prompt_cache.utils import normalize_language_model_input
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -196,7 +195,7 @@ def generate_cache_key_hash(
     """Generate a deterministic cache key hash from cacheable prefix.
 
     Args:
-        cacheable_prefix: LanguageModelInput (str or Sequence[ChatCompletionMessage])
+        cacheable_prefix: Single message or list of messages to hash
         provider: LLM provider name
         model_name: Model name
         tenant_id: Tenant ID
@@ -204,10 +203,11 @@ def generate_cache_key_hash(
     Returns:
         SHA256 hash as hex string
     """
-    # Normalize to Sequence[ChatCompletionMessage] for consistent hashing
-    messages = normalize_language_model_input(cacheable_prefix)
-    # Convert to list of dicts for serialization, handling nested Pydantic models
-    messages_dict = [_make_json_serializable(dict(msg)) for msg in messages]
+    # Normalize to list for consistent hashing; _make_json_serializable handles Pydantic models
+    messages = (
+        cacheable_prefix if isinstance(cacheable_prefix, list) else [cacheable_prefix]
+    )
+    messages_dict = [_make_json_serializable(msg) for msg in messages]
 
     # Serialize messages in a deterministic way
     # Include only content, roles, and order - exclude timestamps or dynamic fields

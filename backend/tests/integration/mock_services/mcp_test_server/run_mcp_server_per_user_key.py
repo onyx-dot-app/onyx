@@ -41,6 +41,12 @@ API_KEY_RECORDS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# These are inferrable from the file anyways, no need to obfuscate.
+# use them to test your auth with this server
+#
+# mcp_live-kid_alice_001-S3cr3tAlice
+# mcp_live-kid_bob_001-S3cr3tBob
+
 
 # ---- verifier ---------------------------------------------------------------
 class ApiKeyVerifier(TokenVerifier):
@@ -90,7 +96,7 @@ class ApiKeyVerifier(TokenVerifier):
 def make_many_tools(mcp: FastMCP) -> list[FunctionTool]:
     def make_tool(i: int) -> FunctionTool:
         @mcp.tool(name=f"tool_{i}", description=f"Get secret value {i}")
-        def tool_name(name: str) -> str:
+        def tool_name(name: str) -> str:  # noqa: ARG001
             """Get secret value."""
             return f"Secret value {400 - i}!"
 

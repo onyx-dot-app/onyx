@@ -14,7 +14,7 @@ from tests.integration.common_utils.test_models import DATestUser
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
-def test_chat_retention(reset: None, admin_user: DATestUser) -> None:
+def test_chat_retention(reset: None, admin_user: DATestUser) -> None:  # noqa: ARG001
     """Test that chat sessions are deleted after the retention period expires."""
 
     # Set chat retention period to 10 seconds

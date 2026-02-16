@@ -8,18 +8,17 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
   ProjectFile,
   UserFileStatus,
-} from "@/app/chat/projects/projectsService";
+} from "@/app/app/projects/projectsService";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { usePopup } from "@/components/admin/connectors/Popup";
-import { useProjectsContext } from "@/app/chat/projects/ProjectsContext";
+import { toast } from "@/hooks/useToast";
+import { useProjectsContext } from "@/providers/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import { isImageFile } from "@/lib/utils";
 import {
   SvgExternalLink,
   SvgFileText,
-  SvgFiles,
   SvgImage,
   SvgLoader,
   SvgMoreHorizontal,
@@ -120,7 +119,7 @@ function FilePickerPopoverContents({
   const quickAccessFiles = recentFiles.slice(0, MAX_FILES_TO_SHOW);
 
   return (
-    <PopoverMenu medium>
+    <PopoverMenu>
       {[
         // Action button to upload more files
         <LineItem
@@ -190,7 +189,6 @@ export default function FilePickerPopover({
   const [recentFilesSnapshot, setRecentFilesSnapshot] = useState<ProjectFile[]>(
     []
   );
-  const { popup, setPopup } = usePopup();
   const { deleteUserFile, setCurrentMessageFiles } = useProjectsContext();
   const [deletedFileIds, setDeletedFileIds] = useState<string[]>([]);
 
@@ -212,10 +210,7 @@ export default function FilePickerPopover({
     deleteUserFile(file.id)
       .then((result) => {
         if (!result.has_associations) {
-          setPopup({
-            message: "File deleted successfully",
-            type: "success",
-          });
+          toast.success("File deleted successfully");
           setCurrentMessageFiles((prev) =>
             prev.filter((f) => f.id !== file.id)
           );
@@ -240,10 +235,7 @@ export default function FilePickerPopover({
             message += `assistants: ${assistants}`;
           }
 
-          setPopup({
-            message: message,
-            type: "error",
-          });
+          toast.error(message);
         }
       })
       .catch((error) => {
@@ -251,10 +243,7 @@ export default function FilePickerPopover({
         setRecentFilesSnapshot((prev) =>
           prev.map((f) => (f.id === file.id ? { ...f, status: lastStatus } : f))
         );
-        setPopup({
-          message: "Failed to delete file. Please try again.",
-          type: "error",
-        });
+        toast.error("Failed to delete file. Please try again.");
         // Useful for debugging; safe in client components
         console.error("Failed to delete file", error);
       });
@@ -262,8 +251,6 @@ export default function FilePickerPopover({
 
   return (
     <>
-      {popup}
-
       <input
         ref={fileInputRef}
         type="file"
@@ -295,7 +282,7 @@ export default function FilePickerPopover({
         <Popover.Trigger asChild>
           {typeof trigger === "function" ? trigger(open) : trigger}
         </Popover.Trigger>
-        <Popover.Content align="start" side="bottom">
+        <Popover.Content align="start" side="bottom" width="lg">
           <FilePickerPopoverContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {

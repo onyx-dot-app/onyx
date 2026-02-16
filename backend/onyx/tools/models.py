@@ -16,9 +16,11 @@ from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
@@ -34,6 +36,15 @@ class ToolCallException(Exception):
         # LLM made tool calls are acceptable and not flow terminating, this is the message
         # which will populate the tool response.
         self.llm_facing_message = llm_facing_message
+
+
+class ToolExecutionException(Exception):
+    """Exception raise for errors during tool execution."""
+
+    def __init__(self, message: str, emit_error_packet: bool = False):
+        super().__init__(message)
+
+        self.emit_error_packet = emit_error_packet
 
 
 class SearchToolUsage(str, Enum):
@@ -76,15 +87,21 @@ class ToolResponse(BaseModel):
         FinalImageGenerationResponse
         # This comes from internal search / web search, search docs need to be saved, already emitted by the tool
         | SearchDocsResponse
+        # This comes from the memory tool, memory needs to be persisted to the database
+        | MemoryToolResponse
         # This comes from open url, web content needs to be saved, maybe this can be consolidated too
         # | WebContentResponse
         # This comes from custom tools, tool result needs to be saved
         | CustomToolCallSummary
+        # If the rich response is a string, this is what's saved to the tool call in the DB
+        | str
         | None  # If nothing needs to be persisted outside of the string value passed to the LLM
     )
     # This is the final string that needs to be wrapped in a tool call response message and concatenated to the history
     llm_facing_response: str
     # The original tool call that triggered this response - set by tool_runner
+    # The response is first created by the tool runner, which does not need to be aware of things like the tool_call_id
+    # So this is set after the response is created by the tool runner
     tool_call: ToolCallKickoff | None = None
 
 
@@ -140,6 +157,8 @@ class OpenURLToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
     citation_mapping: dict[str, int]
+    url_snippet_map: dict[str, str]
+    max_urls: int = 10
 
 
 # None indicates that the default value should be used
@@ -150,7 +169,7 @@ class SearchToolOverrideKwargs(BaseModel):
     # without help and a specific custom prompt for this
     original_query: str | None = None
     message_history: list[ChatMinimalTextMessage] | None = None
-    memories: list[str] | None = None
+    user_memory_context: UserMemoryContext | None = None
     user_info: str | None = None
 
     # Used for tool calls after the first one but in the same chat turn. The reason for this is that if the initial pass through
@@ -196,6 +215,13 @@ class CustomToolRunContext(BaseModel):
     emitter: Emitter
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+class MemoryToolResponseSnapshot(BaseModel):
+    memory_text: str
+    operation: Literal["add", "update"]
+    memory_id: int | None = None
+    index: int | None = None
 
 
 class ToolCallInfo(BaseModel):

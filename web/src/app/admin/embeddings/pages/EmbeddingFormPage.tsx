@@ -1,6 +1,6 @@
 "use client";
 
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import EmbeddingModelSelection from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
@@ -41,7 +41,6 @@ import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 import { SvgAlertTriangle, SvgArrowLeft, SvgArrowRight } from "@opal/icons";
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
 
   const [advancedEmbeddingDetails, setAdvancedEmbeddingDetails] =
@@ -207,10 +206,7 @@ export default function EmbeddingForm() {
     if (response.ok) {
       return true;
     } else {
-      setPopup({
-        message: "Failed to update search settings",
-        type: "error",
-      });
+      toast.error("Failed to update search settings");
       return false;
     }
   }, [
@@ -218,7 +214,6 @@ export default function EmbeddingForm() {
     advancedEmbeddingDetails,
     rerankingDetails,
     switchoverType,
-    setPopup,
   ]);
 
   const handleValidationChange = useCallback(
@@ -478,7 +473,7 @@ export default function EmbeddingForm() {
     if (response.ok) {
       navigateToEmbeddingPage("embedding model");
     } else {
-      setPopup({ message: "Failed to update embedding model", type: "error" });
+      toast.error("Failed to update embedding model");
 
       alert(`Failed to update embedding model - ${await response.text()}`);
     }
@@ -486,8 +481,6 @@ export default function EmbeddingForm() {
 
   return (
     <div className="mx-auto mb-8 w-full">
-      {popup}
-
       <div className="mb-4">
         <HealthCheckBanner />
       </div>
@@ -526,6 +519,8 @@ export default function EmbeddingForm() {
                     setDisplayPoorModelName(false);
                     setShowPoorModel(true);
                   } else {
+                    // Skip reranking step (step 1), go directly to advanced settings (step 2)
+                    nextFormStep();
                     nextFormStep();
                   }
                 }}
@@ -539,7 +534,7 @@ export default function EmbeddingForm() {
         )}
         {showPoorModel && (
           <Modal open onOpenChange={() => setShowPoorModel(false)}>
-            <Modal.Content medium>
+            <Modal.Content>
               <Modal.Header
                 icon={SvgAlertTriangle}
                 title={`Are you sure you want to select ${selectedProvider.model_name}?`}
@@ -571,6 +566,8 @@ export default function EmbeddingForm() {
                 <Button
                   onClick={() => {
                     setShowPoorModel(false);
+                    // Skip reranking step (step 1), go directly to advanced settings (step 2)
+                    nextFormStep();
                     nextFormStep();
                   }}
                 >
@@ -667,7 +664,11 @@ export default function EmbeddingForm() {
 
             <div className={`mt-4 grid  grid-cols-3 w-full `}>
               <Button
-                onClick={() => prevFormStep()}
+                onClick={() => {
+                  // Skip reranking step (step 1), go back to embedding model (step 0)
+                  prevFormStep();
+                  prevFormStep();
+                }}
                 leftIcon={SvgArrowLeft}
                 secondary
               >

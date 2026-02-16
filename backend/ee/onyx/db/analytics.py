@@ -334,11 +334,9 @@ def fetch_assistant_unique_users_total(
 # Users can view assistant stats if they created the persona,
 # or if they are an admin
 def user_can_view_assistant_stats(
-    db_session: Session, user: User | None, assistant_id: int
+    db_session: Session, user: User, assistant_id: int
 ) -> bool:
-    # If user is None and auth is disabled, assume the user is an admin
-
-    if user is None or user.role == UserRole.ADMIN:
+    if user.role == UserRole.ADMIN:
         return True
 
     # Check if the user created the persona

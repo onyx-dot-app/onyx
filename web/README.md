@@ -5,22 +5,21 @@ This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next
 ## Getting Started
 
 Install node / npm: https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
-Install all dependencies: `npm i`
+Install all dependencies: `npm i`.
 
 Then, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 _Note:_ if you are having problems accessing the ^, try setting the `WEB_DOMAIN` env variable to
 `http://127.0.0.1:3000` and accessing it there.
+
+> [!TIP]
+> Packages are installed automatically when switching branches after `package.json` changes with [pre-commit](https://github.com/onyx-dot-app/onyx/blob/main/CONTRIBUTING.md#formatting-and-linting) configured.
 
 ### Connecting to a Cloud Backend
 
@@ -62,60 +61,45 @@ Bring up the entire application.
 
 0. Install playwright dependencies
 
-```cd web
+```bash
 npx playwright install
 ```
 
-1. Reset the instance
+1. Run playwright
 
-```cd backend
-export PYTEST_IGNORE_SKIP=true
-pytest -s tests/integration/tests/playwright/test_playwright.py
-```
-
-If you don't want to reset your local instance, you can still run playwright tests
-with SKIP_AUTH=true. This is convenient but slightly different from what happens
-in CI so tests might pass locally and fail in CI.
-
-```cd web
-SKIP_AUTH=true npx playwright test create_and_edit_assistant.spec.ts --project=no-auth
-```
-
-2. Run playwright
-
-```
-cd web
+```bash
 npx playwright test
 ```
 
 To run a single test:
 
-```
+```bash
 npx playwright test landing-page.spec.ts
 ```
 
 If running locally, interactive options can help you see exactly what is happening in
 the test.
 
-```
+```bash
 npx playwright test --ui
 npx playwright test --headed
 ```
 
-3. Inspect results
+2. Inspect results
 
 By default, playwright.config.ts is configured to output the results to:
 
-```
-web/test-results
+```bash
+web/output/playwright/
 ```
 
-4. Upload results to Chromatic (Optional)
+3. Visual regression screenshots
 
-This step would normally not be run by third party developers, but first party devs
-may use this for local troubleshooting and testing.
+Screenshots are captured automatically during test runs and saved to `web/output/screenshots/`.
+To compare screenshots across CI runs, use:
 
+```bash
+ods screenshot-diff compare --project admin
 ```
-cd web
-npx chromatic --playwright --project-token={your token here}
-```
+
+For more information, see [tools/ods/README.md](https://github.com/onyx-dot-app/onyx/blob/main/tools/ods/README.md#screenshot-diff---visual-regression-testing).

@@ -5,7 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.github.connector import GithubConnector
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_all_from_connector
 
 
 @pytest.fixture
@@ -25,11 +25,11 @@ def github_connector() -> GithubConnector:
 
 
 def test_github_connector_basic(github_connector: GithubConnector) -> None:
-    docs = load_all_docs_from_checkpoint_connector(
+    docs = load_all_from_connector(
         connector=github_connector,
         start=0,
         end=time.time(),
-    )
+    ).documents
     assert len(docs) > 1  # We expect at least one PR and one Issue to exist
 
     # Test the first document's structure

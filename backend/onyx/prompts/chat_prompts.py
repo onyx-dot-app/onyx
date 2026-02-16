@@ -1,18 +1,20 @@
-from onyx.prompts.constants import GENERAL_SEP_PAT
-
 # ruff: noqa: E501, W605 start
+
+from onyx.prompts.constants import REMINDER_TAG_NO_HEADER
+
 
 DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
 CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
-ALT_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
-ALT_CITATION_GUIDANCE_REPLACEMENT_PAT = "[[CITATION_GUIDANCE]]"
+REMINDER_TAG_REPLACEMENT_PAT = "{{REMINDER_TAG_DESCRIPTION}}"
 
 
 # Note this uses a string pattern replacement so the user can also include it in their custom prompts. Keeps the replacement logic simple
 # This is editable by the user in the admin UI.
 # The first line is intended to help guide the general feel/behavior of the system.
 DEFAULT_SYSTEM_PROMPT = f"""
-You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient.
+You are an expert assistant who is truthful, nuanced, insightful, and efficient. \
+Your goal is to deeply understand the user's intent, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. \
+Whenever there is any ambiguity around the user's query (or more information would be helpful), you use available tools (if any) to get more context.
 
 The current date is {DATETIME_REPLACEMENT_PAT}.{CITATION_GUIDANCE_REPLACEMENT_PAT}
 
@@ -22,11 +24,10 @@ You use proper Markdown and LaTeX to format your responses for math, scientific,
 For code you prefer to use Markdown and specify the language.
 You can use horizontal rules (---) to separate sections of your responses.
 You can use Markdown tables to format your responses for data, lists, and other structured information.
+
+{REMINDER_TAG_REPLACEMENT_PAT}
 """.lstrip()
 
-
-# Section for information about the user if provided such as their name, role, memories, etc.
-USER_INFO_HEADER = "\n\n# User Information\n"
 
 COMPANY_NAME_BLOCK = """
 The user is at an organization called `{company_name}`.
@@ -47,8 +48,6 @@ DO NOT provide any links following the citations. Cite inline as opposed to leav
 # Reminder message if any search tool has been run anytime in the chat turn
 CITATION_REMINDER = """
 Remember to provide inline citations in the format [1], [2], [3], etc. based on the "document" field of the documents.
-
-Do not acknowledge this hint in your response.
 """.strip()
 
 LAST_CYCLE_CITATION_REMINDER = """
@@ -62,15 +61,11 @@ Remember that after using web_search, you are encouraged to open some pages to g
 Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs. Open as many as you want.
 
 If you do have enough to answer, remember to provide INLINE citations using the "document" field in the format [1], [2], [3], etc.
-
-Do not acknowledge this hint in your response.
 """.strip()
 
 
 IMAGE_GEN_REMINDER = """
 Very briefly describe the image(s) generated. Do not include any links or attachments.
-
-Do not acknowledge this hint/message in your response.
 """.strip()
 
 
@@ -93,17 +88,20 @@ This tool call completed but the results are no longer accessible.
 # date and time but the replacement pattern is not present in the prompt.
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
-CHAT_NAMING = f"""
-Given the following conversation, provide a SHORT name for the conversation.{{language_hint_or_empty}}
-IMPORTANT: TRY NOT TO USE MORE THAN 5 WORDS, MAKE IT AS CONCISE AS POSSIBLE.
-Focus the name on the important keywords to convey the topic of the conversation.
 
-Chat History:
-{GENERAL_SEP_PAT}
-{{chat_history}}
-{GENERAL_SEP_PAT}
+CHAT_NAMING_SYSTEM_PROMPT = f"""
+Given the conversation history, provide a SHORT name for the conversation. Focus the name on the important keywords to convey the topic of the conversation. \
+Make sure the name is in the same language as the user's first message.
 
-Based on the above, what is a short name to convey the topic of the conversation?
+{REMINDER_TAG_NO_HEADER}
+
+IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 
+
+CHAT_NAMING_REMINDER = """
+Provide a short name for the conversation. Refer to other messages in the conversation (not including this one) to determine the language of the name.
+
+IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
+""".strip()
 # ruff: noqa: E501, W605 end

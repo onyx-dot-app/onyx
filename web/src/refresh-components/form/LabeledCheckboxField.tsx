@@ -14,6 +14,7 @@ interface CheckboxFieldProps {
   size?: "sm" | "md" | "lg";
   tooltip?: string;
   onChange?: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
 export const CheckboxField: React.FC<CheckboxFieldProps> = ({
@@ -24,6 +25,7 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
   size = "md",
   tooltip,
   labelClassName,
+  disabled,
   ...props
 }) => {
   const [field, , helpers] = useField<boolean>({ name, type: "checkbox" });
@@ -54,6 +56,7 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
           onChange?.(Boolean(checked));
         }}
         className={cn(sizeClasses[size])}
+        disabled={disabled}
         {...props}
       />
       <div className="flex flex-col">

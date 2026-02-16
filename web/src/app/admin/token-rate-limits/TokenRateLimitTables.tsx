@@ -65,7 +65,7 @@ export const TokenRateLimitTable = ({
 
   if (tokenRateLimits.length === 0) {
     return (
-      <div>
+      <div className="w-full">
         {!hideHeading && title && <Title>{title}</Title>}
         {!hideHeading && description && (
           <Text className="my-2">{description}</Text>
@@ -78,7 +78,7 @@ export const TokenRateLimitTable = ({
   }
 
   return (
-    <div>
+    <div className="w-full">
       {!hideHeading && title && <Title>{title}</Title>}
       {!hideHeading && description && (
         <Text className="my-2">{description}</Text>

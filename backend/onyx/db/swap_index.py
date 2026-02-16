@@ -15,12 +15,14 @@ from onyx.db.index_attempt import (
     count_unique_active_cc_pairs_with_successful_index_attempts,
 )
 from onyx.db.index_attempt import count_unique_cc_pairs_with_successful_index_attempts
+from onyx.db.llm import update_default_contextual_model
+from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_search_settings_status
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.key_value_store.factory import get_kv_store
 from onyx.utils.logger import setup_logger
 
@@ -80,39 +82,61 @@ def _perform_index_swap(
         db_session=db_session,
     )
 
-    # remove the old index from the vector db
-    document_index = get_default_document_index(new_search_settings, None)
+    # Update the default contextual model to match the newly promoted settings
+    try:
+        update_default_contextual_model(
+            db_session=db_session,
+            enable_contextual_rag=new_search_settings.enable_contextual_rag,
+            contextual_rag_llm_provider=new_search_settings.contextual_rag_llm_provider,
+            contextual_rag_llm_name=new_search_settings.contextual_rag_llm_name,
+        )
+    except ValueError as e:
+        logger.error(f"Model not found, defaulting to no contextual model: {e}")
+        update_no_default_contextual_rag_provider(
+            db_session=db_session,
+        )
+        new_search_settings.enable_contextual_rag = False
+        new_search_settings.contextual_rag_llm_provider = None
+        new_search_settings.contextual_rag_llm_name = None
+        db_session.commit()
+
+    # This flow is for checking and possibly creating an index so we get all
+    # indices.
+    document_indices = get_all_document_indices(new_search_settings, None, None)
 
     WAIT_SECONDS = 5
 
-    success = False
-    for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
-        try:
-            logger.notice(
-                f"Vespa index swap (attempt {x+1}/{VESPA_NUM_ATTEMPTS_ON_STARTUP})..."
-            )
-            document_index.ensure_indices_exist(
-                primary_embedding_dim=new_search_settings.final_embedding_dim,
-                primary_embedding_precision=new_search_settings.embedding_precision,
-                # just finished swap, no more secondary index
-                secondary_index_embedding_dim=None,
-                secondary_index_embedding_precision=None,
-            )
+    for document_index in document_indices:
+        success = False
+        for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
+            try:
+                logger.notice(
+                    f"Document index {document_index.__class__.__name__} swap (attempt {x+1}/{VESPA_NUM_ATTEMPTS_ON_STARTUP})..."
+                )
+                document_index.ensure_indices_exist(
+                    primary_embedding_dim=new_search_settings.final_embedding_dim,
+                    primary_embedding_precision=new_search_settings.embedding_precision,
+                    # just finished swap, no more secondary index
+                    secondary_index_embedding_dim=None,
+                    secondary_index_embedding_precision=None,
+                )
 
-            logger.notice("Vespa index swap complete.")
-            success = True
-            break
-        except Exception:
-            logger.exception(
-                f"Vespa index swap did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
-            )
-            time.sleep(WAIT_SECONDS)
+                logger.notice("Document index swap complete.")
+                success = True
+                break
+            except Exception:
+                logger.exception(
+                    f"Document index swap for {document_index.__class__.__name__} did not succeed. "
+                    f"The document index services may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
+                )
+                time.sleep(WAIT_SECONDS)
 
-    if not success:
-        logger.error(
-            f"Vespa index swap did not succeed. Attempt limit reached. ({VESPA_NUM_ATTEMPTS_ON_STARTUP})"
-        )
-        return None
+        if not success:
+            logger.error(
+                f"Document index swap for {document_index.__class__.__name__} did not succeed. "
+                f"Attempt limit reached. ({VESPA_NUM_ATTEMPTS_ON_STARTUP})"
+            )
+            return None
 
     return current_search_settings
 

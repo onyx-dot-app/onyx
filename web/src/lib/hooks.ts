@@ -24,10 +24,10 @@ import {
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import { parseLlmDescriptor } from "./llm/utils";
-import { ChatSession } from "@/app/chat/interfaces";
+import { ChatSession } from "@/app/app/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import {
   MinimalPersonaSnapshot,
   PersonaLabel,
@@ -36,9 +36,9 @@ import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces"
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
-import { useUser } from "@/components/user/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
+import { useUser } from "@/providers/UserProvider";
+import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
 import { useLLMProviders } from "./hooks/useLLMProviders";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
@@ -462,21 +462,6 @@ export function useFilters(): FilterManager {
   };
 }
 
-interface UseUsersParams {
-  includeApiKeys: boolean;
-}
-
-export const useUsers = ({ includeApiKeys }: UseUsersParams) => {
-  const url = `/api/manage/users?include_api_keys=${includeApiKeys}`;
-
-  const swrResponse = useSWR<AllUsersResponse>(url, errorHandlingFetcher);
-
-  return {
-    ...swrResponse,
-    refreshIndexingStatus: () => mutate(url),
-  };
-};
-
 export interface LlmDescriptor {
   name: string;
   provider: string;
@@ -539,7 +524,7 @@ This approach ensures that user preferences are maintained for existing chats wh
 providing appropriate defaults for new conversations based on the available tools.
 */
 
-function getDefaultLlmDescriptor(
+export function getDefaultLlmDescriptor(
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
   const defaultProvider = llmProviders.find(
@@ -563,6 +548,77 @@ function getDefaultLlmDescriptor(
     };
   }
   return null;
+}
+
+export function getValidLlmDescriptorForProviders(
+  modelName: string | null | undefined,
+  llmProviders: LLMProviderDescriptor[] | undefined | null
+): LlmDescriptor {
+  // Return early if providers haven't loaded yet (undefined/null)
+  // Empty arrays are valid (user has no provider access for this assistant)
+  if (llmProviders === undefined || llmProviders === null) {
+    return { name: "", provider: "", modelName: "" };
+  }
+
+  if (modelName) {
+    const model = parseLlmDescriptor(modelName);
+    // If we have no parsed modelName, try to find the provider by the raw modelName string
+    if (!(model.modelName && model.modelName.length > 0)) {
+      const provider = llmProviders.find((p) =>
+        p.model_configurations
+          .map((modelConfiguration) => modelConfiguration.name)
+          .includes(modelName)
+      );
+      if (provider) {
+        return {
+          modelName: modelName,
+          name: provider.name,
+          provider: provider.provider,
+        };
+      }
+    }
+
+    // If we have parsed provider info, try to find that specific provider.
+    // This ensures we don't incorrectly match a model to the wrong provider
+    // when the same model name exists across multiple providers (e.g., gpt-5 in Azure and OpenAI)
+    if (model.provider && model.provider.length > 0) {
+      const matchingProvider = llmProviders.find(
+        (p) =>
+          p.provider === model.provider &&
+          p.model_configurations
+            .map((modelConfiguration) => modelConfiguration.name)
+            .includes(model.modelName)
+      );
+      if (matchingProvider) {
+        return {
+          ...model,
+          name: matchingProvider.name,
+          provider: matchingProvider.provider,
+        };
+      }
+      // Provider info was present but not found - fall through to default
+    } else {
+      // Only search by model name when no provider info was parsed
+      const provider = llmProviders.find((p) =>
+        p.model_configurations
+          .map((modelConfiguration) => modelConfiguration.name)
+          .includes(model.modelName)
+      );
+
+      if (provider) {
+        return { ...model, provider: provider.provider, name: provider.name };
+      }
+    }
+  }
+
+  // Model not found in available providers - fall back to default model
+  return (
+    getDefaultLlmDescriptor(llmProviders) ?? {
+      name: "",
+      provider: "",
+      modelName: "",
+    }
+  );
 }
 
 export function useLlmManager(
@@ -658,48 +714,7 @@ export function useLlmManager(
   function getValidLlmDescriptor(
     modelName: string | null | undefined
   ): LlmDescriptor {
-    // Return early if providers haven't loaded yet (undefined/null)
-    // Empty arrays are valid (user has no provider access for this assistant)
-    if (llmProviders === undefined || llmProviders === null) {
-      return { name: "", provider: "", modelName: "" };
-    }
-
-    if (modelName) {
-      const model = parseLlmDescriptor(modelName);
-      if (!(model.modelName && model.modelName.length > 0)) {
-        const provider = llmProviders.find((p) =>
-          p.model_configurations
-            .map((modelConfiguration) => modelConfiguration.name)
-            .includes(modelName)
-        );
-        if (provider) {
-          return {
-            modelName: modelName,
-            name: provider.name,
-            provider: provider.provider,
-          };
-        }
-      }
-
-      const provider = llmProviders.find((p) =>
-        p.model_configurations
-          .map((modelConfiguration) => modelConfiguration.name)
-          .includes(model.modelName)
-      );
-
-      if (provider) {
-        return { ...model, provider: provider.provider, name: provider.name };
-      }
-    }
-
-    // Model not found in available providers - fall back to default model
-    return (
-      getDefaultLlmDescriptor(llmProviders) ?? {
-        name: "",
-        provider: "",
-        modelName: "",
-      }
-    );
+    return getValidLlmDescriptorForProviders(modelName, llmProviders);
   }
 
   const [imageFilesPresent, setImageFilesPresent] = useState(false);
@@ -726,12 +741,17 @@ export function useLlmManager(
   };
 
   const [temperature, setTemperature] = useState<number>(() => {
-    llmUpdate();
-
     if (currentChatSession?.current_temperature_override != null) {
+      // Derive Anthropic check from chat session since currentLlm isn't populated yet
+      const sessionModel = currentChatSession.current_alternate_model
+        ? parseLlmDescriptor(currentChatSession.current_alternate_model)
+        : null;
+      const isAnthropicModel = sessionModel
+        ? isAnthropic(sessionModel.provider, sessionModel.modelName)
+        : false;
       return Math.min(
         currentChatSession.current_temperature_override,
-        isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0
+        isAnthropicModel ? 1.0 : 2.0
       );
     } else if (
       liveAssistant?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)
@@ -742,8 +762,20 @@ export function useLlmManager(
   });
 
   const maxTemperature = useMemo(() => {
-    return isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0;
-  }, [currentLlm]);
+    // Check currentLlm first, fall back to chat session model if currentLlm isn't populated
+    if (currentLlm.provider) {
+      return isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0;
+    }
+    const sessionModel = currentChatSession?.current_alternate_model
+      ? parseLlmDescriptor(currentChatSession.current_alternate_model)
+      : null;
+    if (sessionModel?.provider) {
+      return isAnthropic(sessionModel.provider, sessionModel.modelName)
+        ? 1.0
+        : 2.0;
+    }
+    return 2.0; // Default max when no model info available
+  }, [currentLlm, currentChatSession]);
 
   useEffect(() => {
     if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
@@ -785,13 +817,12 @@ export function useLlmManager(
   ]);
 
   const updateTemperature = (temperature: number) => {
-    if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
-      setTemperature(Math.min(temperature, 1.0));
-    } else {
-      setTemperature(temperature);
-    }
+    const clampedTemp = isAnthropic(currentLlm.provider, currentLlm.modelName)
+      ? Math.min(temperature, 1.0)
+      : temperature;
+    setTemperature(clampedTemp);
     if (chatSession) {
-      updateTemperatureOverrideForChatSession(chatSession.id, temperature);
+      updateTemperatureOverrideForChatSession(chatSession.id, clampedTemp);
     }
   };
 
@@ -1044,11 +1075,20 @@ export function useSourcePreferences({
       }
       setSourcesInitialized(true);
     }
-  }, [availableSources, sourcesInitialized, setSelectedSources]);
+  }, [
+    availableSources,
+    configuredSources,
+    sourcesInitialized,
+    setSelectedSources,
+  ]);
+
+  const enableSources = (sources: SourceMetadata[]) => {
+    setSelectedSources([...sources]);
+    persistSourcePreferencesState(sources, configuredSources);
+  };
 
   const enableAllSources = () => {
-    setSelectedSources(configuredSources);
-    persistSourcePreferencesState(configuredSources, configuredSources);
+    enableSources(configuredSources);
   };
 
   const disableAllSources = () => {
@@ -1091,6 +1131,7 @@ export function useSourcePreferences({
 
   return {
     sourcesInitialized,
+    enableSources,
     enableAllSources,
     disableAllSources,
     toggleSource,

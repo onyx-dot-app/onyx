@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -74,7 +75,7 @@ _THREAD_1_BY_ID: dict[str, dict[str, Any]] = {
     return_value=None,
 )
 def test_slim_docs_retrieval(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_gmail_service_acct_connector_factory: Callable[..., GmailConnector],
 ) -> None:
     print("\n\nRunning test_slim_docs_retrieval")
@@ -83,7 +84,9 @@ def test_slim_docs_retrieval(
     for doc_batch in connector.retrieve_all_slim_docs_perm_sync(
         _THREAD_1_START_TIME, _THREAD_1_END_TIME
     ):
-        retrieved_slim_docs.extend(doc_batch)
+        retrieved_slim_docs.extend(
+            [doc for doc in doc_batch if not isinstance(doc, HierarchyNode)]
+        )
 
     assert len(retrieved_slim_docs) == 4
 
@@ -99,7 +102,7 @@ def test_slim_docs_retrieval(
     return_value=None,
 )
 def test_docs_retrieval(
-    mock_get_api_key: MagicMock,
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_gmail_service_acct_connector_factory: Callable[..., GmailConnector],
 ) -> None:
     print("\n\nRunning test_docs_retrieval")

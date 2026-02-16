@@ -10,10 +10,10 @@ requires-python = ">=3.11"
 dependencies = [
     "aioboto3==15.1.0",
     "cohere==5.6.1",
-    "fastapi==0.116.1",
+    "fastapi==0.128.0",
     "google-cloud-aiplatform==1.121.0",
     "google-genai==1.52.0",
-    "litellm==1.80.11",
+    "litellm==1.81.6",
     "openai==2.14.0",
     "pydantic==2.11.7",
     "prometheus_client>=0.21.1",
@@ -23,6 +23,10 @@ dependencies = [
     "uvicorn==0.35.0",
     "voyageai==0.2.3",
     "brotli>=1.2.0",
+    "claude-agent-sdk>=0.1.19",
+    "agent-client-protocol>=0.7.1",
+    "discord-py==2.4.0",
+    "kubernetes>=31.0.0",
 ]
 
 [project.optional-dependencies]
@@ -38,15 +42,15 @@ backend = [
     "celery==5.5.1",
     "chardet==5.2.0",
     "chonkie==1.0.10",
-    "dask==2023.8.1",
+    "dask==2026.1.1",
     "ddtrace==3.10.0",
     "discord.py==2.4.0",
-    "distributed==2023.8.1",
-    "fastapi-users==14.0.1",
-    "fastapi-users-db-sqlalchemy==5.0.0",
+    "distributed==2026.1.1",
+    "fastapi-users==15.0.4",
+    "fastapi-users-db-sqlalchemy==7.0.0",
     "fastapi-limiter==0.1.6",
     "fastmcp==2.14.2",
-    "filelock==3.20.1",
+    "filelock==3.20.3",
     "google-api-python-client==2.86.0",
     "google-auth-httplib2==0.1.0",
     "google-auth-oauthlib==1.0.0",
@@ -60,11 +64,9 @@ backend = [
     "inflection==0.5.1",
     "jira==3.10.5",
     "jsonref==1.1.0",
+    "kubernetes==31.0.0",
     "trafilatura==1.12.2",
-    "langchain==0.3.23",
-    "langchain-core==0.3.51",
-    "langchain-text-splitters==0.3.8",
-    "langchainhub==0.1.21",
+    "langchain-core==1.2.11",
     "lazy_imports==1.0.1",
     "lxml==5.3.0",
     "Mako==1.2.4",
@@ -72,7 +74,6 @@ backend = [
     "mcp[cli]==1.25.0",
     "msal==1.34.0",
     "msoffcrypto-tool==5.4.2",
-    "nltk==3.9.1",
     "Office365-REST-Python-Client==2.5.9",
     "oauthlib==3.2.2",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
@@ -90,12 +91,13 @@ backend = [
     "python-dateutil==2.8.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.6.0",
+    "pypandoc_binary==1.16.2",
+    "pypdf==6.6.2",
     "pytest-mock==3.12.0",
     "pytest-playwright==0.7.0",
     "python-docx==1.1.2",
     "python-dotenv==1.1.1",
-    "python-multipart==0.0.20",
+    "python-multipart==0.0.22",
     "pywikibot==9.0.0",
     "redis==5.0.8",
     "requests==2.32.5",
@@ -104,7 +106,7 @@ backend = [
     "simple-salesforce==1.12.6",
     "slack-sdk==3.20.2",
     "SQLAlchemy[mypy]==2.0.15",
-    "starlette==0.47.2",
+    "starlette==0.49.3",
     "supervisor==4.3.0",
     "RapidFuzz==3.13.0",
     "tiktoken==0.7.0",
@@ -119,7 +121,7 @@ backend = [
     "shapely==2.0.6",
     "stripe==10.12.0",
     "urllib3==2.6.3",
-    "mistune==0.8.4",
+    "mistune==3.2.0",
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
@@ -135,21 +137,22 @@ backend = [
 dev = [
     "black==25.1.0",
     "celery-types==0.19.0",
-    "faker==37.1.0",
+    "faker==40.1.2",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "mypy-extensions==1.0.0",
     "mypy==1.13.0",
-    "onyx-devtools==0.2.0",
+    "onyx-devtools==0.5.7",
     "openapi-generator-cli==7.17.0",
-    "pandas-stubs==2.2.3.241009",
+    "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.3.0",
     "pytest-dotenv==0.5.2",
-    "pytest-xdist==3.6.1",
+    "pytest-repeat==0.9.4",
+    "pytest-xdist==3.8.0",
     "pytest==8.3.5",
     "release-tag==0.4.3",
     "reorder-python-imports-black==3.14.0",
@@ -183,7 +186,7 @@ model_server = [
     "numpy==2.4.1",
     "safetensors==0.5.3",
     "sentence-transformers==4.0.2",
-    "torch==2.6.0",
+    "torch==2.9.1",
     "transformers==4.53.0",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
@@ -193,8 +196,21 @@ members = ["backend", "tools/ods"]
 
 [tool.basedpyright]
 include = ["backend"]
-exclude = ["backend/generated"]
+exclude = ["backend/generated", "backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx", "backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv"]
 typeCheckingMode = "off"
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = []
+select = [
+  "ARG",
+  "E",
+  "F",
+  "W",
+]
 
 [tool.setuptools.packages.find]
 where = ["backend"]

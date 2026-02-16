@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAs, loginWithCredentials } from "../utils/auth";
+import { loginAs, apiLogin } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
 
@@ -19,6 +19,40 @@ async function scrollToBottom(page: Page): Promise<void> {
   }
 }
 
+async function ensureOnboardingComplete(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    try {
+      await fetch("/api/user/personalization", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: "Playwright User" }),
+      });
+    } catch {
+      // ignore personalization failures
+    }
+
+    const baseKey = "hasFinishedOnboarding";
+    localStorage.setItem(baseKey, "true");
+
+    try {
+      const meRes = await fetch("/api/me", { credentials: "include" });
+      if (meRes.ok) {
+        const me = await meRes.json();
+        const userId = me.id ?? me.user?.id ?? me.user_id;
+        if (userId) {
+          localStorage.setItem(`${baseKey}_${userId}`, "true");
+        }
+      }
+    } catch {
+      // ignore
+    }
+  });
+
+  await page.reload();
+  await page.waitForLoadState("networkidle");
+}
+
 test.describe("Default Assistant MCP Integration", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -28,6 +62,7 @@ test.describe("Default Assistant MCP Integration", () => {
   let serverUrl: string;
   let basicUserEmail: string;
   let basicUserPassword: string;
+  let createdProviderId: number | null = null;
 
   test.beforeAll(async ({ browser }) => {
     // Use dockerized server if URL is provided, otherwise start local server
@@ -55,7 +90,10 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
+
+    // Ensure a public LLM provider exists
+    createdProviderId = await adminClient.ensurePublicProvider();
 
     // Clean up any existing servers with the same URL
     try {
@@ -82,7 +120,11 @@ test.describe("Default Assistant MCP Integration", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
+
+    if (createdProviderId !== null) {
+      await adminClient.deleteProvider(createdProviderId);
+    }
 
     if (serverId) {
       await adminClient.deleteMcpServer(serverId);
@@ -314,12 +356,13 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user: ${basicUserEmail}`);
 
     // Navigate to chat (which uses default assistant for new users)
-    await page.goto("/chat");
-    await page.waitForURL("**/chat**");
+    await page.goto("/app");
+    await page.waitForURL("**/app**");
+    await ensureOnboardingComplete(page);
     console.log(`[test] Navigated to chat page`);
 
     // Open actions popover
@@ -413,6 +456,68 @@ test.describe("Default Assistant MCP Integration", () => {
     }
 
     console.log(`[test] Basic user completed MCP tool management tests`);
+  });
+
+  test("Basic user can create assistant with MCP actions attached", async ({
+    page,
+  }) => {
+    test.skip(!serverId, "MCP server must be configured first");
+    test.skip(!basicUserEmail, "Basic user must be created first");
+
+    await page.context().clearCookies();
+    await apiLogin(page, basicUserEmail, basicUserPassword);
+
+    await page.goto("/app");
+    await ensureOnboardingComplete(page);
+    await page.getByTestId("AppSidebar/more-agents").click();
+    await page.waitForURL("**/app/agents");
+
+    await page
+      .getByTestId("AgentsPage/new-agent-button")
+      .getByRole("link", { name: "New Agent" })
+      .click();
+    await page.waitForURL("**/app/agents/create");
+
+    const assistantName = `MCP Assistant ${Date.now()}`;
+    await page.locator('input[name="name"]').fill(assistantName);
+    await page
+      .locator('textarea[name="description"]')
+      .fill("Assistant with MCP actions attached.");
+    await page
+      .locator('textarea[name="instructions"]')
+      .fill("Use MCP actions when helpful.");
+
+    const mcpServerSwitch = page.locator(
+      `button[role="switch"][name="mcp_server_${serverId}.enabled"]`
+    );
+    await mcpServerSwitch.scrollIntoViewIfNeeded();
+    await mcpServerSwitch.click();
+    await expect(mcpServerSwitch).toHaveAttribute("data-state", "checked");
+
+    const firstToolToggle = page
+      .locator(`button[role="switch"][name^="mcp_server_${serverId}.tool_"]`)
+      .first();
+    await expect(firstToolToggle).toBeVisible({ timeout: 15000 });
+    const toolState = await firstToolToggle.getAttribute("data-state");
+    if (toolState !== "checked") {
+      await firstToolToggle.click();
+    }
+    await expect(firstToolToggle).toHaveAttribute("data-state", "checked");
+
+    await page.getByRole("button", { name: "Create" }).click();
+
+    await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
+    const assistantIdMatch = page.url().match(/assistantId=(\d+)/);
+    expect(assistantIdMatch).toBeTruthy();
+    const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
+    expect(assistantId).not.toBeNull();
+
+    const client = new OnyxApiClient(page.request);
+    const assistant = await client.getAssistant(Number(assistantId));
+    const hasMcpTool = assistant.tools.some(
+      (tool) => tool.mcp_server_id === serverId
+    );
+    expect(hasMcpTool).toBeTruthy();
   });
 
   test("Admin can modify MCP tools in default assistant", async ({ page }) => {
@@ -555,12 +660,12 @@ test.describe("Default Assistant MCP Integration", () => {
     test.skip(!basicUserEmail, "Basic user must be created first");
 
     await page.context().clearCookies();
-    await loginWithCredentials(page, basicUserEmail, basicUserPassword);
+    await apiLogin(page, basicUserEmail, basicUserPassword);
     console.log(`[test] Logged in as basic user to verify tool visibility`);
 
     // Navigate to chat
-    await page.goto("/chat");
-    await page.waitForURL("**/chat**");
+    await page.goto("/app");
+    await page.waitForURL("**/app**");
     console.log(`[test] Navigated to chat`);
 
     // Open actions popover

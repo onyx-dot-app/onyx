@@ -55,7 +55,7 @@ describe("Email/Password Login Workflow", () => {
 
     // After successful login, user should be redirected to /chat
     await waitFor(() => {
-      expect(window.location.href).toBe("/chat");
+      expect(window.location.href).toBe("/app");
     });
 
     // Verify API was called with correct credentials
@@ -189,7 +189,7 @@ describe("Email/Password Signup Workflow", () => {
     // Verify success message is shown
     await waitFor(() => {
       expect(
-        screen.getByText(/account created successfully/i)
+        screen.getByText(/account created\. signing in/i)
       ).toBeInTheDocument();
     });
   });

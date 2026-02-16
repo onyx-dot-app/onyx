@@ -10,10 +10,7 @@ import {
 } from "@/lib/types";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
-import {
-  FetchAssistantsResponse,
-  fetchAssistantsSS,
-} from "@/lib/assistants/fetchAssistantsSS";
+import { FetchAssistantsResponse, fetchAssistantsSS } from "@/lib/agentsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 async function EditslackChannelConfigPage(props: {

@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import os
-
 import httpx
 from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.dependencies import get_access_token
 
-from onyx.configs.app_configs import APP_API_PREFIX
-from onyx.configs.app_configs import APP_PORT
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 
 logger = setup_logger()
 
@@ -34,21 +31,6 @@ def require_access_token() -> AccessToken:
             "MCP Server requires an Onyx access token to authenticate your request"
         )
     return access_token
-
-
-def get_api_server_url() -> str:
-    """Construct the API server base URL for internal or external requests."""
-    override = os.getenv("API_SERVER_BASE_URL") or os.getenv("ONYX_URL")
-    if override:
-        return override.rstrip("/")
-
-    protocol = os.getenv("API_SERVER_PROTOCOL", "http")
-    host = os.getenv("API_SERVER_HOST", "127.0.0.1")
-    port = os.getenv("API_SERVER_PORT", str(APP_PORT))
-    prefix = (APP_API_PREFIX or "").strip("/")
-
-    base = f"{protocol}://{host}:{port}"
-    return f"{base}/{prefix}" if prefix else base
 
 
 def get_http_client() -> httpx.AsyncClient:
@@ -79,7 +61,7 @@ async def get_indexed_sources(
     headers = {"Authorization": f"Bearer {access_token.token}"}
     try:
         response = await get_http_client().get(
-            f"{get_api_server_url()}/manage/indexed-sources",
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/manage/indexed-sources",
             headers=headers,
         )
         response.raise_for_status()

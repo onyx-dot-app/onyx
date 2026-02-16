@@ -1,6 +1,10 @@
 import os
 
 import pytest
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
 
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from shared_configs.enums import EmbedTextType
@@ -31,7 +35,7 @@ def openai_embedding_model() -> EmbeddingModel:
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        api_key=os.getenv("OPENAI_API_KEY"),
+        api_key=os.environ["OPENAI_API_KEY"],
         provider_type=EmbeddingProvider.OPENAI,
         api_url=None,
     )
@@ -51,7 +55,7 @@ def cohere_embedding_model() -> EmbeddingModel:
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        api_key=os.getenv("COHERE_API_KEY"),
+        api_key=os.environ["COHERE_API_KEY"],
         provider_type=EmbeddingProvider.COHERE,
         api_url=None,
     )
@@ -71,9 +75,9 @@ def litellm_embedding_model() -> EmbeddingModel:
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        api_key=os.getenv("LITELLM_API_KEY"),
+        api_key=os.environ["LITELLM_API_KEY"],
         provider_type=EmbeddingProvider.LITELLM,
-        api_url=os.getenv("LITELLM_API_URL"),
+        api_url=os.environ["LITELLM_API_URL"],
     )
 
 
@@ -112,12 +116,20 @@ def azure_embedding_model() -> EmbeddingModel:
         normalize=True,
         query_prefix=None,
         passage_prefix=None,
-        api_key=os.getenv("AZURE_API_KEY"),
+        api_key=os.environ["AZURE_API_KEY"],
         provider_type=EmbeddingProvider.AZURE,
-        api_url=os.getenv("AZURE_API_URL"),
+        api_url=os.environ["AZURE_API_URL"],
     )
 
 
+# Azure has strict rate limits on their embedding API, so we retry with exponential
+# backoff to handle transient RateLimitError responses
+@retry(
+    retry=retry_if_exception_type(RuntimeError),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
 def test_azure_embedding(azure_embedding_model: EmbeddingModel) -> None:
     _run_embeddings(VALID_SAMPLE, azure_embedding_model, 1536)
     _run_embeddings(TOO_LONG_SAMPLE, azure_embedding_model, 1536)

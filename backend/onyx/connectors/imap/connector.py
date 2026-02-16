@@ -443,7 +443,7 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
 
 if __name__ == "__main__":
     import time
-    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+    from tests.daily.connectors.utils import load_all_from_connector
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 
     host = os.environ.get("IMAP_HOST")
@@ -476,9 +476,9 @@ if __name__ == "__main__":
         )
     )
 
-    for doc in load_all_docs_from_checkpoint_connector(
+    for doc in load_all_from_connector(
         connector=imap_connector,
         start=0,
         end=time.time(),
-    ):
+    ).documents:
         print(doc)

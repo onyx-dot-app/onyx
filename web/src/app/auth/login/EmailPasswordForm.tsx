@@ -1,6 +1,6 @@
 "use client";
 
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { basicLogin, basicSignup } from "@/lib/user";
 import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
@@ -9,7 +9,7 @@ import { requestEmailVerification } from "../lib";
 import { useMemo, useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -38,7 +38,6 @@ export default function EmailPasswordForm({
 }: EmailPasswordFormProps) {
   const { user, authTypeMetadata } = useUser();
   const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
-  const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState<boolean>(false);
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("loading");
   const [showApiMessage, setShowApiMessage] = useState(false);
@@ -63,7 +62,6 @@ export default function EmailPasswordForm({
   return (
     <>
       {isWorking && <Spinner />}
-      {popup}
 
       <Formik
         initialValues={{
@@ -121,18 +119,12 @@ export default function EmailPasswordForm({
               }
               setErrorMessage(errorMsg);
               setApiStatus("error");
-              setPopup({
-                type: "error",
-                message: `Failed to sign up - ${errorMsg}`,
-              });
+              toast.error(`Failed to sign up - ${errorMsg}`);
               setIsWorking(false);
               return;
             } else {
               setApiStatus("success");
-              setPopup({
-                type: "success",
-                message: "Account created successfully. Please log in.",
-              });
+              toast.success("Account created successfully. Please log in.");
             }
           }
 
@@ -153,7 +145,7 @@ export default function EmailPasswordForm({
               const validatedNextUrl = validateInternalRedirect(nextUrl);
               window.location.href = validatedNextUrl
                 ? validatedNextUrl
-                : `/chat${isSignup && !isJoin ? "?new_team=true" : ""}`;
+                : `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
             }
           } else {
             setIsWorking(false);
@@ -171,10 +163,7 @@ export default function EmailPasswordForm({
             }
             setErrorMessage(errorMsg);
             setApiStatus("error");
-            setPopup({
-              type: "error",
-              message: `Failed to login - ${errorMsg}`,
-            });
+            toast.error(`Failed to login - ${errorMsg}`);
           }
         }}
       >
@@ -200,7 +189,7 @@ export default function EmailPasswordForm({
                         placeholder="email@yourcompany.com"
                         onClear={() => helper.setValue("")}
                         data-testid="email"
-                        error={apiStatus === "error"}
+                        variant={apiStatus === "error" ? "error" : undefined}
                         showClearButton={false}
                       />
                     </FormField.Control>
@@ -260,7 +249,7 @@ export default function EmailPasswordForm({
               </Button>
               {user?.is_anonymous_user && (
                 <Link
-                  href="/chat"
+                  href="/app"
                   className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
                 >
                   <span className="hover:border-b hover:border-dotted hover:border-action-link-05">

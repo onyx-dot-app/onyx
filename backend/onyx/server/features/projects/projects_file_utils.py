@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
+from onyx.configs.app_configs import FILE_TOKEN_COUNT_THRESHOLD
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -22,7 +23,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
-FILE_TOKEN_COUNT_THRESHOLD = 100000
 UNKNOWN_FILENAME = "[unknown_file]"  # More descriptive than empty string
 
 

@@ -77,6 +77,16 @@ _EXPECTED_JIRA_GROUPS = [
         },
         gives_anyone_access=False,
     ),
+    ExternalUserGroupSet(
+        id="bitbucket-admins-onyxai",
+        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="bitbucket-users-onyxai",
+        user_emails={"founders@onyx.app"},  # no Oauth, we skip "app" account in jira
+        gives_anyone_access=False,
+    ),
 ]
 
 
@@ -104,6 +114,8 @@ def test_jira_group_sync(
         )
         db_session.add(credential)
         db_session.flush()
+        # Expire the credential so it reloads from DB with SensitiveValue wrapper
+        db_session.expire(credential)
 
         cc_pair = ConnectorCredentialPair(
             connector_id=connector.id,

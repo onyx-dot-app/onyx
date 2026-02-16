@@ -16,6 +16,10 @@ export function PHProvider({ children }: PHProviderProps) {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST!,
         person_profiles: "identified_only",
         capture_pageview: false,
+        session_recording: {
+          // Sensitive inputs should use data-ph-no-capture attribute
+          maskAllInputs: false,
+        },
       });
     }
   }, []);

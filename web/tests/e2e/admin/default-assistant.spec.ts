@@ -17,7 +17,7 @@ test.describe("Default Assistant Admin Page", () => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
 
     // Create a connector so Internal Search tool becomes available
     testCcPairId = await apiClient.createFileConnector(
@@ -83,7 +83,7 @@ test.describe("Default Assistant Admin Page", () => {
   });
 
   test.afterEach(async ({ page }) => {
-    const apiClient = new OnyxApiClient(page);
+    const apiClient = new OnyxApiClient(page.request);
 
     // Clean up the test connector
     if (testCcPairId !== null) {
@@ -662,8 +662,8 @@ test.describe("Default Assistant Admin Page", () => {
     });
     await page.waitForTimeout(500);
 
-    // Navigate to chat to verify tools are disabled and initial load greeting
-    await page.goto("/chat");
+    // Navigate to app to verify tools are disabled and initial load greeting
+    await page.goto("/app");
     await waitForUnifiedGreeting(page);
 
     // Go back and re-enable all tools
@@ -701,8 +701,8 @@ test.describe("Default Assistant Admin Page", () => {
     });
     await page.waitForTimeout(500);
 
-    // Navigate to chat and verify the Action Management toggle and actions exist
-    await page.goto("/chat");
+    // Navigate to app and verify the Action Management toggle and actions exist
+    await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
     // Wait a bit for backend to process the changes

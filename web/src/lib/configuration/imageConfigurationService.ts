@@ -23,6 +23,7 @@ export interface ImageGenerationCredentials {
   api_base: string | null;
   api_version: string | null;
   deployment_name: string | null;
+  custom_config: Record<string, string> | null;
 }
 
 // Creation options - either clone from existing provider or use new credentials
@@ -40,6 +41,7 @@ export interface ImageGenerationConfigCreateOptions {
   apiBase?: string;
   apiVersion?: string;
   deploymentName?: string;
+  customConfig?: Record<string, string>;
 }
 
 // API Endpoints
@@ -65,6 +67,7 @@ export async function testImageGenerationApiKey(
     apiBase?: string;
     apiVersion?: string;
     deploymentName?: string;
+    customConfig?: Record<string, string>;
   }
 ): Promise<TestApiKeyResult> {
   try {
@@ -79,6 +82,7 @@ export async function testImageGenerationApiKey(
         api_base: options.apiBase || null,
         api_version: options.apiVersion || null,
         deployment_name: options.deploymentName || null,
+        custom_config: options.customConfig || null,
       }),
     });
 
@@ -150,6 +154,7 @@ export async function createImageGenerationConfig(
       api_base: options.apiBase,
       api_version: options.apiVersion,
       deployment_name: options.deploymentName,
+      custom_config: options.customConfig,
     }),
   });
 
@@ -174,6 +179,7 @@ export interface ImageGenerationConfigUpdateOptions {
   apiBase?: string;
   apiVersion?: string;
   deploymentName?: string;
+  customConfig?: Record<string, string>;
 
   // If true, apiKey was changed by user; if false, backend preserves existing key
   apiKeyChanged?: boolean;
@@ -200,6 +206,7 @@ export async function updateImageGenerationConfig(
       api_base: options.apiBase,
       api_version: options.apiVersion,
       deployment_name: options.deploymentName,
+      custom_config: options.customConfig,
       // If false, backend preserves existing API key
       api_key_changed: options.apiKeyChanged ?? false,
     }),

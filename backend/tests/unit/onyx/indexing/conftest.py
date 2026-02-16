@@ -11,7 +11,7 @@ class MockHeartbeat(IndexingHeartbeatInterface):
     def should_stop(self) -> bool:
         return False
 
-    def progress(self, tag: str, amount: int) -> None:
+    def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
         self.call_count += 1
 
 

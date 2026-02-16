@@ -3,7 +3,6 @@ from __future__ import annotations
 import datetime
 import itertools
 import tempfile
-from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
@@ -21,6 +20,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.mediawiki.family import family_class_dispatch
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
@@ -146,7 +146,9 @@ class MediaWikiConnector(LoadConnector, PollConnector):
                 continue
             self.pages.append(pywikibot.Page(self.site, page))
 
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+    def load_credentials(
+        self, credentials: dict[str, Any]  # noqa: ARG002
+    ) -> dict[str, Any] | None:
         """Load credentials for a MediaWiki site.
 
         Note:
@@ -160,7 +162,7 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> Generator[list[Document], None, None]:
+    ) -> GenerateDocumentsOutput:
         """Request batches of pages from a MediaWiki site.
 
         Args:
@@ -170,7 +172,7 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         Yields:
             Lists of Documents containing each parsed page in a batch.
         """
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         # Pywikibot can handle batching for us, including only loading page contents when we finally request them.
         category_pages = [

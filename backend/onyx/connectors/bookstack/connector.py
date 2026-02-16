@@ -18,6 +18,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 
@@ -47,7 +48,7 @@ class BookstackConnector(LoadConnector, PollConnector):
         start_ind: int,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> tuple[list[Document], int]:
+    ) -> tuple[list[Document | HierarchyNode], int]:
         params = {
             "count": str(batch_size),
             "offset": str(start_ind),
@@ -65,7 +66,9 @@ class BookstackConnector(LoadConnector, PollConnector):
             )
 
         batch = bookstack_client.get(endpoint, params=params).get("data", [])
-        doc_batch = [transformer(bookstack_client, item) for item in batch]
+        doc_batch: list[Document | HierarchyNode] = [
+            transformer(bookstack_client, item) for item in batch
+        ]
 
         return doc_batch, len(batch)
 

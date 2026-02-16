@@ -1,9 +1,9 @@
-import { CodeBlock } from "@/app/chat/message/CodeBlock";
-import { extractCodeText } from "@/app/chat/message/codeUtils";
+import { CodeBlock } from "@/app/app/message/CodeBlock";
+import { extractCodeText } from "@/app/app/message/codeUtils";
 import {
   MemoizedLink,
   MemoizedParagraph,
-} from "@/app/chat/message/MemoizedTextComponents";
+} from "@/app/app/message/MemoizedTextComponents";
 import React, { useMemo, CSSProperties } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";

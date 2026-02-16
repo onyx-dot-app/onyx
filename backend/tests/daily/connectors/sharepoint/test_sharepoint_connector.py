@@ -10,9 +10,11 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.sharepoint.connector import SharepointConnector
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from onyx.db.enums import HierarchyNodeType
+from tests.daily.connectors.utils import load_all_from_connector
 
 # NOTE: Sharepoint site for tests is "sharepoint-tests"
 
@@ -121,7 +123,7 @@ def sharepoint_credentials() -> dict[str, str]:
 
 
 def test_sharepoint_connector_all_sites__docs_only(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -139,7 +141,7 @@ def test_sharepoint_connector_all_sites__docs_only(
 
         # Not asserting expected sites because that can change in test tenant at any time
         # Finding any docs is good enough to verify that the connector is working
-        document_batches = load_all_docs_from_checkpoint_connector(
+        document_batches = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
@@ -148,7 +150,7 @@ def test_sharepoint_connector_all_sites__docs_only(
 
 
 def test_sharepoint_connector_all_sites__pages_only(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -166,7 +168,7 @@ def test_sharepoint_connector_all_sites__pages_only(
 
         # Not asserting expected sites because that can change in test tenant at any time
         # Finding any docs is good enough to verify that the connector is working
-        document_batches = load_all_docs_from_checkpoint_connector(
+        document_batches = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
@@ -175,7 +177,7 @@ def test_sharepoint_connector_all_sites__pages_only(
 
 
 def test_sharepoint_connector_specific_folder(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -194,11 +196,11 @@ def test_sharepoint_connector_specific_folder(
         connector.load_credentials(sharepoint_credentials)
 
         # Get all documents
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
 
         # Should only find documents in the test folder
         test_folder_docs = [
@@ -217,7 +219,7 @@ def test_sharepoint_connector_specific_folder(
 
 
 def test_sharepoint_connector_root_folder__docs_only(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -236,11 +238,11 @@ def test_sharepoint_connector_root_folder__docs_only(
         connector.load_credentials(sharepoint_credentials)
 
         # Get all documents
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
 
         assert len(found_documents) == len(
             EXPECTED_DOCUMENTS
@@ -253,7 +255,7 @@ def test_sharepoint_connector_root_folder__docs_only(
 
 
 def test_sharepoint_connector_other_library(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -274,11 +276,11 @@ def test_sharepoint_connector_other_library(
         connector.load_credentials(sharepoint_credentials)
 
         # Get all documents
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
         expected_documents: list[ExpectedDocument] = [
             doc for doc in EXPECTED_DOCUMENTS if doc.library == "Other Library"
         ]
@@ -295,7 +297,7 @@ def test_sharepoint_connector_other_library(
 
 
 def test_sharepoint_connector_poll(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -316,11 +318,11 @@ def test_sharepoint_connector_poll(
         end = datetime(2025, 1, 28, 20, 51, 50, tzinfo=timezone.utc)  # 8 seconds after
 
         # Get documents within the time window
-        found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        found_documents: list[Document] = load_all_from_connector(
             connector=connector,
             start=start.timestamp(),
             end=end.timestamp(),
-        )
+        ).documents
 
         # Should only find test1.docx
         assert (
@@ -337,7 +339,7 @@ def test_sharepoint_connector_poll(
 
 
 def test_sharepoint_connector_pages(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_store_image: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
@@ -353,11 +355,11 @@ def test_sharepoint_connector_pages(
 
         connector.load_credentials(sharepoint_credentials)
 
-        found_documents = load_all_docs_from_checkpoint_connector(
+        found_documents = load_all_from_connector(
             connector=connector,
             start=0,
             end=time.time(),
-        )
+        ).documents
 
         assert len(found_documents) == len(
             EXPECTED_PAGES
@@ -366,3 +368,132 @@ def test_sharepoint_connector_pages(
         for expected in EXPECTED_PAGES:
             doc = find_document(found_documents, expected.semantic_identifier)
             verify_document_content(doc, expected)
+
+
+def verify_hierarchy_nodes(
+    hierarchy_nodes: list[HierarchyNode],
+    documents: list[Document],
+    expected_site_url: str,
+) -> None:
+    """Verify hierarchy nodes have correct structure and relationships."""
+    # Build a set of all raw_node_ids for parent validation
+    all_node_ids = {node.raw_node_id for node in hierarchy_nodes}
+
+    # Track nodes by type
+    site_nodes = [n for n in hierarchy_nodes if n.node_type == HierarchyNodeType.SITE]
+    drive_nodes = [n for n in hierarchy_nodes if n.node_type == HierarchyNodeType.DRIVE]
+    folder_nodes = [
+        n for n in hierarchy_nodes if n.node_type == HierarchyNodeType.FOLDER
+    ]
+
+    # Verify we have at least one site node
+    assert len(site_nodes) >= 1, "Should have at least one SITE hierarchy node"
+    assert len(drive_nodes) >= 1, "Should have at least one DRIVE hierarchy node"
+    assert len(folder_nodes) >= 1, "Should have at least one FOLDER hierarchy node"
+
+    # Verify expected site is in hierarchy
+    site_node_ids = {n.raw_node_id for n in site_nodes}
+    assert expected_site_url in site_node_ids, (
+        f"Expected site {expected_site_url} not found in hierarchy nodes. "
+        f"Found sites: {site_node_ids}"
+    )
+
+    # Verify no duplicate raw_node_ids
+    assert len(all_node_ids) == len(
+        hierarchy_nodes
+    ), "Should not have duplicate hierarchy nodes"
+
+    # Verify all hierarchy nodes have required fields
+    for node in hierarchy_nodes:
+        assert node.raw_node_id, "All nodes should have raw_node_id"
+        assert node.display_name, "All nodes should have display_name"
+        assert node.link, "All nodes should have link"
+        assert node.node_type in [
+            HierarchyNodeType.SITE,
+            HierarchyNodeType.DRIVE,
+            HierarchyNodeType.FOLDER,
+        ], f"Unexpected node type: {node.node_type}"
+
+    # Verify parent relationships
+    for node in hierarchy_nodes:
+        if node.node_type == HierarchyNodeType.SITE:
+            # Sites should have no parent (direct child of SOURCE)
+            assert node.raw_parent_id is None, "SITE nodes should have no parent"
+        elif node.node_type == HierarchyNodeType.DRIVE:
+            # Drives should have a site as parent
+            assert node.raw_parent_id is not None, "DRIVE nodes should have a parent"
+            assert (
+                node.raw_parent_id in site_node_ids
+            ), f"DRIVE parent {node.raw_parent_id} should be a SITE node"
+        elif node.node_type == HierarchyNodeType.FOLDER:
+            # Folders should have either a drive or another folder as parent
+            assert node.raw_parent_id is not None, "FOLDER nodes should have a parent"
+            assert (
+                node.raw_parent_id in all_node_ids
+            ), f"FOLDER parent {node.raw_parent_id} should exist in hierarchy"
+
+    # Verify documents have parent_hierarchy_raw_node_id set
+    for doc in documents:
+        if doc.parent_hierarchy_raw_node_id:
+            assert doc.parent_hierarchy_raw_node_id in all_node_ids, (
+                f"Document {doc.semantic_identifier} parent "
+                f"{doc.parent_hierarchy_raw_node_id} should exist in hierarchy"
+            )
+
+
+def test_sharepoint_connector_hierarchy_nodes(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_store_image: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    """Test that the SharePoint connector yields proper hierarchy nodes."""
+    with patch(
+        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        mock_store_image,
+    ):
+        site_url = os.environ["SHAREPOINT_SITE"]
+
+        # Initialize connector with the test site
+        connector = SharepointConnector(
+            sites=[site_url],
+            include_site_pages=True,
+            include_site_documents=True,
+        )
+
+        # Load credentials
+        connector.load_credentials(sharepoint_credentials)
+
+        # Get all documents and hierarchy nodes
+        result = load_all_from_connector(
+            connector=connector,
+            start=0,
+            end=time.time(),
+        )
+
+        found_documents = result.documents
+        hierarchy_nodes = result.hierarchy_nodes
+
+        # Should have hierarchy nodes
+        assert len(hierarchy_nodes) > 0, "Should have hierarchy nodes"
+
+        # Verify hierarchy structure
+        verify_hierarchy_nodes(hierarchy_nodes, found_documents, site_url)
+
+        # Verify we have the expected node types
+        node_types = {n.node_type for n in hierarchy_nodes}
+        assert HierarchyNodeType.SITE in node_types, "Should have SITE nodes"
+        assert HierarchyNodeType.DRIVE in node_types, "Should have DRIVE nodes"
+
+        # Should have folder nodes if documents are in folders
+        docs_in_folders = [d for d in EXPECTED_DOCUMENTS if d.folder_path]
+        if docs_in_folders:
+            assert (
+                HierarchyNodeType.FOLDER in node_types
+            ), "Should have FOLDER nodes since documents are in folders"
+
+        # Verify all documents have parent_hierarchy_raw_node_id set
+        for doc in found_documents:
+            assert doc.parent_hierarchy_raw_node_id is not None, (
+                f"Document {doc.semantic_identifier} should have "
+                "parent_hierarchy_raw_node_id set"
+            )

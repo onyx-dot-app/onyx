@@ -11,6 +11,9 @@ from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 #####
 # App Configs
@@ -21,6 +24,14 @@ APP_PORT = 8080
 # generally used if using a reverse proxy which doesn't support stripping the `/api`
 # prefix from requests directed towards the API server. In these cases, set this to `/api`
 APP_API_PREFIX = os.environ.get("API_PREFIX", "")
+
+# Certain services need to make HTTP requests to the API server, such as the MCP server and Discord bot
+API_SERVER_PROTOCOL = os.environ.get("API_SERVER_PROTOCOL", "http")
+API_SERVER_HOST = os.environ.get("API_SERVER_HOST", "127.0.0.1")
+# This override allows self-hosting the MCP server with Onyx Cloud backend.
+API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS = os.environ.get(
+    "API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS"
+)
 
 # Whether to send user metadata (user_id/email and session_id) to the LLM provider.
 # Disabled by default.
@@ -38,6 +49,17 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
+
+# Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
+# are disabled but core chat, tools, user file uploads, and Projects still work.
+DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
+
+# Maximum token count for a single uploaded file. Files exceeding this are rejected.
+# Defaults to 100k tokens (or 10M when vector DB is disabled).
+_DEFAULT_FILE_TOKEN_LIMIT = 10_000_000 if DISABLE_VECTOR_DB else 100_000
+FILE_TOKEN_COUNT_THRESHOLD = int(
+    os.environ.get("FILE_TOKEN_COUNT_THRESHOLD", str(_DEFAULT_FILE_TOKEN_LIMIT))
+)
 
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"
@@ -63,8 +85,20 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 #####
 # Auth Configs
 #####
-AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
-DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
+# Upgrades users from disabled auth to basic auth and shows warning.
+_auth_type_str = (os.environ.get("AUTH_TYPE") or "basic").lower()
+if _auth_type_str == "disabled":
+    logger.warning(
+        "AUTH_TYPE='disabled' is no longer supported. "
+        "Defaulting to 'basic'. Please update your configuration. "
+        "Your existing data will be migrated automatically."
+    )
+    _auth_type_str = AuthType.BASIC.value
+try:
+    AUTH_TYPE = AuthType(_auth_type_str)
+except ValueError:
+    logger.error(f"Invalid AUTH_TYPE: {_auth_type_str}. Defaulting to 'basic'.")
+    AUTH_TYPE = AuthType.BASIC
 
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
@@ -137,6 +171,10 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+
+# Whether Google OAuth is enabled (requires both client ID and secret)
+OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
+
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
@@ -195,13 +233,49 @@ TRACK_EXTERNAL_IDP_EXPIRY = (
 #####
 DOCUMENT_INDEX_NAME = "danswer_index"
 
+# OpenSearch Configs
 OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST") or "localhost"
 OPENSEARCH_REST_API_PORT = int(os.environ.get("OPENSEARCH_REST_API_PORT") or 9200)
+# TODO(andrei): 60 seconds is too much, we're just setting a high default
+# timeout for now to examine why queries are slow.
+# NOTE: This timeout applies to all requests the client makes, including bulk
+# indexing.
+DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S = int(
+    os.environ.get("DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S") or 60
+)
+# TODO(andrei): 50 seconds is too much, we're just setting a high default
+# timeout for now to examine why queries are slow.
+# NOTE: To get useful partial results, this value should be less than the client
+# timeout above.
+DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S = int(
+    os.environ.get("DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S") or 50
+)
 OPENSEARCH_ADMIN_USERNAME = os.environ.get("OPENSEARCH_ADMIN_USERNAME", "admin")
 OPENSEARCH_ADMIN_PASSWORD = os.environ.get("OPENSEARCH_ADMIN_PASSWORD", "")
+USING_AWS_MANAGED_OPENSEARCH = (
+    os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
+)
+# Profiling adds some overhead to OpenSearch operations. This overhead is
+# unknown right now. It is enabled by default so we can get useful logs for
+# investigating slow queries. We may never disable it if the overhead is
+# minimal.
+OPENSEARCH_PROFILING_DISABLED = (
+    os.environ.get("OPENSEARCH_PROFILING_DISABLED", "").lower() == "true"
+)
 
-ENABLE_OPENSEARCH_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_FOR_ONYX", "").lower() == "true"
+# This is the "base" config for now, the idea is that at least for our dev
+# environments we always want to be dual indexing into both OpenSearch and Vespa
+# to stress test the new codepaths. Only enable this if there is some instance
+# of OpenSearch running for the relevant Onyx instance.
+ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
+    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "").lower() == "true"
+)
+# Given that the "base" config above is true, this enables whether we want to
+# retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
+# in the event we see issues with OpenSearch retrieval in our dev environments.
+ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
 )
 
 VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
@@ -391,7 +465,7 @@ CELERY_WORKER_PRIMARY_POOL_OVERFLOW = int(
     os.environ.get("CELERY_WORKER_PRIMARY_POOL_OVERFLOW") or 4
 )
 
-# Consolidated background worker (light, docprocessing, docfetching, heavy, kg_processing, monitoring, user_file_processing)
+# Consolidated background worker (light, docprocessing, docfetching, heavy, monitoring, user_file_processing)
 # separate workers' defaults: light=24, docprocessing=6, docfetching=1, heavy=4, kg=2, monitoring=1, user_file=2
 # Total would be 40, but we use a more conservative default of 20 for the consolidated worker
 CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
@@ -401,10 +475,6 @@ CELERY_WORKER_BACKGROUND_CONCURRENCY = int(
 # Individual worker concurrency settings (used when USE_LIGHTWEIGHT_BACKGROUND_WORKER is False or on Kuberenetes deployments)
 CELERY_WORKER_HEAVY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_HEAVY_CONCURRENCY") or 4
-)
-
-CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 2
 )
 
 CELERY_WORKER_MONITORING_CONCURRENCY = int(
@@ -730,6 +800,10 @@ JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
+
+PROMPT_CACHE_CHAT_HISTORY = (
+    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
+)
 # If set to `true` will enable additional logs about Vespa query performance
 # (time spent on finding the right docs + time spent fetching summaries from disk)
 LOG_VESPA_TIMING_INFORMATION = (
@@ -779,6 +853,7 @@ SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 # Langfuse API credentials - if provided, Langfuse tracing will be enabled
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
 
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings
@@ -850,11 +925,15 @@ AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get(
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
+IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
 
 # Use managed Vespa (Vespa Cloud). If set, must also set VESPA_CLOUD_URL, VESPA_CLOUD_CERT_PATH and VESPA_CLOUD_KEY_PATH
 MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
+
+# Limit on number of users a free trial tenant can invite (cloud only)
+NUM_FREE_TRIAL_USER_INVITES = int(os.environ.get("NUM_FREE_TRIAL_USER_INVITES", "10"))
 
 # Security and authentication
 DATA_PLANE_SECRET = os.environ.get(
@@ -898,6 +977,7 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 
 # CORS origins for MCP clients (comma-separated)
@@ -964,6 +1044,9 @@ DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
 )
 
 # File Store Configuration
+# Which backend to use for file storage: "s3" (S3/MinIO) or "postgres" (PostgreSQL Large Objects)
+FILE_STORE_BACKEND = os.environ.get("FILE_STORE_BACKEND", "s3")
+
 S3_FILE_STORE_BUCKET_NAME = (
     os.environ.get("S3_FILE_STORE_BUCKET_NAME") or "onyx-file-store-bucket"
 )
@@ -1002,3 +1085,19 @@ INSTANCE_TYPE = (
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
     else "cloud" if AUTH_TYPE == AuthType.CLOUD else "self_hosted"
 )
+
+
+## Discord Bot Configuration
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
+DISCORD_BOT_INVOKE_CHAR = os.environ.get("DISCORD_BOT_INVOKE_CHAR", "!")
+
+
+## Stripe Configuration
+# URL to fetch the Stripe publishable key from a public S3 bucket.
+# Publishable keys are safe to expose publicly - they can only initialize
+# Stripe.js and tokenize payment info, not make charges or access data.
+STRIPE_PUBLISHABLE_KEY_URL = (
+    "https://onyx-stripe-public.s3.amazonaws.com/publishable-key.txt"
+)
+# Override for local testing with Stripe test keys (pk_test_*)
+STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")

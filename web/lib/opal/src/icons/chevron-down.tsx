@@ -1,6 +1,6 @@
 import type { IconProps } from "@opal/types";
 
-const SvgChevronDown = ({ size, ...props }: IconProps) => (
+const SvgChevronDown = ({ size, strokeWidth = 1.5, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -12,7 +12,7 @@ const SvgChevronDown = ({ size, ...props }: IconProps) => (
   >
     <path
       d="M4 6L8 10L12 6"
-      strokeWidth={1.5}
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
     />

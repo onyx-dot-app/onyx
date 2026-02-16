@@ -33,7 +33,7 @@ basic_router = APIRouter(prefix="/embedding")
 @admin_router.post("/test-embedding")
 def test_embedding_configuration(
     test_llm_request: TestEmbeddingRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> None:
     try:
         test_model = EmbeddingModel(
@@ -64,7 +64,7 @@ def test_embedding_configuration(
 
 @admin_router.get("", response_model=list[EmbeddingModelDetail])
 def list_embedding_models(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[EmbeddingModelDetail]:
     search_settings = get_all_search_settings(db_session)
@@ -73,7 +73,7 @@ def list_embedding_models(
 
 @admin_router.get("/embedding-provider")
 def list_embedding_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[CloudEmbeddingProvider]:
     return [
@@ -85,7 +85,7 @@ def list_embedding_providers(
 @admin_router.delete("/embedding-provider/{provider_type}")
 def delete_embedding_provider(
     provider_type: EmbeddingProvider,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     embedding_provider = get_current_db_embedding_provider(db_session=db_session)

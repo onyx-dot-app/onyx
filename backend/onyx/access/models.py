@@ -105,6 +105,54 @@ class DocExternalAccess:
         )
 
 
+@dataclass(frozen=True)
+class NodeExternalAccess:
+    """
+    Wraps external access with a hierarchy node's raw ID.
+    Used for syncing hierarchy node permissions (e.g., folder permissions).
+    """
+
+    external_access: ExternalAccess
+    # The raw node ID from the source system (e.g., Google Drive folder ID)
+    raw_node_id: str
+    # The source type (e.g., "google_drive")
+    source: str
+
+    def to_dict(self) -> dict:
+        return {
+            "external_access": {
+                "external_user_emails": list(self.external_access.external_user_emails),
+                "external_user_group_ids": list(
+                    self.external_access.external_user_group_ids
+                ),
+                "is_public": self.external_access.is_public,
+            },
+            "raw_node_id": self.raw_node_id,
+            "source": self.source,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "NodeExternalAccess":
+        external_access = ExternalAccess(
+            external_user_emails=set(
+                data["external_access"].get("external_user_emails", [])
+            ),
+            external_user_group_ids=set(
+                data["external_access"].get("external_user_group_ids", [])
+            ),
+            is_public=data["external_access"]["is_public"],
+        )
+        return cls(
+            external_access=external_access,
+            raw_node_id=data["raw_node_id"],
+            source=data["source"],
+        )
+
+
+# Union type for elements that can have permissions synced
+ElementExternalAccess = DocExternalAccess | NodeExternalAccess
+
+
 # TODO(andrei): First refactor this into a pydantic model, then get rid of
 # duplicate fields.
 @dataclass(frozen=True, init=False)
@@ -125,9 +173,11 @@ class DocumentAccess(ExternalAccess):
         )
 
     def to_acl(self) -> set[str]:
-        # the acl's emitted by this function are prefixed by type
-        # to get the native objects, access the member variables directly
+        """Converts the access state to a set of formatted ACL strings.
 
+        NOTE: When querying for documents, the supplied ACL filter strings must
+        be formatted in the same way as this function.
+        """
         acl_set: set[str] = set()
         for user_email in self.user_emails:
             if user_email:

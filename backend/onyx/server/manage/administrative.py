@@ -16,6 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_GEN_AI_KEY_CHECK_TIME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
@@ -37,7 +38,6 @@ from onyx.server.manage.models import BoostDoc
 from onyx.server.manage.models import BoostUpdateRequest
 from onyx.server.manage.models import HiddenUpdateRequest
 from onyx.server.models import StatusResponse
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -51,7 +51,7 @@ logger = setup_logger()
 def get_most_boosted_docs(
     ascending: bool,
     limit: int,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[BoostDoc]:
     boost_docs = fetch_docs_ranked_by_boost_for_user(
@@ -76,7 +76,7 @@ def get_most_boosted_docs(
 @router.post("/admin/doc-boosts")
 def document_boost_update(
     boost_update: BoostUpdateRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_boost_for_user(
@@ -91,7 +91,7 @@ def document_boost_update(
 @router.post("/admin/doc-hidden")
 def document_hidden_update(
     hidden_update: HiddenUpdateRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     update_document_hidden_for_user(

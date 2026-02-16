@@ -1,0 +1,169 @@
+/* Import Hanken Grotesk font */
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;700&display=swap");
+
+:root {
+  --primary-color: #4285f4;
+  --primary-hover-color: #3367d6;
+  --secondary-color: #f1f3f4;
+  --secondary-hover-color: #e8eaed;
+  --text-color: #333;
+  --text-light-color: #666;
+  --background-color: #f1f3f4;
+  --card-background-color: #fff;
+  --border-color: #ccc;
+  --font-family: Arial, sans-serif;
+  --font-hanken-grotesk: "Hanken Grotesk", sans-serif;
+}
+
+body {
+  font-family: var(--font-hanken-grotesk);
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 500px;
+  width: 90%;
+  margin: 0 auto;
+}
+
+.card {
+  background-color: var(--card-background-color);
+  padding: 25px;
+  border-radius: 10px;
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  color: var(--text-color);
+  font-size: 24px;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.option-group {
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-light-color);
+  font-weight: 400;
+  font-size: 16px;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: var(--card-background-color);
+  color: var(--text-color);
+}
+
+.button {
+  width: 100%;
+  padding: 10px 20px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background-color 0.3s;
+}
+
+.button.primary {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.button.primary:hover {
+  background-color: var(--primary-hover-color);
+}
+
+.button.secondary {
+  background-color: var(--secondary-color);
+  color: var(--text-color);
+}
+
+.button.secondary:hover {
+  background-color: var(--secondary-hover-color);
+}
+
+.status-container {
+  margin-top: 10px;
+  margin-bottom: 15px;
+}
+
+.status-message {
+  margin: 0 0 10px 0;
+  color: var(--text-color);
+  font-weight: 500;
+  text-align: center;
+  font-size: 16px;
+  transition: opacity 0.5s ease-in-out;
+}
+
+kbd {
+  background-color: var(--secondary-color);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-family: monospace;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.toggle-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--secondary-color);
+  transition: 0.4s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--primary-color);
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}

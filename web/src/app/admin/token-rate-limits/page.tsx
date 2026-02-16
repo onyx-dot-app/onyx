@@ -1,7 +1,7 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import SimpleTabs from "@/refresh-components/SimpleTabs";
 import Text from "@/components/ui/text";
 import { useState } from "react";
 import {
@@ -12,11 +12,12 @@ import {
 import { Scope, TokenRateLimit } from "./types";
 import { GenericTokenRateLimitTable } from "./TokenRateLimitTables";
 import { mutate } from "swr";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SvgGlobe, SvgShield, SvgUser, SvgUsers } from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
 const BASE_URL = "/api/admin/token-rate-limits";
 const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
 const USER_TOKEN_FETCH_URL = `${BASE_URL}/users`;
@@ -60,7 +61,6 @@ const handleCreateTokenRateLimit = async (
 function Main() {
   const [tabIndex, setTabIndex] = useState(0);
   const [modalIsOpen, setModalIsOpen] = useState(false);
-  const { popup, setPopup } = usePopup();
 
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
@@ -91,24 +91,22 @@ function Main() {
     )
       .then(() => {
         setModalIsOpen(false);
-        setPopup({ type: "success", message: "Token rate limit created!" });
+        toast.success("Token rate limit created!");
         updateTable(target_scope);
       })
       .catch((error) => {
-        setPopup({ type: "error", message: error.message });
+        toast.error(error.message);
       });
   };
 
   return (
-    <div>
-      {popup}
-
-      <Text className="mb-2">
+    <Section alignItems="stretch" justifyContent="start" height="auto">
+      <Text>
         Token rate limits enable you control how many tokens can be spent in a
         given time period. With token rate limits, you can:
       </Text>
 
-      <ul className="list-disc mt-2 ml-4 mb-2">
+      <ul className="list-disc ml-4">
         <li>
           <Text>
             Set a global rate limit to control your team&apos;s overall token
@@ -139,87 +137,72 @@ function Main() {
       <CreateButton onClick={() => setModalIsOpen(true)}>
         Create a Token Rate Limit
       </CreateButton>
-      {isPaidEnterpriseFeaturesEnabled && (
-        <Tabs
-          className="mt-2"
+
+      {isPaidEnterpriseFeaturesEnabled ? (
+        <SimpleTabs
+          tabs={{
+            "0": {
+              name: "Global",
+              icon: SvgGlobe,
+              content: (
+                <GenericTokenRateLimitTable
+                  fetchUrl={GLOBAL_TOKEN_FETCH_URL}
+                  title={"Global Token Rate Limits"}
+                  description={GLOBAL_DESCRIPTION}
+                />
+              ),
+            },
+            "1": {
+              name: "User",
+              icon: SvgUser,
+              content: (
+                <GenericTokenRateLimitTable
+                  fetchUrl={USER_TOKEN_FETCH_URL}
+                  title={"User Token Rate Limits"}
+                  description={USER_DESCRIPTION}
+                />
+              ),
+            },
+            "2": {
+              name: "User Groups",
+              icon: SvgUsers,
+              content: (
+                <GenericTokenRateLimitTable
+                  fetchUrl={USER_GROUP_FETCH_URL}
+                  title={"User Group Token Rate Limits"}
+                  description={USER_GROUP_DESCRIPTION}
+                  responseMapper={(data: Record<string, TokenRateLimit[]>) =>
+                    Object.entries(data).flatMap(([group_name, elements]) =>
+                      elements.map((element) => ({
+                        ...element,
+                        group_name,
+                      }))
+                    )
+                  }
+                />
+              ),
+            },
+          }}
           value={tabIndex.toString()}
           onValueChange={(val) => setTabIndex(parseInt(val))}
-        >
-          <TabsList>
-            <TabsTrigger value="0" className="flex items-center gap-2">
-              <SvgGlobe
-                aria-hidden="true"
-                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
-              />
-              Global
-            </TabsTrigger>
-            <TabsTrigger value="1" className="flex items-center gap-2">
-              <SvgUser
-                aria-hidden="true"
-                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
-              />
-              User
-            </TabsTrigger>
-            <TabsTrigger value="2" className="flex items-center gap-2">
-              <SvgUsers
-                aria-hidden="true"
-                className="h-3.5 w-3.5 stroke-text-03 group-data-[state=active]:stroke-text-04 shrink-0"
-              />
-              User Groups
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="0">
-            <GenericTokenRateLimitTable
-              fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-              title={"Global Token Rate Limits"}
-              description={GLOBAL_DESCRIPTION}
-            />
-          </TabsContent>
-          <TabsContent value="1">
-            <GenericTokenRateLimitTable
-              fetchUrl={USER_TOKEN_FETCH_URL}
-              title={"User Token Rate Limits"}
-              description={USER_DESCRIPTION}
-            />
-          </TabsContent>
-          <TabsContent value="2">
-            <GenericTokenRateLimitTable
-              fetchUrl={USER_GROUP_FETCH_URL}
-              title={"User Group Token Rate Limits"}
-              description={USER_GROUP_DESCRIPTION}
-              responseMapper={(data: Record<string, TokenRateLimit[]>) =>
-                Object.entries(data).flatMap(([group_name, elements]) =>
-                  elements.map((element) => ({
-                    ...element,
-                    group_name,
-                  }))
-                )
-              }
-            />
-          </TabsContent>
-        </Tabs>
-      )}
-
-      {!isPaidEnterpriseFeaturesEnabled && (
-        <div className="mt-6">
-          <GenericTokenRateLimitTable
-            fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-            title={"Global Token Rate Limits"}
-            description={GLOBAL_DESCRIPTION}
-          />
-        </div>
+        />
+      ) : (
+        <GenericTokenRateLimitTable
+          fetchUrl={GLOBAL_TOKEN_FETCH_URL}
+          title={"Global Token Rate Limits"}
+          description={GLOBAL_DESCRIPTION}
+        />
       )}
 
       <CreateRateLimitModal
         isOpen={modalIsOpen}
         setIsOpen={() => setModalIsOpen(false)}
-        setPopup={setPopup}
         onSubmit={handleSubmit}
         forSpecificScope={
           isPaidEnterpriseFeaturesEnabled ? undefined : Scope.GLOBAL
         }
       />
-    </div>
+    </Section>
   );
 }
 

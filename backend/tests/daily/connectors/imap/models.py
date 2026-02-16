@@ -15,7 +15,7 @@ class EmailDoc(BaseModel):
         assert document.title
         assert document.external_access
 
-        body = " ".join(to_text_sections(iterator=iter(document.sections)))
+        body = " ".join(to_text_sections(sections=iter(document.sections)))
 
         return cls(
             subject=document.title,

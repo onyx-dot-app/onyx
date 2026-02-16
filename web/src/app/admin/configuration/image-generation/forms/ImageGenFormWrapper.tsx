@@ -18,6 +18,7 @@ import {
   ImageGenSubmitPayload,
   FormValues,
 } from "./types";
+import { toast } from "@/hooks/useToast";
 
 export function ImageGenFormWrapper<T extends FormValues>({
   modal,
@@ -25,7 +26,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
   existingProviders,
   existingConfig,
   onSuccess,
-  setPopup,
   title,
   description,
   initialValues,
@@ -152,6 +152,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
           apiBase: payload.apiBase,
           apiVersion: payload.apiVersion,
           deploymentName: payload.deploymentName,
+          customConfig: payload.customConfig,
         });
 
         if (!result.ok) {
@@ -169,6 +170,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
           });
         } else {
           await createImageGenerationConfig({
@@ -178,6 +180,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
             isDefault: true,
           });
         }
@@ -194,6 +197,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
           });
 
           if (!result.ok) {
@@ -213,6 +217,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
             apiKeyChanged,
           });
         } else {
@@ -224,6 +229,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
             apiBase: payload.apiBase,
             apiVersion: payload.apiVersion,
             deploymentName: payload.deploymentName,
+            customConfig: payload.customConfig,
             isDefault: true,
           });
         }
@@ -237,7 +243,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
         error instanceof Error ? error.message : "Unknown error occurred";
       setApiStatus("error");
       setErrorMessage(message);
-      setPopup({ message, type: "error" });
+      toast.error(message);
       setIsSubmitting(false);
     }
   };

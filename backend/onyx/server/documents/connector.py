@@ -20,6 +20,7 @@ from google.oauth2.credentials import Credentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.email_utils import send_email
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
@@ -28,7 +29,7 @@ from onyx.background.celery.tasks.pruning.tasks import (
     try_creating_prune_generator_task,
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.app_configs import DISABLE_AUTH
+from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
 from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
@@ -37,6 +38,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import (
@@ -113,6 +115,7 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
 from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
+from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
@@ -124,6 +127,7 @@ from onyx.server.documents.models import ConnectorFileInfo
 from onyx.server.documents.models import ConnectorFilesResponse
 from onyx.server.documents.models import ConnectorIndexingStatusLite
 from onyx.server.documents.models import ConnectorIndexingStatusLiteResponse
+from onyx.server.documents.models import ConnectorRequestSubmission
 from onyx.server.documents.models import ConnectorSnapshot
 from onyx.server.documents.models import ConnectorStatus
 from onyx.server.documents.models import ConnectorUpdateRequest
@@ -144,7 +148,7 @@ from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
-from onyx.server.utils import PUBLIC_API_TAGS
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
@@ -161,7 +165,7 @@ _INDEXING_STATUS_PAGE_SIZE = 10
 SEEN_ZIP_DETAIL = "Only one zip file is allowed per file connector, \
 use the ingestion APIs for multiple files"
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
 """Admin only API endpoints"""
@@ -344,7 +348,7 @@ def delete_google_service_account_key(
 @router.put("/admin/connector/google-drive/service-account-credential")
 def upsert_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     """Special API which allows the creation of a credential for a service account.
@@ -371,7 +375,7 @@ def upsert_service_account_credential(
 @router.put("/admin/connector/gmail/service-account-credential")
 def upsert_gmail_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     """Special API which allows the creation of a credential for a service account.
@@ -401,12 +405,13 @@ def check_drive_tokens(
     db_session: Session = Depends(get_session),
 ) -> AuthStatus:
     db_credentials = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if (
-        not db_credentials
-        or DB_CREDENTIALS_DICT_TOKEN_KEY not in db_credentials.credential_json
-    ):
+    if not db_credentials or not db_credentials.credential_json:
         return AuthStatus(authenticated=False)
-    token_json_str = str(db_credentials.credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
+
+    credential_json = db_credentials.credential_json.get_value(apply_mask=False)
+    if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
+        return AuthStatus(authenticated=False)
+    token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
     google_drive_creds = get_google_oauth_creds(
         token_json_str=token_json_str,
         source=DocumentSource.GOOGLE_DRIVE,
@@ -416,29 +421,39 @@ def check_drive_tokens(
     return AuthStatus(authenticated=True)
 
 
-def extract_zip_metadata(zf: zipfile.ZipFile) -> dict[str, Any]:
-    zip_metadata = {}
+def save_zip_metadata_to_file_store(
+    zf: zipfile.ZipFile, file_store: FileStore
+) -> str | None:
+    """
+    Extract .onyx_metadata.json from zip and save to file store.
+    Returns the file_id or None if no metadata file exists.
+    """
     try:
         metadata_file_info = zf.getinfo(ONYX_METADATA_FILENAME)
         with zf.open(metadata_file_info, "r") as metadata_file:
+            metadata_bytes = metadata_file.read()
+
+            # Validate that it's valid JSON before saving
             try:
-                zip_metadata = json.load(metadata_file)
-                if isinstance(zip_metadata, list):
-                    # convert list of dicts to dict of dicts
-                    # Use just the basename for matching since metadata may not include
-                    # the full path within the ZIP file
-                    zip_metadata = {d["filename"]: d for d in zip_metadata}
+                json.loads(metadata_bytes)
             except json.JSONDecodeError as e:
                 logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
-                # should fail loudly here to let users know that their metadata
-                # file is not valid JSON
                 raise HTTPException(
                     status_code=400,
                     detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
                 )
+
+            # Save to file store
+            file_id = file_store.save_file(
+                content=BytesIO(metadata_bytes),
+                display_name=ONYX_METADATA_FILENAME,
+                file_origin=FileOrigin.CONNECTOR_METADATA,
+                file_type="application/json",
+            )
+            return file_id
     except KeyError:
         logger.info(f"No {ONYX_METADATA_FILENAME} file")
-    return zip_metadata
+        return None
 
 
 def is_zip_file(file: UploadFile) -> bool:
@@ -472,7 +487,7 @@ def upload_files(
 
     deduped_file_paths = []
     deduped_file_names = []
-    zip_metadata = {}
+    zip_metadata_file_id: str | None = None
     try:
         file_store = get_default_file_store()
         seen_zip = False
@@ -486,7 +501,9 @@ def upload_files(
                     raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
                 seen_zip = True
                 with zipfile.ZipFile(file.file, "r") as zf:
-                    zip_metadata = extract_zip_metadata(zf)
+                    zip_metadata_file_id = save_zip_metadata_to_file_store(
+                        zf, file_store
+                    )
                     for file_info in zf.namelist():
                         if zf.getinfo(file_info).is_dir():
                             continue
@@ -539,7 +556,7 @@ def upload_files(
     return FileUploadResponse(
         file_paths=deduped_file_paths,
         file_names=deduped_file_names,
-        zip_metadata=zip_metadata,
+        zip_metadata_file_id=zip_metadata_file_id,
     )
 
 
@@ -565,7 +582,7 @@ def upload_files_api(
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -627,7 +644,7 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """
@@ -668,18 +685,55 @@ def update_connector_files(
     current_config = connector.connector_specific_config
     current_file_locations = current_config.get("file_locations", [])
     current_file_names = current_config.get("file_names", [])
-    current_zip_metadata = current_config.get("zip_metadata", {})
+    current_zip_metadata_file_id = current_config.get("zip_metadata_file_id")
+
+    # Load existing metadata from file store if available
+    file_store = get_default_file_store()
+    current_zip_metadata: dict[str, Any] = {}
+    if current_zip_metadata_file_id:
+        try:
+            metadata_io = file_store.read_file(
+                file_id=current_zip_metadata_file_id, mode="b"
+            )
+            metadata_bytes = metadata_io.read()
+            loaded_metadata = json.loads(metadata_bytes)
+            if isinstance(loaded_metadata, list):
+                current_zip_metadata = {d["filename"]: d for d in loaded_metadata}
+            else:
+                current_zip_metadata = loaded_metadata
+        except Exception as e:
+            logger.warning(f"Failed to load existing metadata file: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to load existing connector metadata file",
+            )
 
     # Upload new files if any
     new_file_paths = []
     new_file_names_list = []
-    new_zip_metadata = {}
+    new_zip_metadata_file_id: str | None = None
+    new_zip_metadata: dict[str, Any] = {}
 
     if files and len(files) > 0:
         upload_response = upload_files(files, FileOrigin.CONNECTOR)
         new_file_paths = upload_response.file_paths
         new_file_names_list = upload_response.file_names
-        new_zip_metadata = upload_response.zip_metadata
+        new_zip_metadata_file_id = upload_response.zip_metadata_file_id
+
+        # Load new metadata from file store if available
+        if new_zip_metadata_file_id:
+            try:
+                metadata_io = file_store.read_file(
+                    file_id=new_zip_metadata_file_id, mode="b"
+                )
+                metadata_bytes = metadata_io.read()
+                loaded_metadata = json.loads(metadata_bytes)
+                if isinstance(loaded_metadata, list):
+                    new_zip_metadata = {d["filename"]: d for d in loaded_metadata}
+                else:
+                    new_zip_metadata = loaded_metadata
+            except Exception as e:
+                logger.warning(f"Failed to load new metadata file: {e}")
 
     # Remove specified files
     files_to_remove_set = set(file_ids_list)
@@ -691,11 +745,14 @@ def update_connector_files(
 
     remaining_file_locations = []
     remaining_file_names = []
+    removed_file_names = set()
 
     for file_id, file_name in zip(current_file_locations, current_file_names):
         if file_id not in files_to_remove_set:
             remaining_file_locations.append(file_id)
             remaining_file_names.append(file_name)
+        else:
+            removed_file_names.add(file_name)
 
     # Combine remaining files with new files
     final_file_locations = remaining_file_locations + new_file_paths
@@ -708,21 +765,33 @@ def update_connector_files(
             detail="Cannot remove all files from connector. At least one file must remain.",
         )
 
-    # Update zip metadata
+    # Merge and filter metadata (remove metadata for deleted files)
     final_zip_metadata = {
         key: value
         for key, value in current_zip_metadata.items()
-        if key not in files_to_remove_set
+        if key not in removed_file_names
     }
     final_zip_metadata.update(new_zip_metadata)
+
+    # Save merged metadata to file store if we have any metadata
+    final_zip_metadata_file_id: str | None = None
+    if final_zip_metadata:
+        final_zip_metadata_file_id = file_store.save_file(
+            content=BytesIO(json.dumps(final_zip_metadata).encode("utf-8")),
+            display_name=ONYX_METADATA_FILENAME,
+            file_origin=FileOrigin.CONNECTOR_METADATA,
+            file_type="application/json",
+        )
 
     # Update connector config
     updated_config = {
         **current_config,
         "file_locations": final_file_locations,
         "file_names": final_file_names,
-        "zip_metadata": final_zip_metadata,
+        "zip_metadata_file_id": final_zip_metadata_file_id,
     }
+    # Remove old zip_metadata dict if present (backwards compatibility cleanup)
+    updated_config.pop("zip_metadata", None)
 
     connector_base = ConnectorBase(
         name=connector.name,
@@ -781,7 +850,7 @@ def update_connector_files(
     return FileUploadResponse(
         file_paths=final_file_locations,
         file_names=final_file_names,
-        zip_metadata=final_zip_metadata,
+        zip_metadata_file_id=final_zip_metadata_file_id,
     )
 
 
@@ -1001,7 +1070,7 @@ def get_connector_indexing_status(
         (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
     ]
 
-    if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
+    if user and user.role == UserRole.ADMIN:
         # For Admin users, we already got all the cc pair in editable_cc_pairs
         # its not needed to get them again
         (
@@ -1176,7 +1245,7 @@ def get_connector_indexing_status(
     # Track admin page visit for analytics
     mt_cloud_telemetry(
         tenant_id=tenant_id,
-        distinct_id=user.email if user else tenant_id,
+        distinct_id=user.email,
         event=MilestoneRecordType.VISITED_ADMIN_PAGE,
     )
 
@@ -1391,7 +1460,7 @@ def create_connector_from_model(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email,
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
 
@@ -1470,7 +1539,7 @@ def create_connector_with_mock_credential(
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
-            distinct_id=user.email if user else tenant_id,
+            distinct_id=user.email,
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
         return response
@@ -1721,7 +1790,7 @@ def get_connectors(
 
 @router.get("/indexed-sources", tags=PUBLIC_API_TAGS)
 def get_indexed_sources(
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> IndexedSourcesResponse:
     sources = sorted(
@@ -1756,6 +1825,86 @@ def get_connector_by_id(
         ],
         time_created=connector.time_created,
         time_updated=connector.time_updated,
+    )
+
+
+@router.post("/connector-request")
+def submit_connector_request(
+    request_data: ConnectorRequestSubmission,
+    user: User | None = Depends(current_user),
+) -> StatusResponse:
+    """
+    Submit a connector request for Cloud deployments.
+    Tracks via PostHog telemetry and sends email to hello@onyx.app.
+    """
+    tenant_id = get_current_tenant_id()
+    connector_name = request_data.connector_name.strip()
+
+    if not connector_name:
+        raise HTTPException(status_code=400, detail="Connector name cannot be empty")
+
+    # Get user identifier for telemetry
+    user_email = user.email if user else None
+    distinct_id = user_email or tenant_id
+
+    # Track connector request via PostHog telemetry (Cloud only)
+    from shared_configs.configs import MULTI_TENANT
+
+    if MULTI_TENANT:
+        mt_cloud_telemetry(
+            tenant_id=tenant_id,
+            distinct_id=distinct_id,
+            event=MilestoneRecordType.REQUESTED_CONNECTOR,
+            properties={
+                "connector_name": connector_name,
+                "user_email": user_email,
+            },
+        )
+
+    # Send email notification (if email is configured)
+    if EMAIL_CONFIGURED:
+        try:
+            subject = "Onyx Craft Connector Request"
+            email_body_text = f"""A new connector request has been submitted:
+
+Connector Name: {connector_name}
+User Email: {user_email or 'Not provided (anonymous user)'}
+Tenant ID: {tenant_id}
+"""
+            email_body_html = f"""<html>
+<body>
+<p>A new connector request has been submitted:</p>
+<ul>
+<li><strong>Connector Name:</strong> {connector_name}</li>
+<li><strong>User Email:</strong> {user_email or 'Not provided (anonymous user)'}</li>
+<li><strong>Tenant ID:</strong> {tenant_id}</li>
+</ul>
+</body>
+</html>"""
+
+            send_email(
+                user_email="hello@onyx.app",
+                subject=subject,
+                html_body=email_body_html,
+                text_body=email_body_text,
+            )
+            logger.info(
+                f"Connector request email sent to hello@onyx.app for connector: {connector_name}"
+            )
+        except Exception as e:
+            # Log error but don't fail the request if email fails
+            logger.error(
+                f"Failed to send connector request email for {connector_name}: {e}"
+            )
+
+    logger.info(
+        f"Connector request submitted: {connector_name} by user {user_email or 'anonymous'} "
+        f"(tenant: {tenant_id})"
+    )
+
+    return StatusResponse(
+        success=True,
+        message="Connector request submitted successfully. We'll prioritize popular requests!",
     )
 
 

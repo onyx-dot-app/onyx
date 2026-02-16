@@ -7,6 +7,7 @@ import pytest
 
 from onyx.connectors.gong.connector import GongConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 
 
 @pytest.fixture
@@ -27,7 +28,9 @@ def gong_connector() -> GongConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_gong_basic(mock_get_api_key: MagicMock, gong_connector: GongConnector) -> None:
+def test_gong_basic(
+    mock_get_api_key: MagicMock, gong_connector: GongConnector  # noqa: ARG001
+) -> None:
     doc_batch_generator = gong_connector.poll_source(0, time.time())
 
     doc_batch = next(doc_batch_generator)
@@ -38,7 +41,8 @@ def test_gong_basic(mock_get_api_key: MagicMock, gong_connector: GongConnector) 
 
     docs: list[Document] = []
     for doc in doc_batch:
-        docs.append(doc)
+        if not isinstance(doc, HierarchyNode):
+            docs.append(doc)
 
     assert docs[0].semantic_identifier == "test with chris"
     assert docs[1].semantic_identifier == "Testing Gong"

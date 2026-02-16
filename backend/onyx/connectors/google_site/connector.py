@@ -11,6 +11,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.extract_file_text import read_text_file
@@ -65,7 +66,7 @@ class GoogleSitesConnector(LoadConnector):
         pass
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        documents: list[Document] = []
+        documents: list[Document | HierarchyNode] = []
 
         file_content_io = get_default_file_store().read_file(self.zip_path, mode="b")
 

@@ -65,7 +65,7 @@ env:
   ZENDESK_TOKEN: ${{ secrets.ZENDESK_TOKEN }}
 
   # Salesforce
-  SF_USERNAME: ${{ secrets.SF_USERNAME }}
+  SF_USERNAME: ${{ vars.SF_USERNAME }}
   SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
   SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
 
@@ -110,6 +110,9 @@ env:
   # Slack
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 
+  # Discord
+  DISCORD_CONNECTOR_BOT_TOKEN: ${{ secrets.DISCORD_CONNECTOR_BOT_TOKEN }}
+
   # Teams
   TEAMS_APPLICATION_ID: ${{ secrets.TEAMS_APPLICATION_ID }}
   TEAMS_DIRECTORY_ID: ${{ secrets.TEAMS_DIRECTORY_ID }}
@@ -139,7 +142,7 @@ jobs:
       - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
 
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

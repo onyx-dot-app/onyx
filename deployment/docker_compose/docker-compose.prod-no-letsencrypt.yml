@@ -31,6 +31,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     env_file:
       - path: .env
         required: false
@@ -47,7 +48,8 @@ services:
     volumes:
       # optional, only for debugging purposes
       - api_server_logs:/var/log/onyx
-
+      # Shared volume for persistent document storage (Craft file-system mode)
+      - file-system:/app/file-system
 
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -78,6 +80,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     env_file:
       - path: .env
         required: false
@@ -88,6 +91,8 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - background_logs:/var/log/onyx
+      # Shared volume for persistent document storage (Craft file-system mode)
+      - file-system:/app/file-system
     logging:
       driver: json-file
       options:
@@ -100,10 +105,7 @@ services:
       context: ../../web
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
-        - NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS=${NEXT_PUBLIC_NEGATIVE_PREDEFINED_FEEDBACK_OPTIONS:-}
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
-        - NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN=${NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN:-}
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
     depends_on:
       - api_server
@@ -148,7 +150,6 @@ services:
   #     - MCP_SERVER_CORS_ORIGINS=${MCP_SERVER_CORS_ORIGINS:-}
   #     - API_SERVER_PROTOCOL=${API_SERVER_PROTOCOL:-http}
   #     - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
-  #     - API_SERVER_PORT=${API_SERVER_PORT:-8080}
   #   extra_hosts:
   #     - "host.docker.internal:host-gateway"
   #   logging:
@@ -350,3 +351,5 @@ volumes:
   inference_model_server_logs:
   indexing_model_server_logs:
   # mcp_server_logs:
+  # Shared volume for persistent document storage (Craft file-system mode)
+  file-system:

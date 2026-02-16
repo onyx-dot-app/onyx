@@ -23,12 +23,35 @@ export interface ButtonProps
   // Button states:
   transient?: boolean;
 
+  // Button sizes:
+  size?: "lg" | "md";
+
   // Icons:
   leftIcon?: React.FunctionComponent<IconProps>;
   rightIcon?: React.FunctionComponent<IconProps>;
 
   href?: string;
+  target?: string;
 }
+
+const BUTTON_SIZE_CLASS_MAP = {
+  lg: {
+    button: "p-2 rounded-12 gap-1.5",
+    content: {
+      left: "pr-1",
+      right: "pl-1",
+      none: "",
+    },
+  },
+  md: {
+    button: "p-1 rounded-08 gap-0",
+    content: {
+      left: "pr-1 py-0.5",
+      right: "pl-1 py-0.5",
+      none: "py-0.5",
+    },
+  },
+} as const;
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
@@ -44,11 +67,13 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
       disabled,
       transient,
+      size = "lg",
 
       leftIcon: LeftIcon,
       rightIcon: RightIcon,
 
       href,
+      target,
       children,
       className,
       ...props
@@ -80,12 +105,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const buttonClass = `button-${variant}-${subvariant}`;
     const textClass = `button-${variant}-${subvariant}-text`;
     const iconClass = `button-${variant}-${subvariant}-icon`;
+    const iconPlacement = LeftIcon ? "left" : RightIcon ? "right" : "none";
+    const sizeClasses = BUTTON_SIZE_CLASS_MAP[size];
+    const textSizeProps =
+      size === "md"
+        ? { secondaryAction: true as const }
+        : { mainUiBody: true as const };
 
     const content = (
       <button
         ref={ref}
         className={cn(
-          "p-2 h-fit rounded-12 w-fit flex flex-row items-center justify-center gap-1.5",
+          "h-fit w-fit flex flex-row items-center justify-center",
+          sizeClasses.button,
           buttonClass,
           className
         )}
@@ -99,15 +131,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
           </div>
         )}
-        <div
-          className={cn(
-            "leading-none",
-            LeftIcon && "pr-1",
-            RightIcon && "pl-1"
-          )}
-        >
+        <div className={cn("leading-none", sizeClasses.content[iconPlacement])}>
           {typeof children === "string" ? (
-            <Text className={cn("whitespace-nowrap", textClass)} as="span">
+            <Text
+              {...textSizeProps}
+              className={cn("whitespace-nowrap", textClass)}
+            >
               {children}
             </Text>
           ) : (
@@ -123,7 +152,15 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     );
 
     if (!href) return content;
-    return <Link href={href as Route}>{content}</Link>;
+    return (
+      <Link
+        href={href as Route}
+        target={target}
+        rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      >
+        {content}
+      </Link>
+    );
   }
 );
 Button.displayName = "Button";

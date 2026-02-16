@@ -24,6 +24,9 @@ def upgrade() -> None:
     # in unique constraints, but we want NULL == NULL for deduplication).
     # The '{}' represents an empty JSONB object as the NULL replacement.
 
+    # Clean up legacy notifications first
+    op.execute("DELETE FROM notification WHERE title = 'New Notification'")
+
     op.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS ix_notification_user_type_data
@@ -39,9 +42,6 @@ def upgrade() -> None:
         ON notification (user_id, dismissed, first_shown DESC)
         """
     )
-
-    # Clean up legacy 'reindex' notifications that are no longer needed
-    op.execute("DELETE FROM notification WHERE title = 'New Notification'")
 
 
 def downgrade() -> None:

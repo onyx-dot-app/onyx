@@ -3,7 +3,6 @@ from typing import Any
 
 from redis.lock import Lock as RedisLock
 
-from onyx.background.celery.tasks.kg_processing.utils import extend_lock
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
@@ -40,6 +39,7 @@ from onyx.kg.utils.formatting_utils import extract_relationship_type_id
 from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_relationship_id
+from onyx.kg.utils.lock_utils import extend_lock
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 

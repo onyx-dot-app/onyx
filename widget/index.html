@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Onyx Chat Widget - Development</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+          "Helvetica", "Arial", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f5f5f5;
+        color: #1a1a1a;
+        line-height: 1.6;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 60px 20px;
+        text-align: center;
+      }
+
+      .header h1 {
+        margin: 0 0 10px 0;
+        font-size: 2.5em;
+        font-weight: 700;
+      }
+
+      .header p {
+        margin: 0;
+        font-size: 1.2em;
+        opacity: 0.9;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+      }
+
+      .section {
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        margin-bottom: 40px;
+      }
+
+      .section h2 {
+        margin-top: 0;
+        color: #667eea;
+        font-size: 1.8em;
+        margin-bottom: 20px;
+      }
+
+      .section p {
+        color: #666;
+        margin-bottom: 20px;
+      }
+
+      .code-block {
+        background: #f8f9fa;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        padding: 16px;
+        font-family: "Monaco", "Courier New", monospace;
+        font-size: 14px;
+        overflow-x: auto;
+        margin: 20px 0;
+      }
+
+      .demo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 30px;
+        margin-top: 30px;
+      }
+
+      .demo-card {
+        background: #f8f9fa;
+        border: 2px solid #e1e4e8;
+        border-radius: 8px;
+        padding: 20px;
+      }
+
+      .demo-card h3 {
+        margin-top: 0;
+        color: #1a1a1a;
+        font-size: 1.2em;
+      }
+
+      .demo-card p {
+        color: #666;
+        font-size: 0.95em;
+        margin-bottom: 15px;
+      }
+
+      .compact-demo {
+        width: 100%;
+        max-width: 600px;
+        margin: 20px auto 0;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        background: #667eea;
+        color: white;
+        border-radius: 12px;
+        font-size: 0.85em;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+
+      .info-box {
+        background: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 16px 20px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+
+      .info-box strong {
+        color: #1565c0;
+      }
+
+      .feature-list {
+        list-style: none;
+        padding: 0;
+      }
+
+      .feature-list li {
+        padding: 8px 0;
+        padding-left: 24px;
+        position: relative;
+      }
+
+      .feature-list li:before {
+        content: "✓";
+        position: absolute;
+        left: 0;
+        color: #667eea;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🤖 Onyx Chat Widget</h1>
+      <p>Embeddable AI-powered chat for your website</p>
+    </div>
+
+    <div class="container">
+      <!-- Introduction Section -->
+      <div class="section">
+        <h2>Development Environment</h2>
+        <p>
+          This page demonstrates the Onyx Chat Widget in development mode. The
+          widget is loaded from <code>src/index.ts</code> via Vite with hot
+          module replacement.
+        </p>
+
+        <div class="info-box">
+          <strong>Configuration:</strong> Widget settings are loaded from the
+          <code>.env</code> file. Create one from <code>.env.example</code> to
+          configure backend URL, API key, and other options.
+        </div>
+
+        <ul class="feature-list">
+          <li>Real-time streaming responses via SSE</li>
+          <li>Markdown rendering for rich content</li>
+          <li>Session persistence across page reloads</li>
+          <li>Shadow DOM isolation (no style conflicts)</li>
+          <li>Responsive design (desktop & mobile)</li>
+          <li>Two display modes: Launcher & Inline</li>
+        </ul>
+      </div>
+
+      <!-- Launcher Mode Section -->
+      <div class="section">
+        <span class="badge">Launcher Mode</span>
+        <h2>Floating Chat Button</h2>
+        <p>
+          Look at the bottom-right corner of this page! A floating chat button
+          will appear there. Click it to open the chat popup. This is the
+          default mode for most website integrations.
+        </p>
+
+        <div class="code-block">
+          &lt;onyx-chat-widget mode="launcher"&gt;&lt;/onyx-chat-widget&gt;
+        </div>
+
+        <div class="demo-grid">
+          <div class="demo-card">
+            <h3>Desktop View</h3>
+            <p>Opens as a 400×600px popup above the button</p>
+          </div>
+          <div class="demo-card">
+            <h3>Mobile View</h3>
+            <p>Expands to full-screen overlay (&lt;768px)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compact Inline Mode Section -->
+      <div class="section">
+        <span class="badge">Compact Mode</span>
+        <h2>Compact Inline (No Messages)</h2>
+        <p>
+          When using inline mode without any messages, the widget displays in a
+          compact form - just a search-like input bar. Once you send a message,
+          it expands to show the full chat interface.
+        </p>
+
+        <div class="code-block">
+          &lt;onyx-chat-widget mode="inline"&gt;&lt;/onyx-chat-widget&gt;
+          &lt;!-- Automatically compact when no messages --&gt;
+        </div>
+
+        <div class="compact-demo">
+          <onyx-chat-widget mode="inline"></onyx-chat-widget>
+        </div>
+      </div>
+
+      <!-- Configuration Section -->
+      <div class="section">
+        <h2>Configuration Options</h2>
+        <p>
+          The widget can be customized via HTML attributes or environment
+          variables (for self-hosted builds). Below are some common
+          configuration examples:
+        </p>
+
+        <h3>Basic Setup</h3>
+        <div class="code-block">
+          &lt;onyx-chat-widget backend-url="https://api.onyx.app"
+          api-key="your_api_key_here"&gt; &lt;/onyx-chat-widget&gt;
+        </div>
+
+        <h3>Custom Branding</h3>
+        <div class="code-block">
+          &lt;onyx-chat-widget backend-url="https://api.onyx.app"
+          api-key="your_api_key_here" agent-id="42" agent-name="Support Bot"
+          logo="https://yoursite.com/logo.png" primary-color="#FF6B35"
+          background-color="#FFFFFF" text-color="#1A1A1A"&gt;
+          &lt;/onyx-chat-widget&gt;
+        </div>
+
+        <div class="info-box">
+          <strong>Note:</strong> For cloud deployments, configuration must be
+          provided via HTML attributes. For self-hosted builds, you can bake
+          configuration into the bundle using environment variables.
+        </div>
+      </div>
+    </div>
+
+    <!-- Launcher widget instance -->
+    <onyx-chat-widget
+      backend-url="http://localhost:8080"
+      api-key="your-api-key-here"
+      mode="launcher"
+    ></onyx-chat-widget>
+
+    <!-- Load widget source via Vite for local development -->
+    <script type="module" src="./dist/onyx-widget.js"></script>
+
+    <!-- Load widget source via CDN for production -->
+    <!-- <script type="module" src="https://cdn.onyx.app/widget/1.0/dist/onyx-widget.js"></script> -->
+  </body>
+</html>

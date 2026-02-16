@@ -33,8 +33,8 @@ def get_default_admin_user_emails_() -> list[str]:
 
 async def current_cloud_superuser(
     request: Request,
-    user: User | None = Depends(current_admin_user),
-) -> User | None:
+    user: User = Depends(current_admin_user),
+) -> User:
     api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
     if api_key != SUPER_CLOUD_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")

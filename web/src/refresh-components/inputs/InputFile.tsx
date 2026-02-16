@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import InputTypeIn, {
   InputTypeInProps,
 } from "@/refresh-components/inputs/InputTypeIn";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { SvgPaperclip } from "@opal/icons";
 
@@ -13,6 +13,14 @@ export interface InputFileProps
     InputTypeInProps,
     "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
   > {
+  /**
+   * Whether the input is disabled.
+   */
+  disabled?: boolean;
+  /**
+   * Whether the input has an error.
+   */
+  error?: boolean;
   // Receives the extracted file content (text) or pasted value
   setValue: (value: string) => void;
   // Called when a value is committed via file selection or paste (not on each keystroke)
@@ -32,6 +40,8 @@ export default function InputFile({
   maxSizeKb,
   onFileSizeExceeded,
   disabled,
+  error,
+  variant,
   placeholder,
   className,
   ...rest
@@ -41,8 +51,13 @@ export default function InputFile({
   const [isFileMode, setIsFileMode] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Derive disabled/readOnly state from either the boolean props or the variant
+  const isDisabled = disabled || variant === "disabled";
+  const isReadOnly = variant === "readOnly";
+  const isNonEditable = isDisabled || isReadOnly;
+
   function openFilePicker() {
-    if (disabled) return;
+    if (isNonEditable) return;
     fileInputRef.current?.click();
   }
 
@@ -98,6 +113,8 @@ export default function InputFile({
   }
 
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    // Don't allow paste when non-editable
+    if (isNonEditable) return;
     // Switch to editable mode and use pasted text as the value
     const pastedText = e.clipboardData.getData("text");
     if (!pastedText) return;
@@ -110,12 +127,13 @@ export default function InputFile({
   }
 
   const rightSection = (
-    <IconButton
+    <Button
       icon={SvgPaperclip}
-      disabled={disabled}
+      disabled={isNonEditable}
       onClick={noProp(openFilePicker)}
       type="button"
-      internal
+      prominence="tertiary"
+      size="sm"
       aria-label="Attach file"
     />
   );
@@ -130,18 +148,18 @@ export default function InputFile({
         aria-hidden
         className="hidden"
         tabIndex={-1}
-        disabled={disabled}
+        disabled={isNonEditable}
       />
       <InputTypeIn
         {...rest}
         className={className}
         placeholder={placeholder}
-        disabled={disabled}
+        variant={isDisabled ? "disabled" : error ? "error" : variant}
         value={displayValue}
         onChange={handleChangeWhenTyping}
         onPaste={handlePaste}
         onClear={handleClear}
-        readOnly={isFileMode}
+        readOnly={isFileMode || isReadOnly}
         rightSection={rightSection}
       />
     </>

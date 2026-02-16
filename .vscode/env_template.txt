@@ -6,21 +6,15 @@
 # processes.
 
 
-# For local dev, often user Authentication is not needed.
-AUTH_TYPE=disabled
+AUTH_TYPE=basic
+DEV_MODE=true
 
 
 # Always keep these on for Dev.
 # Logs model prompts, reasoning, and answer to stdout.
-LOG_ONYX_MODEL_INTERACTIONS=True
+LOG_ONYX_MODEL_INTERACTIONS=False
 # More verbose logging
 LOG_LEVEL=debug
-
-
-# This passes top N results to LLM an additional time for reranking prior to
-# answer generation.
-# This step is quite heavy on token usage so we disable it for dev generally.
-DISABLE_LLM_DOC_RELEVANCE=False
 
 
 # Useful if you want to toggle auth on/off (google_oauth/OIDC specifically).
@@ -41,7 +35,6 @@ GEN_AI_API_KEY=<REPLACE THIS>
 OPENAI_API_KEY=<REPLACE THIS>
 # If answer quality isn't important for dev, use gpt-4o-mini since it's cheaper.
 GEN_AI_MODEL_VERSION=gpt-4o
-FAST_GEN_AI_MODEL_VERSION=gpt-4o
 
 
 # Python stuff

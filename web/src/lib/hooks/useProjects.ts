@@ -1,10 +1,10 @@
 import useSWR from "swr";
-import { Project } from "@/app/chat/projects/projectsService";
+import { Project } from "@/app/app/projects/projectsService";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export function useProjects() {
   const { data, error, mutate } = useSWR<Project[]>(
-    "/api/user/projects/",
+    "/api/user/projects",
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,

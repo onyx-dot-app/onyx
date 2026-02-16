@@ -15,14 +15,17 @@ import {
   Table,
 } from "@/components/ui/table";
 import Title from "@/components/ui/title";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
 import Modal from "@/refresh-components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "@/app/admin/api-key/lib";
 import OnyxApiKeyForm from "@/app/admin/api-key/OnyxApiKeyForm";
-import { APIKey } from "@/app/admin/api-key/types";
+import {
+  APIKey,
+  DISCORD_SERVICE_API_KEY_NAME,
+} from "@/app/admin/api-key/types";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
 import Button from "@/refresh-components/buttons/Button";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
@@ -30,8 +33,6 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgEdit, SvgKey, SvgRefreshCw } from "@opal/icons";
 
 function Main() {
-  const { popup, setPopup } = usePopup();
-
   const {
     data: apiKeys,
     isLoading,
@@ -61,25 +62,26 @@ function Main() {
     );
   }
 
+  // Filter out the discord service key from the displayed list
+  const filteredApiKeys = apiKeys.filter(
+    (key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME
+  );
+
   const introSection = (
     <div className="flex flex-col items-start gap-4">
       <Text as="p">
         API Keys allow you to access Onyx APIs programmatically. Click the
         button below to generate a new API Key.
       </Text>
-      <CreateButton
-        className="self-start"
-        onClick={() => setShowCreateUpdateForm(true)}
-      >
+      <CreateButton onClick={() => setShowCreateUpdateForm(true)}>
         Create API Key
       </CreateButton>
     </div>
   );
 
-  if (apiKeys.length === 0) {
+  if (filteredApiKeys.length === 0) {
     return (
       <div>
-        {popup}
         {introSection}
 
         {showCreateUpdateForm && (
@@ -92,7 +94,6 @@ function Main() {
               setSelectedApiKey(undefined);
               mutate("/api/admin/api-key");
             }}
-            setPopup={setPopup}
             apiKey={selectedApiKey}
           />
         )}
@@ -102,10 +103,8 @@ function Main() {
 
   return (
     <>
-      {popup}
-
       <Modal open={!!fullApiKey}>
-        <Modal.Content small>
+        <Modal.Content width="sm" height="sm">
           <Modal.Header
             title="New API Key"
             icon={SvgKey}
@@ -139,7 +138,7 @@ function Main() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {apiKeys.map((apiKey) => (
+          {filteredApiKeys.map((apiKey) => (
             <TableRow key={apiKey.api_key_id}>
               <TableCell>
                 <Button
@@ -166,10 +165,7 @@ function Main() {
                     setKeyIsGenerating(false);
                     if (!response.ok) {
                       const errorMsg = await response.text();
-                      setPopup({
-                        type: "error",
-                        message: `Failed to regenerate API Key: ${errorMsg}`,
-                      });
+                      toast.error(`Failed to regenerate API Key: ${errorMsg}`);
                       return;
                     }
                     const newKey = (await response.json()) as APIKey;
@@ -186,10 +182,7 @@ function Main() {
                     const response = await deleteApiKey(apiKey.api_key_id);
                     if (!response.ok) {
                       const errorMsg = await response.text();
-                      setPopup({
-                        type: "error",
-                        message: `Failed to delete API Key: ${errorMsg}`,
-                      });
+                      toast.error(`Failed to delete API Key: ${errorMsg}`);
                       return;
                     }
                     mutate("/api/admin/api-key");
@@ -211,7 +204,6 @@ function Main() {
             setSelectedApiKey(undefined);
             mutate("/api/admin/api-key");
           }}
-          setPopup={setPopup}
           apiKey={selectedApiKey}
         />
       )}

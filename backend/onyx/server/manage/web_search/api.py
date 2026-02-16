@@ -4,10 +4,13 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Response
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import InternetContentProvider
+from onyx.db.models import InternetSearchProvider
 from onyx.db.models import User
 from onyx.db.web_search import deactivate_web_content_provider
 from onyx.db.web_search import deactivate_web_search_provider
@@ -32,13 +35,18 @@ from onyx.server.manage.web_search.models import WebSearchProviderView
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
+from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.providers import (
     build_content_provider_from_config,
 )
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
+from onyx.tools.tool_implementations.web_search.providers import (
+    provider_requires_api_key,
+)
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
@@ -49,7 +57,7 @@ admin_router = APIRouter(prefix="/admin/web-search")
 
 @admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
 def list_search_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[WebSearchProviderView]:
     providers = fetch_web_search_providers(db_session)
@@ -69,7 +77,7 @@ def list_search_providers(
 @admin_router.post("/search-providers", response_model=WebSearchProviderView)
 def upsert_search_provider_endpoint(
     request: WebSearchProviderUpsertRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebSearchProviderView:
     existing_by_name = fetch_web_search_provider_by_name(request.name, db_session)
@@ -94,6 +102,28 @@ def upsert_search_provider_endpoint(
         db_session=db_session,
     )
 
+    # Sync Exa key of search engine to content provider
+    if (
+        request.provider_type == WebSearchProviderType.EXA
+        and request.api_key_changed
+        and request.api_key
+    ):
+        stmt = (
+            insert(InternetContentProvider)
+            .values(
+                name="Exa",
+                provider_type=WebContentProviderType.EXA.value,
+                api_key=request.api_key,
+                is_active=False,
+            )
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
+        )
+        db_session.execute(stmt)
+        db_session.flush()
+
     db_session.commit()
     return WebSearchProviderView(
         id=provider.id,
@@ -110,7 +140,7 @@ def upsert_search_provider_endpoint(
 )
 def delete_search_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     delete_web_search_provider(provider_id, db_session)
@@ -120,7 +150,7 @@ def delete_search_provider(
 @admin_router.post("/search-providers/{provider_id}/activate")
 def activate_search_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebSearchProviderView:
     provider = set_active_web_search_provider(
@@ -140,7 +170,7 @@ def activate_search_provider(
 @admin_router.post("/search-providers/{provider_id}/deactivate")
 def deactivate_search_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     deactivate_web_search_provider(provider_id=provider_id, db_session=db_session)
@@ -151,14 +181,14 @@ def deactivate_search_provider(
 @admin_router.post("/search-providers/test")
 def test_search_provider(
     request: WebSearchProviderTestRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    provider_requires_api_key = request.provider_type != WebSearchProviderType.SEARXNG
+    requires_key = provider_requires_api_key(request.provider_type)
 
     # Determine which API key to use
     api_key = request.api_key
-    if request.use_stored_key and provider_requires_api_key:
+    if request.use_stored_key and requires_key:
         existing_provider = fetch_web_search_provider_by_type(
             request.provider_type, db_session
         )
@@ -167,9 +197,9 @@ def test_search_provider(
                 status_code=400,
                 detail="No stored API key found for this provider type.",
             )
-        api_key = existing_provider.api_key
+        api_key = existing_provider.api_key.get_value(apply_mask=False)
 
-    if provider_requires_api_key and not api_key:
+    if requires_key and not api_key:
         raise HTTPException(
             status_code=400,
             detail="API key is required. Either provide api_key or set use_stored_key to true.",
@@ -178,7 +208,7 @@ def test_search_provider(
     try:
         provider = build_search_provider_from_config(
             provider_type=request.provider_type,
-            api_key=api_key or "",
+            api_key=api_key,
             config=request.config or {},
         )
     except ValueError as exc:
@@ -200,7 +230,7 @@ def test_search_provider(
 
 @admin_router.get("/content-providers", response_model=list[WebContentProviderView])
 def list_content_providers(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[WebContentProviderView]:
     providers = fetch_web_content_providers(db_session)
@@ -210,7 +240,7 @@ def list_content_providers(
             name=provider.name,
             provider_type=WebContentProviderType(provider.provider_type),
             is_active=provider.is_active,
-            config=provider.config or {},
+            config=provider.config or WebContentProviderConfig(),
             has_api_key=bool(provider.api_key),
         )
         for provider in providers
@@ -220,7 +250,7 @@ def list_content_providers(
 @admin_router.post("/content-providers", response_model=WebContentProviderView)
 def upsert_content_provider_endpoint(
     request: WebContentProviderUpsertRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebContentProviderView:
     existing_by_name = fetch_web_content_provider_by_name(request.name, db_session)
@@ -245,13 +275,35 @@ def upsert_content_provider_endpoint(
         db_session=db_session,
     )
 
+    # Sync Exa key of content provider to search provider
+    if (
+        request.provider_type == WebContentProviderType.EXA
+        and request.api_key_changed
+        and request.api_key
+    ):
+        stmt = (
+            insert(InternetSearchProvider)
+            .values(
+                name="Exa",
+                provider_type=WebSearchProviderType.EXA.value,
+                api_key=request.api_key,
+                is_active=False,
+            )
+            .on_conflict_do_update(
+                index_elements=["name"],
+                set_={"api_key": request.api_key},
+            )
+        )
+        db_session.execute(stmt)
+        db_session.flush()
+
     db_session.commit()
     return WebContentProviderView(
         id=provider.id,
         name=provider.name,
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
-        config=provider.config or {},
+        config=provider.config or WebContentProviderConfig(),
         has_api_key=bool(provider.api_key),
     )
 
@@ -261,7 +313,7 @@ def upsert_content_provider_endpoint(
 )
 def delete_content_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     delete_web_content_provider(provider_id, db_session)
@@ -271,7 +323,7 @@ def delete_content_provider(
 @admin_router.post("/content-providers/{provider_id}/activate")
 def activate_content_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> WebContentProviderView:
     provider = set_active_web_content_provider(
@@ -283,14 +335,14 @@ def activate_content_provider(
         name=provider.name,
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
-        config=provider.config or {},
+        config=provider.config or WebContentProviderConfig(),
         has_api_key=bool(provider.api_key),
     )
 
 
 @admin_router.post("/content-providers/reset-default")
 def reset_content_provider_default(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     providers = fetch_web_content_providers(db_session)
@@ -306,7 +358,7 @@ def reset_content_provider_default(
 @admin_router.post("/content-providers/{provider_id}/deactivate")
 def deactivate_content_provider(
     provider_id: int,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     deactivate_web_content_provider(provider_id=provider_id, db_session=db_session)
@@ -317,7 +369,7 @@ def deactivate_content_provider(
 @admin_router.post("/content-providers/test")
 def test_content_provider(
     request: WebContentProviderTestRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     # Determine which API key to use
@@ -331,7 +383,18 @@ def test_content_provider(
                 status_code=400,
                 detail="No stored API key found for this provider type.",
             )
-        api_key = existing_provider.api_key
+        if MULTI_TENANT:
+            stored_base_url = (
+                existing_provider.config.base_url if existing_provider.config else None
+            )
+            request_base_url = request.config.base_url
+            if request_base_url != stored_base_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Base URL cannot differ from stored provider when using stored API key",
+                )
+
+        api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if not api_key:
         raise HTTPException(

@@ -23,7 +23,7 @@ ContentRange = tuple[int, int | None]  # (start_index, end_index) None means to 
 
 # NOTE: Used for testing timing
 def _get_dummy_object_access_map(
-    object_ids: set[str], user_email: str, chunks: list[InferenceChunk]
+    object_ids: set[str], user_email: str, chunks: list[InferenceChunk]  # noqa: ARG001
 ) -> dict[str, bool]:
     time.sleep(0.15)
     # return {object_id: True for object_id in object_ids}

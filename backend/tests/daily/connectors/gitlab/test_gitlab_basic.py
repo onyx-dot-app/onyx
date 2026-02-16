@@ -5,6 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.gitlab.connector import GitlabConnector
+from onyx.connectors.models import HierarchyNode
 
 
 @pytest.fixture
@@ -52,6 +53,8 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
     # ---
 
     for doc in docs:
+        if isinstance(doc, HierarchyNode):
+            continue
         # Verify basic document properties (common to all types)
         assert doc.source == DocumentSource.GITLAB
         assert doc.secondary_owners is None

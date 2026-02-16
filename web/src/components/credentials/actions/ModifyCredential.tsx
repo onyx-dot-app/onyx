@@ -10,8 +10,8 @@ import {
   Credential,
 } from "@/lib/connectors/credentials";
 import { Connector } from "@/lib/connectors/connectors";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgAlertTriangle, SvgTrash } from "@opal/icons";
+import { Button as OpalButton } from "@opal/components";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
@@ -115,7 +115,7 @@ function CredentialSelectionTable({
                     {new Date(credential.time_updated).toLocaleString()}
                   </td>
                   <td className="p-2 flex gap-x-2 content-center mt-auto">
-                    <IconButton
+                    <OpalButton
                       onClick={async () => {
                         onDeleteCredential(credential);
                       }}
@@ -190,7 +190,7 @@ export default function ModifyCredential({
     <>
       {confirmDeletionCredential != null && (
         <Modal open onOpenChange={() => setConfirmDeletionCredential(null)}>
-          <Modal.Content small>
+          <Modal.Content width="sm" height="sm">
             <Modal.Header
               icon={SvgAlertTriangle}
               title="Confirm Deletion"

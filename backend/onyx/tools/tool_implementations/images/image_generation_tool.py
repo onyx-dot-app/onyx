@@ -9,9 +9,13 @@ from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
+from onyx.configs.app_configs import IMAGE_MODEL_PROVIDER
 from onyx.db.image_generation import get_default_image_generation_config
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import save_files
+from onyx.image_gen.factory import get_image_generation_provider
+from onyx.image_gen.factory import validate_credentials
+from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import ImageGenerationFinal
@@ -19,6 +23,8 @@ from onyx.server.query_and_chat.streaming_models import ImageGenerationToolHeart
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
+from onyx.tools.models import ToolCallException
+from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
@@ -28,11 +34,12 @@ from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
-
 logger = setup_logger()
 
 # Heartbeat interval in seconds to prevent timeouts
 HEARTBEAT_INTERVAL = 5.0
+
+PROMPT_FIELD = "prompt"
 
 
 # override_kwargs is not supported for image generation tools
@@ -43,22 +50,20 @@ class ImageGenerationTool(Tool[None]):
 
     def __init__(
         self,
-        api_key: str,
-        api_base: str | None,
-        api_version: str | None,
+        image_generation_credentials: ImageGenerationProviderCredentials,
         tool_id: int,
         emitter: Emitter,
         model: str = IMAGE_MODEL_NAME,
+        provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
     ) -> None:
         super().__init__(emitter=emitter)
-
-        self.api_key = api_key
-        self.api_base = api_base
-        self.api_version = api_version
-
         self.model = model
         self.num_imgs = num_imgs
+
+        self.img_provider = get_image_generation_provider(
+            provider, image_generation_credentials
+        )
 
         self._id = tool_id
 
@@ -88,7 +93,21 @@ class ImageGenerationTool(Tool[None]):
                 return False
 
             llm_provider = config.model_configuration.llm_provider
-            return llm_provider is not None and llm_provider.api_key is not None
+            credentials = ImageGenerationProviderCredentials(
+                api_key=(
+                    llm_provider.api_key.get_value(apply_mask=False)
+                    if llm_provider.api_key
+                    else None
+                ),
+                api_base=llm_provider.api_base,
+                api_version=llm_provider.api_version,
+                deployment_name=llm_provider.deployment_name,
+                custom_config=llm_provider.custom_config,
+            )
+            return validate_credentials(
+                provider=llm_provider.provider,
+                credentials=credentials,
+            )
         except Exception:
             logger.exception("Error checking if image generation is available")
             return False
@@ -102,7 +121,7 @@ class ImageGenerationTool(Tool[None]):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "prompt": {
+                        PROMPT_FIELD: {
                             "type": "string",
                             "description": "Prompt used to generate the image",
                         },
@@ -115,7 +134,7 @@ class ImageGenerationTool(Tool[None]):
                             "enum": [shape.value for shape in ImageShape],
                         },
                     },
-                    "required": ["prompt"],
+                    "required": [PROMPT_FIELD],
                 },
             },
         }
@@ -131,8 +150,6 @@ class ImageGenerationTool(Tool[None]):
     def _generate_image(
         self, prompt: str, shape: ImageShape
     ) -> tuple[ImageGenerationResponse, Any]:
-        from litellm import image_generation
-
         if shape == ImageShape.LANDSCAPE:
             if "gpt-image-1" in self.model:
                 size = "1536x1024"
@@ -147,16 +164,13 @@ class ImageGenerationTool(Tool[None]):
             size = "1024x1024"
         logger.debug(f"Generating image with model: {self.model}, size: {size}")
         try:
-            response = image_generation(
+            response = self.img_provider.generate_image(
                 prompt=prompt,
                 model=self.model,
-                api_key=self.api_key,
-                api_base=self.api_base or None,
-                api_version=self.api_version or None,
-                # response_format parameter is not supported for gpt-image-1
-                response_format=None if "gpt-image-1" in self.model else "b64_json",
                 size=size,
                 n=1,
+                # response_format parameter is not supported for gpt-image-1
+                response_format=None if "gpt-image-1" in self.model else "b64_json",
             )
 
             if not response.data or len(response.data) == 0:
@@ -182,7 +196,9 @@ class ImageGenerationTool(Tool[None]):
 
         except requests.RequestException as e:
             logger.error(f"Error fetching or converting image: {e}")
-            raise ValueError("Failed to fetch or convert the generated image")
+            raise ToolExecutionException(
+                "Failed to fetch or convert the generated image", emit_error_packet=True
+            )
         except Exception as e:
             logger.debug(f"Error occurred during image generation: {e}")
 
@@ -192,27 +208,44 @@ class ImageGenerationTool(Tool[None]):
                     "Your request was rejected as a result of our safety system"
                     in error_message
                 ):
-                    raise ValueError(
-                        "The image generation request was rejected due to OpenAI's content policy. Please try a different prompt."
+                    raise ToolExecutionException(
+                        (
+                            "The image generation request was rejected due to OpenAI's content policy. "
+                            "Please try a different prompt."
+                        ),
+                        emit_error_packet=True,
                     )
                 elif "Invalid image URL" in error_message:
-                    raise ValueError("Invalid image URL provided for image generation.")
+                    raise ToolExecutionException(
+                        "Invalid image URL provided for image generation.",
+                        emit_error_packet=True,
+                    )
                 elif "invalid_request_error" in error_message:
-                    raise ValueError(
-                        "Invalid request for image generation. Please check your input."
+                    raise ToolExecutionException(
+                        "Invalid request for image generation. Please check your input.",
+                        emit_error_packet=True,
                     )
 
-            raise ValueError(
-                "An error occurred during image generation. Please try again later."
+            raise ToolExecutionException(
+                f"An error occurred during image generation. error={error_message}",
+                emit_error_packet=True,
             )
 
     def run(
         self,
         placement: Placement,
-        override_kwargs: None = None,
+        override_kwargs: None = None,  # noqa: ARG002
         **llm_kwargs: Any,
     ) -> ToolResponse:
-        prompt = cast(str, llm_kwargs["prompt"])
+        if PROMPT_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{PROMPT_FIELD}' parameter in generate_image tool call",
+                llm_facing_message=(
+                    f"The generate_image tool requires a '{PROMPT_FIELD}' parameter describing "
+                    f'the image to generate. Please provide like: {{"prompt": "a sunset over mountains"}}'
+                ),
+            )
+        prompt = cast(str, llm_kwargs[PROMPT_FIELD])
         shape = ImageShape(llm_kwargs.get("shape", ImageShape.SQUARE.value))
 
         # Use threading to generate images in parallel while emitting heartbeats

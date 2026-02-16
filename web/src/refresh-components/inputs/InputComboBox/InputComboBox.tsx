@@ -94,7 +94,7 @@ import {
 import { cn, noProp } from "@/lib/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { FieldMessage } from "../../messages/FieldMessage";
 
 // Hooks
@@ -113,6 +113,7 @@ import { ComboBoxDropdown } from "./components/ComboBoxDropdown";
 // Types
 import { InputComboBoxProps, ComboBoxOption } from "./types";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
+import { WithoutStyles } from "@/types";
 
 const InputComboBox = ({
   value,
@@ -128,9 +129,8 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
-  className,
   ...rest
-}: InputComboBoxProps) => {
+}: WithoutStyles<InputComboBoxProps>) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fieldContext = useContext(FieldContext);
@@ -363,7 +363,7 @@ const InputComboBox = ({
   }, [isOpen, inputValue, value, options, hasOptions]);
 
   return (
-    <div ref={refs.setReference} className={cn("relative w-full", className)}>
+    <div ref={refs.setReference} className="relative w-full">
       <>
         <InputTypeIn
           ref={inputRef}
@@ -372,8 +372,7 @@ const InputComboBox = ({
           onChange={handleInputChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
-          error={!isValid}
+          variant={disabled ? "disabled" : !isValid ? "error" : undefined}
           leftSearchIcon={leftSearchIcon}
           showClearButton={false}
           rightSection={
@@ -392,8 +391,9 @@ const InputComboBox = ({
                 </div>
               )}
               {hasOptions && (
-                <IconButton
-                  internal
+                <Button
+                  prominence="tertiary"
+                  size="sm"
                   onClick={noProp(toggleDropdown)}
                   disabled={disabled}
                   icon={isOpen ? SvgChevronUp : SvgChevronDown}

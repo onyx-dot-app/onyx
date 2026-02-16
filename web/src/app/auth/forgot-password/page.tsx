@@ -9,13 +9,12 @@ import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { Spinner } from "@/components/Spinner";
 import { redirect } from "next/navigation";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 
 const ForgotPasswordPage: React.FC = () => {
-  const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
@@ -29,7 +28,6 @@ const ForgotPasswordPage: React.FC = () => {
           <Title className="mb-2 mx-auto font-bold">Forgot Password</Title>
         </div>
         {isWorking && <Spinner />}
-        {popup}
         <Formik
           initialValues={{
             email: "",
@@ -41,19 +39,15 @@ const ForgotPasswordPage: React.FC = () => {
             setIsWorking(true);
             try {
               await forgotPassword(values.email);
-              setPopup({
-                type: "success",
-                message: "Password reset email sent. Please check your inbox.",
-              });
+              toast.success(
+                "Password reset email sent. Please check your inbox."
+              );
             } catch (error) {
               const errorMessage =
                 error instanceof Error
                   ? error.message
                   : "An error occurred. Please try again.";
-              setPopup({
-                type: "error",
-                message: errorMessage,
-              });
+              toast.error(errorMessage);
             } finally {
               setIsWorking(false);
             }

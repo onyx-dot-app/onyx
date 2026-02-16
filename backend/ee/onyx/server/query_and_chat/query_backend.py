@@ -22,7 +22,7 @@ basic_router = APIRouter(prefix="/query")
 def get_standard_answer(
     request: StandardAnswerRequest,
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
 ) -> StandardAnswerResponse:
     try:
         standard_answers = oneoff_standard_answers(

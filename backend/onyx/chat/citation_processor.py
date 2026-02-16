@@ -4,14 +4,15 @@ Dynamic Citation Processor for LLM Responses
 This module provides a citation processor that can:
 - Accept citation number to SearchDoc mappings dynamically
 - Process token streams from LLMs to extract citations
-- Optionally replace citation markers with formatted markdown links
-- Emit CitationInfo objects for detected citations (when replacing)
-- Track all seen citations regardless of replacement mode
+- Handle citations in three modes: REMOVE, KEEP_MARKERS, or HYPERLINK
+- Emit CitationInfo objects for detected citations (in HYPERLINK mode)
+- Track all seen citations regardless of mode
 - Maintain a list of cited documents in order of first citation
 """
 
 import re
 from collections.abc import Generator
+from enum import Enum
 from typing import TypeAlias
 
 from onyx.configs.chat_configs import STOP_STREAM_PAT
@@ -21,6 +22,29 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class CitationMode(Enum):
+    """Defines how citations should be handled in the output.
+
+    REMOVE: Citations are completely removed from output text.
+            No CitationInfo objects are emitted.
+            Use case: When you need to remove citations from the output if they are not shared with the user
+            (e.g. in discord bot, public slack bot).
+
+    KEEP_MARKERS: Original citation markers like [1], [2] are preserved unchanged.
+                  No CitationInfo objects are emitted.
+                  Use case: When you need to track citations in research agent and later process
+                  them with collapse_citations() to renumber.
+
+    HYPERLINK: Citations are replaced with markdown links like [[1]](url).
+               CitationInfo objects are emitted for UI tracking.
+               Use case: Final reports shown to users with clickable links.
+    """
+
+    REMOVE = "remove"
+    KEEP_MARKERS = "keep_markers"
+    HYPERLINK = "hyperlink"
 
 
 CitationMapping: TypeAlias = dict[int, SearchDoc]
@@ -48,29 +72,37 @@ class DynamicCitationProcessor:
 
     This processor is designed for multi-turn conversations where the citation
     number to document mapping is provided externally. It processes streaming
-    tokens from an LLM, detects citations (e.g., [1], [2,3], [[4]]), and based
-    on the `replace_citation_tokens` setting:
+    tokens from an LLM, detects citations (e.g., [1], [2,3], [[4]]), and handles
+    them according to the configured CitationMode:
 
-    When replace_citation_tokens=True (default):
+    CitationMode.HYPERLINK (default):
         1. Replaces citation markers with formatted markdown links (e.g., [[1]](url))
         2. Emits CitationInfo objects for tracking
         3. Maintains the order in which documents were first cited
+        Use case: Final reports shown to users with clickable links.
 
-    When replace_citation_tokens=False:
-        1. Preserves original citation markers in the output text
+    CitationMode.KEEP_MARKERS:
+        1. Preserves original citation markers like [1], [2] unchanged
         2. Does NOT emit CitationInfo objects
         3. Still tracks all seen citations via get_seen_citations()
+        Use case: When citations need later processing (e.g., renumbering).
+
+    CitationMode.REMOVE:
+        1. Removes citation markers entirely from the output text
+        2. Does NOT emit CitationInfo objects
+        3. Still tracks all seen citations via get_seen_citations()
+        Use case: Research agent intermediate reports.
 
     Features:
         - Accepts citation number → SearchDoc mapping via update_citation_mapping()
-        - Configurable citation replacement behavior at initialization
-        - Always tracks seen citations regardless of replacement mode
+        - Configurable citation mode at initialization
+        - Always tracks seen citations regardless of mode
         - Holds back tokens that might be partial citations
         - Maintains list of cited SearchDocs in order of first citation
         - Handles unicode bracket variants (【】, ［］)
         - Skips citation processing inside code blocks
 
-    Example (with citation replacement - default):
+    Example (HYPERLINK mode - default):
         processor = DynamicCitationProcessor()
 
         # Set up citation mapping
@@ -87,8 +119,8 @@ class DynamicCitationProcessor:
         # Get cited documents at the end
         cited_docs = processor.get_cited_documents()
 
-    Example (without citation replacement):
-        processor = DynamicCitationProcessor(replace_citation_tokens=False)
+    Example (KEEP_MARKERS mode):
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.KEEP_MARKERS)
         processor.update_citation_mapping({1: search_doc1, 2: search_doc2})
 
         # Process tokens from LLM
@@ -99,26 +131,42 @@ class DynamicCitationProcessor:
 
         # Get all seen citations after processing
         seen_citations = processor.get_seen_citations()  # {1: search_doc1, ...}
+
+    Example (REMOVE mode):
+        processor = DynamicCitationProcessor(citation_mode=CitationMode.REMOVE)
+        processor.update_citation_mapping({1: search_doc1, 2: search_doc2})
+
+        # Process tokens - citations are removed but tracked
+        for token in llm_stream:
+            for result in processor.process_token(token):
+                print(result)  # Text without any citation markers
+
+        # Citations are still tracked
+        seen_citations = processor.get_seen_citations()
     """
 
     def __init__(
         self,
-        replace_citation_tokens: bool = True,
+        citation_mode: CitationMode = CitationMode.HYPERLINK,
         stop_stream: str | None = STOP_STREAM_PAT,
     ):
         """
         Initialize the citation processor.
 
         Args:
-            replace_citation_tokens: If True (default), citations like [1] are replaced
-                with formatted markdown links like [[1]](url) and CitationInfo objects
-                are emitted. If False, original citation text is preserved in output
-                and no CitationInfo objects are emitted. Regardless of this setting,
-                all seen citations are tracked and available via get_seen_citations().
+            citation_mode: How to handle citations in the output. One of:
+                - CitationMode.HYPERLINK (default): Replace [1] with [[1]](url)
+                  and emit CitationInfo objects.
+                - CitationMode.KEEP_MARKERS: Keep original [1] markers unchanged,
+                  no CitationInfo objects emitted.
+                - CitationMode.REMOVE: Remove citations entirely from output,
+                  no CitationInfo objects emitted.
+                All modes track seen citations via get_seen_citations().
             stop_stream: Optional stop token pattern to halt processing early.
                 When this pattern is detected in the token stream, processing stops.
                 Defaults to STOP_STREAM_PAT from chat configs.
         """
+
         # Citation mapping from citation number to SearchDoc
         self.citation_to_doc: CitationMapping = {}
         self.seen_citations: CitationMapping = {}  # citation num -> SearchDoc
@@ -128,7 +176,7 @@ class DynamicCitationProcessor:
         self.curr_segment = ""  # tokens held for citation processing
         self.hold = ""  # tokens held for stop token processing
         self.stop_stream = stop_stream
-        self.replace_citation_tokens = replace_citation_tokens
+        self.citation_mode = citation_mode
 
         # Citation tracking
         self.cited_documents_in_order: list[SearchDoc] = (
@@ -199,19 +247,21 @@ class DynamicCitationProcessor:
         5. Handles stop tokens
         6. Always tracks seen citations in self.seen_citations
 
-        Behavior depends on the `replace_citation_tokens` setting from __init__:
-        - If True: Citations are replaced with [[n]](url) format and CitationInfo
+        Behavior depends on the `citation_mode` setting from __init__:
+        - HYPERLINK: Citations are replaced with [[n]](url) format and CitationInfo
           objects are yielded before each formatted citation
-        - If False: Original citation text (e.g., [1]) is preserved in output
-          and no CitationInfo objects are yielded
+        - KEEP_MARKERS: Original citation markers like [1] are preserved unchanged,
+          no CitationInfo objects are yielded
+        - REMOVE: Citations are removed entirely from output,
+          no CitationInfo objects are yielded
 
         Args:
             token: The next token from the LLM stream, or None to signal end of stream.
                 Pass None to flush any remaining buffered text at end of stream.
 
         Yields:
-            str: Text chunks to display. Citation format depends on replace_citation_tokens.
-            CitationInfo: Citation metadata (only when replace_citation_tokens=True)
+            str: Text chunks to display. Citation format depends on citation_mode.
+            CitationInfo: Citation metadata (only when citation_mode=HYPERLINK)
         """
         # None -> end of stream, flush remaining segment
         if token is None:
@@ -299,17 +349,17 @@ class DynamicCitationProcessor:
                 if self.non_citation_count > 5:
                     self.recent_cited_documents.clear()
 
-                # Yield text before citation FIRST (preserve order)
-                if intermatch_str:
-                    yield intermatch_str
-
                 # Process the citation (returns formatted citation text and CitationInfo objects)
-                # Always tracks seen citations regardless of strip_citations flag
+                # Always tracks seen citations regardless of citation_mode
                 citation_text, citation_info_list = self._process_citation(
-                    match, has_leading_space, self.replace_citation_tokens
+                    match, has_leading_space
                 )
 
-                if self.replace_citation_tokens:
+                if self.citation_mode == CitationMode.HYPERLINK:
+                    # HYPERLINK mode: Replace citations with markdown links [[n]](url)
+                    # Yield text before citation FIRST (preserve order)
+                    if intermatch_str:
+                        yield intermatch_str
                     # Yield CitationInfo objects BEFORE the citation text
                     # This allows the frontend to receive citation metadata before the token
                     # that contains [[n]](link), enabling immediate rendering
@@ -318,9 +368,33 @@ class DynamicCitationProcessor:
                     # Then yield the formatted citation text
                     if citation_text:
                         yield citation_text
-                else:
-                    # When not stripping, yield the original citation text unchanged
+
+                elif self.citation_mode == CitationMode.KEEP_MARKERS:
+                    # KEEP_MARKERS mode: Preserve original citation markers unchanged
+                    # Yield text before citation
+                    if intermatch_str:
+                        yield intermatch_str
+                    # Yield the original citation marker as-is
                     yield match.group()
+
+                else:  # CitationMode.REMOVE
+                    # REMOVE mode: Remove citations entirely from output
+                    # This strips citation markers like [1], [2], 【1】 from the output text
+                    # When removing citations, we need to handle spacing to avoid issues like:
+                    # - "text [1] more" -> "text  more" (double space)
+                    # - "text [1]." -> "text ." (space before punctuation)
+                    if intermatch_str:
+                        remaining_text = self.curr_segment[match_span[1] :]
+                        # Strip trailing space from intermatch if:
+                        # 1. Remaining text starts with space (avoids double space)
+                        # 2. Remaining text starts with punctuation (avoids space before punctuation)
+                        if intermatch_str[-1].isspace() and remaining_text:
+                            first_char = remaining_text[0]
+                            # Check if next char is space or common punctuation
+                            if first_char.isspace() or first_char in ".,;:!?)]}":
+                                intermatch_str = intermatch_str.rstrip()
+                        if intermatch_str:
+                            yield intermatch_str
 
                 self.non_citation_count = 0
 
@@ -338,7 +412,7 @@ class DynamicCitationProcessor:
             yield result
 
     def _process_citation(
-        self, match: re.Match, has_leading_space: bool, replace_tokens: bool = True
+        self, match: re.Match, has_leading_space: bool
     ) -> tuple[str, list[CitationInfo]]:
         """
         Process a single citation match and return formatted citation text and citation info objects.
@@ -349,31 +423,28 @@ class DynamicCitationProcessor:
         This method always:
         1. Extracts citation numbers from the match
         2. Looks up the corresponding SearchDoc from the mapping
-        3. Tracks seen citations in self.seen_citations (regardless of replace_tokens)
+        3. Tracks seen citations in self.seen_citations (regardless of citation_mode)
 
-        When replace_tokens=True (controlled by self.replace_citation_tokens):
+        When citation_mode is HYPERLINK:
         4. Creates formatted citation text as [[n]](url)
         5. Creates CitationInfo objects for new citations
         6. Handles deduplication of recently cited documents
 
-        When replace_tokens=False:
-        4. Returns empty string and empty list (caller yields original match text)
+        When citation_mode is REMOVE or KEEP_MARKERS:
+        4. Returns empty string and empty list (caller handles output based on mode)
 
         Args:
             match: Regex match object containing the citation pattern
             has_leading_space: Whether the text immediately before this citation
                 ends with whitespace. Used to determine if a leading space should
                 be added to the formatted output.
-            replace_tokens: If True, return formatted text and CitationInfo objects.
-                If False, only track seen citations and return empty results.
-                This is passed from self.replace_citation_tokens by the caller.
 
         Returns:
             Tuple of (formatted_citation_text, citation_info_list):
             - formatted_citation_text: Markdown-formatted citation text like
-              "[[1]](https://example.com)" or empty string if replace_tokens=False
+              "[[1]](https://example.com)" or empty string if not in HYPERLINK mode
             - citation_info_list: List of CitationInfo objects for newly cited
-              documents, or empty list if replace_tokens=False
+              documents, or empty list if not in HYPERLINK mode
         """
         citation_str: str = match.group()  # e.g., '[1]', '[1, 2, 3]', '[[1]]', '【1】'
         formatted = (
@@ -411,11 +482,11 @@ class DynamicCitationProcessor:
             doc_id = search_doc.document_id
             link = search_doc.link or ""
 
-            # Always track seen citations regardless of replace_tokens setting
+            # Always track seen citations regardless of citation_mode setting
             self.seen_citations[num] = search_doc
 
-            # When not replacing citation tokens, skip the rest of the processing
-            if not replace_tokens:
+            # Only generate formatted citations and CitationInfo in HYPERLINK mode
+            if self.citation_mode != CitationMode.HYPERLINK:
                 continue
 
             # Format the citation text as [[n]](link)
@@ -450,14 +521,14 @@ class DynamicCitationProcessor:
         """
         Get the list of cited SearchDoc objects in the order they were first cited.
 
-        Note: This list is only populated when `replace_citation_tokens=True`.
-        When `replace_citation_tokens=False`, this will return an empty list.
+        Note: This list is only populated when `citation_mode=HYPERLINK`.
+        When using REMOVE or KEEP_MARKERS mode, this will return an empty list.
         Use get_seen_citations() instead if you need to track citations without
-        replacing them.
+        emitting CitationInfo objects.
 
         Returns:
             List of SearchDoc objects in the order they were first cited.
-            Empty list if replace_citation_tokens=False.
+            Empty list if citation_mode is not HYPERLINK.
         """
         return self.cited_documents_in_order
 
@@ -465,14 +536,14 @@ class DynamicCitationProcessor:
         """
         Get the list of cited document IDs in the order they were first cited.
 
-        Note: This list is only populated when `replace_citation_tokens=True`.
-        When `replace_citation_tokens=False`, this will return an empty list.
+        Note: This list is only populated when `citation_mode=HYPERLINK`.
+        When using REMOVE or KEEP_MARKERS mode, this will return an empty list.
         Use get_seen_citations() instead if you need to track citations without
-        replacing them.
+        emitting CitationInfo objects.
 
         Returns:
             List of document IDs (strings) in the order they were first cited.
-            Empty list if replace_citation_tokens=False.
+            Empty list if citation_mode is not HYPERLINK.
         """
         return [doc.document_id for doc in self.cited_documents_in_order]
 
@@ -481,12 +552,12 @@ class DynamicCitationProcessor:
         Get all seen citations as a mapping from citation number to SearchDoc.
 
         This returns all citations that have been encountered during processing,
-        regardless of the `replace_citation_tokens` setting. Citations are tracked
+        regardless of the `citation_mode` setting. Citations are tracked
         whenever they are parsed, making this useful for cases where you need to
-        know which citations appeared in the text without replacing them.
+        know which citations appeared in the text without emitting CitationInfo objects.
 
-        This is particularly useful when `replace_citation_tokens=False`, as
-        get_cited_documents() will be empty in that case, but get_seen_citations()
+        This is particularly useful when using REMOVE or KEEP_MARKERS mode, as
+        get_cited_documents() will be empty in those cases, but get_seen_citations()
         will still contain all the citations that were found.
 
         Returns:
@@ -501,13 +572,13 @@ class DynamicCitationProcessor:
         """
         Get the number of unique documents that have been cited.
 
-        Note: This count is only updated when `replace_citation_tokens=True`.
-        When `replace_citation_tokens=False`, this will always return 0.
+        Note: This count is only updated when `citation_mode=HYPERLINK`.
+        When using REMOVE or KEEP_MARKERS mode, this will always return 0.
         Use len(get_seen_citations()) instead if you need to count citations
-        without replacing them.
+        without emitting CitationInfo objects.
 
         Returns:
-            Number of unique documents cited. 0 if replace_citation_tokens=False.
+            Number of unique documents cited. 0 if citation_mode is not HYPERLINK.
         """
         return len(self.cited_document_ids)
 
@@ -519,9 +590,9 @@ class DynamicCitationProcessor:
         CitationInfo objects for the same document when it's cited multiple times
         in close succession. This method clears that tracker.
 
-        This is primarily useful when `replace_citation_tokens=True` to allow
+        This is primarily useful when `citation_mode=HYPERLINK` to allow
         previously cited documents to emit CitationInfo objects again. Has no
-        effect when `replace_citation_tokens=False`.
+        effect when using REMOVE or KEEP_MARKERS mode.
 
         The recent citation tracker is also automatically cleared when more than
         5 non-citation characters are processed between citations.

@@ -34,12 +34,9 @@ from onyx.configs.onyxbot_configs import (
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
-from onyx.llm.factory import get_default_llm
-from onyx.llm.utils import llm_response_to_string
 from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import ThreadMessage
-from onyx.prompts.miscellaneous_prompts import SLACK_LANGUAGE_REPHRASE_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -140,15 +137,6 @@ def check_message_limit() -> bool:
     return True
 
 
-def rephrase_slack_message(msg: str) -> str:
-    llm = get_default_llm(timeout=5)
-    prompt = SLACK_LANGUAGE_REPHRASE_PROMPT.format(query=msg)
-    model_output = llm_response_to_string(llm.invoke(prompt))
-    logger.debug(model_output)
-
-    return model_output
-
-
 def update_emote_react(
     emoji: str,
     channel: str,
@@ -239,7 +227,7 @@ def respond_in_thread_or_channel(
     receiver_ids: list[str] | None = None,
     metadata: Metadata | None = None,
     unfurl: bool = True,
-    send_as_ephemeral: bool | None = True,
+    send_as_ephemeral: bool | None = True,  # noqa: ARG001
 ) -> list[str]:
     if not text and not blocks:
         raise ValueError("One of `text` or `blocks` must be provided")

@@ -21,6 +21,8 @@ from onyx.utils.logger import setup_logger
 DOCUMENT_SYNC_PREFIX = "documentsync"
 DOCUMENT_SYNC_FENCE_KEY = f"{DOCUMENT_SYNC_PREFIX}_fence"
 DOCUMENT_SYNC_TASKSET_KEY = f"{DOCUMENT_SYNC_PREFIX}_taskset"
+FENCE_TTL = 7 * 24 * 60 * 60  # 7 days - defensive TTL to prevent memory leaks
+TASKSET_TTL = FENCE_TTL
 
 logger = setup_logger()
 
@@ -50,7 +52,7 @@ def set_document_sync_fence(r: Redis, payload: int | None) -> None:
         r.delete(DOCUMENT_SYNC_FENCE_KEY)
         return
 
-    r.set(DOCUMENT_SYNC_FENCE_KEY, payload)
+    r.set(DOCUMENT_SYNC_FENCE_KEY, payload, ex=FENCE_TTL)
     r.sadd(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
 
 
@@ -110,6 +112,7 @@ def generate_document_sync_tasks(
 
         # Add to the tracking taskset in Redis BEFORE creating the celery task
         r.sadd(DOCUMENT_SYNC_TASKSET_KEY, custom_task_id)
+        r.expire(DOCUMENT_SYNC_TASKSET_KEY, TASKSET_TTL)
 
         # Create the Celery task
         celery_app.send_task(

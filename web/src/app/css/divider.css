@@ -1,0 +1,11 @@
+/* =============================================================================
+   Divider Keyboard Navigation Overrides
+   Disable hover effects when keyboard navigation is active
+   ============================================================================= */
+[data-keyboard-nav="true"] .group\/divider:hover {
+  background-color: transparent !important;
+}
+
+[data-keyboard-nav="true"] .group\/divider[data-selected="true"] {
+  background-color: var(--background-tint-02) !important;
+}

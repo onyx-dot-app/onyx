@@ -28,7 +28,6 @@ def create_test_chunk(
         semantic_identifier="test_chunk",
         title="Test Chunk",
         boost=1,
-        recency_bias=1.0,
         score=None,
         hidden=False,
         metadata={},

@@ -80,6 +80,7 @@ from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.interface import Tool
 from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.search.constants import (
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -225,8 +226,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         tool_id: int,
         db_session: Session,
         emitter: Emitter,
-        # Used for ACLs and federated search
-        user: User | None,
+        # Used for ACLs and federated search, anonymous users only see public docs
+        user: User,
         # Used for filter settings
         persona: Persona,
         llm: LLM,
@@ -238,6 +239,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
+        # Whether to enable Slack federated search
+        enable_slack_search: bool = True,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -249,6 +252,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.project_id = project_id
         self.bypass_acl = bypass_acl
         self.slack_context = slack_context
+        self.enable_slack_search = enable_slack_search
 
         # Store session factory instead of session for thread-safety
         # When tools are called in parallel, each thread needs its own session
@@ -348,10 +352,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         )
 
                     if tenant_slack_bot:
-                        bot_token = tenant_slack_bot.bot_token
-                        access_token = (
-                            tenant_slack_bot.user_token or tenant_slack_bot.bot_token
+                        bot_token = (
+                            tenant_slack_bot.bot_token.get_value(apply_mask=False)
+                            if tenant_slack_bot.bot_token
+                            else None
                         )
+                        user_token = (
+                            tenant_slack_bot.user_token.get_value(apply_mask=False)
+                            if tenant_slack_bot.user_token
+                            else None
+                        )
+                        access_token = user_token or bot_token
                 except Exception as e:
                     logger.warning(f"Could not fetch Slack bot tokens: {e}")
 
@@ -371,8 +382,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         None,
                     )
 
-                    if slack_oauth_token:
-                        access_token = slack_oauth_token.token
+                    if slack_oauth_token and slack_oauth_token.token:
+                        access_token = slack_oauth_token.token.get_value(
+                            apply_mask=False
+                        )
                         entities = slack_oauth_token.federated_connector.config or {}
                 except Exception as e:
                     logger.warning(f"Could not fetch Slack OAuth token: {e}")
@@ -450,12 +463,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
     def is_available(cls, db_session: Session) -> bool:
         """Check if search tool is available.
 
-        The search tool is available if ANY of the following exist:
+        Returns False when the vector DB is disabled (search cannot function
+        without it). Otherwise, available if ANY of the following exist:
         - Regular connectors (team knowledge)
         - Federated connectors (e.g., Slack)
         - User files (User Knowledge mode)
         """
+        from onyx.configs.app_configs import DISABLE_VECTOR_DB
         from onyx.db.connector import check_user_files_exist
+
+        if DISABLE_VECTOR_DB:
+            return False
 
         return (
             check_connectors_exist(db_session)
@@ -528,6 +546,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This prevents transaction conflicts when multiple search tools run in parallel
         db_session = self._get_thread_safe_session()
         try:
+            if QUERIES_FIELD not in llm_kwargs:
+                raise ToolCallException(
+                    message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                    llm_facing_message=(
+                        f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                        f"containing an array of search queries. Please provide the queries "
+                        f'like: {{"queries": ["your search query here"]}}'
+                    ),
+                )
             llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
             # Run semantic and keyword query expansion in parallel (unless skipped)
@@ -537,7 +564,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 if override_kwargs.message_history
                 else []
             )
-            memories = override_kwargs.memories
+            memories = (
+                override_kwargs.user_memory_context.as_formatted_list()
+                if override_kwargs.user_memory_context
+                else []
+            )
             user_info = override_kwargs.user_info
 
             # Skip query expansion if this is a repeat search call
@@ -669,7 +700,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # This avoids the query multiplication problem where each Vespa query
             # would trigger a separate Slack search
             # Run if we have slack_context (bot) or user (might have OAuth token)
-            if (self.slack_context or self.user) and override_kwargs.original_query:
+            if (
+                (self.enable_slack_search or self.slack_context)
+                and (self.slack_context or self.user)
+                and override_kwargs.original_query
+            ):
                 search_functions.append(
                     (
                         self._run_slack_search,
@@ -825,7 +860,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 top_sections=merged_sections,
                 citation_start=override_kwargs.starting_citation_num,
                 limit=override_kwargs.max_llm_chunks,
-                include_document_id=True,
+                include_document_id=False,
             )
 
             # End overall timing
@@ -837,12 +872,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 f"document expansion: {document_expansion_elapsed:.3f}s)"
             )
 
-            # TODO: extension - this can include the smaller set of approved docs to be saved/displayed in the UI
-            # for replaying. Currently the full set is returned and saved.
             return ToolResponse(
                 # Typically the rich response will give more docs in case it needs to be displayed in the UI
                 rich_response=SearchDocsResponse(
-                    search_docs=search_docs, citation_mapping=citation_mapping
+                    search_docs=search_docs,
+                    citation_mapping=citation_mapping,
+                    displayed_docs=final_ui_docs or None,
                 ),
                 # The LLM facing response typically includes less docs to cut down on noise and token usage
                 llm_facing_response=docs_str,

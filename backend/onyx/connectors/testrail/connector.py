@@ -21,6 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
@@ -348,7 +349,7 @@ class TestRailConnector(LoadConnector, PollConnector):
             if len(cases) < limit:
                 break
 
-    def _build_case_link(self, project_id: int, case_id: int) -> str:
+    def _build_case_link(self, project_id: int, case_id: int) -> str:  # noqa: ARG002
         # Standard UI link to a case
         return f"{self.base_url}/index.php?/cases/view/{case_id}"
 
@@ -356,7 +357,7 @@ class TestRailConnector(LoadConnector, PollConnector):
         self,
         project: dict[str, Any],
         case: dict[str, Any],
-        suite: dict[str, Any] | None = None,
+        suite: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> Document | None:
         project_id = project.get("id")
         if not isinstance(project_id, int):
@@ -478,7 +479,7 @@ class TestRailConnector(LoadConnector, PollConnector):
         if not self.base_url or not self.username or not self.api_key:
             raise ConnectorMissingCredentialError("testrail")
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
 
         projects = self._list_projects()
         project_filter: list[int] | None = self.project_ids

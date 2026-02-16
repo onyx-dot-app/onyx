@@ -7,7 +7,7 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 import { updateHiddenStatus } from "../lib";
-import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { ScoreSection } from "../ScoreEditor";
 import { useRouter } from "next/navigation";
@@ -19,17 +19,14 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Text from "@/refresh-components/texts/Text";
 import { ThreeDotsLoader } from "@/components/Loading";
 
 const DocumentDisplay = ({
   document,
   refresh,
-  setPopup,
 }: {
   document: OnyxDocument;
   refresh: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
 }) => {
   return (
     <div
@@ -58,7 +55,6 @@ const DocumentDisplay = ({
           <ScoreSection
             documentId={document.document_id}
             initialScore={document.boost}
-            setPopup={setPopup}
             refresh={refresh}
             consistentWidth={false}
           />
@@ -72,12 +68,9 @@ const DocumentDisplay = ({
             if (response.ok) {
               refresh();
             } else {
-              setPopup({
-                type: "error",
-                message: `Failed to update document - ${getErrorMsg(
-                  response
-                )}}`,
-              });
+              toast.error(
+                `Failed to update document - ${getErrorMsg(response)}`
+              );
             }
           }}
           className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded flex cursor-pointer select-none"
@@ -116,7 +109,6 @@ export function Explorer({
   documentSets: DocumentSetSummary[];
 }) {
   const router = useRouter();
-  const { popup, setPopup } = usePopup();
 
   const [query, setQuery] = useState(initialSearchValue || "");
   const [timeoutId, setTimeoutId] = useState<number | null>(null);
@@ -171,7 +163,6 @@ export function Explorer({
 
   return (
     <div className="flex flex-col gap-6">
-      {popup}
       <div className="flex flex-col justify-center gap-2">
         <InputTypeIn
           placeholder="Find documents based on title / content..."
@@ -211,7 +202,6 @@ export function Explorer({
                 key={document.document_id}
                 document={document}
                 refresh={() => onSearch(query)}
-                setPopup={setPopup}
               />
             );
           })}

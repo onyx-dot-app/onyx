@@ -29,6 +29,7 @@ from onyx.connectors.models import TextSection
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
+from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
@@ -37,6 +38,7 @@ from onyx.document_index.document_index_utils import (
     get_multipass_config,
 )
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces import DocumentInsertionRecord
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
@@ -51,6 +53,7 @@ from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_bac
 from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import llm_response_to_string
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
@@ -118,6 +121,8 @@ def _upsert_documents_in_db(
             from_ingestion_api=doc.from_ingestion_api,
             external_access=doc.external_access,
             doc_metadata=doc.doc_metadata,
+            # parent_hierarchy_node_id is resolved in docfetching using Redis cache
+            parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
         )
         document_metadata_list.append(db_doc_metadata)
 
@@ -162,7 +167,7 @@ def index_doc_batch_with_handler(
     *,
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    document_index: DocumentIndex,
+    document_indices: list[DocumentIndex],
     document_batch: list[Document],
     request_id: str | None,
     tenant_id: str,
@@ -175,7 +180,7 @@ def index_doc_batch_with_handler(
         index_pipeline_result = index_doc_batch(
             chunker=chunker,
             embedder=embedder,
-            document_index=document_index,
+            document_indices=document_indices,
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,
@@ -267,6 +272,17 @@ def index_doc_batch_prepare(
         index_attempt_metadata.credential_id,
         document_ids,
     )
+
+    # Link hierarchy nodes to documents for sources where pages can be both
+    # hierarchy nodes AND documents (e.g., Notion, Confluence).
+    # This must happen after documents are upserted due to FK constraint.
+    if documents:
+        link_hierarchy_nodes_to_documents(
+            db_session=db_session,
+            document_ids=document_ids,
+            source=documents[0].source,
+            commit=False,  # We'll commit with the rest of the transaction
+        )
 
     # No docs to process because the batch is empty or every doc was already indexed
     if not updatable_docs:
@@ -491,9 +507,10 @@ def add_document_summaries(
     # Note: For document summarization, there's no cacheable prefix since the document changes
     # So we just pass the full prompt without caching
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-    doc_summary = llm_response_to_string(
-        llm.invoke(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
-    )
+    prompt_msg = UserMessage(content=summary_prompt)
+
+    response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+    doc_summary = llm_response_to_string(response)
 
     for chunk in chunks_by_doc:
         chunk.doc_summary = doc_summary
@@ -532,12 +549,11 @@ def add_chunk_summaries(
     if not doc_info:
         # This happens if the document is too long AND document summaries are turned off
         # In this case we compute a doc summary using the LLM
-        doc_info = llm_response_to_string(
-            llm.invoke(
-                DOCUMENT_SUMMARY_PROMPT.format(document=doc_content),
-                max_tokens=MAX_CONTEXT_TOKENS,
-            )
+        fallback_prompt = UserMessage(
+            content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
         )
+        response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+        doc_info = llm_response_to_string(response)
 
     from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
@@ -550,17 +566,13 @@ def add_chunk_summaries(
             # For string inputs with continuation=True, the result will be a concatenated string
             processed_prompt, _ = process_with_prompt_cache(
                 llm_config=llm.config,
-                cacheable_prefix=context_prompt1,
-                suffix=context_prompt2,
+                cacheable_prefix=UserMessage(content=context_prompt1),
+                suffix=UserMessage(content=context_prompt2),
                 continuation=True,  # Append chunk to the document context
             )
 
-            chunk.chunk_context = llm_response_to_string(
-                llm.invoke(
-                    processed_prompt,
-                    max_tokens=MAX_CONTEXT_TOKENS,
-                )
-            )
+            response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            chunk.chunk_context = llm_response_to_string(response)
 
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue
@@ -624,7 +636,7 @@ def index_doc_batch(
     document_batch: list[Document],
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    document_index: DocumentIndex,
+    document_indices: list[DocumentIndex],
     request_id: str | None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
@@ -740,47 +752,57 @@ def index_doc_batch(
         short_descriptor_log = str(short_descriptor_list)[:1024]
         logger.debug(f"Indexing the following chunks: {short_descriptor_log}")
 
-        # A document will not be spread across different batches, so all the
-        # documents with chunks in this set, are fully represented by the chunks
-        # in this set
-        (
-            insertion_records,
-            vector_db_write_failures,
-        ) = write_chunks_to_vector_db_with_backoff(
-            document_index=document_index,
-            chunks=result.chunks,
-            index_batch_params=IndexBatchParams(
-                doc_id_to_previous_chunk_cnt=result.doc_id_to_previous_chunk_cnt,
-                doc_id_to_new_chunk_cnt=result.doc_id_to_new_chunk_cnt,
-                tenant_id=tenant_id,
-                large_chunks_enabled=chunker.enable_large_chunks,
-            ),
-        )
+        primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = None
+        primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = None
+        for document_index in document_indices:
+            # A document will not be spread across different batches, so all the
+            # documents with chunks in this set, are fully represented by the chunks
+            # in this set
+            (
+                insertion_records,
+                vector_db_write_failures,
+            ) = write_chunks_to_vector_db_with_backoff(
+                document_index=document_index,
+                chunks=result.chunks,
+                index_batch_params=IndexBatchParams(
+                    doc_id_to_previous_chunk_cnt=result.doc_id_to_previous_chunk_cnt,
+                    doc_id_to_new_chunk_cnt=result.doc_id_to_new_chunk_cnt,
+                    tenant_id=tenant_id,
+                    large_chunks_enabled=chunker.enable_large_chunks,
+                ),
+            )
 
-        all_returned_doc_ids = (
-            {record.document_id for record in insertion_records}
-            .union(
-                {
-                    record.failed_document.document_id
-                    for record in vector_db_write_failures
-                    if record.failed_document
-                }
+            all_returned_doc_ids: set[str] = (
+                {record.document_id for record in insertion_records}
+                .union(
+                    {
+                        record.failed_document.document_id
+                        for record in vector_db_write_failures
+                        if record.failed_document
+                    }
+                )
+                .union(
+                    {
+                        record.failed_document.document_id
+                        for record in embedding_failures
+                        if record.failed_document
+                    }
+                )
             )
-            .union(
-                {
-                    record.failed_document.document_id
-                    for record in embedding_failures
-                    if record.failed_document
-                }
-            )
-        )
-        if all_returned_doc_ids != set(updatable_ids):
-            raise RuntimeError(
-                f"Some documents were not successfully indexed. "
-                f"Updatable IDs: {updatable_ids}, "
-                f"Returned IDs: {all_returned_doc_ids}. "
-                "This should never happen."
-            )
+            if all_returned_doc_ids != set(updatable_ids):
+                raise RuntimeError(
+                    f"Some documents were not successfully indexed. "
+                    f"Updatable IDs: {updatable_ids}, "
+                    f"Returned IDs: {all_returned_doc_ids}. "
+                    "This should never happen."
+                    f"This occured for document index {document_index.__class__.__name__}"
+                )
+            # We treat the first document index we got as the primary one used
+            # for reporting the state of indexing.
+            if primary_doc_idx_insertion_records is None:
+                primary_doc_idx_insertion_records = insertion_records
+            if primary_doc_idx_vector_db_write_failures is None:
+                primary_doc_idx_vector_db_write_failures = vector_db_write_failures
 
         adapter.post_index(
             context=context,
@@ -789,11 +811,15 @@ def index_doc_batch(
             result=result,
         )
 
+    assert primary_doc_idx_insertion_records is not None
+    assert primary_doc_idx_vector_db_write_failures is not None
     return IndexingPipelineResult(
-        new_docs=len([r for r in insertion_records if not r.already_existed]),
+        new_docs=len(
+            [r for r in primary_doc_idx_insertion_records if not r.already_existed]
+        ),
         total_docs=len(filtered_documents),
         total_chunks=len(chunks_with_embeddings),
-        failures=vector_db_write_failures + embedding_failures,
+        failures=primary_doc_idx_vector_db_write_failures + embedding_failures,
     )
 
 
@@ -802,7 +828,7 @@ def run_indexing_pipeline(
     document_batch: list[Document],
     request_id: str | None,
     embedder: IndexingEmbedder,
-    document_index: DocumentIndex,
+    document_indices: list[DocumentIndex],
     db_session: Session,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
@@ -843,7 +869,7 @@ def run_indexing_pipeline(
     return index_doc_batch_with_handler(
         chunker=chunker,
         embedder=embedder,
-        document_index=document_index,
+        document_indices=document_indices,
         document_batch=document_batch,
         request_id=request_id,
         tenant_id=tenant_id,

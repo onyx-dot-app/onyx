@@ -1,6 +1,6 @@
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
-import { filterAssistants } from "../assistants/utils";
+import { filterAssistants } from "@/lib/agents";
+import { fetchAssistantsSS } from "@/lib/agentsSS";
 
 export async function fetchAssistantData(): Promise<MinimalPersonaSnapshot[]> {
   try {

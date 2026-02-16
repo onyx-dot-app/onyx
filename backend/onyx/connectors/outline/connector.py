@@ -15,6 +15,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.connectors.outline.client import OutlineApiClient
 from onyx.connectors.outline.client import OutlineClientRequestFailedError
@@ -165,7 +166,7 @@ class OutlineConnector(LoadConnector, PollConnector):
                 )
 
                 # Apply time filtering if specified
-                filtered_batch = []
+                filtered_batch: list[Document | HierarchyNode] = []
                 for doc in doc_batch:
                     if time_filter is None or time_filter(doc):
                         filtered_batch.append(doc)

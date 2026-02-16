@@ -87,7 +87,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import get_all_document_indices
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.httpx.httpx_pool import HttpxPool
@@ -1071,7 +1071,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
     bind=True,
 )
 def cleanup_checkpoint_task(
-    self: Task, *, index_attempt_id: int, tenant_id: str | None
+    self: Task, *, index_attempt_id: int, tenant_id: str | None  # noqa: ARG001
 ) -> None:
     """Clean up a checkpoint for a given index attempt"""
 
@@ -1160,7 +1160,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
     bind=True,
 )
 def cleanup_index_attempt_task(
-    self: Task, *, index_attempt_ids: list[int], tenant_id: str
+    self: Task, *, index_attempt_ids: list[int], tenant_id: str  # noqa: ARG001
 ) -> None:
     """Clean up an index attempt"""
     start = time.monotonic()
@@ -1266,7 +1266,7 @@ def _resolve_indexing_document_errors(
     bind=True,
 )
 def docprocessing_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     index_attempt_id: int,
     cc_pair_id: int,
     tenant_id: str,
@@ -1436,7 +1436,7 @@ def _docprocessing_task(
                 callback=callback,
             )
 
-            document_index = get_default_document_index(
+            document_indices = get_all_document_indices(
                 index_attempt.search_settings,
                 None,
                 httpx_client=HttpxPool.get("vespa"),
@@ -1473,7 +1473,7 @@ def _docprocessing_task(
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
-                document_index=document_index,
+                document_indices=document_indices,
                 ignore_time_skip=True,  # Documents are already filtered during extraction
                 db_session=db_session,
                 tenant_id=tenant_id,

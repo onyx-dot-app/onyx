@@ -2,7 +2,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
 
 
-MAX_RESEARCH_CYCLES = 3
+MAX_RESEARCH_CYCLES = 8
 
 # ruff: noqa: E501, W605 start
 RESEARCH_AGENT_PROMPT = f"""
@@ -14,13 +14,12 @@ NEVER output normal response tokens, you must only call tools.
 For context, the date is {{current_datetime}}.
 
 # Tools
-You have a limited number of cycles of searches to complete your research but you do not have to use all cycles. \
-Each set of web searches increments the cycle by 1 (only web searches increment the cycle count). You are on cycle {{current_cycle_count}} of 3.\
+You have a limited number of cycles to complete your research and you do not have to use all cycles. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
 {{optional_internal_search_tool_description}}\
 {{optional_web_search_tool_description}}\
 {{optional_open_url_tool_description}}
 ## {THINK_TOOL_NAME}
-CRITICAL - use the think tool after every set of searches and reads. \
+CRITICAL - use the think tool after every set of searches and reads (so search, read some pages, then think and repeat). \
 You MUST use the {THINK_TOOL_NAME} before calling the web_search tool for all calls to web_search except for the first call. \
 Use the {THINK_TOOL_NAME} before calling the {GENERATE_REPORT_TOOL_NAME} tool.
 
@@ -51,6 +50,8 @@ Remove any obviously irrelevant or duplicative information.
 
 If a statement seems not trustworthy or is contradictory to other statements, it is important to flag it.
 
+Write the report in the same language as the provided task.
+
 Cite all sources INLINE using the format [1], [2], [3], etc. based on the `document` field of the source. \
 Cite inline as opposed to leaving all citations until the very end of the response.
 """
@@ -61,7 +62,8 @@ Please write me a comprehensive report on the research topic given the context a
 {research_topic}
 
 Remember to include AS MUCH INFORMATION AS POSSIBLE and as faithful to the original sources as possible. \
-Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution.
+Keep it free of formatting and focus on the facts only. Be sure to include all context for each fact to avoid misinterpretation or misattribution. \
+Respond in the same language as the topic provided above.
 
 Cite every fact INLINE using the format [1], [2], [3], etc. based on the `document` field of the source.
 
@@ -82,7 +84,7 @@ NEVER output normal response tokens, you must only call tools.
 For context, the date is {{current_datetime}}.
 
 # Tools
-You have a limited number of cycles of searches to complete your research but you do not have to use all cycles. Each set of web searches increments the cycle by 1. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
+You have a limited number of cycles to complete your research and you do not have to use all cycles. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
 {{optional_internal_search_tool_description}}\
 {{optional_web_search_tool_description}}\
 {{optional_open_url_tool_description}}
@@ -94,7 +96,5 @@ Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` to
 OPEN_URL_REMINDER_RESEARCH_AGENT = """
 Remember that after using web_search, you are encouraged to open some pages to get more context unless the query is completely answered by the snippets.
 Open the pages that look the most promising and high quality by calling the open_url tool with an array of URLs.
-
-Do not acknowledge this hint in your response.
 """.strip()
 # ruff: noqa: E501, W605 end

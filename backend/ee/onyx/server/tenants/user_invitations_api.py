@@ -24,10 +24,8 @@ router = APIRouter(prefix="/tenants")
 @router.post("/users/invite/request")
 async def request_invite(
     invite_request: RequestInviteRequest,
-    user: User | None = Depends(current_admin_user),
+    user: User = Depends(current_admin_user),
 ) -> None:
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not authenticated")
     try:
         invite_self_to_tenant(user.email, invite_request.tenant_id)
     except Exception as e:
@@ -39,7 +37,7 @@ async def request_invite(
 
 @router.get("/users/pending")
 def list_pending_users(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> list[PendingUserSnapshot]:
     pending_emails = get_pending_users()
     return [PendingUserSnapshot(email=email) for email in pending_emails]
@@ -48,7 +46,7 @@ def list_pending_users(
 @router.post("/users/invite/approve")
 async def approve_user(
     approve_user_request: ApproveUserRequest,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> None:
     tenant_id = get_current_tenant_id()
     approve_user_invite(approve_user_request.email, tenant_id)
@@ -57,14 +55,11 @@ async def approve_user(
 @router.post("/users/invite/accept")
 async def accept_invite(
     invite_request: RequestInviteRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> None:
     """
     Accept an invitation to join a tenant.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     try:
         accept_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
@@ -75,14 +70,11 @@ async def accept_invite(
 @router.post("/users/invite/deny")
 async def deny_invite(
     invite_request: RequestInviteRequest,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> None:
     """
     Deny an invitation to join a tenant.
     """
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     try:
         deny_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:

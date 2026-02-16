@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 import pytest
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -72,13 +71,8 @@ class TestVerifyLicenseSignature:
 
         license_data = create_signed_license(private_key, payload)
 
-        # Patch the public key in the validator module
-        public_key_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
-
-        with patch("ee.onyx.utils.license.LICENSE_PUBLIC_KEY_PEM", public_key_pem):
+        # Patch the _get_public_key function to return our test key
+        with patch("ee.onyx.utils.license._get_public_key", return_value=public_key):
             result = verify_license_signature(license_data)
 
         assert result.tenant_id == "tenant_123"
@@ -101,15 +95,10 @@ class TestVerifyLicenseSignature:
 
         license_data = create_signed_license(private_key, payload)
 
-        # Use a different public key
-        different_public_key_pem = different_public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
-
+        # Patch _get_public_key to return a different key (signature won't match)
         with patch(
-            "ee.onyx.utils.license.LICENSE_PUBLIC_KEY_PEM",
-            different_public_key_pem,
+            "ee.onyx.utils.license._get_public_key",
+            return_value=different_public_key,
         ):
             with pytest.raises(ValueError, match="Invalid license signature"):
                 verify_license_signature(license_data)
@@ -149,12 +138,8 @@ class TestVerifyLicenseSignature:
 
         encoded_license = base64.b64encode(json.dumps(license_data).encode()).decode()
 
-        public_key_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
-
-        with patch("ee.onyx.utils.license.LICENSE_PUBLIC_KEY_PEM", public_key_pem):
+        # Patch _get_public_key to return our test key
+        with patch("ee.onyx.utils.license._get_public_key", return_value=public_key):
             with pytest.raises(ValueError, match="Invalid license signature"):
                 verify_license_signature(encoded_license)
 

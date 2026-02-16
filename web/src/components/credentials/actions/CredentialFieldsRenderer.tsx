@@ -1,5 +1,6 @@
-import React from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+"use client";
+
+import Tabs from "@/refresh-components/Tabs";
 import { useFormikContext } from "formik";
 import {
   BooleanFormField,
@@ -61,28 +62,20 @@ export function CredentialFieldsRenderer({
         <Tabs
           value={authMethod || templateWithAuth.authMethods?.[0]?.value || ""}
           onValueChange={handleAuthMethodChange}
-          className="w-full"
         >
-          <TabsList
-            className="grid w-full"
-            style={{
-              gridTemplateColumns: `repeat(${
-                templateWithAuth.authMethods!.length
-              }, minmax(0, 1fr))`,
-            }}
-          >
+          <Tabs.List>
             {templateWithAuth.authMethods.map((method) => (
-              <TabsTrigger key={method.value} value={method.value}>
+              <Tabs.Trigger key={method.value} value={method.value}>
                 {method.label}
-              </TabsTrigger>
+              </Tabs.Trigger>
             ))}
-          </TabsList>
+          </Tabs.List>
 
           {templateWithAuth.authMethods.map((method) => (
-            <TabsContent
+            <Tabs.Content
               key={method.value}
               value={method.value}
-              className="space-y-4"
+              alignItems="stretch"
             >
               {/* Show description if method has no fields but has a description */}
               {Object.keys(method.fields).length === 0 &&
@@ -130,7 +123,7 @@ export function CredentialFieldsRenderer({
                   />
                 );
               })}
-            </TabsContent>
+            </Tabs.Content>
           ))}
         </Tabs>
       </div>

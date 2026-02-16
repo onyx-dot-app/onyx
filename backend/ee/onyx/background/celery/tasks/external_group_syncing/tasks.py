@@ -259,7 +259,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
 def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
-    r: Redis,
+    r: Redis,  # noqa: ARG001
     tenant_id: str,
 ) -> str | None:
     """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
@@ -344,7 +344,7 @@ def try_creating_external_group_sync_task(
     bind=True,
 )
 def connector_external_group_sync_generator_task(
-    self: Task,
+    self: Task,  # noqa: ARG001
     cc_pair_id: int,
     tenant_id: str,
 ) -> None:
@@ -466,6 +466,7 @@ def connector_external_group_sync_generator_task(
 def _perform_external_group_sync(
     cc_pair_id: int,
     tenant_id: str,
+    timeout_seconds: int = JOB_TIMEOUT,
 ) -> None:
     # Create attempt record at the start
     with get_session_with_current_tenant() as db_session:
@@ -518,9 +519,23 @@ def _perform_external_group_sync(
         seen_users: set[str] = set()  # Track unique users across all groups
         total_groups_processed = 0
         total_group_memberships_synced = 0
+        start_time = time.monotonic()
         try:
             external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
             for external_user_group in external_user_group_generator:
+                # Check if the task has exceeded its timeout
+                # NOTE: Celery's soft_time_limit does not work with thread pools,
+                # so we must enforce timeouts internally.
+                elapsed = time.monotonic() - start_time
+                if elapsed > timeout_seconds:
+                    raise RuntimeError(
+                        f"External group sync task timed out: "
+                        f"cc_pair={cc_pair_id} "
+                        f"elapsed={elapsed:.0f}s "
+                        f"timeout={timeout_seconds}s "
+                        f"groups_processed={total_groups_processed}"
+                    )
+
                 external_user_group_batch.append(external_user_group)
 
                 # Track progress
@@ -590,8 +605,8 @@ def _perform_external_group_sync(
 
 def validate_external_group_sync_fences(
     tenant_id: str,
-    celery_app: Celery,
-    r: Redis,
+    celery_app: Celery,  # noqa: ARG001
+    r: Redis,  # noqa: ARG001
     r_replica: Redis,
     r_celery: Redis,
     lock_beat: RedisLock,

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.document_set import check_document_sets_are_public
@@ -48,17 +49,18 @@ def create_document_set(
     try:
         document_set_db_model, _ = insert_document_set(
             document_set_creation_request=document_set_creation_request,
-            user_id=user.id if user else None,
+            user_id=user.id,
             db_session=db_session,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-    )
+    if not DISABLE_VECTOR_DB:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+        )
 
     return document_set_db_model.id
 
@@ -66,7 +68,7 @@ def create_document_set(
 @router.patch("/admin/document-set")
 def patch_document_set(
     document_set_update_request: DocumentSetUpdateRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
@@ -84,7 +86,8 @@ def patch_document_set(
         user=user,
         target_group_ids=document_set_update_request.groups,
         object_is_public=document_set_update_request.is_public,
-        object_is_owned_by_user=user and document_set.user_id == user.id,
+        object_is_owned_by_user=user
+        and (document_set.user_id is None or document_set.user_id == user.id),
     )
     try:
         update_document_set(
@@ -95,11 +98,12 @@ def patch_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-    )
+    if not DISABLE_VECTOR_DB:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+        )
 
 
 @router.delete("/admin/document-set/{document_set_id}")
@@ -125,7 +129,8 @@ def delete_document_set(
         db_session=db_session,
         user=user,
         object_is_public=document_set.is_public,
-        object_is_owned_by_user=user and document_set.user_id == user.id,
+        object_is_owned_by_user=user
+        and (document_set.user_id is None or document_set.user_id == user.id),
     )
 
     try:
@@ -137,11 +142,12 @@ def delete_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-    )
+    if not DISABLE_VECTOR_DB:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+        )
 
 
 """Endpoints for non-admins"""
@@ -149,7 +155,7 @@ def delete_document_set(
 
 @router.get("/document-set")
 def list_document_sets_for_user(
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable document sets"

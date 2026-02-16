@@ -48,17 +48,94 @@ const getCreateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Create")');
 const getUpdateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Save")');
-const getKnowledgeSourceSelect = (page: Page) =>
-  page
-    .locator('label:has-text("Knowledge Source")')
-    .locator('button[role="combobox"]')
-    .first();
+
+// Helper to navigate to document sets view in the new Knowledge UI
+const navigateToDocumentSetsView = async (page: Page) => {
+  // First, check if we need to click "View / Edit" or "Add" button to open the knowledge panel
+  const viewEditButton = page.getByLabel("knowledge-view-edit");
+  const addButton = page.getByLabel("knowledge-add-button");
+
+  if (await viewEditButton.isVisible()) {
+    await viewEditButton.click();
+  } else if (await addButton.isVisible()) {
+    await addButton.click();
+  }
+
+  // Now click on "Document Sets" in the add view or sidebar
+  const documentSetsButton = page.getByLabel("knowledge-add-document-sets");
+  if (await documentSetsButton.isVisible()) {
+    await documentSetsButton.click();
+  } else {
+    // Try the sidebar version
+    const sidebarDocumentSets = page.getByLabel(
+      "knowledge-sidebar-document-sets"
+    );
+    if (await sidebarDocumentSets.isVisible()) {
+      await sidebarDocumentSets.click();
+    }
+  }
+
+  // Wait for the document sets table to appear
+  await page.waitForTimeout(500);
+};
+
+// Helper to select a document set by ID in the new Knowledge UI
+const selectDocumentSet = async (page: Page, documentSetId: number) => {
+  const documentSetRow = page.getByLabel(`document-set-row-${documentSetId}`);
+  await expect(documentSetRow).toBeVisible({ timeout: 5000 });
+  await documentSetRow.click();
+};
+
+// Helper to navigate to files view in the new Knowledge UI
+const navigateToFilesView = async (page: Page) => {
+  // First, check if we need to click "View / Edit" or "Add" button to open the knowledge panel
+  const viewEditButton = page.getByLabel("knowledge-view-edit");
+  const addButton = page.getByLabel("knowledge-add-button");
+
+  if (await viewEditButton.isVisible()) {
+    await viewEditButton.click();
+  } else if (await addButton.isVisible()) {
+    await addButton.click();
+  }
+
+  // Now click on "Your Files" in the add view or sidebar
+  const filesButton = page.getByLabel("knowledge-add-files");
+  if (await filesButton.isVisible()) {
+    await filesButton.click();
+  } else {
+    // Try the sidebar version
+    const sidebarFiles = page.getByLabel("knowledge-sidebar-files");
+    if (await sidebarFiles.isVisible()) {
+      await sidebarFiles.click();
+    }
+  }
+
+  // Wait for the files table to appear
+  await page.waitForTimeout(500);
+};
 
 test.describe("Assistant Creation and Edit Verification", () => {
   // Configure this entire suite to run serially
   test.describe.configure({ mode: "serial" });
 
   test.describe("User Files Only", () => {
+    let userFilesAssistantId: number | null = null;
+
+    test.afterAll(async ({ browser }: { browser: Browser }) => {
+      if (userFilesAssistantId !== null) {
+        const context = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        const page = await context.newPage();
+        const cleanupClient = new OnyxApiClient(page.request);
+        await cleanupClient.deleteAssistant(userFilesAssistantId);
+        await context.close();
+        console.log(
+          "[test] Cleanup completed - deleted User Files Only assistant"
+        );
+      }
+    });
+
     test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
     }: {
@@ -72,7 +149,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "Testing user file uploads without connectors";
       const assistantInstructions = "Help users with their documents.";
 
-      await page.goto("/chat/agents/create");
+      await page.goto("/app/agents/create");
 
       // Fill in basic assistant details
       await getNameInput(page).fill(assistantName);
@@ -85,25 +162,28 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(knowledgeToggle).toHaveAttribute("aria-checked", "false");
       await knowledgeToggle.click();
 
-      // Select "User Knowledge" from the knowledge source dropdown
-      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
-      await knowledgeSourceSelect.click();
-      await page.getByRole("option", { name: "User Knowledge" }).click();
+      // Navigate to files view in the new Knowledge UI
+      await navigateToFilesView(page);
 
-      // Verify "Add User Files" button is visible
-      const addUserFilesButton = page.getByRole("button", {
-        name: /add user files/i,
+      // Verify "Add File" button is visible in the new UI
+      const addFileButton = page.getByRole("button", {
+        name: /add file/i,
       });
-      await expect(addUserFilesButton).toBeVisible();
+      await expect(addFileButton).toBeVisible();
 
       // Submit the assistant creation form
       await getCreateSubmitButton(page).click();
 
       // Verify redirection to chat page with the new assistant
-      await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
       const url = page.url();
       const assistantIdMatch = url.match(/assistantId=(\d+)/);
       expect(assistantIdMatch).toBeTruthy();
+
+      // Store assistant ID for cleanup
+      if (assistantIdMatch) {
+        userFilesAssistantId = Number(assistantIdMatch[1]);
+      }
 
       console.log(
         `[test] Successfully created assistant without connectors: ${assistantName}`
@@ -114,22 +194,28 @@ test.describe("Assistant Creation and Edit Verification", () => {
   test.describe("With Knowledge", () => {
     let ccPairId: number;
     let documentSetId: number;
+    let knowledgeAssistantId: number | null = null;
 
     test.afterAll(async ({ browser }: { browser: Browser }) => {
       // Cleanup using browser fixture (worker-scoped) to avoid per-test fixture limitation
+      const context = await browser.newContext({
+        storageState: "admin_auth.json",
+      });
+      const page = await context.newPage();
+      const cleanupClient = new OnyxApiClient(page.request);
+
+      if (knowledgeAssistantId !== null) {
+        await cleanupClient.deleteAssistant(knowledgeAssistantId);
+      }
       if (ccPairId && documentSetId) {
-        const context = await browser.newContext({
-          storageState: "admin_auth.json",
-        });
-        const page = await context.newPage();
-        const cleanupClient = new OnyxApiClient(page);
         await cleanupClient.deleteDocumentSet(documentSetId);
         await cleanupClient.deleteCCPair(ccPairId);
-        await context.close();
-        console.log(
-          "[test] Cleanup completed - deleted connector and document set"
-        );
       }
+
+      await context.close();
+      console.log(
+        "[test] Cleanup completed - deleted assistant, connector, and document set"
+      );
     });
 
     test("should create and edit assistant with Knowledge enabled", async ({
@@ -142,7 +228,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await loginAs(page, "admin");
 
       // Create a connector and document set to enable the Knowledge toggle
-      const onyxApiClient = new OnyxApiClient(page);
+      const onyxApiClient = new OnyxApiClient(page.request);
       ccPairId = await onyxApiClient.createFileConnector("Test Connector");
       documentSetId = await onyxApiClient.createDocumentSet(
         "Test Document Set",
@@ -150,7 +236,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
       );
 
       // Navigate to a page to ensure session is fully established
-      await page.goto("/chat");
+      await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
       // Now login as a regular user to test the assistant creation
@@ -163,7 +249,6 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const assistantInstructions = "These are the test instructions.";
       const assistantReminder = "Initial reminder.";
       const assistantStarterMessage = "Initial starter message?";
-      const knowledgeCutoffDate = "2023-01-01";
 
       // --- Edited Values ---
       const editedAssistantName = `Edited Assistant ${Date.now()}`;
@@ -171,10 +256,9 @@ test.describe("Assistant Creation and Edit Verification", () => {
       const editedAssistantInstructions = "These are the edited instructions.";
       const editedAssistantReminder = "Edited reminder.";
       const editedAssistantStarterMessage = "Edited starter message?";
-      const editedKnowledgeCutoffDate = "2024-01-01";
 
       // Navigate to the assistant creation page
-      await page.goto("/chat/agents/create");
+      await page.goto("/app/agents/create");
 
       // --- Fill in Initial Assistant Details ---
       await getNameInput(page).fill(assistantName);
@@ -195,14 +279,9 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await expect(knowledgeToggle).not.toBeDisabled();
       await knowledgeToggle.click();
 
-      // Select "Team Knowledge" from the knowledge source dropdown
-      const knowledgeSourceSelect = getKnowledgeSourceSelect(page);
-      await knowledgeSourceSelect.click();
-      await page.getByRole("option", { name: "Team Knowledge" }).click();
-
-      // Select the document set created in beforeAll
-      // Document sets are rendered as clickable cards, not a dropdown
-      await page.getByTestId(`document-set-card-${documentSetId}`).click();
+      // Navigate to document sets view and select the document set
+      await navigateToDocumentSetsView(page);
+      await selectDocumentSet(page, documentSetId);
 
       // Starter Message
       await getStarterMessageInput(page).fill(assistantStarterMessage);
@@ -211,16 +290,19 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getCreateSubmitButton(page).click();
 
       // Verify redirection to chat page with the new assistant ID
-      await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
       const url = page.url();
       const assistantIdMatch = url.match(/assistantId=(\d+)/);
       expect(assistantIdMatch).toBeTruthy();
       const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
       expect(assistantId).not.toBeNull();
 
+      // Store assistant ID for cleanup
+      knowledgeAssistantId = Number(assistantId);
+
       // Navigate directly to the edit page
-      await page.goto(`/chat/agents/edit/${assistantId}`);
-      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
+      await page.goto(`/app/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/app/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(assistantName);
@@ -236,12 +318,15 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "aria-checked",
         "true"
       );
-      // Verify document set is selected (cards show selected state with different background)
-      // The selected document set card should be visible
-      await expect(
-        page.getByTestId(`document-set-card-${documentSetId}`)
-      ).toBeVisible();
-      // Knowledge cutoff date is set to today's date
+      // Verify document set is selected by navigating to the document sets view
+      await navigateToDocumentSetsView(page);
+      const documentSetRow = page.getByLabel(
+        `document-set-row-${documentSetId}`
+      );
+      await expect(documentSetRow).toBeVisible();
+      // The row should have a checked checkbox (data-selected attribute)
+      await expect(documentSetRow).toHaveAttribute("data-selected", "true");
+
       await expect(getStarterMessageInput(page)).toHaveValue(
         assistantStarterMessage
       );
@@ -258,12 +343,12 @@ test.describe("Assistant Creation and Edit Verification", () => {
       await getUpdateSubmitButton(page).click();
 
       // Verify redirection back to the chat page
-      await page.waitForURL(/.*\/chat\?assistantId=\d+.*/);
+      await page.waitForURL(/.*\/app\?assistantId=\d+.*/);
       expect(page.url()).toContain(`assistantId=${assistantId}`);
 
       // --- Navigate to Edit Page Again and Verify Edited Values ---
-      await page.goto(`/chat/agents/edit/${assistantId}`);
-      await page.waitForURL(`**/chat/agents/edit/${assistantId}`);
+      await page.goto(`/app/agents/edit/${assistantId}`);
+      await page.waitForURL(`**/app/agents/edit/${assistantId}`);
 
       // Verify basic fields
       await expect(getNameInput(page)).toHaveValue(editedAssistantName);
@@ -283,10 +368,16 @@ test.describe("Assistant Creation and Edit Verification", () => {
         "true"
       );
       // Verify document set is still selected after edit
-      await expect(
-        page.getByTestId(`document-set-card-${documentSetId}`)
-      ).toBeVisible();
-      // Knowledge cutoff date is set to today's date
+      await navigateToDocumentSetsView(page);
+      const documentSetRowAfterEdit = page.getByLabel(
+        `document-set-row-${documentSetId}`
+      );
+      await expect(documentSetRowAfterEdit).toBeVisible();
+      await expect(documentSetRowAfterEdit).toHaveAttribute(
+        "data-selected",
+        "true"
+      );
+
       await expect(getStarterMessageInput(page)).toHaveValue(
         editedAssistantStarterMessage
       );

@@ -14,7 +14,6 @@ from ee.onyx.server.tenants.anonymous_user_path import validate_anonymous_user_p
 from ee.onyx.server.tenants.models import AnonymousUserPath
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import optional_user
 from onyx.auth.users import User
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
@@ -29,7 +28,7 @@ router = APIRouter(prefix="/tenants")
 
 @router.get("/anonymous-user-path")
 async def get_anonymous_user_path_api(
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> AnonymousUserPath:
     tenant_id = get_current_tenant_id()
 
@@ -45,7 +44,7 @@ async def get_anonymous_user_path_api(
 @router.post("/anonymous-user-path")
 async def set_anonymous_user_path_api(
     anonymous_user_path: str,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> None:
     tenant_id = get_current_tenant_id()
     try:
@@ -72,7 +71,6 @@ async def set_anonymous_user_path_api(
 @router.post("/anonymous-user")
 async def login_as_anonymous_user(
     anonymous_user_path: str,
-    _: User | None = Depends(optional_user),
 ) -> Response:
     with get_session_with_shared_schema() as db_session:
         tenant_id = get_tenant_id_for_anonymous_user_path(

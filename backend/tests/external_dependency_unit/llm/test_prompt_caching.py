@@ -151,7 +151,7 @@ def _validate_vertex_credentials_file(credentials_path: Path) -> None:
     reason="OpenAI API key not available",
 )
 def test_openai_prompt_caching_reduces_costs(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that OpenAI prompt caching reduces costs on subsequent calls.
 
@@ -275,19 +275,19 @@ def test_openai_prompt_caching_reduces_costs(
     reason="Anthropic API key not available",
 )
 def test_anthropic_prompt_caching_reduces_costs(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that Anthropic prompt caching reduces costs on subsequent calls.
 
     Anthropic requires explicit cache_control parameters.
     """
     # Create Anthropic LLM
-    # NOTE: prompt caching support is model-specific; `claude-3-5-haiku-20241022` is known
+    # NOTE: prompt caching support is model-specific; `claude-3-haiku-20240307` is known
     # to return cache_creation/cache_read usage metrics, while some newer aliases may not.
     llm = LitellmLLM(
         api_key=os.environ["ANTHROPIC_API_KEY"],
         model_provider="anthropic",
-        model_name="claude-3-5-haiku-20241022",
+        model_name="claude-3-haiku-20240307",
         max_input_tokens=200000,
     )
 
@@ -399,7 +399,7 @@ def test_anthropic_prompt_caching_reduces_costs(
 )
 @pytest.mark.skip(reason="Vertex AI prompt caching is disabled for now")
 def test_google_genai_prompt_caching_reduces_costs(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that Litellm Gemini prompt caching reduces costs on subsequent calls.
 
@@ -474,9 +474,12 @@ def test_google_genai_prompt_caching_reduces_costs(
                 continuation=False,
             )
             # Debug: print processed messages structure
-            print(
-                f"Processed messages structure (first msg): {processed_messages1[0] if processed_messages1 else 'empty'}"
+            first_msg = (
+                processed_messages1[0]
+                if isinstance(processed_messages1, list) and processed_messages1
+                else processed_messages1
             )
+            print(f"Processed messages structure (first msg): {first_msg}")
 
             response1 = llm.invoke(prompt=processed_messages1)
             cost1 = completion_cost(
@@ -571,7 +574,7 @@ def test_google_genai_prompt_caching_reduces_costs(
     reason="OpenAI API key not available",
 )
 def test_prompt_caching_with_conversation_history(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test that prompt caching works with multi-turn conversations.
 
@@ -686,7 +689,7 @@ def test_prompt_caching_with_conversation_history(
     reason="OpenAI API key not available",
 )
 def test_no_caching_without_process_with_prompt_cache(
-    db_session: Session,
+    db_session: Session,  # noqa: ARG001
 ) -> None:
     """Test baseline: without using process_with_prompt_cache, no special caching occurs.
 

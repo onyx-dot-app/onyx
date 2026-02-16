@@ -5,6 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.gitbook.connector import GitbookConnector
+from onyx.connectors.models import HierarchyNode
 
 
 @pytest.fixture
@@ -32,6 +33,7 @@ def test_gitbook_connector_basic(gitbook_connector: GitbookConnector) -> None:
 
     # Verify first document structure
     main_doc = doc_batch[0]
+    assert not isinstance(main_doc, HierarchyNode)
 
     # Basic document properties
     assert main_doc.id.startswith("gitbook-")
@@ -79,6 +81,7 @@ def test_gitbook_connector_basic(gitbook_connector: GitbookConnector) -> None:
     assert section.link  # Should have a URL
 
     nested1 = doc_batch[1]
+    assert not isinstance(nested1, HierarchyNode)
     assert nested1.id.startswith("gitbook-")
     assert nested1.semantic_identifier == "Nested1"
     assert len(nested1.sections) == 1
@@ -88,6 +91,7 @@ def test_gitbook_connector_basic(gitbook_connector: GitbookConnector) -> None:
     assert nested1.source == DocumentSource.GITBOOK
 
     nested2 = doc_batch[2]
+    assert not isinstance(nested2, HierarchyNode)
     assert nested2.id.startswith("gitbook-")
     assert nested2.semantic_identifier == "Nested2"
     assert len(nested2.sections) == 1

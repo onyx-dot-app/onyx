@@ -1,0 +1,163 @@
+"""
+Memory Tool for storing user-specific information.
+
+This tool allows the LLM to save memories about the user for future conversations.
+The memories are passed in via override_kwargs which contains the current list of
+memories that exist for the user.
+"""
+
+from typing import Any
+from typing import cast
+from typing import Literal
+
+from pydantic import BaseModel
+from typing_extensions import override
+
+from onyx.chat.emitter import Emitter
+from onyx.llm.interfaces import LLM
+from onyx.secondary_llm_flows.memory_update import process_memory_update
+from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import MemoryToolDelta
+from onyx.server.query_and_chat.streaming_models import MemoryToolStart
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.tools.interface import Tool
+from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tools.models import ToolCallException
+from onyx.tools.models import ToolResponse
+from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.utils.logger import setup_logger
+
+
+logger = setup_logger()
+
+
+MEMORY_FIELD = "memory"
+
+
+class MemoryToolOverrideKwargs(BaseModel):
+    # Not including the Team Information or User Preferences because these are less likely to contribute to building the memory
+    # Things like the user's name is important because the LLM may create a memory like "Dave prefers light mode." instead of
+    # User prefers light mode.
+    user_name: str | None
+    user_email: str | None
+    user_role: str | None
+    existing_memories: list[str]
+    chat_history: list[ChatMinimalTextMessage]
+
+
+class MemoryTool(Tool[MemoryToolOverrideKwargs]):
+    NAME = "add_memory"
+    DISPLAY_NAME = "Add Memory"
+    DESCRIPTION = "Save memories about the user for future conversations."
+
+    def __init__(
+        self,
+        tool_id: int,
+        emitter: Emitter,
+        llm: LLM,
+    ) -> None:
+        super().__init__(emitter=emitter)
+        self._id = tool_id
+        self.llm = llm
+
+    @property
+    def id(self) -> int:
+        return self._id
+
+    @property
+    def name(self) -> str:
+        return self.NAME
+
+    @property
+    def description(self) -> str:
+        return self.DESCRIPTION
+
+    @property
+    def display_name(self) -> str:
+        return self.DISPLAY_NAME
+
+    @override
+    def tool_definition(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        MEMORY_FIELD: {
+                            "type": "string",
+                            "description": (
+                                "The text of the memory to add or update. "
+                                "Should be a concise, standalone statement that "
+                                "captures the key information. For example: "
+                                "'User prefers dark mode' or 'User's favorite frontend framework is React'."
+                            ),
+                        },
+                    },
+                    "required": [MEMORY_FIELD],
+                },
+            },
+        }
+
+    @override
+    def emit_start(self, placement: Placement) -> None:
+        self.emitter.emit(Packet(placement=placement, obj=MemoryToolStart()))
+
+    @override
+    def run(
+        self,
+        placement: Placement,
+        override_kwargs: MemoryToolOverrideKwargs,
+        **llm_kwargs: Any,
+    ) -> ToolResponse:
+        if MEMORY_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{MEMORY_FIELD}' parameter in add_memory tool call",
+                llm_facing_message=(
+                    f"The add_memory tool requires a '{MEMORY_FIELD}' parameter containing "
+                    f"the memory text to save. Please provide like: "
+                    f'{{"memory": "User prefers dark mode"}}'
+                ),
+            )
+        memory = cast(str, llm_kwargs[MEMORY_FIELD])
+
+        existing_memories = override_kwargs.existing_memories
+        chat_history = override_kwargs.chat_history
+
+        # Determine if this should be an add or update operation
+        memory_text, index_to_replace = process_memory_update(
+            new_memory=memory,
+            existing_memories=existing_memories,
+            chat_history=chat_history,
+            llm=self.llm,
+            user_name=override_kwargs.user_name,
+            user_email=override_kwargs.user_email,
+            user_role=override_kwargs.user_role,
+        )
+
+        logger.info(f"New memory to be added: {memory_text}")
+
+        operation: Literal["add", "update"] = (
+            "update" if index_to_replace is not None else "add"
+        )
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=MemoryToolDelta(
+                    memory_text=memory_text,
+                    operation=operation,
+                    memory_id=None,
+                    index=index_to_replace,
+                ),
+            )
+        )
+
+        return ToolResponse(
+            rich_response=MemoryToolResponse(
+                memory_text=memory_text,
+                index_to_replace=index_to_replace,
+            ),
+            llm_facing_response=f"New memory added: {memory_text}",
+        )

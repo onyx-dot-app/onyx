@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "Onyx",
+  "version": "1.0",
+  "description": "Onyx lets you research, create, and automate with LLMs powered by your team's unique knowledge",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "service_worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_icon": {
+      "16": "public/icon16.png",
+      "48": "public/icon48.png",
+      "128": "public/icon128.png"
+    },
+    "default_popup": "src/pages/popup.html"
+  },
+  "icons": {
+    "16": "public/icon16.png",
+    "48": "public/icon48.png",
+    "128": "public/icon128.png"
+  },
+  "options_page": "src/pages/options.html",
+  "chrome_url_overrides": {
+    "newtab": "src/pages/onyx_home.html"
+  },
+  "commands": {
+    "toggleNewTabOverride": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+O",
+        "mac": "Command+Shift+O"
+      },
+      "description": "Toggle Onyx New Tab Override"
+    },
+    "openSidePanel": {
+      "suggested_key": {
+        "default": "Ctrl+O",
+        "windows": "Alt+O",
+        "mac": "MacCtrl+O"
+      },
+      "description": "Open Onyx Side Panel"
+    }
+  },
+  "side_panel": {
+    "default_path": "src/pages/panel.html"
+  },
+  "omnibox": {
+    "keyword": "onyx"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/utils/selection-icon.js"],
+      "css": ["src/styles/selection-icon.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["public/icon32.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

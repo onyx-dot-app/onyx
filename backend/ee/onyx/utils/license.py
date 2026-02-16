@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime
 from datetime import timezone
+from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
@@ -19,21 +20,27 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-
-# RSA-4096 Public Key for license verification
-# Load from environment variable - key is generated on the control plane
-# In production, inject via Kubernetes secrets or secrets manager
-LICENSE_PUBLIC_KEY_PEM = os.environ.get("LICENSE_PUBLIC_KEY_PEM", "")
+# Path to the license public key file
+_LICENSE_PUBLIC_KEY_PATH = (
+    Path(__file__).parent.parent.parent.parent / "keys" / "license_public_key.pem"
+)
 
 
 def _get_public_key() -> RSAPublicKey:
-    """Load the public key from environment variable."""
-    if not LICENSE_PUBLIC_KEY_PEM:
-        raise ValueError(
-            "LICENSE_PUBLIC_KEY_PEM environment variable not set. "
-            "License verification requires the control plane public key."
-        )
-    key = serialization.load_pem_public_key(LICENSE_PUBLIC_KEY_PEM.encode())
+    """Load the public key from file, with env var override."""
+    # Allow env var override for flexibility
+    key_pem = os.environ.get("LICENSE_PUBLIC_KEY_PEM")
+
+    if not key_pem:
+        # Read from file
+        if not _LICENSE_PUBLIC_KEY_PATH.exists():
+            raise ValueError(
+                f"License public key not found at {_LICENSE_PUBLIC_KEY_PATH}. "
+                "License verification requires the control plane public key."
+            )
+        key_pem = _LICENSE_PUBLIC_KEY_PATH.read_text()
+
+    key = serialization.load_pem_public_key(key_pem.encode())
     if not isinstance(key, RSAPublicKey):
         raise ValueError("Expected RSA public key")
     return key
@@ -53,17 +60,21 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         ValueError: If license data is invalid or signature verification fails
     """
     try:
-        # Decode the license data
         decoded = json.loads(base64.b64decode(license_data))
+
+        # Parse into LicenseData to validate structure
         license_obj = LicenseData(**decoded)
 
-        payload_json = json.dumps(
-            license_obj.payload.model_dump(mode="json"), sort_keys=True
-        )
+        # IMPORTANT: Use the ORIGINAL payload JSON for signature verification,
+        # not re-serialized through Pydantic. Pydantic may format fields differently
+        # (e.g., datetime "+00:00" vs "Z") which would break signature verification.
+        original_payload = decoded.get("payload", {})
+        payload_json = json.dumps(original_payload, sort_keys=True)
         signature_bytes = base64.b64decode(license_obj.signature)
 
         # Verify signature using PSS padding (modern standard)
         public_key = _get_public_key()
+
         public_key.verify(
             signature_bytes,
             payload_json.encode(),
@@ -77,16 +88,18 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         return license_obj.payload
 
     except InvalidSignature:
-        logger.error("License signature verification failed")
+        logger.error("[verify_license] FAILED: Signature verification failed")
         raise ValueError("Invalid license signature")
-    except json.JSONDecodeError:
-        logger.error("Failed to decode license JSON")
+    except json.JSONDecodeError as e:
+        logger.error(f"[verify_license] FAILED: JSON decode error: {e}")
         raise ValueError("Invalid license format: not valid JSON")
     except (ValueError, KeyError, TypeError) as e:
-        logger.error(f"License data validation error: {type(e).__name__}")
-        raise ValueError(f"Invalid license format: {type(e).__name__}")
+        logger.error(
+            f"[verify_license] FAILED: Validation error: {type(e).__name__}: {e}"
+        )
+        raise ValueError(f"Invalid license format: {type(e).__name__}: {e}")
     except Exception:
-        logger.exception("Unexpected error during license verification")
+        logger.exception("[verify_license] FAILED: Unexpected error")
         raise ValueError("License verification failed: unexpected error")
 
 

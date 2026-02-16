@@ -68,11 +68,7 @@ export const WebProviderSetupModal = memo(
             <SvgArrowExchange className="size-3 text-text-04" />
           </div>
           <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-            <SvgOnyxLogo
-              width={24}
-              height={24}
-              className="text-text-04 shrink-0"
-            />
+            <SvgOnyxLogo size={24} className="text-text-04 shrink-0" />
           </div>
         </div>
       );
@@ -81,7 +77,7 @@ export const WebProviderSetupModal = memo(
 
     return (
       <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <Modal.Content mini preventAccidentalClose>
+        <Modal.Content width="sm" preventAccidentalClose>
           <Modal.Header
             icon={LogoArrangement}
             title={`Set up ${providerLabel}`}

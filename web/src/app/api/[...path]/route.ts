@@ -108,9 +108,20 @@ async function handleRequest(request: NextRequest, path: string[]) {
       headers: headers,
       body: request.body,
       signal: request.signal,
+      redirect: "manual",
       // @ts-ignore
       duplex: "half",
     });
+
+    const setCookies =
+      // @ts-ignore - undici provides getSetCookie in Node.
+      response.headers.getSetCookie?.() ??
+      (response.headers.get("set-cookie")
+        ? [response.headers.get("set-cookie")]
+        : []);
+
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.delete("set-cookie");
 
     // Check if the response is a stream
     if (
@@ -121,15 +132,27 @@ async function handleRequest(request: NextRequest, path: string[]) {
       const { readable, writable } = new TransformStream();
       response.body?.pipeTo(writable);
 
-      return new NextResponse(readable, {
+      const proxyResponse = new NextResponse(readable, {
         status: response.status,
-        headers: response.headers,
+        headers: responseHeaders,
       });
+      for (const cookie of setCookies) {
+        if (cookie) {
+          proxyResponse.headers.append("set-cookie", cookie);
+        }
+      }
+      return proxyResponse;
     } else {
-      return new NextResponse(response.body, {
+      const proxyResponse = new NextResponse(response.body, {
         status: response.status,
-        headers: response.headers,
+        headers: responseHeaders,
       });
+      for (const cookie of setCookies) {
+        if (cookie) {
+          proxyResponse.headers.append("set-cookie", cookie);
+        }
+      }
+      return proxyResponse;
     }
   } catch (error: unknown) {
     console.error("Proxy error:", error);

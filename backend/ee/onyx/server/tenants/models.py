@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -41,6 +42,12 @@ class BillingInformation(BaseModel):
     payment_method_enabled: bool
 
 
+class CreateCheckoutSessionRequest(BaseModel):
+    billing_period: Literal["monthly", "annual"] = "monthly"
+    seats: int | None = None
+    email: str | None = None
+
+
 class CheckoutSessionCreationResponse(BaseModel):
     id: str
 
@@ -73,6 +80,12 @@ class SubscriptionSessionResponse(BaseModel):
     sessionId: str
 
 
+class CreateSubscriptionSessionRequest(BaseModel):
+    """Request to create a subscription checkout session."""
+
+    billing_period: Literal["monthly", "annual"] = "monthly"
+
+
 class TenantByDomainResponse(BaseModel):
     tenant_id: str
     number_of_users: int
@@ -98,3 +111,7 @@ class PendingUserSnapshot(BaseModel):
 
 class ApproveUserRequest(BaseModel):
     email: str
+
+
+class StripePublishableKeyResponse(BaseModel):
+    publishable_key: str

@@ -21,6 +21,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
@@ -193,7 +194,7 @@ class DiscourseConnector(PollConnector):
     ) -> GenerateDocumentsOutput:
         page = 0
         while topic_ids := self._get_latest_topics(start, end, page):
-            doc_batch: list[Document] = []
+            doc_batch: list[Document | HierarchyNode] = []
             for topic_id in topic_ids:
                 doc_batch.append(self._get_doc_from_topic(topic_id))
                 if len(doc_batch) >= self.batch_size:

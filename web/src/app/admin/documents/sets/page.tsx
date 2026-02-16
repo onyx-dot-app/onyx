@@ -18,7 +18,7 @@ import { useState } from "react";
 import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
-import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { AdminPageTitle } from "@/components/admin/Title";
 import {
   FiAlertTriangle,
@@ -158,7 +158,6 @@ interface DocumentFeedbackTableProps {
   documentSets: DocumentSetSummary[];
   refresh: () => void;
   refreshEditable: () => void;
-  setPopup: (popupSpec: PopupSpec | null) => void;
   editableDocumentSets: DocumentSetSummary[];
 }
 
@@ -167,7 +166,6 @@ const DocumentSetTable = ({
   editableDocumentSets,
   refresh,
   refreshEditable,
-  setPopup,
 }: DocumentFeedbackTableProps) => {
   const [page, setPage] = useState(1);
 
@@ -324,16 +322,14 @@ const DocumentSetTable = ({
                             documentSet.id
                           );
                           if (response.ok) {
-                            setPopup({
-                              message: `Document set "${documentSet.name}" scheduled for deletion`,
-                              type: "success",
-                            });
+                            toast.success(
+                              `Document set "${documentSet.name}" scheduled for deletion`
+                            );
                           } else {
                             const errorMsg = (await response.json()).detail;
-                            setPopup({
-                              message: `Failed to schedule document set for deletion - ${errorMsg}`,
-                              type: "error",
-                            });
+                            toast.error(
+                              `Failed to schedule document set for deletion - ${errorMsg}`
+                            );
                           }
                           refresh();
                           refreshEditable();
@@ -363,7 +359,6 @@ const DocumentSetTable = ({
 };
 
 const Main = () => {
-  const { popup, setPopup } = usePopup();
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -396,7 +391,6 @@ const Main = () => {
 
   return (
     <div className="mb-8">
-      {popup}
       <Text className="mb-3">
         <b>Document Sets</b> allow you to group logically connected documents
         into a single bundle. These can then be used as a filter when performing
@@ -419,7 +413,6 @@ const Main = () => {
             editableDocumentSets={editableDocumentSets}
             refresh={refreshDocumentSets}
             refreshEditable={refreshEditableDocumentSets}
-            setPopup={setPopup}
           />
         </>
       )}

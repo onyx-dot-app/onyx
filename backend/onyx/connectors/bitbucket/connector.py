@@ -30,6 +30,7 @@ from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -271,9 +272,9 @@ class BitbucketConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
-    ) -> Iterator[list[SlimDocument]]:
+    ) -> Iterator[list[SlimDocument | HierarchyNode]]:
         """Return only document IDs for all existing pull requests."""
-        batch: list[SlimDocument] = []
+        batch: list[SlimDocument | HierarchyNode] = []
         params = self._build_params(
             fields=SLIM_PR_LIST_RESPONSE_FIELDS,
             start=start,

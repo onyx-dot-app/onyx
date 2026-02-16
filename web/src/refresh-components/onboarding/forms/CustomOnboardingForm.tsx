@@ -108,7 +108,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
                 {...field}
                 placeholder="E.g. openai, anthropic, etc."
                 showClearButton={false}
-                disabled={disabled}
+                variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>
             <FormField.Message
@@ -159,11 +159,14 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
                 {...field}
                 placeholder="https://"
                 showClearButton={false}
-                disabled={disabled}
-                error={
-                  typeof field.value === "string" &&
-                  field.value.trim() !== "" &&
-                  apiStatus === "error"
+                variant={
+                  disabled
+                    ? "disabled"
+                    : typeof field.value === "string" &&
+                        field.value.trim() !== "" &&
+                        apiStatus === "error"
+                      ? "error"
+                      : undefined
                 }
               />
             </FormField.Control>
@@ -307,7 +310,7 @@ function CustomFormFields(props: OnboardingFormChildProps<CustomFormValues>) {
                 {...field}
                 placeholder="model-name"
                 showClearButton={false}
-                disabled={disabled}
+                variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>
             <FormField.Message

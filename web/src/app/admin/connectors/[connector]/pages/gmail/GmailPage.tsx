@@ -3,7 +3,7 @@
 import React from "react";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { CCPairBasicInfo, ValidSources } from "@/lib/types";
 import {
   Credential,
@@ -13,7 +13,7 @@ import {
 import { GmailAuthSection, GmailJsonUploadSection } from "./Credential";
 import { usePublicCredentials, useBasicConnectorStatus } from "@/lib/hooks";
 import Title from "@/components/ui/title";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import {
   useGoogleAppCredential,
   useGoogleServiceAccountKey,
@@ -25,9 +25,22 @@ import {
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
 
-export const GmailMain = () => {
+interface GmailMainProps {
+  buildMode?: boolean;
+  onOAuthRedirect?: () => void;
+  onCredentialCreated?: (
+    credential: Credential<
+      GmailCredentialJson | GmailServiceAccountCredentialJson
+    >
+  ) => void;
+}
+
+export const GmailMain = ({
+  buildMode = false,
+  onOAuthRedirect,
+  onCredentialCreated,
+}: GmailMainProps) => {
   const { isAdmin, user } = useUser();
-  const { popup, setPopup } = usePopup();
 
   const {
     data: appCredentialData,
@@ -162,12 +175,10 @@ export const GmailMain = () => {
 
   return (
     <>
-      {popup}
       <Title className="mb-2 mt-6 ml-auto mr-auto">
         Step 1: Provide your Credentials
       </Title>
       <GmailJsonUploadSection
-        setPopup={setPopup}
         appCredentialData={appCredentialData}
         serviceAccountCredentialData={serviceAccountKeyData}
         isAdmin={isAdmin}
@@ -183,7 +194,6 @@ export const GmailMain = () => {
             Step 2: Authenticate with Onyx
           </Title>
           <GmailAuthSection
-            setPopup={setPopup}
             refreshCredentials={handleRefresh}
             gmailPublicCredential={gmailPublicUploadedCredential}
             gmailServiceAccountCredential={gmailServiceAccountCredential}
@@ -191,6 +201,12 @@ export const GmailMain = () => {
             serviceAccountKeyData={serviceAccountKeyData}
             connectorExists={connectorExists}
             user={user}
+            buildMode={buildMode}
+            onOAuthRedirect={onOAuthRedirect}
+            // Necessary prop drilling for build mode v1.
+            // TODO: either integrate gmail into normal flow
+            // or create a build-mode specific Gmail flow
+            onCredentialCreated={onCredentialCreated}
           />
         </>
       )}

@@ -10,6 +10,16 @@ EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
     ("/enterprise-settings/logo", {"GET"}),
     ("/enterprise-settings/logotype", {"GET"}),
     ("/enterprise-settings/custom-analytics-script", {"GET"}),
+    # Stripe publishable key is safe to expose publicly
+    ("/tenants/stripe-publishable-key", {"GET"}),
+    ("/admin/billing/stripe-publishable-key", {"GET"}),
+    # Proxy endpoints use license-based auth, not user auth
+    ("/proxy/create-checkout-session", {"POST"}),
+    ("/proxy/claim-license", {"POST"}),
+    ("/proxy/create-customer-portal-session", {"POST"}),
+    ("/proxy/billing-information", {"GET"}),
+    ("/proxy/license/{tenant_id}", {"GET"}),
+    ("/proxy/seats/update", {"POST"}),
 ]
 
 

@@ -36,6 +36,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
@@ -377,7 +378,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         paginator = self.s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix)
 
-        batch: list[Document] = []
+        batch: list[Document | HierarchyNode] = []
         for page in pages:
             if "Contents" not in page:
                 continue
@@ -616,6 +617,10 @@ if __name__ == "__main__":
         for document_batch in document_batch_generator:
             print("First batch of documents:")
             for doc in document_batch:
+                if isinstance(doc, HierarchyNode):
+                    print("hierarchynode:", doc.display_name)
+                    continue
+
                 print(f"Document ID: {doc.id}")
                 print(f"Semantic Identifier: {doc.semantic_identifier}")
                 print(f"Source: {doc.source}")

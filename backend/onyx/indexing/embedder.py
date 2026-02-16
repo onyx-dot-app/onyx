@@ -7,6 +7,9 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import DocumentFailure
 from onyx.db.models import SearchSettings
+from onyx.document_index.chunk_content_enrichment import (
+    generate_enriched_content_for_chunk_embedding,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocAwareChunk
@@ -126,7 +129,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             if chunk.large_chunk_reference_ids:
                 large_chunks_present = True
             chunk_text = (
-                f"{chunk.title_prefix}{chunk.doc_summary}{chunk.content}{chunk.chunk_context}{chunk.metadata_suffix_semantic}"
+                generate_enriched_content_for_chunk_embedding(chunk)
             ) or chunk.source_document.get_title_for_document_index()
 
             if not chunk_text:

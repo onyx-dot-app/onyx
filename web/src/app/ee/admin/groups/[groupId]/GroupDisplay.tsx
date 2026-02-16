@@ -1,6 +1,6 @@
 "use client";
 
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useState } from "react";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import AddMemberForm from "./AddMemberForm";
@@ -32,7 +32,7 @@ import { Bubble } from "@/components/Bubble";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
 import { AddTokenRateLimitForm } from "./AddTokenRateLimitForm";
 import { GenericTokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import GenericConfirmModal from "@/components/modals/GenericConfirmModal";
 
 interface GroupDisplayProps {
@@ -135,7 +135,6 @@ const UserRoleDropdown = ({
           value={localRole}
           onValueChange={handleChange}
           disabled={isSettingRole}
-          className="w-40"
         >
           <InputSelect.Trigger placeholder="Select role" />
 
@@ -159,26 +158,19 @@ export const GroupDisplay = ({
   userGroup,
   refreshUserGroup,
 }: GroupDisplayProps) => {
-  const { popup, setPopup } = usePopup();
   const [addMemberFormVisible, setAddMemberFormVisible] = useState(false);
   const [addConnectorFormVisible, setAddConnectorFormVisible] = useState(false);
   const [addRateLimitFormVisible, setAddRateLimitFormVisible] = useState(false);
 
   const { isAdmin } = useUser();
 
-  const handlePopup = (message: string, type: "success" | "error") => {
-    setPopup({ message, type });
-  };
-
   const onRoleChangeSuccess = () =>
-    handlePopup("User role updated successfully!", "success");
+    toast.success("User role updated successfully!");
   const onRoleChangeError = (errorMsg: string) =>
-    handlePopup(`Unable to update user role - ${errorMsg}`, "error");
+    toast.error(`Unable to update user role - ${errorMsg}`);
 
   return (
     <div>
-      {popup}
-
       <div className="text-sm mb-3 flex">
         <Text className="mr-1">Status:</Text>{" "}
         {userGroup.is_up_to_date ? (
@@ -251,20 +243,17 @@ export const GroupDisplay = ({
                                     }
                                   );
                                   if (response.ok) {
-                                    setPopup({
-                                      message:
-                                        "Successfully removed user from group",
-                                      type: "success",
-                                    });
+                                    toast.success(
+                                      "Successfully removed user from group"
+                                    );
                                   } else {
                                     const responseJson = await response.json();
                                     const errorMsg =
                                       responseJson.detail ||
                                       responseJson.message;
-                                    setPopup({
-                                      message: `Error removing user from group - ${errorMsg}`,
-                                      type: "error",
-                                    });
+                                    toast.error(
+                                      `Error removing user from group - ${errorMsg}`
+                                    );
                                   }
                                   refreshUserGroup();
                                 }}
@@ -307,7 +296,6 @@ export const GroupDisplay = ({
             setAddMemberFormVisible(false);
             refreshUserGroup();
           }}
-          setPopup={setPopup}
         />
       )}
 
@@ -357,19 +345,16 @@ export const GroupDisplay = ({
                                   }
                                 );
                                 if (response.ok) {
-                                  setPopup({
-                                    message:
-                                      "Successfully removed connector from group",
-                                    type: "success",
-                                  });
+                                  toast.success(
+                                    "Successfully removed connector from group"
+                                  );
                                 } else {
                                   const responseJson = await response.json();
                                   const errorMsg =
                                     responseJson.detail || responseJson.message;
-                                  setPopup({
-                                    message: `Error removing connector from group - ${errorMsg}`,
-                                    type: "error",
-                                  });
+                                  toast.error(
+                                    `Error removing connector from group - ${errorMsg}`
+                                  );
                                 }
                                 refreshUserGroup();
                               }}
@@ -412,7 +397,6 @@ export const GroupDisplay = ({
             setAddConnectorFormVisible(false);
             refreshUserGroup();
           }}
-          setPopup={setPopup}
         />
       )}
 
@@ -473,7 +457,6 @@ export const GroupDisplay = ({
       <AddTokenRateLimitForm
         isOpen={addRateLimitFormVisible}
         setIsOpen={setAddRateLimitFormVisible}
-        setPopup={setPopup}
         userGroupId={userGroup.id}
       />
 

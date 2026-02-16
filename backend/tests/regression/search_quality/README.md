@@ -6,7 +6,7 @@ This Python script evaluates the search and answer quality for a list of queries
 
 1. Ensure you have the required dependencies installed and onyx running.
 
-2. Ensure you have `OPENAI_API_KEY` set if you intend to do answer evaluation (enabled by default, unless you run the script with the `-s` flag). Also, if you're not using `AUTH_TYPE=disabled`, go to the API Keys page in the admin panel, generate a basic api token, and add it to the env file as `ONYX_API_KEY=on_...`.
+2. Ensure you have `OPENAI_API_KEY` set if you intend to do answer evaluation (enabled by default, unless you run the script with the `-s` flag). Go to the API Keys page in the admin panel, generate a basic api token, and add it to the env file as `ONYX_API_KEY=on_...`.
 
 3. Navigate to Onyx repo, **search_quality** folder:
 

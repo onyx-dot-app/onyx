@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import useSWR, { KeyedMutator } from "swr";
-import { ChatSession, ChatSessionSharedStatus } from "@/app/chat/interfaces";
+import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import useAppFocus from "./useAppFocus";
@@ -163,6 +163,11 @@ export default function useChatSessions(): UseChatSessionsOutput {
   // The session will be automatically removed once it appears in the server response
   const addPendingChatSession = useCallback(
     ({ chatSessionId, personaId, projectId }: PendingChatSessionParams) => {
+      // Don't add sessions that belong to a project
+      if (projectId != null) {
+        return;
+      }
+
       // Don't add if already in pending store (duplicates are also filtered during merge)
       if (pendingSessionsStore.has(chatSessionId)) {
         return;

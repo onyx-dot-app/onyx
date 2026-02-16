@@ -1,105 +1,19 @@
-from collections.abc import Callable
 from collections.abc import Iterator
-from datetime import datetime
-from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from pydantic import Field
 
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
-from onyx.context.search.enums import QueryFlow
-from onyx.context.search.enums import RecencyBiasSetting
-from onyx.context.search.enums import SearchType
 from onyx.context.search.models import SearchDoc
-from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
-
-
-# First chunk of info for streaming QA
-class QADocsResponse(BaseModel):
-    top_documents: list[SearchDoc]
-    rephrased_query: str | None = None
-    predicted_flow: QueryFlow | None
-    predicted_search: SearchType | None
-    applied_source_filters: list[DocumentSource] | None
-    applied_time_cutoff: datetime | None
-    recency_bias_multiplier: float
-
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
-        initial_dict["applied_time_cutoff"] = (
-            self.applied_time_cutoff.isoformat() if self.applied_time_cutoff else None
-        )
-
-        return initial_dict
-
-
-class StreamStopReason(Enum):
-    CONTEXT_LENGTH = "context_length"
-    CANCELLED = "cancelled"
-    FINISHED = "finished"
-
-
-class StreamType(Enum):
-    SUB_QUESTIONS = "sub_questions"
-    SUB_ANSWER = "sub_answer"
-    MAIN_ANSWER = "main_answer"
-
-
-class StreamStopInfo(BaseModel):
-    stop_reason: StreamStopReason
-
-    stream_type: StreamType = StreamType.MAIN_ANSWER
-
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        data = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
-        data["stop_reason"] = self.stop_reason.name
-        return data
-
-
-class UserKnowledgeFilePacket(BaseModel):
-    user_files: list[FileDescriptor]
-
-
-class LLMRelevanceFilterResponse(BaseModel):
-    llm_selected_doc_indices: list[int]
-
-
-class RelevanceAnalysis(BaseModel):
-    relevant: bool
-    content: str | None = None
-
-
-class SectionRelevancePiece(RelevanceAnalysis):
-    """LLM analysis mapped to an Inference Section"""
-
-    document_id: str
-    chunk_id: int  # ID of the center chunk for a given inference section
-
-
-class DocumentRelevance(BaseModel):
-    """Contains all relevance information for a given search"""
-
-    relevance_summaries: dict[str, RelevanceAnalysis]
-
-
-class OnyxAnswerPiece(BaseModel):
-    # A small piece of a complete answer. Used for streaming back answers.
-    answer_piece: str | None  # if None, specifies the end of an Answer
-
-
-class MessageResponseIDInfo(BaseModel):
-    user_message_id: int | None
-    reserved_assistant_message_id: int
 
 
 class StreamingError(BaseModel):
@@ -112,27 +26,9 @@ class StreamingError(BaseModel):
     details: dict | None = None  # Additional context (tool name, model name, etc.)
 
 
-class OnyxAnswer(BaseModel):
-    answer: str | None
-
-
-class ThreadMessage(BaseModel):
-    message: str
-    sender: str | None = None
-    role: MessageType = MessageType.USER
-
-
-class FileChatDisplay(BaseModel):
-    file_ids: list[str]
-
-
 class CustomToolResponse(BaseModel):
     response: ToolResultType
     tool_name: str
-
-
-class ToolConfig(BaseModel):
-    id: int
 
 
 class ProjectSearchConfig(BaseModel):
@@ -142,82 +38,13 @@ class ProjectSearchConfig(BaseModel):
     disable_forced_tool: bool
 
 
-class PromptOverrideConfig(BaseModel):
-    name: str
-    description: str = ""
-    system_prompt: str
-    task_prompt: str = ""
-    datetime_aware: bool = True
-    include_citations: bool = True
-
-
-class PersonaOverrideConfig(BaseModel):
-    name: str
-    description: str
-    search_type: SearchType = SearchType.SEMANTIC
-    num_chunks: float | None = None
-    llm_relevance_filter: bool = False
-    llm_filter_extraction: bool = False
-    recency_bias: RecencyBiasSetting = RecencyBiasSetting.AUTO
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
-
-    prompts: list[PromptOverrideConfig] = Field(default_factory=list)
-    # Note: prompt_ids removed - prompts are now embedded in personas
-
-    document_set_ids: list[int] = Field(default_factory=list)
-    tools: list[ToolConfig] = Field(default_factory=list)
-    tool_ids: list[int] = Field(default_factory=list)
-    custom_tools_openapi: list[dict[str, Any]] = Field(default_factory=list)
-
-
-AnswerQuestionPossibleReturn = (
-    OnyxAnswerPiece
-    | CitationInfo
-    | FileChatDisplay
-    | CustomToolResponse
-    | StreamingError
-    | StreamStopInfo
-)
-
-
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
 
 
-AnswerQuestionStreamReturn = Iterator[AnswerQuestionPossibleReturn]
-
-
-class LLMMetricsContainer(BaseModel):
-    prompt_tokens: int
-    response_tokens: int
-
-
-StreamProcessor = Callable[[Iterator[str]], AnswerQuestionStreamReturn]
-
-
-AnswerStreamPart = (
-    Packet
-    | StreamStopInfo
-    | MessageResponseIDInfo
-    | StreamingError
-    | UserKnowledgeFilePacket
-    | CreateChatSessionID
-)
+AnswerStreamPart = Packet | MessageResponseIDInfo | StreamingError | CreateChatSessionID
 
 AnswerStream = Iterator[AnswerStreamPart]
-
-
-class ChatBasicResponse(BaseModel):
-    # This is built piece by piece, any of these can be None as the flow could break
-    answer: str
-    answer_citationless: str
-
-    top_documents: list[SearchDoc]
-
-    error_msg: str | None
-    message_id: int
-    citation_info: list[CitationInfo]
 
 
 class ToolCallResponse(BaseModel):
@@ -232,8 +59,23 @@ class ToolCallResponse(BaseModel):
     pre_reasoning: str | None = None
 
 
+class ChatBasicResponse(BaseModel):
+    # This is built piece by piece, any of these can be None as the flow could break
+    answer: str
+    answer_citationless: str
+
+    top_documents: list[SearchDoc]
+
+    error_msg: str | None
+    message_id: int
+    citation_info: list[CitationInfo]
+
+
 class ChatFullResponse(BaseModel):
-    """Complete non-streaming response with all available data."""
+    """Complete non-streaming response with all available data.
+    NOTE: This model is used for the core flow of the Onyx application, any changes to it should be reviewed and approved by an
+    experienced team member. It is very important to 1. avoid bloat and 2. that this remains backwards compatible across versions.
+    """
 
     # Core response fields
     answer: str
@@ -256,6 +98,19 @@ class ChatLoadedFile(InMemoryChatFile):
     token_count: int
 
 
+class ToolCallSimple(BaseModel):
+    """Tool call for ChatMessageSimple representation (mirrors OpenAI format).
+
+    Used when an ASSISTANT message contains one or more tool calls.
+    Each tool call has an ID, name, arguments, and token count for tracking.
+    """
+
+    tool_call_id: str
+    tool_name: str
+    tool_arguments: dict[str, Any]
+    token_count: int = 0
+
+
 class ChatMessageSimple(BaseModel):
     message: str
     token_count: int
@@ -264,12 +119,17 @@ class ChatMessageSimple(BaseModel):
     image_files: list[ChatLoadedFile] | None = None
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
+    # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)
+    tool_calls: list[ToolCallSimple] | None = None
     # The last message for which this is true
     # AND is true for all previous messages
     # (counting from the start of the history)
     # represents the end of the cacheable prefix
     # used for prompt caching
     should_cache: bool = False
+    # When this message represents an injected text file, this is the file's ID.
+    # Used to detect which file messages survive context-window truncation.
+    file_id: str | None = None
 
 
 class ProjectFileMetadata(BaseModel):
@@ -278,6 +138,33 @@ class ProjectFileMetadata(BaseModel):
     file_id: str
     filename: str
     file_content: str
+
+
+class FileToolMetadata(BaseModel):
+    """Lightweight metadata for exposing files to the FileReaderTool.
+
+    Used when files cannot be loaded directly into context (project too large
+    or persona-attached user_files without direct-load path). The LLM receives
+    a listing of these so it knows which files it can read via ``read_file``.
+    """
+
+    file_id: str
+    filename: str
+    approx_char_count: int
+
+
+class ChatHistoryResult(BaseModel):
+    """Result of converting chat history to simple format.
+
+    Bundles the simple messages with metadata for every text file that was
+    injected into the history. After context-window truncation drops older
+    messages, callers compare surviving ``file_id`` tags against this map
+    to discover "forgotten" files whose metadata should be provided to the
+    FileReaderTool.
+    """
+
+    simple_messages: list[ChatMessageSimple]
+    all_injected_file_metadata: dict[str, FileToolMetadata]
 
 
 class ExtractedProjectFiles(BaseModel):
@@ -289,6 +176,9 @@ class ExtractedProjectFiles(BaseModel):
     project_file_metadata: list[ProjectFileMetadata]
     # None if not a project
     project_uncapped_token_count: int | None
+    # Lightweight metadata for files exposed via FileReaderTool
+    # (populated when files don't fit in context and vector DB is disabled)
+    file_metadata_for_tool: list[FileToolMetadata] = []
 
 
 class LlmStepResult(BaseModel):

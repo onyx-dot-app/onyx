@@ -185,7 +185,7 @@ export const HealthCheckBanner = () => {
   if (showLoggedOutModal) {
     return (
       <Modal open>
-        <Modal.Content small>
+        <Modal.Content width="sm" height="sm">
           <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
           <Modal.Body>
             <p className="text-sm">

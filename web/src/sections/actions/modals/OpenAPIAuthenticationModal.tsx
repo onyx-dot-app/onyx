@@ -314,7 +314,7 @@ export default function OpenAPIAuthenticationModal({
         }
       }}
     >
-      <Modal.Content tall skipOverlay={skipOverlay}>
+      <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgArrowExchange}
           title={title}
@@ -598,7 +598,8 @@ export default function OpenAPIAuthenticationModal({
                               <CopyIconButton
                                 getCopyText={() => redirectUri}
                                 tooltip="Copy redirect URI"
-                                internal
+                                prominence="tertiary"
+                                size="sm"
                               />
                             </div>
                           </div>

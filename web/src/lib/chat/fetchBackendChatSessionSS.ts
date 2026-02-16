@@ -1,4 +1,4 @@
-import { BackendChatSession } from "@/app/chat/interfaces";
+import { BackendChatSession } from "@/app/app/interfaces";
 import { fetchSS } from "@/lib/utilsSS";
 
 export async function fetchBackendChatSessionSS(

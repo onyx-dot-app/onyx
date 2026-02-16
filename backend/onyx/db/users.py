@@ -14,8 +14,12 @@ from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.schemas import UserRole
+from onyx.configs.constants import ANONYMOUS_USER_EMAIL
+from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
+from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
+from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import SamlAccount
 from onyx.db.models import User
@@ -109,15 +113,15 @@ def get_all_users(
     is assumed to be relatively small (<< 1 million)"""
     stmt = select(User)
 
-    where_clause = []
+    # Exclude system users (anonymous user, no-auth placeholder)
+    stmt = stmt.where(User.email != ANONYMOUS_USER_EMAIL)  # type: ignore
+    stmt = stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)  # type: ignore
 
     if not include_external:
-        where_clause.append(User.role != UserRole.EXT_PERM_USER)
+        stmt = stmt.where(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string is not None:
-        where_clause.append(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
-
-    stmt = stmt.where(*where_clause)
+        stmt = stmt.where(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
 
     return db_session.scalars(stmt).unique().all()
 
@@ -148,7 +152,10 @@ def _get_accepted_user_where_clause(
     is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
 
     where_clause: list[ColumnElement[bool]] = [
-        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN))
+        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+        # Exclude system users (anonymous user, no-auth placeholder)
+        email_col != ANONYMOUS_USER_EMAIL,
+        email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
     ]
 
     if not include_external:
@@ -327,6 +334,15 @@ def delete_user_from_db(
     db_session.query(SamlAccount).filter(
         SamlAccount.user_id == user_to_delete.id
     ).delete()
+    # Null out ownership on document sets and personas so they're
+    # preserved for other users instead of being cascade-deleted
+    db_session.query(DocumentSet).filter(
+        DocumentSet.user_id == user_to_delete.id
+    ).update({DocumentSet.user_id: None})
+    db_session.query(Persona).filter(Persona.user_id == user_to_delete.id).update(
+        {Persona.user_id: None}
+    )
+
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.user_id == user_to_delete.id
     ).delete()

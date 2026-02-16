@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Permissions-Policy" content="clipboard-write=(self)" />
+    <title>Onyx Panel</title>
+    <link rel="stylesheet" href="../styles/shared.css" />
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #f5f5f5;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        transition: opacity 0.5s ease-in-out;
+      }
+
+      #logo {
+        width: 100px;
+        height: 100px;
+        background-image: url("/public/logo.png");
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+
+        50% {
+          transform: scale(1.1);
+        }
+
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      #loading-text {
+        color: #0a0a0a;
+        margin-top: 20px;
+        font-size: 1.125rem;
+        font-weight: 600;
+        text-align: center;
+      }
+
+      iframe {
+        border: none;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        opacity: 0;
+        transition: opacity 0.5s ease-in-out;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="loading-screen">
+      <div id="logo"></div>
+      <div id="loading-text">Loading Onyx...</div>
+    </div>
+    <iframe
+      id="onyx-panel-iframe"
+      allow="clipboard-read; clipboard-write"
+    ></iframe>
+    <script src="../utils/error-modal.js" type="module"></script>
+    <script src="panel.js" type="module"></script>
+  </body>
+</html>

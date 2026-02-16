@@ -10,8 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 from onyx.db.models import IndexModelStatus
-from onyx.context.search.enums import RecencyBiasSetting
-from onyx.context.search.enums import SearchType
+from onyx.context.search.enums import RecencyBiasSetting, SearchType
 
 # revision identifiers, used by Alembic.
 revision = "776b3bbe9092"

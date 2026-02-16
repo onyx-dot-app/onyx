@@ -206,6 +206,7 @@ class TestConnectorMappingIntegrity:
             DocumentSource.REQUESTTRACKER,  # Not yet implemented or special case
             DocumentSource.NOT_APPLICABLE,  # Special placeholder, no connector needed
             DocumentSource.USER_FILE,  # Special placeholder, no connector needed
+            DocumentSource.CRAFT_FILE,  # Direct S3 upload via API, no connector needed
             # Add other legitimately unmapped sources here if they exist
         }
 
@@ -247,11 +248,13 @@ class TestInstantiateConnectorIntegration:
 
     def test_instantiate_connector_loads_class_lazily(self) -> None:
         """Test that instantiate_connector triggers lazy loading."""
+        from onyx.utils.sensitive import make_mock_sensitive_value
+
         # Mock the database session and credential
         mock_session = MagicMock()
         mock_credential = MagicMock()
         mock_credential.id = 123
-        mock_credential.credential_json = {"test": "data"}
+        mock_credential.credential_json = make_mock_sensitive_value({"test": "data"})
 
         # This should trigger lazy loading but will fail on actual instantiation
         # due to missing real configuration - that's expected

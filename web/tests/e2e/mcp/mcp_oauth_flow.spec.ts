@@ -1,6 +1,6 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import type { Page, Browser, Locator } from "@playwright/test";
-import { loginAs, loginWithCredentials } from "../utils/auth";
+import { loginAs, apiLogin } from "../utils/auth";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 import { startMcpOauthServer, McpServerProcess } from "../utils/mcpServer";
 import { TEST_ADMIN_CREDENTIALS } from "../constants";
@@ -55,22 +55,22 @@ type FlowArtifacts = {
 };
 
 const DEFAULT_USERNAME_SELECTORS = [
+  'input[name="identifier"]',
+  "#identifier-input",
   'input[name="username"]',
   "#okta-signin-username",
   "#idp-discovery-username",
   'input[id="idp-discovery-username"]',
   'input[name="email"]',
   'input[type="email"]',
-  'input[name="identifier"]',
-  "#identifier-input",
   "#username",
   'input[name="user"]',
 ];
 
 const DEFAULT_PASSWORD_SELECTORS = [
+  'input[name="credentials.passcode"]',
   'input[name="password"]',
   "#okta-signin-password",
-  'input[name="credentials.passcode"]',
   'input[type="password"]',
   "#password",
 ];
@@ -272,7 +272,7 @@ async function waitForAnySelector(
         continue;
       }
     }
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(50);
   }
   return false;
 }
@@ -344,7 +344,7 @@ async function performIdpLogin(page: Page): Promise<void> {
   if (usernameFilled) {
     logOauthEvent(page, "Filled username");
     await clickFirstVisible(page, nextSelectors, { optional: true });
-    await page.waitForTimeout(500);
+    await waitForAnySelector(page, passwordSelectors, { timeout: 2000 });
   }
 
   const submitPasswordAttempt = async (attemptLabel: string) => {
@@ -387,7 +387,7 @@ async function performIdpLogin(page: Page): Promise<void> {
     await page
       .waitForLoadState("domcontentloaded", { timeout: 15000 })
       .catch(() => {});
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(300);
     return true;
   };
 
@@ -410,7 +410,7 @@ async function performIdpLogin(page: Page): Promise<void> {
 
   const MAX_PASSWORD_RETRIES = 3;
   for (let retry = 1; retry <= MAX_PASSWORD_RETRIES; retry++) {
-    await page.waitForTimeout(750);
+    await page.waitForTimeout(250);
     if (!isOnIdpHost(page.url())) {
       break;
     }
@@ -427,7 +427,7 @@ async function performIdpLogin(page: Page): Promise<void> {
   await clickFirstVisible(page, consentSelectors, { optional: true });
   logOauthEvent(page, "Handled consent prompt if present");
   await page
-    .waitForLoadState("networkidle", { timeout: 15000 })
+    .waitForLoadState("networkidle", { timeout: 10000 })
     .catch(() => {});
 }
 
@@ -815,7 +815,7 @@ async function waitForServerRow(
     .catch(() => {});
 
   const locator = getServerRowLocator(page, serverName);
-  const pollInterval = 250;
+  const pollInterval = 100;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -1056,7 +1056,7 @@ test.describe("MCP OAuth flows", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
     try {
       const existingServers = await adminClient.listMcpServers();
       for (const server of existingServers) {
@@ -1128,7 +1128,7 @@ test.describe("MCP OAuth flows", () => {
       storageState: "admin_auth.json",
     });
     const adminPage = await adminContext.newPage();
-    const adminClient = new OnyxApiClient(adminPage);
+    const adminClient = new OnyxApiClient(adminPage.request);
 
     if (adminArtifacts?.assistantId) {
       await adminClient.deleteAssistant(adminArtifacts.assistantId);
@@ -1180,7 +1180,7 @@ test.describe("MCP OAuth flows", () => {
       { email: TEST_ADMIN_CREDENTIALS.email, role: "admin" },
       "AdminFlow primary login"
     );
-    const adminApiClient = new OnyxApiClient(page);
+    const adminApiClient = new OnyxApiClient(page.request);
     logStep("Logged in as admin");
 
     const serverName = `PW MCP Admin ${Date.now()}`;
@@ -1192,7 +1192,7 @@ test.describe("MCP OAuth flows", () => {
 
     // Click "Add MCP Server" button to open modal
     await page.getByRole("button", { name: /Add MCP Server/i }).click();
-    await page.waitForTimeout(500); // Wait for modal to appear
+    await expect(page.locator("input#name")).toBeVisible({ timeout: 10000 });
     logStep("Opened Add MCP Server modal");
 
     // Fill basic server info in AddMCPServerModal
@@ -1205,11 +1205,10 @@ test.describe("MCP OAuth flows", () => {
 
     // Submit the modal to create server
     await page.getByRole("button", { name: "Add Server" }).click();
-    await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
-    logStep("Created MCP server, auth modal should open");
-
-    // MCPAuthenticationModal should now be open - configure OAuth
-    await page.waitForTimeout(500); // Ensure modal is fully rendered
+    await expect(page.getByTestId("mcp-auth-method-select")).toBeVisible({
+      timeout: 10000,
+    });
+    logStep("Created MCP server, auth modal opened");
 
     // Select OAuth as authentication method
     const authMethodSelect = page.getByTestId("mcp-auth-method-select");
@@ -1264,19 +1263,13 @@ test.describe("MCP OAuth flows", () => {
       }
     }
 
-    // Wait for tools to be fetched automatically
-    await page.waitForTimeout(3000);
-    logStep("Waited for tools to auto-fetch");
-
-    // Verify server card is visible with tools
+    // Verify server card is visible with tools and wait for tool toggle
     await expect(
       page.getByText(serverName, { exact: false }).first()
     ).toBeVisible({ timeout: 20000 });
-    logStep("Verified server card is visible");
-
-    // Tools list automatically expands after fetch - wait for tool toggle to appear
     const adminToolToggles = page.getByLabel(`tool-toggle-${TOOL_NAMES.admin}`);
-    await expect(adminToolToggles.first()).toBeVisible({ timeout: 10000 });
+    await expect(adminToolToggles.first()).toBeVisible({ timeout: 20000 });
+    logStep("Verified server card and tool toggles are visible");
 
     // Enable all matching tools (in case there are multiple on the page)
     const toggleCount = await adminToolToggles.count();
@@ -1287,7 +1280,9 @@ test.describe("MCP OAuth flows", () => {
       const isEnabled = await toggle.getAttribute("data-state");
       if (isEnabled !== "checked") {
         await toggle.click();
-        await page.waitForTimeout(300);
+        await expect(toggle).toHaveAttribute("data-state", "checked", {
+          timeout: 5000,
+        });
         logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.admin}`);
       }
     }
@@ -1295,22 +1290,22 @@ test.describe("MCP OAuth flows", () => {
     logStep("Tools auto-fetched and enabled via UI");
 
     const assistantEditorUrl =
-      "http://localhost:3000/chat/agents/create?admin=true";
+      "http://localhost:3000/app/agents/create?admin=true";
     let assistantPageLoaded = false;
     for (let attempt = 0; attempt < 2 && !assistantPageLoaded; attempt++) {
       await page.goto(assistantEditorUrl);
       try {
-        await page.waitForURL("**/chat/agents/create**", {
+        await page.waitForURL("**/app/agents/create**", {
           timeout: 15000,
         });
         assistantPageLoaded = true;
       } catch (error) {
         const currentUrl = page.url();
-        if (currentUrl.includes("/chat/agents/create")) {
+        if (currentUrl.includes("/app/agents/create")) {
           assistantPageLoaded = true;
           break;
         }
-        if (currentUrl.includes("/chat?from=login")) {
+        if (currentUrl.includes("/app?from=login")) {
           await loginAs(page, "admin");
           await verifySessionUser(
             page,
@@ -1321,13 +1316,13 @@ test.describe("MCP OAuth flows", () => {
         }
         await logPageStateWithTag(
           page,
-          "Timed out waiting for /chat/agents/create"
+          "Timed out waiting for /app/agents/create"
         );
         throw error;
       }
     }
     if (!assistantPageLoaded) {
-      throw new Error("Unable to navigate to /chat/agents/create");
+      throw new Error("Unable to navigate to /app/agents/create");
     }
     logStep("Assistant editor loaded");
 
@@ -1346,7 +1341,7 @@ test.describe("MCP OAuth flows", () => {
       (url) => {
         const href = typeof url === "string" ? url : url.toString();
         return (
-          /\/chat\?assistantId=\d+/.test(href) ||
+          /\/app\?assistantId=\d+/.test(href) ||
           href.includes("/admin/assistants")
         );
       },
@@ -1354,7 +1349,7 @@ test.describe("MCP OAuth flows", () => {
     );
 
     let assistantId: number | null = null;
-    if (/\/chat\?assistantId=\d+/.test(page.url())) {
+    if (/\/app\?assistantId=\d+/.test(page.url())) {
       const chatUrl = new URL(page.url());
       const assistantIdParam = chatUrl.searchParams.get("assistantId");
       if (!assistantIdParam) {
@@ -1370,8 +1365,8 @@ test.describe("MCP OAuth flows", () => {
         assistantName
       );
       assistantId = assistantRecord.id;
-      await page.goto(`/chat?assistantId=${assistantId}`);
-      await page.waitForURL(/\/chat\?assistantId=\d+/, { timeout: 20000 });
+      await page.goto(`/app?assistantId=${assistantId}`);
+      await page.waitForURL(/\/app\?assistantId=\d+/, { timeout: 20000 });
     }
     if (assistantId === null) {
       throw new Error("Assistant ID could not be determined");
@@ -1390,7 +1385,7 @@ test.describe("MCP OAuth flows", () => {
     await reauthenticateFromChat(
       page,
       serverName,
-      `/chat?assistantId=${assistantId}`
+      `/app?assistantId=${assistantId}`
     );
     await ensureServerVisibleInActions(page, serverName);
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
@@ -1437,7 +1432,7 @@ test.describe("MCP OAuth flows", () => {
 
     await page.context().clearCookies();
     logStep("Cleared cookies");
-    await loginWithCredentials(
+    await apiLogin(
       page,
       curatorCredentials!.email,
       curatorCredentials!.password
@@ -1448,7 +1443,7 @@ test.describe("MCP OAuth flows", () => {
       "CuratorFlow primary login"
     );
     logStep("Logged in as curator");
-    const curatorApiClient = new OnyxApiClient(page);
+    const curatorApiClient = new OnyxApiClient(page.request);
 
     const serverName = `PW MCP Curator ${Date.now()}`;
     const assistantName = `PW Curator Assistant ${Date.now()}`;
@@ -1472,7 +1467,7 @@ test.describe("MCP OAuth flows", () => {
 
       // Click "Add MCP Server" button to open modal
       await page.getByRole("button", { name: /Add MCP Server/i }).click();
-      await page.waitForTimeout(500); // Wait for modal to appear
+      await expect(page.locator("input#name")).toBeVisible({ timeout: 10000 });
       logStep("Opened Add MCP Server modal");
 
       // Fill basic server info in AddMCPServerModal
@@ -1485,11 +1480,10 @@ test.describe("MCP OAuth flows", () => {
 
       // Submit the modal to create server
       await page.getByRole("button", { name: "Add Server" }).click();
-      await page.waitForTimeout(1000); // Wait for modal to close and auth modal to open
-      logStep("Created MCP server, auth modal should open");
-
-      // MCPAuthenticationModal should now be open - configure OAuth
-      await page.waitForTimeout(500); // Ensure modal is fully rendered
+      await expect(page.getByTestId("mcp-auth-method-select")).toBeVisible({
+        timeout: 10000,
+      });
+      logStep("Created MCP server, auth modal opened");
 
       // Select OAuth as authentication method
       const authMethodSelect = page.getByTestId("mcp-auth-method-select");
@@ -1548,21 +1542,15 @@ test.describe("MCP OAuth flows", () => {
         }
       }
 
-      // Wait for tools to be fetched automatically
-      await page.waitForTimeout(3000);
-      logStep("Waited for tools to auto-fetch");
-
-      // Verify server card is visible with tools
+      // Verify server card is visible with tools and wait for tool toggle
       await expect(
         page.getByText(serverName, { exact: false }).first()
       ).toBeVisible({ timeout: 20000 });
-      logStep("Verified server card is visible");
-
-      // Tools list automatically expands after fetch - wait for tool toggle to appear
       const curatorToolToggles = page.getByLabel(
         `tool-toggle-${TOOL_NAMES.curator}`
       );
-      await expect(curatorToolToggles.first()).toBeVisible({ timeout: 10000 });
+      await expect(curatorToolToggles.first()).toBeVisible({ timeout: 20000 });
+      logStep("Verified server card and tool toggles are visible");
 
       // Enable all matching tools (in case there are multiple on the page)
       const toggleCount = await curatorToolToggles.count();
@@ -1573,15 +1561,17 @@ test.describe("MCP OAuth flows", () => {
         const isEnabled = await toggle.getAttribute("data-state");
         if (isEnabled !== "checked") {
           await toggle.click();
-          await page.waitForTimeout(300);
+          await expect(toggle).toHaveAttribute("data-state", "checked", {
+            timeout: 5000,
+          });
           logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.curator}`);
         }
       }
 
       logStep("Tools auto-fetched and enabled via UI");
 
-      await page.goto("/chat/agents/create?admin=true");
-      await page.waitForURL("**/chat/agents/create**", { timeout: 15000 });
+      await page.goto("/app/agents/create?admin=true");
+      await page.waitForURL("**/app/agents/create**", { timeout: 15000 });
       logStep("Assistant editor loaded (curator)");
 
       await page.locator('input[name="name"]').fill(assistantName);
@@ -1599,7 +1589,7 @@ test.describe("MCP OAuth flows", () => {
         (url) => {
           const href = typeof url === "string" ? url : url.toString();
           return (
-            /\/chat\?assistantId=\d+/.test(href) ||
+            /\/app\?assistantId=\d+/.test(href) ||
             href.includes("/admin/assistants")
           );
         },
@@ -1607,7 +1597,7 @@ test.describe("MCP OAuth flows", () => {
       );
 
       let assistantId: number | null = null;
-      if (/\/chat\?assistantId=\d+/.test(page.url())) {
+      if (/\/app\?assistantId=\d+/.test(page.url())) {
         const chatUrl = new URL(page.url());
         const assistantIdParam = chatUrl.searchParams.get("assistantId");
         if (!assistantIdParam) {
@@ -1623,10 +1613,8 @@ test.describe("MCP OAuth flows", () => {
           assistantName
         );
         assistantId = assistantRecord.id;
-        await page.goto(
-          `http://localhost:3000/chat?assistantId=${assistantId}`
-        );
-        await page.waitForURL(/\/chat\?assistantId=\d+/, { timeout: 20000 });
+        await page.goto(`http://localhost:3000/app?assistantId=${assistantId}`);
+        await page.waitForURL(/\/app\?assistantId=\d+/, { timeout: 20000 });
       }
       if (assistantId === null) {
         throw new Error("Assistant ID could not be determined");
@@ -1645,7 +1633,7 @@ test.describe("MCP OAuth flows", () => {
       await reauthenticateFromChat(
         page,
         serverName,
-        `/chat?assistantId=${assistantId}`
+        `/app?assistantId=${assistantId}`
       );
       await ensureServerVisibleInActions(page, serverName);
       await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.curator);
@@ -1666,7 +1654,7 @@ test.describe("MCP OAuth flows", () => {
         curatorTwoPage,
         "CuratorFlow secondary pre-login logout"
       );
-      await loginWithCredentials(
+      await apiLogin(
         curatorTwoPage,
         curatorTwoCredentials!.email,
         curatorTwoCredentials!.password
@@ -1720,7 +1708,7 @@ test.describe("MCP OAuth flows", () => {
     const serverName = adminArtifacts!.serverName;
     const toolName = adminArtifacts!.toolName;
 
-    await page.goto(`/chat?assistantId=${assistantId}`, {
+    await page.goto(`/app?assistantId=${assistantId}`, {
       waitUntil: "load",
     });
     await ensureServerVisibleInActions(page, serverName);
@@ -1748,7 +1736,7 @@ test.describe("MCP OAuth flows", () => {
     await serverLineItem.click();
     await navPromise;
     await completeOauthFlow(page, {
-      expectReturnPathContains: `/chat?assistantId=${assistantId}`,
+      expectReturnPathContains: `/app?assistantId=${assistantId}`,
     });
     logStep("Completed user OAuth reauthentication");
 

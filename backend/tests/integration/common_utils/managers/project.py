@@ -31,7 +31,7 @@ class ProjectManager:
     ) -> List[UserProjectSnapshot]:
         """Get all projects for a user via API."""
         response = requests.get(
-            f"{API_SERVER_URL}/user/projects/",
+            f"{API_SERVER_URL}/user/projects",
             headers=user_performing_action.headers or GENERAL_HEADERS,
         )
         response.raise_for_status()
@@ -56,7 +56,7 @@ class ProjectManager:
     ) -> bool:
         """Verify that a project has been deleted by ensuring it's not in list."""
         response = requests.get(
-            f"{API_SERVER_URL}/user/projects/",
+            f"{API_SERVER_URL}/user/projects",
             headers=user_performing_action.headers or GENERAL_HEADERS,
         )
         response.raise_for_status()

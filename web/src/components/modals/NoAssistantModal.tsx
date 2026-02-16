@@ -3,7 +3,7 @@
 import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { SvgUser } from "@opal/icons";
 
 export default function NoAssistantModal() {
@@ -11,7 +11,7 @@ export default function NoAssistantModal() {
 
   return (
     <Modal open>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header icon={SvgUser} title="No Assistant Available" />
         <Modal.Body>
           <Text as="p">

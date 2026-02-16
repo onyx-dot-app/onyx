@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
 
+from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
+from ee.onyx.server.billing.api import router as billing_router
 from ee.onyx.server.documents.cc_pair import router as ee_document_cc_pair_router
 from ee.onyx.server.enterprise_settings.api import (
     admin_router as enterprise_settings_admin_router,
@@ -16,16 +18,17 @@ from ee.onyx.server.enterprise_settings.api import (
 from ee.onyx.server.evals.api import router as evals_router
 from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
+from ee.onyx.server.middleware.license_enforcement import (
+    add_license_enforcement_middleware,
+)
 from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
 from ee.onyx.server.oauth.api import router as ee_oauth_router
-from ee.onyx.server.query_and_chat.chat_backend import (
-    router as chat_router,
-)
 from ee.onyx.server.query_and_chat.query_backend import (
     basic_router as ee_query_router,
 )
+from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.seeding import seed_db
@@ -84,6 +87,11 @@ def get_application() -> FastAPI:
 
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
+    else:
+        # License enforcement middleware for self-hosted deployments only
+        # Checks LICENSE_ENFORCEMENT_ENABLED at runtime (can be toggled without restart)
+        # MT deployments use control plane gating via is_tenant_gated() instead
+        add_license_enforcement_middleware(application, logger)
 
     if AUTH_TYPE == AuthType.CLOUD:
         # For Google OAuth, refresh tokens are requested by:
@@ -124,7 +132,7 @@ def get_application() -> FastAPI:
     # EE only backend APIs
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, ee_query_router)
-    include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, search_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)
     include_router_with_global_prefix_prepended(application, ee_document_cc_pair_router)
@@ -142,6 +150,13 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, usage_export_router)
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
+
+    # Unified billing API - available when license system is enabled
+    # Works for both self-hosted and cloud deployments
+    # TODO(ENG-3533): Once frontend migrates to /admin/billing/*, this becomes the
+    # primary billing API and /tenants/* billing endpoints can be removed
+    if LICENSE_ENFORCEMENT_ENABLED:
+        include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:
         # Tenant management

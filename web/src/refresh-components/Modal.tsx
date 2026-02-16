@@ -5,9 +5,8 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
-import Truncated from "@/refresh-components/texts/Truncated";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
 
@@ -34,7 +33,7 @@ const ModalRoot = DialogPrimitive.Root;
  *
  * @example
  * ```tsx
- * <Modal.Overlay className="bg-custom-overlay" />
+ * <Modal.Overlay />
  * ```
  */
 const ModalOverlay = React.forwardRef<
@@ -54,13 +53,15 @@ const ModalOverlay = React.forwardRef<
 ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 /**
- * Modal Context for managing close button ref, warning state, and size variant
+ * Modal Context for managing close button ref, warning state, and height variant
  */
 interface ModalContextValue {
   closeButtonRef: React.RefObject<HTMLDivElement | null>;
   hasAttemptedClose: boolean;
   setHasAttemptedClose: (value: boolean) => void;
-  sizeVariant: "large" | "medium" | "small" | "tall" | "mini";
+  height: keyof typeof heightClasses;
+  hasDescription: boolean;
+  setHasDescription: (value: boolean) => void;
 }
 
 const ModalContext = React.createContext<ModalContextValue | null>(null);
@@ -73,49 +74,42 @@ const useModalContext = () => {
   return context;
 };
 
-/**
- * Size class names mapping for modal variants
- */
-const sizeClassNames = {
-  large: ["w-[80dvw]", "h-[80dvh]"],
-  medium: ["w-[60rem]", "h-fit"],
-  small: ["w-[32rem]", "max-h-[30rem]"],
-  tall: ["w-[32rem]", "max-h-[calc(100dvh-4rem)]"],
-  mini: ["w-[32rem]", "h-fit"],
-} as const;
+const widthClasses = {
+  lg: "w-[80dvw]",
+  md: "w-[60rem]",
+  "md-sm": "w-[50rem]",
+  sm: "w-[32rem]",
+};
+
+const heightClasses = {
+  fit: "h-fit",
+  sm: "max-h-[30rem] overflow-y-auto",
+  lg: "max-h-[calc(100dvh-4rem)] overflow-y-auto",
+  full: "h-[80dvh] overflow-y-auto",
+};
 
 /**
  * Modal Content Component
  *
- * Main modal container with default styling. Size and other styles controlled via className or size prop.
+ * Main modal container with default styling.
  *
  * @example
  * ```tsx
- * // Using size variants
- * <Modal.Content large>
- *   {/* Main modal: w-[80dvw] h-[80dvh] *\/}
+ * // Using width and height props
+ * <Modal.Content width="lg" height="full">
+ *   {/* Large modal: w-[80dvw] h-[80dvh] *\/}
  * </Modal.Content>
  *
- * <Modal.Content medium>
+ * <Modal.Content width="md" height="fit">
  *   {/* Medium modal: w-[60rem] h-fit *\/}
  * </Modal.Content>
  *
- * <Modal.Content small>
- *   {/* Small modal: w-[32rem] h-[30rem] *\/}
+ * <Modal.Content width="sm" height="sm">
+ *   {/* Small modal: w-[32rem] max-h-[30rem] *\/}
  * </Modal.Content>
  *
- * <Modal.Content tall>
- *   {/* Tall modal: w-[32rem] *\/}
- * </Modal.Content>
- *
- * <Modal.Content mini>
- *   {/* Mini modal: w-[32rem] h-fit *\/}
- * </Modal.Content>
- *
- * // Custom size with className
- * // (Highly discouraged! Always try to default to predefined sizings, please.)
- * <Modal.Content className="w-[48rem]">
- *   {/* Custom sized modal *\/}
+ * <Modal.Content width="sm" height="lg">
+ *   {/* Tall modal: w-[32rem] max-h-[calc(100dvh-4rem)] *\/}
  * </Modal.Content>
  * ```
  */
@@ -123,13 +117,14 @@ interface ModalContentProps
   extends WithoutStyles<
     React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
   > {
-  large?: boolean;
-  medium?: boolean;
-  small?: boolean;
-  tall?: boolean;
-  mini?: boolean;
+  width?: keyof typeof widthClasses;
+  height?: keyof typeof heightClasses;
   preventAccidentalClose?: boolean;
   skipOverlay?: boolean;
+  background?: "default" | "gray";
+  /** Content rendered below the modal card, floating with gap-4 (1rem) separation.
+   *  Stays inside DialogPrimitive.Content for proper focus management. */
+  bottomSlot?: React.ReactNode;
 }
 const ModalContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
@@ -138,30 +133,19 @@ const ModalContent = React.forwardRef<
   (
     {
       children,
-      large,
-      medium,
-      small,
-      tall,
-      mini,
+      width = "md",
+      height = "fit",
       preventAccidentalClose = true,
       skipOverlay = false,
+      background = "default",
+      bottomSlot,
       ...props
     },
     ref
   ) => {
-    const variant = large
-      ? "large"
-      : medium
-        ? "medium"
-        : small
-          ? "small"
-          : tall
-            ? "tall"
-            : mini
-              ? "mini"
-              : "medium";
     const closeButtonRef = React.useRef<HTMLDivElement>(null);
     const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
+    const [hasDescription, setHasDescription] = React.useState(false);
     const hasUserTypedRef = React.useRef(false);
 
     // Reset state when modal closes or opens
@@ -269,58 +253,105 @@ const ModalContent = React.forwardRef<
       [preventAccidentalClose, hasModifiedInputs, hasAttemptedClose]
     );
 
+    const handleRef = (node: HTMLDivElement | null) => {
+      // Handle forwarded ref
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+      // Handle content ref with event listener
+      contentRef(node);
+    };
+
+    const animationClasses = cn(
+      "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+      "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
+      "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
+      "duration-200"
+    );
+
+    const dialogEventHandlers = {
+      onOpenAutoFocus: (e: Event) => {
+        resetState();
+        props.onOpenAutoFocus?.(e);
+      },
+      onCloseAutoFocus: (e: Event) => {
+        resetState();
+        props.onCloseAutoFocus?.(e);
+      },
+      onEscapeKeyDown: handleInteractOutside,
+      onPointerDownOutside: handleInteractOutside,
+      ...(!hasDescription && { "aria-describedby": undefined }),
+      ...props,
+    };
+
+    const cardClasses = cn(
+      "overflow-hidden",
+      background === "gray" ? "bg-background-tint-01" : "bg-background-tint-00",
+      "border rounded-16 shadow-2xl",
+      "flex flex-col",
+      heightClasses[height]
+    );
+
     return (
       <ModalContext.Provider
         value={{
           closeButtonRef,
           hasAttemptedClose,
           setHasAttemptedClose,
-          sizeVariant: variant,
+          height,
+          hasDescription,
+          setHasDescription,
         }}
       >
         <DialogPrimitive.Portal>
           {!skipOverlay && <ModalOverlay />}
-          <DialogPrimitive.Content
-            ref={(node) => {
-              // Handle forwarded ref
-              if (typeof ref === "function") {
-                ref(node);
-              } else if (ref) {
-                ref.current = node;
-              }
-              // Handle content ref with event listener
-              contentRef(node);
-            }}
-            className={cn(
-              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden",
-              "z-modal",
-              "bg-background-tint-00 border rounded-16 shadow-2xl",
-              "flex flex-col",
-              // Never exceed viewport on small screens
-              "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
-              "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-              "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-              "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
-              "duration-200",
-              // Size variants
-              sizeClassNames[variant]
-            )}
-            onOpenAutoFocus={(e) => {
-              // Reset typing detection when modal opens
-              resetState();
-              props.onOpenAutoFocus?.(e);
-            }}
-            onCloseAutoFocus={(e) => {
-              // Reset typing detection when modal closes
-              resetState();
-              props.onCloseAutoFocus?.(e);
-            }}
-            onEscapeKeyDown={handleInteractOutside}
-            onPointerDownOutside={handleInteractOutside}
-            {...props}
-          >
-            {children}
-          </DialogPrimitive.Content>
+          {bottomSlot ? (
+            // With bottomSlot: use asChild to wrap card + slot in a flex column
+            <DialogPrimitive.Content
+              asChild
+              ref={handleRef}
+              {...dialogEventHandlers}
+            >
+              <div
+                className={cn(
+                  "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+                  "z-modal",
+                  "flex flex-col gap-4 items-center",
+                  "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
+                  animationClasses,
+                  widthClasses[width]
+                )}
+              >
+                <div className={cn(cardClasses, "w-full min-h-0")}>
+                  {children}
+                </div>
+                <div className="w-full flex-shrink-0">{bottomSlot}</div>
+              </div>
+            </DialogPrimitive.Content>
+          ) : (
+            // Without bottomSlot: original single-element rendering
+            <DialogPrimitive.Content
+              ref={handleRef}
+              className={cn(
+                "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden",
+                "z-modal",
+                background === "gray"
+                  ? "bg-background-tint-01"
+                  : "bg-background-tint-00",
+                "border rounded-16 shadow-2xl",
+                "flex flex-col",
+                "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
+                animationClasses,
+                widthClasses[width],
+                heightClasses[height]
+              )}
+              {...dialogEventHandlers}
+            >
+              {children}
+            </DialogPrimitive.Content>
+          )}
         </DialogPrimitive.Portal>
       </ModalContext.Provider>
     );
@@ -349,58 +380,66 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
 interface ModalHeaderProps extends WithoutStyles<SectionProps> {
   icon: React.FunctionComponent<IconProps>;
   title: string;
-  titleClassName?: string;
   description?: string;
   onClose?: () => void;
 }
 const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
-  (
-    {
-      icon: Icon,
-      title,
-      titleClassName,
-      description,
-      onClose,
-      children,
-      ...props
-    },
-    ref
-  ) => {
-    const { closeButtonRef } = useModalContext();
+  ({ icon: Icon, title, description, onClose, children, ...props }, ref) => {
+    const { closeButtonRef, setHasDescription } = useModalContext();
+
+    // useLayoutEffect ensures aria-describedby is set before paint,
+    // so screen readers announce the description when the dialog opens
+    React.useLayoutEffect(() => {
+      setHasDescription(!!description);
+    }, [description, setHasDescription]);
 
     return (
-      <Section ref={ref} padding={1} alignItems="start" {...props}>
-        <Section gap={0.25} alignItems="start">
+      <Section ref={ref} padding={1} alignItems="start" height="fit" {...props}>
+        <Section gap={0.5}>
           <Section
             gap={0}
             padding={0}
             flexDirection="row"
             justifyContent="between"
           >
-            <Icon className={"w-[1.5rem] h-[1.5rem] stroke-text-04"} />
+            {/*
+              The `h-[1.5rem]` and `w-[1.5rem]` were added as backups here.
+              However, prop-resolution technically resolves to choosing classNames over size props, so technically the `size={24}` is the backup.
+              We specify both to be safe.
+
+              # Note
+              1.5rem === 24px
+            */}
+            <Icon className="stroke-text-04 h-[1.5rem] w-[1.5rem]" size={24} />
             {onClose && (
               <div
                 tabIndex={-1}
                 ref={closeButtonRef as React.RefObject<HTMLDivElement>}
               >
                 <DialogPrimitive.Close asChild>
-                  <IconButton icon={SvgX} internal onClick={onClose} />
+                  <Button
+                    icon={SvgX}
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={onClose}
+                  />
                 </DialogPrimitive.Close>
               </div>
             )}
           </Section>
-          <DialogPrimitive.Title asChild>
-            <Truncated headingH3 as="span" className={titleClassName}>
-              {title}
-            </Truncated>
-          </DialogPrimitive.Title>
-          {description && (
-            <DialogPrimitive.Description asChild>
-              <Text secondaryBody text03 as="span">
-                {description}
-              </Text>
-            </DialogPrimitive.Description>
-          )}
+
+          <Section alignItems="start" gap={0}>
+            <DialogPrimitive.Title asChild>
+              <Text headingH3>{title}</Text>
+            </DialogPrimitive.Title>
+            {description && (
+              <DialogPrimitive.Description asChild>
+                <Text secondaryBody text03>
+                  {description}
+                </Text>
+              </DialogPrimitive.Description>
+            )}
+          </Section>
         </Section>
         {children}
       </Section>
@@ -412,17 +451,12 @@ ModalHeader.displayName = "ModalHeader";
 /**
  * Modal Body Component
  *
- * Content area for the main modal content. All styling via className.
+ * Content area for the main modal content.
  *
  * @example
  * ```tsx
- * <Modal.Body className="p-4">
+ * <Modal.Body>
  *   {/* Content *\/}
- * </Modal.Body>
- *
- * // With custom background and overflow
- * <Modal.Body className="bg-background-tint-02 flex-1 overflow-auto p-6">
- *   {/* Scrollable content *\/}
  * </Modal.Body>
  * ```
  */
@@ -431,20 +465,12 @@ interface ModalBodyProps extends WithoutStyles<SectionProps> {
 }
 const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
   ({ twoTone = true, children, ...props }, ref) => {
-    const { sizeVariant } = useModalContext();
-
-    // Apply overflow-auto for fixed height variants (large, small, tall)
-    const hasFixedHeight =
-      sizeVariant === "large" ||
-      sizeVariant === "small" ||
-      sizeVariant === "tall";
-
     return (
       <div
         ref={ref}
         className={cn(
           twoTone && "bg-background-tint-01",
-          hasFixedHeight && "overflow-auto min-h-0"
+          "h-full min-h-0 overflow-y-auto w-full"
         )}
       >
         <Section padding={1} gap={1} alignItems="start" {...props}>
@@ -459,7 +485,7 @@ ModalBody.displayName = "ModalBody";
 /**
  * Modal Footer Component
  *
- * Footer section for actions/buttons. All styling via className.
+ * Footer section for actions/buttons.
  *
  * @example
  * ```tsx
@@ -481,6 +507,7 @@ const ModalFooter = React.forwardRef<
       justifyContent="end"
       gap={0.5}
       padding={1}
+      height="fit"
       {...props}
     />
   );
@@ -493,3 +520,31 @@ export default Object.assign(ModalRoot, {
   Body: ModalBody,
   Footer: ModalFooter,
 });
+
+// ============================================================================
+// Common Layouts
+// ============================================================================
+
+export interface BasicModalFooterProps {
+  left?: React.ReactNode;
+  cancel?: React.ReactNode;
+  submit?: React.ReactNode;
+}
+
+export function BasicModalFooter({
+  left,
+  cancel,
+  submit,
+}: BasicModalFooterProps) {
+  return (
+    <>
+      {left && <Section alignItems="start">{left}</Section>}
+      {(cancel || submit) && (
+        <Section flexDirection="row" justifyContent="end" gap={0.5}>
+          {cancel}
+          {submit}
+        </Section>
+      )}
+    </>
+  );
+}

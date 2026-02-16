@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.web_search import fetch_active_web_content_provider
@@ -15,10 +16,15 @@ from onyx.server.features.web_search.models import WebSearchToolResponse
 from onyx.server.features.web_search.models import WebSearchWithContentResponse
 from onyx.server.manage.web_search.models import WebContentProviderView
 from onyx.server.manage.web_search.models import WebSearchProviderView
-from onyx.server.utils import PUBLIC_API_TAGS
 from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_HTML_SIZE_BYTES,
+)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
+    DEFAULT_MAX_PDF_SIZE_BYTES,
+)
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     OnyxWebCrawler,
 )
@@ -69,7 +75,7 @@ def _get_active_search_provider(
         has_api_key=bool(provider_model.api_key),
     )
 
-    if not provider_model.api_key:
+    if provider_model.api_key is None:
         raise HTTPException(
             status_code=400,
             detail="Web search provider requires an API key.",
@@ -78,7 +84,7 @@ def _get_active_search_provider(
     try:
         provider: WebSearchProvider = build_search_provider_from_config(
             provider_type=provider_view.provider_type,
-            api_key=provider_model.api_key,
+            api_key=provider_model.api_key.get_value(apply_mask=False),
             config=provider_model.config or {},
         )
     except ValueError as exc:
@@ -97,7 +103,10 @@ def _get_active_content_provider(
         # NOTE: the OnyxWebCrawler is not stored in the content provider table,
         # so we need to return it directly.
 
-        return None, OnyxWebCrawler()
+        return None, OnyxWebCrawler(
+            max_pdf_size_bytes=DEFAULT_MAX_PDF_SIZE_BYTES,
+            max_html_size_bytes=DEFAULT_MAX_HTML_SIZE_BYTES,
+        )
 
     if provider_model.api_key is None:
         # TODO - this is not a great error, in fact, this key should not be nullable.
@@ -108,21 +117,12 @@ def _get_active_content_provider(
 
     try:
         provider_type = WebContentProviderType(provider_model.provider_type)
+        config = provider_model.config or WebContentProviderConfig()
 
-        config = provider_model.config or {}
-        timeout_conf = config.get("timeout_seconds")
-        if timeout_conf is not None:
-            timeout_seconds = int(timeout_conf)
-        else:
-            timeout_seconds = None
-        base_url = config.get("base_url")
         provider: WebContentProvider | None = build_content_provider_from_config(
             provider_type=provider_type,
-            api_key=provider_model.api_key,
-            config=WebContentProviderConfig(
-                timeout_seconds=timeout_seconds,
-                base_url=base_url,
-            ),
+            api_key=provider_model.api_key.get_value(apply_mask=False),
+            config=config,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -138,7 +138,7 @@ def _get_active_content_provider(
         name=provider_model.name,
         provider_type=provider_type,
         is_active=provider_model.is_active,
-        config=provider_model.config or {},
+        config=provider_model.config or WebContentProviderConfig(),
         has_api_key=bool(provider_model.api_key),
     )
 
@@ -220,7 +220,7 @@ def _open_urls(
 @router.post("/search", response_model=WebSearchWithContentResponse)
 def execute_web_search(
     request: WebSearchToolRequest,
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> WebSearchWithContentResponse:
     """
@@ -263,7 +263,7 @@ def execute_web_search(
 @router.post("/search-lite", response_model=WebSearchToolResponse)
 def execute_web_search_lite(
     request: WebSearchToolRequest,
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> WebSearchToolResponse:
     """
@@ -279,7 +279,7 @@ def execute_web_search_lite(
 @router.post("/open-urls", response_model=OpenUrlsToolResponse)
 def execute_open_urls(
     request: OpenUrlsToolRequest,
-    _: User | None = Depends(current_user),
+    _: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> OpenUrlsToolResponse:
     """

@@ -3,7 +3,6 @@ from typing import Any
 
 from redis.lock import Lock as RedisLock
 
-from onyx.background.celery.tasks.kg_processing.utils import extend_lock
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_num_chunks_for_document
@@ -15,6 +14,7 @@ from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
+from onyx.kg.utils.lock_utils import extend_lock
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

@@ -204,6 +204,7 @@ export default function ChangeCredentialsModal({
                 ) : (
                   <>
                     <input
+                      type="password"
                       className="border border-border rounded w-full py-2 px-3 bg-background-emphasis"
                       value={apiKey}
                       onChange={(e: any) => setApiKey(e.target.value)}

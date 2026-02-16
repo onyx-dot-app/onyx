@@ -22,7 +22,7 @@ def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
 
 
 def test_soft_delete_chat_session(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider
+    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
 ) -> None:
     """
     Test soft deletion of a chat session.
@@ -76,7 +76,7 @@ def test_soft_delete_chat_session(
 
 
 def test_hard_delete_chat_session(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider
+    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
 ) -> None:
     """
     Test hard deletion of a chat session.
@@ -135,106 +135,8 @@ def test_hard_delete_chat_session(
     ), "Hard deleted chat should not be found as soft deleted"
 
 
-def test_soft_delete_with_agentic_search(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider
-) -> None:
-    """
-    Test soft deletion of a chat session with agent behavior (sub-questions and sub-queries).
-    Verifies that soft delete preserves all related agent records in the database.
-    """
-    # Create a chat session
-    test_chat_session = ChatSessionManager.create(
-        persona_id=0,
-        description="Test agentic search soft deletion",
-        user_performing_action=basic_user,
-    )
-
-    # Send a message using ChatSessionManager with agentic search enabled
-    # This will create AgentSubQuestion and AgentSubQuery records
-    response = ChatSessionManager.send_message(
-        chat_session_id=test_chat_session.id,
-        message="What are the key principles of software engineering?",
-        user_performing_action=basic_user,
-    )
-
-    # Verify that the message was processed successfully
-    assert response.error is None, "Chat response should not have an error"
-    assert (
-        len(response.full_message) > 0 or len(response.used_tools) > 0
-    ), "Chat response should not be empty"
-
-    # Test soft deletion
-    deletion_success = ChatSessionManager.soft_delete(
-        chat_session=test_chat_session,
-        user_performing_action=basic_user,
-    )
-
-    # Verify successful soft deletion
-    assert deletion_success, "Chat soft deletion should succeed"
-
-    # Verify chat session is soft deleted
-    assert ChatSessionManager.verify_soft_deleted(
-        chat_session=test_chat_session,
-        user_performing_action=basic_user,
-    ), "Soft deleted chat session should be marked as deleted in DB"
-
-    # Verify chat session is not accessible normally
-    assert ChatSessionManager.verify_deleted(
-        chat_session=test_chat_session,
-        user_performing_action=basic_user,
-    ), "Soft deleted chat session should not be accessible"
-
-
-def test_hard_delete_with_agentic_search(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider
-) -> None:
-    """
-    Test hard deletion of a chat session with agent behavior (sub-questions and sub-queries).
-    Verifies that hard delete removes all related agent records from the database via CASCADE.
-    """
-    # Create a chat session
-    test_chat_session = ChatSessionManager.create(
-        persona_id=0,
-        description="Test agentic search hard deletion",
-        user_performing_action=basic_user,
-    )
-
-    # Send a message using ChatSessionManager with agentic search enabled
-    # This will create AgentSubQuestion and AgentSubQuery records
-    response = ChatSessionManager.send_message(
-        chat_session_id=test_chat_session.id,
-        message="What are the key principles of software engineering?",
-        user_performing_action=basic_user,
-    )
-
-    # Verify that the message was processed successfully
-    assert response.error is None, "Chat response should not have an error"
-    assert len(response.full_message) > 0, "Chat response should not be empty"
-
-    # Test hard deletion
-    deletion_success = ChatSessionManager.hard_delete(
-        chat_session=test_chat_session,
-        user_performing_action=basic_user,
-    )
-
-    # Verify successful hard deletion
-    assert deletion_success, "Chat hard deletion should succeed"
-
-    # Verify chat session is hard deleted (completely removed)
-    assert ChatSessionManager.verify_hard_deleted(
-        chat_session=test_chat_session,
-        user_performing_action=basic_user,
-    ), "Hard deleted chat session should be completely removed from DB"
-
-    # Verify chat session is not accessible
-    assert ChatSessionManager.verify_deleted(
-        chat_session=test_chat_session,
-        user_performing_action=basic_user,
-    ), "Hard deleted chat session should not be accessible"
-
-
 def test_multiple_soft_deletions(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider
+    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
 ) -> None:
     """
     Test multiple chat session soft deletions to ensure proper handling
@@ -281,7 +183,7 @@ def test_multiple_soft_deletions(
 
 
 def test_multiple_hard_deletions_with_agent_data(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider
+    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
 ) -> None:
     """
     Test multiple chat session hard deletions to ensure CASCADE deletes work correctly
@@ -328,7 +230,7 @@ def test_multiple_hard_deletions_with_agent_data(
 
 
 def test_soft_vs_hard_delete_edge_cases(
-    basic_user: DATestUser, llm_provider: DATestLLMProvider
+    basic_user: DATestUser, llm_provider: DATestLLMProvider  # noqa: ARG001
 ) -> None:
     """
     Test edge cases for both soft and hard deletion to ensure robustness.

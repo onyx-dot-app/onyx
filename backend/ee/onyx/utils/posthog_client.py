@@ -6,6 +6,7 @@ from posthog import Posthog
 
 from ee.onyx.configs.app_configs import MARKETING_POSTHOG_API_KEY
 from ee.onyx.configs.app_configs import POSTHOG_API_KEY
+from ee.onyx.configs.app_configs import POSTHOG_DEBUG_LOGS_ENABLED
 from ee.onyx.configs.app_configs import POSTHOG_HOST
 from onyx.utils.logger import setup_logger
 
@@ -20,7 +21,7 @@ def posthog_on_error(error: Any, items: Any) -> None:
 posthog = Posthog(
     project_api_key=POSTHOG_API_KEY,
     host=POSTHOG_HOST,
-    debug=True,
+    debug=POSTHOG_DEBUG_LOGS_ENABLED,
     on_error=posthog_on_error,
 )
 
@@ -33,7 +34,7 @@ if MARKETING_POSTHOG_API_KEY:
     marketing_posthog = Posthog(
         project_api_key=MARKETING_POSTHOG_API_KEY,
         host=POSTHOG_HOST,
-        debug=True,
+        debug=POSTHOG_DEBUG_LOGS_ENABLED,
         on_error=posthog_on_error,
     )
 

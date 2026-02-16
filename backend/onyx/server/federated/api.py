@@ -64,17 +64,11 @@ def _get_federated_connector_instance(
 @router.post("")
 def create_federated_connector(
     federated_connector_data: FederatedConnectorRequest,
-    user: User | None = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> FederatedConnectorResponse:
     """Create a new federated connector"""
     tenant_id = get_current_tenant_id()
-
-    if user is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Federated retrieval not supported with AUTH_TYPE=disabled.",
-        )
 
     logger.info(
         f"Creating federated connector: source={federated_connector_data.source}, "
@@ -120,9 +114,14 @@ def get_entities(
         federated_connector = fetch_federated_connector_by_id(id, db_session)
         if not federated_connector:
             raise HTTPException(status_code=404, detail="Federated connector not found")
+        if federated_connector.credentials is None:
+            raise HTTPException(
+                status_code=400, detail="Federated connector has no credentials"
+            )
 
         connector_instance = _get_federated_connector_instance(
-            federated_connector.source, federated_connector.credentials
+            federated_connector.source,
+            federated_connector.credentials.get_value(apply_mask=False),
         )
         entities_spec = connector_instance.configuration_schema()
 
@@ -157,9 +156,14 @@ def get_credentials_schema(
         federated_connector = fetch_federated_connector_by_id(id, db_session)
         if not federated_connector:
             raise HTTPException(status_code=404, detail="Federated connector not found")
+        if federated_connector.credentials is None:
+            raise HTTPException(
+                status_code=400, detail="Federated connector has no credentials"
+            )
 
         connector_instance = _get_federated_connector_instance(
-            federated_connector.source, federated_connector.credentials
+            federated_connector.source,
+            federated_connector.credentials.get_value(apply_mask=False),
         )
         credentials_spec = connector_instance.credentials_schema()
 
@@ -281,6 +285,8 @@ def validate_entities(
         federated_connector = fetch_federated_connector_by_id(id, db_session)
         if not federated_connector:
             raise HTTPException(status_code=404, detail="Federated connector not found")
+        if federated_connector.credentials is None:
+            return Response(status_code=400)
 
         # For HEAD requests, we'll expect entities as query parameters
         # since HEAD requests shouldn't have request bodies
@@ -294,7 +300,8 @@ def validate_entities(
                 return Response(status_code=400)
 
         connector_instance = _get_federated_connector_instance(
-            federated_connector.source, federated_connector.credentials
+            federated_connector.source,
+            federated_connector.credentials.get_value(apply_mask=False),
         )
         is_valid = connector_instance.validate_entities(entities_dict)
 
@@ -324,9 +331,15 @@ def get_authorize_url(
     federated_connector = fetch_federated_connector_by_id(id, db_session)
     if not federated_connector:
         raise HTTPException(status_code=404, detail="Federated connector not found")
+    if federated_connector.credentials is None:
+        raise HTTPException(
+            status_code=400, detail="Federated connector has no credentials"
+        )
 
     # Update credentials to include the correct redirect URI with the connector ID
-    updated_credentials = federated_connector.credentials.copy()
+    updated_credentials = federated_connector.credentials.get_value(
+        apply_mask=False
+    ).copy()
     if "redirect_uri" in updated_credentials and updated_credentials["redirect_uri"]:
         # Replace the {id} placeholder with the actual federated connector ID
         updated_credentials["redirect_uri"] = updated_credentials[
@@ -397,9 +410,14 @@ def handle_oauth_callback_generic(
     )
     if not federated_connector:
         raise HTTPException(status_code=404, detail="Federated connector not found")
+    if federated_connector.credentials is None:
+        raise HTTPException(
+            status_code=400, detail="Federated connector has no credentials"
+        )
 
     connector_instance = _get_federated_connector_instance(
-        federated_connector.source, federated_connector.credentials
+        federated_connector.source,
+        federated_connector.credentials.get_value(apply_mask=False),
     )
     oauth_result = connector_instance.callback(callback_data, get_oauth_callback_uri())
 
@@ -466,9 +484,9 @@ def get_user_oauth_status(
 
         # Generate authorize URL if needed
         authorize_url = None
-        if not oauth_token:
+        if not oauth_token and fc.credentials is not None:
             connector_instance = _get_federated_connector_instance(
-                fc.source, fc.credentials
+                fc.source, fc.credentials.get_value(apply_mask=False)
             )
             base_authorize_url = connector_instance.authorize(get_oauth_callback_uri())
 
@@ -502,6 +520,10 @@ def get_federated_connector_detail(
     federated_connector = fetch_federated_connector_by_id(id, db_session)
     if not federated_connector:
         raise HTTPException(status_code=404, detail="Federated connector not found")
+    if federated_connector.credentials is None:
+        raise HTTPException(
+            status_code=400, detail="Federated connector has no credentials"
+        )
 
     # Get OAuth token information for the current user
     oauth_token = None
@@ -527,7 +549,9 @@ def get_federated_connector_detail(
         id=federated_connector.id,
         source=federated_connector.source,
         name=f"{federated_connector.source.replace('_', ' ').title()}",
-        credentials=FederatedConnectorCredentials(**federated_connector.credentials),
+        credentials=FederatedConnectorCredentials(
+            **federated_connector.credentials.get_value(apply_mask=True)
+        ),
         config=federated_connector.config,
         oauth_token_exists=oauth_token is not None,
         oauth_token_expires_at=oauth_token.expires_at if oauth_token else None,

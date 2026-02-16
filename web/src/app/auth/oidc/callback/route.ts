@@ -7,8 +7,13 @@ export const GET = async (request: NextRequest) => {
   // which adds back a redirect to the main app.
   const url = new URL(buildUrl("/auth/oidc/callback"));
   url.search = request.nextUrl.search;
+  const cookieHeader = request.headers.get("cookie") || "";
+
   // Set 'redirect' to 'manual' to prevent automatic redirection
-  const response = await fetch(url.toString(), { redirect: "manual" });
+  const response = await fetch(url.toString(), {
+    redirect: "manual",
+    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+  });
   const setCookieHeader = response.headers.get("set-cookie");
 
   if (response.status === 401) {

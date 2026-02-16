@@ -64,7 +64,7 @@ export default function ProviderModal({
 
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
-      <Modal.Content tall onKeyDown={handleKeyDown}>
+      <Modal.Content width="sm" height="lg" onKeyDown={handleKeyDown}>
         <Modal.Header
           icon={icon}
           title={title}

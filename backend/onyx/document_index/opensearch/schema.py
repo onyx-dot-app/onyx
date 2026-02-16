@@ -4,24 +4,33 @@ from typing import Any
 from typing import Self
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import field_serializer
+from pydantic import field_validator
+from pydantic import model_serializer
 from pydantic import model_validator
+from pydantic import SerializerFunctionWrapHandler
 
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import EF_CONSTRUCTION
 from onyx.document_index.opensearch.constants import EF_SEARCH
 from onyx.document_index.opensearch.constants import M
+from onyx.document_index.opensearch.string_filtering import (
+    filter_and_validate_document_id,
+)
+from onyx.utils.tenant import get_tenant_id_short_string
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 
 TITLE_FIELD_NAME = "title"
 TITLE_VECTOR_FIELD_NAME = "title_vector"
 CONTENT_FIELD_NAME = "content"
 CONTENT_VECTOR_FIELD_NAME = "content_vector"
-NUM_TOKENS_FIELD_NAME = "num_tokens"
 SOURCE_TYPE_FIELD_NAME = "source_type"
-METADATA_FIELD_NAME = "metadata"
+METADATA_LIST_FIELD_NAME = "metadata_list"
 LAST_UPDATED_FIELD_NAME = "last_updated"
-CREATED_AT_FIELD_NAME = "created_at"
 PUBLIC_FIELD_NAME = "public"
 ACCESS_CONTROL_LIST_FIELD_NAME = "access_control_list"
 HIDDEN_FIELD_NAME = "hidden"
@@ -30,26 +39,57 @@ SEMANTIC_IDENTIFIER_FIELD_NAME = "semantic_identifier"
 IMAGE_FILE_ID_FIELD_NAME = "image_file_id"
 SOURCE_LINKS_FIELD_NAME = "source_links"
 DOCUMENT_SETS_FIELD_NAME = "document_sets"
-PROJECT_IDS_FIELD_NAME = "project_ids"
+USER_PROJECTS_FIELD_NAME = "user_projects"
 DOCUMENT_ID_FIELD_NAME = "document_id"
 CHUNK_INDEX_FIELD_NAME = "chunk_index"
 MAX_CHUNK_SIZE_FIELD_NAME = "max_chunk_size"
 TENANT_ID_FIELD_NAME = "tenant_id"
 BLURB_FIELD_NAME = "blurb"
+DOC_SUMMARY_FIELD_NAME = "doc_summary"
+CHUNK_CONTEXT_FIELD_NAME = "chunk_context"
+METADATA_SUFFIX_FIELD_NAME = "metadata_suffix"
+PRIMARY_OWNERS_FIELD_NAME = "primary_owners"
+SECONDARY_OWNERS_FIELD_NAME = "secondary_owners"
+# Hierarchy filtering - list of ancestor hierarchy node IDs
+ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME = "ancestor_hierarchy_node_ids"
 
 
 def get_opensearch_doc_chunk_id(
-    document_id: str, chunk_index: int, max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
+    tenant_state: TenantState,
+    document_id: str,
+    chunk_index: int,
+    max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE,
 ) -> str:
     """
     Returns a unique identifier for the chunk.
 
-    TODO(andrei): Add source type to this.
-    TODO(andrei): Add tenant ID to this.
-    TODO(andrei): Sanitize document_id in the event it contains characters that
-    are not allowed in OpenSearch IDs.
+    This will be the string used to identify the chunk in OpenSearch. Any direct
+    chunk queries should use this function.
     """
-    return f"{document_id}__{max_chunk_size}__{chunk_index}"
+    sanitized_document_id = filter_and_validate_document_id(document_id)
+    opensearch_doc_chunk_id = (
+        f"{sanitized_document_id}__{max_chunk_size}__{chunk_index}"
+    )
+    if tenant_state.multitenant:
+        # Use tenant ID because in multitenant mode each tenant has its own
+        # Documents table, so there is a very small chance that doc IDs are not
+        # actually unique across all tenants.
+        short_tenant_id = get_tenant_id_short_string(tenant_state.tenant_id)
+        opensearch_doc_chunk_id = f"{short_tenant_id}__{opensearch_doc_chunk_id}"
+    # Do one more validation to ensure we haven't exceeded the max length.
+    opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)
+    return opensearch_doc_chunk_id
+
+
+def set_or_convert_timezone_to_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        # astimezone will raise if value does not have a timezone set.
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        # Does appropriate time conversion if value was set in a different
+        # timezone.
+        value = value.astimezone(timezone.utc)
+    return value
 
 
 class DocumentChunk(BaseModel):
@@ -58,6 +98,10 @@ class DocumentChunk(BaseModel):
 
     The names of these fields are based on the OpenSearch schema. Changes to the
     schema require changes here. See get_document_schema.
+
+    WARNING: Relies on MULTI_TENANT which is global state. Also uses
+    get_current_tenant_id. Generally relying on global state is bad, in this
+    case we accept it because of the importance of validating tenant logic.
     """
 
     model_config = {"frozen": True}
@@ -71,22 +115,17 @@ class DocumentChunk(BaseModel):
     max_chunk_size: int = DEFAULT_MAX_CHUNK_SIZE
 
     # Either both should be None or both should be non-None.
-    title: str | None
-    title_vector: list[float] | None
+    title: str | None = None
+    title_vector: list[float] | None = None
     content: str
     content_vector: list[float]
-    # The actual number of tokens in the chunk.
-    num_tokens: int
 
     source_type: str
-    # Contains a string representation of a dict which maps string key to either
-    # string value or list of string values.
-    # TODO(andrei): When we augment content with metadata this can just be an
-    # index pointer, and when we support metadata list that will just be a list
-    # of strings.
-    metadata: str
-    last_updated: datetime | None
-    created_at: datetime | None = None
+    # A list of key-value pairs separated by INDEX_SEPARATOR. See
+    # convert_metadata_dict_to_list_of_strings.
+    metadata_list: list[str] | None = None
+    # If it exists, time zone should always be UTC.
+    last_updated: datetime | None = None
 
     public: bool
     access_control_list: list[str]
@@ -96,24 +135,41 @@ class DocumentChunk(BaseModel):
     global_boost: int
 
     semantic_identifier: str
-    image_file_id: str | None
+    image_file_id: str | None = None
     # Contains a string representation of a dict which maps offset into the raw
     # chunk text to the link corresponding to that point.
-    source_links: str | None
+    source_links: str | None = None
     blurb: str
+    # doc_summary, chunk_context, and metadata_suffix are all stored simply to
+    # reverse the augmentations to content. Ideally these would just be start
+    # and stop indices into the content string. For legacy reasons they are not
+    # right now.
+    doc_summary: str
+    chunk_context: str
+    metadata_suffix: str | None = None
 
-    document_sets: list[str] | None
-    project_ids: list[int] | None
+    document_sets: list[str] | None = None
+    user_projects: list[int] | None = None
+    primary_owners: list[str] | None = None
+    secondary_owners: list[str] | None = None
 
-    tenant_id: str | None
+    # List of ancestor hierarchy node IDs for hierarchy-based filtering.
+    # None means no hierarchy info (document will be excluded from
+    # hierarchy-filtered searches).
+    ancestor_hierarchy_node_ids: list[int] | None = None
 
-    @model_validator(mode="after")
-    def check_num_tokens_fits_within_max_chunk_size(self) -> Self:
-        if self.num_tokens > self.max_chunk_size:
-            raise ValueError(
-                "Bug: Num tokens must be less than or equal to max chunk size."
-            )
-        return self
+    tenant_id: TenantState = Field(
+        default_factory=lambda: TenantState(
+            tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
+        )
+    )
+
+    def __str__(self) -> str:
+        return (
+            f"DocumentChunk(document_id={self.document_id}, chunk_index={self.chunk_index}, "
+            f"content length={len(self.content)}, content vector length={len(self.content_vector)}, "
+            f"tenant_id={self.tenant_id.tenant_id})"
+        )
 
     @model_validator(mode="after")
     def check_title_and_title_vector_are_consistent(self) -> Self:
@@ -124,24 +180,116 @@ class DocumentChunk(BaseModel):
             raise ValueError("Bug: Title must not be None if title vector is not None.")
         return self
 
-    @field_serializer("last_updated", "created_at", mode="plain")
-    def serialize_datetime_fields_to_epoch_millis(
-        self, value: datetime | None
+    @model_serializer(mode="wrap")
+    def serialize_model(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        """Invokes pydantic's serialization logic, then excludes Nones.
+
+        We do this because .model_dump(exclude_none=True) does not work after
+        @field_serializer logic, so for some field serializers which return None
+        and which we would like to exclude from the final dump, they would be
+        included without this.
+
+        Args:
+            handler: Callable from pydantic which takes the instance of the
+                model as an argument and performs standard serialization.
+
+        Returns:
+            The return of handler but with None items excluded.
+        """
+        serialized: dict[str, object] = handler(self)
+        serialized_exclude_none = {k: v for k, v in serialized.items() if v is not None}
+        return serialized_exclude_none
+
+    @field_serializer("last_updated", mode="wrap")
+    def serialize_datetime_fields_to_epoch_seconds(
+        self,
+        value: datetime | None,
+        handler: SerializerFunctionWrapHandler,  # noqa: ARG002
     ) -> int | None:
         """
-        Serializes datetime fields to milliseconds since the Unix epoch.
+        Serializes datetime fields to seconds since the Unix epoch.
+
+        If there is no datetime, returns None.
         """
         if value is None:
             return None
-        if value.tzinfo is None:
-            # astimezone will raise if value does not have a timezone set.
-            value = value.replace(tzinfo=timezone.utc)
+        value = set_or_convert_timezone_to_utc(value)
+        return int(value.timestamp())
+
+    @field_validator("last_updated", mode="before")
+    @classmethod
+    def parse_epoch_seconds_to_datetime(cls, value: Any) -> datetime | None:
+        """Parses seconds since the Unix epoch to a datetime object.
+
+        If the input is None, returns None.
+
+        The datetime returned will be in UTC.
+        """
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            value = set_or_convert_timezone_to_utc(value)
+            return value
+        if not isinstance(value, int):
+            raise ValueError(
+                f"Bug: Expected an int for the last_updated property from OpenSearch, got {type(value)} instead."
+            )
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+
+    @field_serializer("tenant_id", mode="wrap")
+    def serialize_tenant_state(
+        self, value: TenantState, handler: SerializerFunctionWrapHandler  # noqa: ARG002
+    ) -> str | None:
+        """
+        Serializes tenant_state to the tenant str if multitenant, or None if
+        not.
+
+        The idea is that in single tenant mode, the schema does not have a
+        tenant_id field, so we don't want to supply it in our serialized
+        DocumentChunk. This assumes the final serialized model excludes None
+        fields, which serialize_model should enforce.
+        """
+        if not value.multitenant:
+            return None
         else:
-            # Does appropriate time conversion if value was set in a different
-            # timezone.
-            value = value.astimezone(timezone.utc)
-        # timestamp returns a float in seconds so convert to millis.
-        return int(value.timestamp() * 1000)
+            return value.tenant_id
+
+    @field_validator("tenant_id", mode="before")
+    @classmethod
+    def parse_tenant_id(cls, value: Any) -> TenantState:
+        """
+        Generates a TenantState from OpenSearch's tenant_id if it exists, or
+        generates a default state if it does not (implies we are in single
+        tenant mode).
+        """
+        if value is None:
+            if MULTI_TENANT:
+                raise ValueError(
+                    "Bug: No tenant_id was supplied but multi-tenant mode is enabled."
+                )
+            return TenantState(
+                tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
+            )
+        elif isinstance(value, TenantState):
+            if MULTI_TENANT != value.multitenant:
+                raise ValueError(
+                    f"Bug: An existing TenantState object was supplied to the DocumentChunk model but its multi-tenant mode "
+                    f"({value.multitenant}) does not match the program's current global tenancy state."
+                )
+            return value
+        elif not isinstance(value, str):
+            raise ValueError(
+                f"Bug: Expected a str for the tenant_id property from OpenSearch, got {type(value)} instead."
+            )
+        else:
+            if not MULTI_TENANT:
+                raise ValueError(
+                    "Bug: Got a non-null str for the tenant_id property from OpenSearch but multi-tenant mode is not enabled. "
+                    "This is unexpected because in single-tenant mode we don't expect to see a tenant_id."
+                )
+            return TenantState(tenant_id=value, multitenant=MULTI_TENANT)
 
 
 class DocumentSchema:
@@ -169,6 +317,12 @@ class DocumentSchema:
             full-text searches.
           - "store": True fields are stored and can be returned on their own,
             independent of the parent document.
+          - "index": True fields can be queried on.
+          - "doc_values": True fields can be sorted and aggregated efficiently.
+            Not supported for "text" type fields.
+          - "store": True fields are stored separately from the source document
+            and can thus be returned from a query separately from _source.
+            Generally this is not necessary.
 
         Args:
             vector_dimension: The dimension of vector embeddings. Must be a
@@ -180,7 +334,12 @@ class DocumentSchema:
                 OpenSearch client. The structure of this dictionary is
                 determined by OpenSearch documentation.
         """
-        schema = {
+        schema: dict[str, Any] = {
+            # By default OpenSearch allows dynamically adding new properties
+            # based on indexed documents. This is awful and we disable it here.
+            # An exception will be raised if you try to index a new doc which
+            # contains unexpected fields.
+            "dynamic": "strict",
             "properties": {
                 TITLE_FIELD_NAME: {
                     "type": "text",
@@ -190,10 +349,18 @@ class DocumentSchema:
                         # TODO(andrei): Ask Yuhong do we want this?
                         "keyword": {"type": "keyword", "ignore_above": 256}
                     },
+                    # This makes highlighting text during queries more efficient
+                    # at the cost of disk space. See
+                    # https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#methods-of-obtaining-offsets
+                    "index_options": "offsets",
                 },
                 CONTENT_FIELD_NAME: {
                     "type": "text",
                     "store": True,
+                    # This makes highlighting text during queries more efficient
+                    # at the cost of disk space. See
+                    # https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#methods-of-obtaining-offsets
+                    "index_options": "offsets",
                 },
                 TITLE_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
@@ -217,52 +384,44 @@ class DocumentSchema:
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
-                # See TODO in _convert_onyx_chunk_to_opensearch_document. I
-                # don't want to actually add this to the schema until we know
-                # for sure we need it. If we decide we don't I will remove this.
-                # # Number of tokens in the chunk's content.
-                # NUM_TOKENS_FIELD_NAME: {"type": "integer", "store": True},
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
-                METADATA_FIELD_NAME: {"type": "keyword"},
-                # TODO(andrei): Check if Vespa stores seconds, we may wanna do
-                # seconds here not millis.
+                METADATA_LIST_FIELD_NAME: {"type": "keyword"},
                 LAST_UPDATED_FIELD_NAME: {
                     "type": "date",
-                    "format": "epoch_millis",
+                    "format": "epoch_second",
                     # For some reason date defaults to False, even though it
                     # would make sense to sort by date.
                     "doc_values": True,
                 },
-                # See TODO in _convert_onyx_chunk_to_opensearch_document. I
-                # don't want to actually add this to the schema until we know
-                # for sure we need it. If we decide we don't I will remove this.
-                # CREATED_AT_FIELD_NAME: {
-                #     "type": "date",
-                #     "format": "epoch_millis",
-                #     # For some reason date defaults to False, even though it
-                #     # would make sense to sort by date.
-                #     "doc_values": True,
-                # },
                 # Access control fields.
                 # Whether the doc is public. Could have fallen under access
                 # control list but is such a broad and critical filter that it
-                # is its own field.
+                # is its own field. If true, ACCESS_CONTROL_LIST_FIELD_NAME
+                # should have no effect on queries.
                 PUBLIC_FIELD_NAME: {"type": "boolean"},
                 # Access control list for the doc, excluding public access,
                 # which is covered above.
+                # If a user's access set contains at least one entry from this
+                # set, the user should be able to retrieve this document. This
+                # only applies if public is set to false; public non-hidden
+                # documents are always visible to anyone in a given tenancy
+                # regardless of this field.
                 ACCESS_CONTROL_LIST_FIELD_NAME: {"type": "keyword"},
-                # Whether the doc is hidden from search results. Should clobber
-                # all other search filters; up to search implementations to
-                # guarantee this.
+                # Whether the doc is hidden from search results.
+                # Should clobber all other access search filters, namely
+                # PUBLIC_FIELD_NAME and ACCESS_CONTROL_LIST_FIELD_NAME; up to
+                # search implementations to guarantee this.
                 HIDDEN_FIELD_NAME: {"type": "boolean"},
                 GLOBAL_BOOST_FIELD_NAME: {"type": "integer"},
                 # This field is only used for displaying a useful name for the
                 # doc in the UI and is not used for searching. Disabling these
-                # features to increase perf.
+                # features to increase perf. This field is therefore essentially
+                # just metadata.
                 SEMANTIC_IDENTIFIER_FIELD_NAME: {
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above; used to display an image along with the doc.
@@ -270,6 +429,7 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above; used to link to the source doc.
@@ -277,6 +437,7 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
                     "store": False,
                 },
                 # Same as above; used to quickly summarize the doc in the UI.
@@ -284,18 +445,53 @@ class DocumentSchema:
                     "type": "keyword",
                     "index": False,
                     "doc_values": False,
+                    # Generally False by default; just making sure.
+                    "store": False,
+                },
+                # Same as above.
+                # TODO(andrei): If we want to search on this this needs to be
+                # changed.
+                DOC_SUMMARY_FIELD_NAME: {
+                    "type": "keyword",
+                    "index": False,
+                    "doc_values": False,
+                    # Generally False by default; just making sure.
+                    "store": False,
+                },
+                # Same as above.
+                # TODO(andrei): If we want to search on this this needs to be
+                # changed.
+                CHUNK_CONTEXT_FIELD_NAME: {
+                    "type": "keyword",
+                    "index": False,
+                    "doc_values": False,
+                    # Generally False by default; just making sure.
+                    "store": False,
+                },
+                # Same as above.
+                METADATA_SUFFIX_FIELD_NAME: {
+                    "type": "keyword",
+                    "index": False,
+                    "doc_values": False,
                     "store": False,
                 },
                 # Product-specific fields.
                 DOCUMENT_SETS_FIELD_NAME: {"type": "keyword"},
-                PROJECT_IDS_FIELD_NAME: {"type": "integer"},
+                USER_PROJECTS_FIELD_NAME: {"type": "integer"},
+                PRIMARY_OWNERS_FIELD_NAME: {"type": "keyword"},
+                SECONDARY_OWNERS_FIELD_NAME: {"type": "keyword"},
                 # OpenSearch metadata fields.
                 DOCUMENT_ID_FIELD_NAME: {"type": "keyword"},
                 CHUNK_INDEX_FIELD_NAME: {"type": "integer"},
                 # The maximum number of tokens this chunk's content can hold.
-                # TODO(andrei): Can we generalize this to embedding type?
                 MAX_CHUNK_SIZE_FIELD_NAME: {"type": "integer"},
-            }
+                # Hierarchy filtering - list of ancestor hierarchy node IDs.
+                # Used for scoped search within folder/space hierarchies.
+                # OpenSearch's terms query with value_type: "bitmap" can
+                # efficiently check if any value in this array matches a
+                # query bitmap.
+                ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: {"type": "integer"},
+            },
         }
 
         if multitenant:
@@ -319,16 +515,22 @@ class DocumentSchema:
         }
 
     @staticmethod
-    def get_bulk_index_settings() -> dict[str, Any]:
+    def get_index_settings_for_aws_managed_opensearch() -> dict[str, Any]:
         """
-        Optimized settings for bulk indexing: disable refresh and replicas.
+        Settings for AWS-managed OpenSearch.
+
+        Our AWS-managed OpenSearch cluster has 3 data nodes in 3 availability
+        zones.
+          - We use 3 shards to distribute load across all data nodes.
+          - We use 2 replicas to ensure each shard has a copy in each
+            availability zone. This is a hard requirement from AWS. The number
+            of data copies, including the primary (not a replica) copy, must be
+            divisible by the number of AZs.
         """
         return {
             "index": {
-                "number_of_shards": 1,
-                "number_of_replicas": 0,  # No replication during bulk load.
-                # Disables auto-refresh, improves performance in pure indexing (no searching) scenarios.
-                "refresh_interval": "-1",
+                "number_of_shards": 3,
+                "number_of_replicas": 2,
                 # Required for vector search.
                 "knn": True,
                 "knn.algo_param.ef_search": EF_SEARCH,

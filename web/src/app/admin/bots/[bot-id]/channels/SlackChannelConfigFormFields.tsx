@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { FieldArray, useFormikContext, ErrorMessage } from "formik";
 import { DocumentSetSummary } from "@/lib/types";
+import { toast } from "@/hooks/useToast";
 import {
   Label,
   SelectorFormField,
@@ -12,7 +13,7 @@ import {
 } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
-import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
+import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
@@ -47,10 +48,6 @@ export interface SlackChannelConfigFormFieldsProps {
   searchEnabledAssistants: MinimalPersonaSnapshot[];
   nonSearchAssistants: MinimalPersonaSnapshot[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
-  setPopup: (popup: {
-    message: string;
-    type: "error" | "success" | "warning";
-  }) => void;
   slack_bot_id: number;
   formikProps: any;
 }
@@ -62,7 +59,6 @@ export function SlackChannelConfigFormFields({
   searchEnabledAssistants,
   nonSearchAssistants,
   standardAnswerCategoryResponse,
-  setPopup,
   slack_bot_id,
   formikProps,
 }: SlackChannelConfigFormFieldsProps) {
@@ -142,13 +138,11 @@ export function SlackChannelConfigFormFields({
           (dsId: number) => !invalidSelected.includes(dsId)
         )
       );
-      setPopup({
-        message:
-          "We removed one or more document sets from your selection because they are no longer valid. Please review and update your configuration.",
-        type: "warning",
-      });
+      toast.warning(
+        "We removed one or more document sets from your selection because they are no longer valid. Please review and update your configuration."
+      );
     }
-  }, [unselectableSets, values.document_sets, setFieldValue, setPopup]);
+  }, [unselectableSets, values.document_sets, setFieldValue]);
 
   const shouldShowPrivacyAlert = useMemo(() => {
     if (values.knowledge_source === "document_sets") {
@@ -286,16 +280,13 @@ export function SlackChannelConfigFormFields({
                           const isSelected = selectedIndex !== -1;
 
                           return (
-                            <DocumentSetSelectable
+                            <DocumentSetCard
                               key={documentSet.id}
                               documentSet={documentSet}
                               isSelected={isSelected}
-                              onSelect={() => {
-                                if (isSelected) {
-                                  arrayHelpers.remove(selectedIndex);
-                                } else {
-                                  arrayHelpers.push(documentSet.id);
-                                }
+                              onSelectToggle={(selected) => {
+                                if (selected) arrayHelpers.push(documentSet.id);
+                                else arrayHelpers.remove(selectedIndex);
                               }}
                             />
                           );
@@ -311,13 +302,12 @@ export function SlackChannelConfigFormFields({
                         </p>
                         <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
                           {unselectableSets.map((documentSet) => (
-                            <DocumentSetSelectable
+                            <DocumentSetCard
                               key={documentSet.id}
                               documentSet={documentSet}
                               disabled
                               disabledTooltip="Unable to use this document set because it contains a connector with auto-sync permissions. OnyxBot's responses in this channel are visible to all Slack users, so mirroring the asker's permissions could inadvertently expose private information."
                               isSelected={false}
-                              onSelect={() => {}}
                             />
                           ))}
                         </div>
@@ -385,9 +375,7 @@ export function SlackChannelConfigFormFields({
                       <button
                         type="button"
                         onClick={() =>
-                          router.push(
-                            `/chat/agents/edit/${persona.id}` as Route
-                          )
+                          router.push(`/app/agents/edit/${persona.id}` as Route)
                         }
                         key={persona.id}
                         className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"

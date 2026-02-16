@@ -20,6 +20,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.connectors.zulip.schemas import GetMessagesResponse
 from onyx.connectors.zulip.schemas import Message
@@ -191,14 +192,16 @@ class ZulipConnector(LoadConnector, PollConnector):
             anchor = str(message.id)
 
     def _poll_source(
-        self, start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
+        self,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,  # noqa: ARG002
     ) -> GenerateDocumentsOutput:
         # Since Zulip doesn't support searching by timestamp,
         # we have to always start from the newest message
         # and go backwards.
         anchor = "newest"
 
-        docs = []
+        docs: list[Document | HierarchyNode] = []
         for doc in self._get_docs(anchor=anchor, start=start):
             docs.append(doc)
             if len(docs) == self.batch_size:

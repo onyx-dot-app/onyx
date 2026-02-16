@@ -1,9 +1,12 @@
+import time
 from collections.abc import Callable
+from typing import Any
 from typing import cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import CitationMapping
+from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
@@ -13,6 +16,7 @@ from onyx.chat.llm_step import run_llm_step
 from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.dr_mock_tools import (
@@ -34,6 +38,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION_REASONING,
 )
 from onyx.prompts.deep_research.dr_tool_prompts import WEB_SEARCH_TOOL_DESCRIPTION
+from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.deep_research.research_agent import OPEN_URL_REMINDER_RESEARCH_AGENT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT
 from onyx.prompts.deep_research.research_agent import RESEARCH_AGENT_PROMPT_REASONING
@@ -58,6 +63,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
 from onyx.tools.utils import generate_tools_description
@@ -68,7 +74,11 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-RESEARCH_CYCLE_CAP = 3
+# 30 minute timeout per research agent
+RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
+RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
+# 12 minute timeout before forcing intermediate report generation
+RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 # May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
 MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 10000
 
@@ -83,6 +93,8 @@ def generate_intermediate_report(
     emitter: Emitter,
     placement: Placement,
 ) -> str:
+    # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
+    # research tasks. This is also model / inference provider dependent.
     with function_span("generate_intermediate_report") as span:
         span.span_data.input = (
             f"research_topic={research_topic}, history_length={len(history)}"
@@ -126,6 +138,7 @@ def generate_intermediate_report(
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
+            timeout_override=300,  # 5 minute read timeout for long report generation
         )
 
         while True:
@@ -205,10 +218,16 @@ def run_research_agent_call(
     with function_span("research_agent") as span:
         span.span_data.input = str(research_agent_call.tool_args)
         try:
-            # Used to track the citations, but in this case they're not processed into links.
-            # They are later stripped from the output since the user cannot use these and the numbers
-            # change between the research and the final report.
-            citation_processor = DynamicCitationProcessor(replace_citation_tokens=False)
+            # Track start time for timeout-based forced report generation
+            start_time = time.monotonic()
+
+            # Used to track citations while keeping original citation markers in intermediate reports.
+            # KEEP_MARKERS preserves citation markers like [1], [2] in the text unchanged
+            # while tracking which documents were cited via get_seen_citations().
+            # This allows collapse_citations() to later renumber them in the final report.
+            citation_processor = DynamicCitationProcessor(
+                citation_mode=CitationMode.KEEP_MARKERS
+            )
 
             research_cycle_count = 0
             llm_cycle_count = 0
@@ -235,14 +254,20 @@ def run_research_agent_call(
 
             citation_mapping: dict[int, str] = {}
             most_recent_reasoning: str | None = None
-            while research_cycle_count <= RESEARCH_CYCLE_CAP:
-                if research_cycle_count == RESEARCH_CYCLE_CAP:
-                    # For the last cycle, do not use any more searches, only reason or generate a report
-                    current_tools = [
-                        tool
-                        for tool in tools
-                        if tool.name not in {SearchTool.NAME, WebSearchTool.NAME}
-                    ]
+            while research_cycle_count <= MAX_RESEARCH_CYCLES:
+                # Check if we've exceeded the time limit - if so, skip LLM and generate report
+                elapsed_seconds = time.monotonic() - start_time
+                if elapsed_seconds > RESEARCH_AGENT_FORCE_REPORT_SECONDS:
+                    logger.info(
+                        f"Research agent exceeded {RESEARCH_AGENT_FORCE_REPORT_SECONDS}s "
+                        f"(elapsed: {elapsed_seconds:.1f}s), forcing intermediate report generation"
+                    )
+                    break
+
+                if research_cycle_count == MAX_RESEARCH_CYCLES:
+                    # Auto-generate report on last cycle
+                    logger.debug("Auto-generating intermediate report on last cycle.")
+                    break
 
                 tools_by_name = {tool.name: tool for tool in current_tools}
 
@@ -335,6 +360,11 @@ def run_research_agent_call(
                     custom_token_processor=custom_processor,
                     use_existing_tab_index=True,
                     is_deep_research=True,
+                    # In case the model is tripped up by the long context and gets into an endless loop of
+                    # things like null tokens, we set a max token limit here. The call will likely not be valid
+                    # in these situations but it at least allows a chance of recovery. None of the tool calls should
+                    # be this long.
+                    max_tokens=1000,
                 )
                 if has_reasoned:
                     reasoning_cycles += 1
@@ -354,13 +384,6 @@ def run_research_agent_call(
                     ]
 
                 just_ran_web_search = False
-
-                if any(
-                    tool_call.tool_name in {SearchTool.NAME, WebSearchTool.NAME}
-                    for tool_call in tool_calls
-                ):
-                    # Only the search actions increment the cycle for the max cycle count
-                    research_cycle_count += 1
 
                 special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
                 if special_tool_calls.generate_report_tool_call:
@@ -385,17 +408,26 @@ def run_research_agent_call(
                 elif special_tool_calls.think_tool_call:
                     think_tool_call = special_tool_calls.think_tool_call
                     tool_call_message = think_tool_call.to_msg_str()
+                    tool_call_token_count = token_counter(tool_call_message)
 
                     with function_span("think_tool") as think_span:
                         think_span.span_data.input = str(think_tool_call.tool_args)
-                        think_tool_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=token_counter(tool_call_message),
-                            message_type=MessageType.TOOL_CALL,
+
+                        # Create ASSISTANT message with tool_calls (OpenAI parallel format)
+                        think_tool_simple = ToolCallSimple(
                             tool_call_id=think_tool_call.tool_call_id,
+                            tool_name=think_tool_call.tool_name,
+                            tool_arguments=think_tool_call.tool_args,
+                            token_count=tool_call_token_count,
+                        )
+                        think_assistant_msg = ChatMessageSimple(
+                            message="",
+                            token_count=tool_call_token_count,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=[think_tool_simple],
                             image_files=None,
                         )
-                        msg_history.append(think_tool_msg)
+                        msg_history.append(think_assistant_msg)
 
                         think_tool_response_msg = ChatMessageSimple(
                             message=THINK_TOOL_RESPONSE_MESSAGE,
@@ -414,7 +446,7 @@ def run_research_agent_call(
                         tool_calls=tool_calls,
                         tools=current_tools,
                         message_history=msg_history,
-                        memories=None,
+                        user_memory_context=None,
                         user_info=None,
                         citation_mapping=citation_mapping,
                         next_citation_num=citation_processor.get_next_citation_number(),
@@ -423,6 +455,14 @@ def run_research_agent_call(
                         max_concurrent_tools=1,
                         # May be better to not do this step, hard to say, needs to be tested
                         skip_search_query_expansion=False,
+                        url_snippet_map=extract_url_snippet_map(
+                            [
+                                search_doc
+                                for tool_call in state_container.get_tool_calls()
+                                if tool_call.search_docs
+                                for search_doc in tool_call.search_docs
+                            ]
+                        ),
                     )
                     tool_responses = parallel_tool_call_results.tool_responses
                     citation_mapping = (
@@ -431,37 +471,74 @@ def run_research_agent_call(
 
                     if tool_calls and not tool_responses:
                         failure_messages = create_tool_call_failure_messages(
-                            tool_calls[0], token_counter
+                            tool_calls, token_counter
                         )
                         msg_history.extend(failure_messages)
+
+                        # If there is a failure like this, we still increment to avoid potential infinite loops
+                        research_cycle_count += 1
+                        llm_cycle_count += 1
                         continue
 
-                    for tool_response in tool_responses:
-                        # Extract tool_call from the response (set by run_tool_calls)
-                        if tool_response.tool_call is None:
-                            raise ValueError(
-                                "Tool response missing tool_call reference"
+                    # Filter to only responses with valid tool_call references
+                    valid_tool_responses = [
+                        tr for tr in tool_responses if tr.tool_call is not None
+                    ]
+
+                    # Build ONE ASSISTANT message with all tool calls (OpenAI parallel format)
+                    if valid_tool_responses:
+                        tool_calls_simple: list[ToolCallSimple] = []
+                        for tool_response in valid_tool_responses:
+                            tc = tool_response.tool_call
+                            assert tc is not None  # Already filtered above
+                            tool_call_message = tc.to_msg_str()
+                            tool_call_token_count = token_counter(tool_call_message)
+                            tool_calls_simple.append(
+                                ToolCallSimple(
+                                    tool_call_id=tc.tool_call_id,
+                                    tool_name=tc.tool_name,
+                                    tool_arguments=tc.tool_args,
+                                    token_count=tool_call_token_count,
+                                )
                             )
 
-                        tool_call = tool_response.tool_call
-                        tab_index = tool_call.placement.tab_index
+                        total_tool_call_tokens = sum(
+                            tc.token_count for tc in tool_calls_simple
+                        )
+                        assistant_with_tools = ChatMessageSimple(
+                            message="",
+                            token_count=total_tool_call_tokens,
+                            message_type=MessageType.ASSISTANT,
+                            tool_calls=tool_calls_simple,
+                            image_files=None,
+                        )
+                        msg_history.append(assistant_with_tools)
 
-                        tool = tools_by_name.get(tool_call.tool_name)
+                    # Now add tool call info and TOOL_CALL_RESPONSE messages for each
+                    for tool_response in valid_tool_responses:
+                        tc = tool_response.tool_call
+                        assert tc is not None  # Already filtered above
+                        tool_call_tab_index = tc.placement.tab_index
+
+                        tool = tools_by_name.get(tc.tool_name)
                         if not tool:
                             raise ValueError(
-                                f"Tool '{tool_call.tool_name}' not found in tools list"
+                                f"Tool '{tc.tool_name}' not found in tools list"
                             )
 
                         search_docs = None
+                        displayed_docs = None
                         if isinstance(tool_response.rich_response, SearchDocsResponse):
                             search_docs = tool_response.rich_response.search_docs
+                            displayed_docs = tool_response.rich_response.displayed_docs
+
+                            # Add ALL search docs to state container for DB persistence
+                            if search_docs:
+                                state_container.add_search_docs(search_docs)
 
                             # This is used for the Open URL reminder in the next cycle
                             # only do this if the web search tool yielded results
-                            if (
-                                search_docs
-                                and tool_call.tool_name == WebSearchTool.NAME
-                            ):
+                            if search_docs and tc.tool_name == WebSearchTool.NAME:
                                 just_ran_web_search = True
 
                         # Makes sure the citation processor is updated with all the possible docs
@@ -479,31 +556,18 @@ def run_research_agent_call(
                             # This is implied by the parent tool call's turn index and the depth
                             # of the tree traversal.
                             turn_index=llm_cycle_count + reasoning_cycles,
-                            tab_index=tab_index,
-                            tool_name=tool_call.tool_name,
-                            tool_call_id=tool_call.tool_call_id,
+                            tab_index=tool_call_tab_index,
+                            tool_name=tc.tool_name,
+                            tool_call_id=tc.tool_call_id,
                             tool_id=tool.id,
                             reasoning_tokens=llm_step_result.reasoning
                             or most_recent_reasoning,
-                            tool_call_arguments=tool_call.tool_args,
+                            tool_call_arguments=tc.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
-                            search_docs=search_docs,
+                            search_docs=displayed_docs or search_docs,
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)
-
-                        # Store tool call with function name and arguments in separate layers
-                        tool_call_message = tool_call.to_msg_str()
-                        tool_call_token_count = token_counter(tool_call_message)
-
-                        tool_call_msg = ChatMessageSimple(
-                            message=tool_call_message,
-                            token_count=tool_call_token_count,
-                            message_type=MessageType.TOOL_CALL,
-                            tool_call_id=tool_call.tool_call_id,
-                            image_files=None,
-                        )
-                        msg_history.append(tool_call_msg)
 
                         tool_response_message = tool_response.llm_facing_response
                         tool_response_token_count = token_counter(tool_response_message)
@@ -512,7 +576,7 @@ def run_research_agent_call(
                             message=tool_response_message,
                             token_count=tool_response_token_count,
                             message_type=MessageType.TOOL_CALL_RESPONSE,
-                            tool_call_id=tool_call.tool_call_id,
+                            tool_call_id=tc.tool_call_id,
                             image_files=None,
                         )
                         msg_history.append(tool_response_msg)
@@ -520,6 +584,7 @@ def run_research_agent_call(
                 # If it reached this point, it did not call reasoning, so here we wipe it to not save it to multiple turns
                 most_recent_reasoning = None
                 llm_cycle_count += 1
+                research_cycle_count += 1
 
             # If we've run out of cycles, just try to generate a report from everything so far
             final_report = generate_intermediate_report(
@@ -552,6 +617,30 @@ def run_research_agent_call(
             return None
 
 
+def _on_research_agent_timeout(
+    index: int,  # noqa: ARG001
+    func: Callable[..., Any],  # noqa: ARG001
+    args: tuple[Any, ...],
+) -> ResearchAgentCallResult:
+    """Callback for handling research agent timeouts.
+
+    Returns a ResearchAgentCallResult with the timeout message so the research
+    can continue with other agents.
+    """
+    research_agent_call: ToolCallKickoff = args[0]  # First arg
+    research_task = research_agent_call.tool_args.get(
+        RESEARCH_AGENT_TASK_KEY, "unknown"
+    )
+    logger.warning(
+        f"Research agent timed out after {RESEARCH_AGENT_TIMEOUT_SECONDS} seconds "
+        f"for task: {research_task}"
+    )
+    return ResearchAgentCallResult(
+        intermediate_report=RESEARCH_AGENT_TIMEOUT_MESSAGE,
+        citation_mapping={},
+    )
+
+
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
     parent_tool_call_ids: list[str],
@@ -564,7 +653,7 @@ def run_research_agent_calls(
     citation_mapping: CitationMapping,
     user_identity: LLMUserIdentity | None = None,
 ) -> CombinedResearchAgentCallResult:
-    # Run all research agent calls in parallel
+    # Run all research agent calls in parallel with timeout
     functions_with_args = [
         (
             run_research_agent_call,
@@ -588,6 +677,11 @@ def run_research_agent_calls(
     research_agent_call_results = run_functions_tuples_in_parallel(
         functions_with_args,
         allow_failures=False,
+        # Note: This simply allows the main thread to continue with an error message
+        # It does not kill the background thread which may still write to the state objects passed to it
+        # This is because forcefully killing Python threads is very dangerous
+        timeout=RESEARCH_AGENT_TIMEOUT_SECONDS,
+        timeout_callback=_on_research_agent_timeout,
     )
 
     updated_citation_mapping = citation_mapping
@@ -598,6 +692,9 @@ def run_research_agent_calls(
             updated_answers.append(None)
             continue
 
+        # Use collapse_citations to renumber citations in the text and merge mappings.
+        # Since we use KEEP_MARKERS mode, the intermediate reports have original citation
+        # markers like [1], [2] which need to be renumbered for the combined report.
         updated_answer, updated_citation_mapping = collapse_citations(
             answer_text=result.intermediate_report,
             existing_citation_mapping=updated_citation_mapping,
@@ -609,3 +706,91 @@ def run_research_agent_calls(
         intermediate_reports=updated_answers,
         citation_mapping=updated_citation_mapping,
     )
+
+
+if __name__ == "__main__":
+    from queue import Queue
+    from uuid import uuid4
+
+    from onyx.chat.chat_state import ChatStateContainer
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
+    from onyx.db.engine.sql_engine import SqlEngine
+    from onyx.db.models import User
+    from onyx.db.persona import get_default_behavior_persona
+    from onyx.llm.factory import get_default_llm
+    from onyx.llm.factory import get_llm_token_counter
+    from onyx.llm.utils import model_is_reasoning_model
+    from onyx.server.query_and_chat.placement import Placement
+    from onyx.tools.models import ToolCallKickoff
+    from onyx.tools.tool_constructor import construct_tools
+
+    # === CONFIGURE YOUR RESEARCH PROMPT HERE ===
+    RESEARCH_PROMPT = "Your test research task."
+
+    SqlEngine.set_app_name("research_agent_script")
+    SqlEngine.init_engine(pool_size=5, max_overflow=5)
+
+    with get_session_with_current_tenant() as db_session:
+        llm = get_default_llm()
+        token_counter = get_llm_token_counter(llm)
+        is_reasoning = model_is_reasoning_model(
+            llm.config.model_name, llm.config.model_provider
+        )
+
+        persona = get_default_behavior_persona(db_session)
+        if persona is None:
+            raise ValueError("No default persona found")
+
+        user = db_session.query(User).first()
+        if user is None:
+            raise ValueError("No users found in database. Please create a user first.")
+
+        bus: Queue[Packet] = Queue()
+        emitter = Emitter(bus)
+        state_container = ChatStateContainer()
+
+        tool_dict = construct_tools(
+            persona=persona,
+            db_session=db_session,
+            emitter=emitter,
+            user=user,
+            llm=llm,
+        )
+        tools = [
+            tool
+            for tool_list in tool_dict.values()
+            for tool in tool_list
+            if tool.name != "generate_image"
+        ]
+
+        logger.info(f"Running research agent with prompt: {RESEARCH_PROMPT}")
+        logger.info(f"LLM: {llm.config.model_provider}/{llm.config.model_name}")
+        logger.info(f"Tools: {[t.name for t in tools]}")
+
+        result = run_research_agent_call(
+            research_agent_call=ToolCallKickoff(
+                tool_name="research_agent",
+                tool_args={RESEARCH_AGENT_TASK_KEY: RESEARCH_PROMPT},
+                tool_call_id=str(uuid4()),
+                placement=Placement(turn_index=0, tab_index=0),
+            ),
+            parent_tool_call_id=str(uuid4()),
+            tools=tools,
+            emitter=emitter,
+            state_container=state_container,
+            llm=llm,
+            is_reasoning_model=is_reasoning,
+            token_counter=token_counter,
+            user_identity=None,
+        )
+
+        if result is None:
+            logger.error("Research agent returned no result")
+        else:
+            print("\n" + "=" * 80)
+            print("RESEARCH AGENT RESULT")
+            print("=" * 80)
+            print(result.intermediate_report)
+            print("=" * 80)
+            print(f"Citations: {result.citation_mapping}")
+            print(f"Total packets emitted: {bus.qsize()}")

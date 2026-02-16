@@ -1,6 +1,6 @@
 "use client";
 
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { SlackBot, ValidSources } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
@@ -24,7 +24,6 @@ export const ExistingSlackBotForm = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [formValues, setFormValues] = useState(existingSlackBot);
-  const { popup, setPopup } = usePopup();
   const router = useRouter();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -42,15 +41,9 @@ export const ExistingSlackBotForm = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      setPopup({
-        message: `Connector ${field} updated successfully`,
-        type: "success",
-      });
+      toast.success(`Connector ${field} updated successfully`);
     } catch (error) {
-      setPopup({
-        message: `Failed to update connector ${field}`,
-        type: "error",
-      });
+      toast.error(`Failed to update connector ${field}`);
     }
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
@@ -74,7 +67,6 @@ export const ExistingSlackBotForm = ({
 
   return (
     <div>
-      {popup}
       <div className="flex items-center justify-between h-14">
         <div className="flex items-center gap-2">
           <div className="my-auto">
@@ -120,7 +112,6 @@ export const ExistingSlackBotForm = ({
                   initialValues={formValues}
                   existingSlackBotId={existingSlackBot.id}
                   refreshSlackBot={refreshSlackBot}
-                  setPopup={setPopup}
                   router={router}
                   onValuesChange={(values) => setFormValues(values)}
                 />
@@ -149,16 +140,10 @@ export const ExistingSlackBotForm = ({
                 if (!response.ok) {
                   throw new Error(await response.text());
                 }
-                setPopup({
-                  message: "Slack bot deleted successfully",
-                  type: "success",
-                });
+                toast.success("Slack bot deleted successfully");
                 router.push("/admin/bots");
               } catch (error) {
-                setPopup({
-                  message: "Failed to delete Slack bot",
-                  type: "error",
-                });
+                toast.error("Failed to delete Slack bot");
               }
               setShowDeleteModal(false);
             }}

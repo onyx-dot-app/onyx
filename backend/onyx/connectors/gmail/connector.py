@@ -40,6 +40,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -320,7 +321,7 @@ def _full_thread_from_id(
 def _slim_thread_from_id(
     thread_id: str,
     user_email: str,
-    gmail_service: GmailService,
+    gmail_service: GmailService,  # noqa: ARG001
 ) -> SlimDocument:
     return SlimDocument(
         id=thread_id,
@@ -390,7 +391,9 @@ class GmailConnector(
         """
         List all user emails if we are on a Google Workspace domain.
         If the domain is gmail.com, or if we attempt to call the Admin SDK and
-        get a 404, fall back to using the single user.
+        get a 404 or 403, fall back to using the single user.
+        A 404 indicates a personal Gmail account with no Workspace domain.
+        A 403 indicates insufficient permissions (e.g., OAuth user without admin privileges).
         """
 
         try:
@@ -413,6 +416,13 @@ class GmailConnector(
                     "with no Workspace domain. Falling back to single user."
                 )
                 return [self.primary_admin_email]
+            elif e.resp.status == 403:
+                logger.warning(
+                    "Received 403 from Admin SDK; this may indicate insufficient permissions "
+                    "(e.g., OAuth user without admin privileges or service account without "
+                    "domain-wide delegation). Falling back to single user."
+                )
+                return [self.primary_admin_email]
             raise
 
     def _fetch_threads_impl(
@@ -422,11 +432,11 @@ class GmailConnector(
         time_range_end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         page_token: str | None = None,
-        set_page_token: Callable[[str | None], None] = lambda x: None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,  # noqa: ARG005
         is_slim: bool = False,
     ) -> Iterator[Document | ConnectorFailure] | GenerateSlimDocumentOutput:
         query = _build_time_range_query(time_range_start, time_range_end)
-        slim_doc_batch: list[SlimDocument] = []
+        slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         logger.info(
             f"Fetching {'slim' if is_slim else 'full'} threads for user: {user_email}"
         )
@@ -494,7 +504,7 @@ class GmailConnector(
         self,
         user_email: str,
         page_token: str | None = None,
-        set_page_token: Callable[[str | None], None] = lambda x: None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,  # noqa: ARG005
         time_range_start: SecondsSinceUnixEpoch | None = None,
         time_range_end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
@@ -516,7 +526,7 @@ class GmailConnector(
         self,
         user_email: str,
         page_token: str | None = None,
-        set_page_token: Callable[[str | None], None] = lambda x: None,
+        set_page_token: Callable[[str | None], None] = lambda x: None,  # noqa: ARG005
         time_range_start: SecondsSinceUnixEpoch | None = None,
         time_range_end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,

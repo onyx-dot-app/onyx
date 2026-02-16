@@ -2,6 +2,7 @@ import React from "react";
 import { ImageGenFormBaseProps } from "./types";
 import { OpenAIImageGenForm } from "./OpenAIImageGenForm";
 import { AzureImageGenForm } from "./AzureImageGenForm";
+import { VertexImageGenForm } from "./VertexImageGenForm";
 
 /**
  * Factory function that routes to the correct provider-specific form
@@ -15,6 +16,8 @@ export function getImageGenForm(props: ImageGenFormBaseProps): React.ReactNode {
       return <OpenAIImageGenForm {...props} />;
     case "azure":
       return <AzureImageGenForm {...props} />;
+    case "vertex_ai":
+      return <VertexImageGenForm {...props} />;
     default:
       // Fallback to OpenAI form for unknown providers
       console.warn(

@@ -2,7 +2,7 @@
 
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { Tabs, TabsList, TabsTrigger } from "@/refresh-components/tabs/tabs";
+import Tabs from "@/refresh-components/Tabs";
 import Separator from "@/refresh-components/Separator";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -227,7 +227,7 @@ export const AppearanceThemeSettings = forwardRef<
                 ref={applicationNameInputRef}
                 data-label="application-name-input"
                 showClearButton
-                error={!!errors.application_name}
+                variant={errors.application_name ? "error" : undefined}
                 value={values.application_name}
                 {...getPreviewHandlers("sidebar")}
                 onChange={(e) =>
@@ -252,16 +252,16 @@ export const AppearanceThemeSettings = forwardRef<
                   setFieldValue("logo_display_style", value)
                 }
               >
-                <TabsList className="w-full grid grid-cols-3">
-                  <TabsTrigger
+                <Tabs.List>
+                  <Tabs.Trigger
                     value="logo_and_name"
                     tooltip="Show both your application logo and name."
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
                     Logo & Name
-                  </TabsTrigger>
-                  <TabsTrigger
+                  </Tabs.Trigger>
+                  <Tabs.Trigger
                     value="logo_only"
                     disabled={!hasLogo}
                     tooltip={
@@ -273,8 +273,8 @@ export const AppearanceThemeSettings = forwardRef<
                     {...getPreviewHandlers("sidebar")}
                   >
                     Logo Only
-                  </TabsTrigger>
-                  <TabsTrigger
+                  </Tabs.Trigger>
+                  <Tabs.Trigger
                     value="name_only"
                     disabled={!hasApplicationName}
                     tooltip={
@@ -286,8 +286,8 @@ export const AppearanceThemeSettings = forwardRef<
                     {...getPreviewHandlers("sidebar")}
                   >
                     Name Only
-                  </TabsTrigger>
-                </TabsList>
+                  </Tabs.Trigger>
+                </Tabs.List>
               </Tabs>
             </FormField.Control>
             <FormField.Description>
@@ -359,7 +359,7 @@ export const AppearanceThemeSettings = forwardRef<
             ref={greetingMessageInputRef}
             data-label="greeting-message-input"
             showClearButton
-            error={!!errors.custom_greeting_message}
+            variant={errors.custom_greeting_message ? "error" : undefined}
             value={values.custom_greeting_message}
             {...getPreviewHandlers("greeting")}
             onChange={(e) =>
@@ -391,7 +391,7 @@ export const AppearanceThemeSettings = forwardRef<
             ref={headerContentInputRef}
             data-label="chat-header-input"
             showClearButton
-            error={!!errors.custom_header_content}
+            variant={errors.custom_header_content ? "error" : undefined}
             value={values.custom_header_content}
             {...getPreviewHandlers("chat_header")}
             onChange={(e) =>
@@ -423,7 +423,9 @@ export const AppearanceThemeSettings = forwardRef<
             data-label="chat-footer-textarea"
             rows={3}
             placeholder="Add markdown content"
-            error={!!errors.custom_lower_disclaimer_content}
+            variant={
+              errors.custom_lower_disclaimer_content ? "error" : undefined
+            }
             value={values.custom_lower_disclaimer_content}
             {...getPreviewHandlers("chat_footer")}
             onChange={(e) =>
@@ -480,7 +482,7 @@ export const AppearanceThemeSettings = forwardRef<
                   ref={noticeHeaderInputRef}
                   data-label="notice-header-input"
                   showClearButton
-                  error={!!errors.custom_popup_header}
+                  variant={errors.custom_popup_header ? "error" : undefined}
                   value={values.custom_popup_header}
                   onChange={(e) =>
                     setFieldValue("custom_popup_header", e.target.value)
@@ -510,7 +512,7 @@ export const AppearanceThemeSettings = forwardRef<
                   data-label="notice-content-textarea"
                   rows={3}
                   placeholder="Add markdown content"
-                  error={!!errors.custom_popup_content}
+                  variant={errors.custom_popup_content ? "error" : undefined}
                   value={values.custom_popup_content}
                   onChange={(e) =>
                     setFieldValue("custom_popup_content", e.target.value)
@@ -563,7 +565,7 @@ export const AppearanceThemeSettings = forwardRef<
                     data-label="consent-prompt-textarea"
                     rows={3}
                     placeholder="Add markdown content"
-                    error={!!errors.consent_screen_prompt}
+                    variant={errors.consent_screen_prompt ? "error" : undefined}
                     value={values.consent_screen_prompt}
                     onChange={(e) => {
                       setFieldValue("consent_screen_prompt", e.target.value);

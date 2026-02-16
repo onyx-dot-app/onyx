@@ -1,4 +1,4 @@
-import { test, expect } from "@chromatic-com/playwright";
+import { test, expect } from "@playwright/test";
 import { dragElementAbove, dragElementBelow } from "../utils/dragUtils";
 import { loginAsRandomUser } from "../utils/auth";
 import { createAssistant, pinAssistantByName } from "../utils/assistantUtils";
@@ -9,7 +9,7 @@ test.skip("Assistant Drag and Drop", async ({ page }) => {
   await loginAsRandomUser(page);
 
   // Navigate to the chat page
-  await page.goto("/chat");
+  await page.goto("/app");
 
   // Ensure at least two assistants exist for drag-and-drop
   const ts = Date.now();

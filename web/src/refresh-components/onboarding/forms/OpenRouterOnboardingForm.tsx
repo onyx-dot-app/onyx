@@ -5,7 +5,7 @@ import { FormField } from "@/refresh-components/form/FormField";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import Separator from "@/refresh-components/Separator";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { cn, noProp } from "@/lib/utils";
 import { SvgRefreshCw } from "@opal/icons";
 import { WellKnownLLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -137,8 +137,9 @@ function OpenRouterFormFields(
                   disabled || isFetchingModels || modelOptions.length === 0
                 }
                 rightSection={
-                  <IconButton
-                    internal
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
                     icon={({ className }) => (
                       <SvgRefreshCw
                         className={cn(

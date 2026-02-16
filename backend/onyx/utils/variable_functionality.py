@@ -1,9 +1,16 @@
 import functools
 import importlib
 import inspect
+import os
 from typing import Any
 from typing import TypeVar
 
+from onyx.configs.app_configs import API_SERVER_HOST
+from onyx.configs.app_configs import API_SERVER_PROTOCOL
+from onyx.configs.app_configs import API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS
+from onyx.configs.app_configs import APP_API_PREFIX
+from onyx.configs.app_configs import APP_PORT
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.utils.logger import setup_logger
 
@@ -23,10 +30,36 @@ class OnyxVersion:
 
 global_version = OnyxVersion()
 
+# Read LICENSE_ENFORCEMENT_ENABLED directly since it's in EE configs
+# This allows EE code to load when license enforcement is enabled,
+# even without ENABLE_PAID_ENTERPRISE_EDITION_FEATURES being set.
+# Eventually, ENABLE_PAID_ENTERPRISE_EDITION_FEATURES will be removed
+# and license enforcement will be the only mechanism for EE features.
+_LICENSE_ENFORCEMENT_ENABLED = (
+    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "true").lower() == "true"
+)
+
 
 def set_is_ee_based_on_env_variable() -> None:
-    if ENTERPRISE_EDITION_ENABLED and not global_version.is_ee_version():
-        logger.notice("Enterprise Edition enabled")
+    """Enable Enterprise Edition based on environment configuration.
+
+    EE is enabled if either:
+    - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true (legacy/rollout flag)
+    - LICENSE_ENFORCEMENT_ENABLED=true (license-based gating)
+
+    When LICENSE_ENFORCEMENT_ENABLED is true, EE code is loaded but access
+    to EE-only features is controlled by the license enforcement middleware.
+    """
+    if global_version.is_ee_version():
+        return
+
+    if ENTERPRISE_EDITION_ENABLED:
+        logger.notice(
+            "Enterprise Edition enabled via ENABLE_PAID_ENTERPRISE_EDITION_FEATURES"
+        )
+        global_version.set_ee()
+    elif _LICENSE_ENFORCEMENT_ENABLED:
+        logger.notice("Enterprise Edition enabled via LICENSE_ENFORCEMENT_ENABLED")
         global_version.set_ee()
 
 
@@ -149,7 +182,7 @@ def fetch_ee_implementation_or_noop(
 
         else:
 
-            def sync_noop(*args: Any, **kwargs: Any) -> Any:
+            def sync_noop(*args: Any, **kwargs: Any) -> Any:  # noqa: ARG001
                 return noop_return_value
 
             return sync_noop
@@ -158,3 +191,22 @@ def fetch_ee_implementation_or_noop(
     except Exception as e:
         logger.error(f"Failed to fetch implementation for {module}.{attribute}: {e}")
         raise
+
+
+def build_api_server_url_for_http_requests(
+    respect_env_override_if_set: bool = False,
+) -> str:
+    """
+    Builds the API server URL for HTTP requests.
+    """
+    if DEV_MODE:
+        url = f"http://127.0.0.1:{APP_PORT}"
+    elif respect_env_override_if_set and API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS:
+        url = API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS.rstrip("/")
+    else:
+        url = f"{API_SERVER_PROTOCOL}://{API_SERVER_HOST}:{APP_PORT}"
+
+    if APP_API_PREFIX:
+        url += f"/{APP_API_PREFIX.strip('/')}"
+
+    return url

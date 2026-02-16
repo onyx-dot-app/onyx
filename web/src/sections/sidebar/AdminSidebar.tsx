@@ -1,21 +1,24 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import Text from "@/refresh-components/texts/Text";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import Settings from "@/sections/sidebar/Settings/Settings";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
-import { useUser } from "@/components/user/UserProvider";
+import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
-import { MdOutlineCreditCard } from "react-icons/md";
+import {
+  useBillingInformation,
+  useLicense,
+  hasActiveSubscription,
+} from "@/lib/billing";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import {
   ClipboardIcon,
   NotebookIconSkeleton,
-  PaintingIconSkeleton,
   SlackIconSkeleton,
   BrainIcon,
 } from "@/components/icons/icons";
@@ -25,11 +28,13 @@ import SidebarBody from "@/sections/sidebar/SidebarBody";
 import {
   SvgActions,
   SvgActivity,
+  SvgArrowUpCircle,
   SvgBarChart,
   SvgCpu,
   SvgFileText,
   SvgFolder,
   SvgGlobe,
+  SvgArrowExchange,
   SvgImage,
   SvgKey,
   SvgOnyxLogo,
@@ -44,8 +49,12 @@ import {
   SvgUsers,
   SvgZoomIn,
   SvgPaintBrush,
+  SvgDiscordMono,
+  SvgWallet,
 } from "@opal/icons";
 import SvgMcp from "@opal/icons/mcp";
+import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
+
 const connectors_items = () => [
   {
     name: "Existing Connectors",
@@ -90,11 +99,18 @@ const custom_assistants_items = (
   ];
 
   if (!isCurator) {
-    items.push({
-      name: "Slack Bots",
-      icon: SlackIconSkeleton,
-      link: "/admin/bots",
-    });
+    items.push(
+      {
+        name: "Slack Bots",
+        icon: SlackIconSkeleton,
+        link: "/admin/bots",
+      },
+      {
+        name: "Discord Bots",
+        icon: SvgDiscordMono,
+        link: "/admin/discord-bot",
+      }
+    );
   }
 
   items.push(
@@ -127,187 +143,201 @@ const collections = (
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
   kgExposed: boolean,
-  customAnalyticsEnabled: boolean
-) => [
-  {
-    name: "Connectors",
-    items: connectors_items(),
-  },
-  {
-    name: "Document Management",
-    items: document_management_items(),
-  },
-  {
-    name: "Custom Assistants",
-    items: custom_assistants_items(isCurator, enableEnterprise),
-  },
-  ...(isCurator
-    ? [
-        {
-          name: "User Management",
-          items: [
-            {
-              name: "Groups",
-              icon: SvgUsers,
-              link: "/admin/groups",
-            },
-          ],
-        },
-      ]
-    : []),
-  ...(!isCurator
-    ? [
-        {
-          name: "Configuration",
-          items: [
-            {
-              name: "Default Assistant",
-              icon: SvgOnyxLogo,
-              link: "/admin/configuration/default-assistant",
-            },
-            {
-              name: "LLM",
-              icon: SvgCpu,
-              link: "/admin/configuration/llm",
-            },
-            {
-              name: "Web Search",
-              icon: SvgGlobe,
-              link: "/admin/configuration/web-search",
-            },
-            {
-              name: "Image Generation",
-              icon: SvgImage,
-              link: "/admin/configuration/image-generation",
-            },
-            ...(!enableCloud
-              ? [
-                  {
-                    error: settings?.settings.needs_reindexing,
-                    name: "Search Settings",
-                    icon: SvgSearch,
-                    link: "/admin/configuration/search",
-                  },
-                ]
-              : []),
-            {
-              name: "Document Processing",
-              icon: SvgFileText,
-              link: "/admin/configuration/document-processing",
-            },
-            ...(kgExposed
-              ? [
-                  {
-                    name: "Knowledge Graph",
-                    icon: BrainIcon,
-                    link: "/admin/kg",
-                  },
-                ]
-              : []),
-          ],
-        },
-        {
-          name: "User Management",
-          items: [
-            {
-              name: "Users",
-              icon: SvgUser,
-              link: "/admin/users",
-            },
-            ...(enableEnterprise
-              ? [
-                  {
-                    name: "Groups",
-                    icon: SvgUsers,
-                    link: "/admin/groups",
-                  },
-                ]
-              : []),
-            {
-              name: "API Keys",
-              icon: SvgKey,
-              link: "/admin/api-key",
-            },
-            {
-              name: "Token Rate Limits",
-              icon: SvgShield,
-              link: "/admin/token-rate-limits",
-            },
-          ],
-        },
-        ...(enableEnterprise
-          ? [
+  customAnalyticsEnabled: boolean,
+  hasSubscription: boolean
+) => {
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+
+  return [
+    ...(vectorDbEnabled
+      ? [
+          {
+            name: "Connectors",
+            items: connectors_items(),
+          },
+        ]
+      : []),
+    ...(vectorDbEnabled
+      ? [
+          {
+            name: "Document Management",
+            items: document_management_items(),
+          },
+        ]
+      : []),
+    {
+      name: "Custom Assistants",
+      items: custom_assistants_items(isCurator, enableEnterprise),
+    },
+    ...(isCurator && enableEnterprise
+      ? [
+          {
+            name: "User Management",
+            items: [
               {
-                name: "Performance",
-                items: [
-                  {
-                    name: "Usage Statistics",
-                    icon: SvgActivity,
-                    link: "/admin/performance/usage",
-                  },
-                  ...(settings?.settings.query_history_type !== "disabled"
-                    ? [
-                        {
-                          name: "Query History",
-                          icon: SvgServer,
-                          link: "/admin/performance/query-history",
-                        },
-                      ]
-                    : []),
-                  ...(!enableCloud && customAnalyticsEnabled
-                    ? [
-                        {
-                          name: "Custom Analytics",
-                          icon: SvgBarChart,
-                          link: "/admin/performance/custom-analytics",
-                        },
-                      ]
-                    : []),
-                ],
+                name: "Groups",
+                icon: SvgUsers,
+                link: "/admin/groups",
               },
-            ]
-          : []),
-        {
-          name: "Settings",
-          items: [
-            {
-              name: "Workspace Settings",
-              icon: SvgSettings,
-              link: "/admin/settings",
-            },
-            ...(enableEnterprise
-              ? [
-                  {
-                    name: "Appearance & Theming",
-                    icon: SvgPaintBrush,
-                    link: "/admin/theme",
-                  },
-                ]
-              : []),
-            ...(enableCloud
-              ? [
-                  {
-                    name: "Billing",
-                    icon: MdOutlineCreditCard,
-                    link: "/admin/billing",
-                  },
-                ]
-              : []),
-          ],
-        },
-      ]
-    : []),
-];
+            ],
+          },
+        ]
+      : []),
+    ...(!isCurator
+      ? [
+          {
+            name: "Configuration",
+            items: [
+              {
+                name: "Default Assistant",
+                icon: SvgOnyxLogo,
+                link: "/admin/configuration/default-assistant",
+              },
+              {
+                name: "LLM",
+                icon: SvgCpu,
+                link: "/admin/configuration/llm",
+              },
+              {
+                name: "Web Search",
+                icon: SvgGlobe,
+                link: "/admin/configuration/web-search",
+              },
+              {
+                name: "Image Generation",
+                icon: SvgImage,
+                link: "/admin/configuration/image-generation",
+              },
+              ...(!enableCloud && vectorDbEnabled
+                ? [
+                    {
+                      error: settings?.settings.needs_reindexing,
+                      name: "Search Settings",
+                      icon: SvgSearch,
+                      link: "/admin/configuration/search",
+                    },
+                  ]
+                : []),
+              {
+                name: "Document Processing",
+                icon: SvgFileText,
+                link: "/admin/configuration/document-processing",
+              },
+              ...(kgExposed
+                ? [
+                    {
+                      name: "Knowledge Graph",
+                      icon: BrainIcon,
+                      link: "/admin/kg",
+                    },
+                  ]
+                : []),
+            ],
+          },
+          {
+            name: "User Management",
+            items: [
+              {
+                name: "Users",
+                icon: SvgUser,
+                link: "/admin/users",
+              },
+              ...(enableEnterprise
+                ? [
+                    {
+                      name: "Groups",
+                      icon: SvgUsers,
+                      link: "/admin/groups",
+                    },
+                  ]
+                : []),
+              {
+                name: "API Keys",
+                icon: SvgKey,
+                link: "/admin/api-key",
+              },
+              {
+                name: "Token Rate Limits",
+                icon: SvgShield,
+                link: "/admin/token-rate-limits",
+              },
+            ],
+          },
+          ...(enableEnterprise
+            ? [
+                {
+                  name: "Performance",
+                  items: [
+                    {
+                      name: "Usage Statistics",
+                      icon: SvgActivity,
+                      link: "/admin/performance/usage",
+                    },
+                    ...(settings?.settings.query_history_type !== "disabled"
+                      ? [
+                          {
+                            name: "Query History",
+                            icon: SvgServer,
+                            link: "/admin/performance/query-history",
+                          },
+                        ]
+                      : []),
+                    ...(!enableCloud && customAnalyticsEnabled
+                      ? [
+                          {
+                            name: "Custom Analytics",
+                            icon: SvgBarChart,
+                            link: "/admin/performance/custom-analytics",
+                          },
+                        ]
+                      : []),
+                  ],
+                },
+              ]
+            : []),
+          {
+            name: "Settings",
+            items: [
+              {
+                name: "Workspace Settings",
+                icon: SvgSettings,
+                link: "/admin/settings",
+              },
+              ...(enableEnterprise
+                ? [
+                    {
+                      name: "Appearance & Theming",
+                      icon: SvgPaintBrush,
+                      link: "/admin/theme",
+                    },
+                  ]
+                : []),
+              // Always show billing/upgrade - community users need access to upgrade
+              {
+                name: hasSubscription ? "Plans & Billing" : "Upgrade Plan",
+                icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
+                link: "/admin/billing",
+              },
+              ...(settings?.settings.opensearch_indexing_enabled
+                ? [
+                    {
+                      name: "Document Index Migration",
+                      icon: SvgArrowExchange,
+                      link: "/admin/document-index-migration",
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
+  ];
+};
 
 interface AdminSidebarProps {
-  // These props are passed down from a server component (Layout.tsx) that
-  // determines feature availability server-side. We don't calculate these
-  // directly in this client component to avoid:
-  // 1. Unnecessary API calls on the client-side
-  // 2. Security concerns - preventing end-users from tampering with
-  //    feature flags by making direct API calls
-  // 3. Performance - avoiding refetches when the data is already available
+  // Cloud flag is passed from server component (Layout.tsx) since it's a build-time constant
   enableCloudSS: boolean;
+  // Enterprise flag is also passed but we override it with runtime license check below
   enableEnterpriseSS: boolean;
 }
 
@@ -320,29 +350,44 @@ export default function AdminSidebar({
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
+  const { data: billingData } = useBillingInformation();
+  const { data: licenseData } = useLicense();
+
+  // Use runtime license check for enterprise features
+  // This checks settings.ee_features_enabled (set by backend based on license status)
+  // Falls back to build-time check if LICENSE_ENFORCEMENT_ENABLED=false
+  const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
 
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
 
+  // Check if user has an active subscription or license for billing link text
+  // Show "Plans & Billing" if they have either (even if Stripe connection fails)
+  const hasSubscription = Boolean(
+    (billingData && hasActiveSubscription(billingData)) ||
+      licenseData?.has_license
+  );
+
   const items = collections(
     isCurator,
     enableCloudSS,
-    enableEnterpriseSS,
+    enableEnterprise,
     settings,
     kgExposed,
-    customAnalyticsEnabled
+    customAnalyticsEnabled,
+    hasSubscription
   );
 
   return (
     <SidebarWrapper>
       <SidebarBody
         scrollKey="admin-sidebar"
-        actionButton={
+        actionButtons={
           <SidebarTab
             leftIcon={({ className }) => (
               <CgArrowsExpandUpLeft className={className} size={16} />
             )}
-            href="/chat"
+            href="/app"
           >
             Exit Admin
           </SidebarTab>
@@ -354,7 +399,7 @@ export default function AdminSidebar({
                 {`Onyx version: ${settings.webVersion}`}
               </Text>
             )}
-            <Settings />
+            <UserAvatarPopover />
           </div>
         }
       >

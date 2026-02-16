@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from onyx.connectors.file.connector import LocalFileConnector
+from onyx.connectors.models import HierarchyNode
 
 
 @pytest.fixture
@@ -34,7 +35,7 @@ def mock_filestore_record() -> MagicMock:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_single_text_file_with_metadata(
-    mock_get_unstructured_api_key: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     mock_get_session: MagicMock,
     mock_db_session: MagicMock,
     mock_file_store: MagicMock,
@@ -65,6 +66,7 @@ def test_single_text_file_with_metadata(
     docs = batches[0]
     assert len(docs) == 1
     doc = docs[0]
+    assert not isinstance(doc, HierarchyNode)
 
     assert doc.sections[0].text == "Test answer is 12345"
     assert doc.sections[0].link == "https://onyx.app"
@@ -78,8 +80,8 @@ def test_single_text_file_with_metadata(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_two_text_files_with_zip_metadata(
-    mock_get_unstructured_api_key: MagicMock,
-    mock_db_session: MagicMock,
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_db_session: MagicMock,  # noqa: ARG001
     mock_file_store: MagicMock,
 ) -> None:
     file1_content = io.BytesIO(b"File 1 content")
@@ -125,6 +127,8 @@ def test_two_text_files_with_zip_metadata(
     docs = batches[0]
     assert len(docs) == 2
     doc1, doc2 = docs
+    assert not isinstance(doc1, HierarchyNode)
+    assert not isinstance(doc2, HierarchyNode)
 
     assert doc1.sections[0].text == "File 1 content"
     assert doc1.sections[0].link == "https://onyx.app/1"

@@ -11,7 +11,7 @@ import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Callout } from "@/components/ui/callout";
 import Button from "@/refresh-components/buttons/Button";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button as OpalButton } from "@opal/components";
 import { cn } from "@/lib/utils";
 import {
   SvgArrowExchange,
@@ -136,6 +136,17 @@ export default function Page() {
 
   const isLoading = isLoadingSearchProviders || isLoadingContentProviders;
 
+  // Exa shares API key between search and content providers
+  const exaSearchProvider = searchProviders.find(
+    (p) => p.provider_type === "exa"
+  );
+  const exaContentProvider = contentProviders.find(
+    (p) => p.provider_type === "exa"
+  );
+  const hasSharedExaKey =
+    (exaSearchProvider?.has_api_key || exaContentProvider?.has_api_key) ??
+    false;
+
   // Modal form state is owned by reducers
 
   const openSearchModal = (
@@ -145,12 +156,18 @@ export default function Page() {
     const requiresApiKey = searchProviderRequiresApiKey(providerType);
     const hasStoredKey = provider?.has_api_key ?? false;
 
+    // For Exa search provider, check if we can use the shared Exa key
+    const isExa = providerType === "exa";
+    const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
+
     dispatchSearchModal({
       type: "OPEN",
       providerType,
       existingProviderId: provider?.id ?? null,
       initialApiKeyValue:
-        requiresApiKey && hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
+        requiresApiKey && (hasStoredKey || canUseSharedExaKey)
+          ? MASKED_API_KEY_PLACEHOLDER
+          : "",
       initialConfigValue: getSingleConfigFieldValueForForm(
         providerType,
         provider
@@ -163,13 +180,18 @@ export default function Page() {
     provider?: WebContentProviderView
   ) => {
     const hasStoredKey = provider?.has_api_key ?? false;
-    const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v1/scrape";
+    const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v2/scrape";
+
+    // For Exa content provider, check if we can use the shared Exa key
+    const isExa = providerType === "exa";
+    const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
 
     dispatchContentModal({
       type: "OPEN",
       providerType,
       existingProviderId: provider?.id ?? null,
-      initialApiKeyValue: hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "",
+      initialApiKeyValue:
+        hasStoredKey || canUseSharedExaKey ? MASKED_API_KEY_PLACEHOLDER : "",
       initialConfigValue:
         providerType === "firecrawl"
           ? getSingleContentConfigFieldValueForForm(
@@ -339,6 +361,17 @@ export default function Page() {
         } satisfies WebContentProviderView;
       }
 
+      if (providerType === "exa") {
+        return {
+          id: -3,
+          name: "Exa",
+          provider_type: "exa",
+          is_active: false,
+          config: null,
+          has_api_key: hasSharedExaKey,
+        } satisfies WebContentProviderView;
+      }
+
       return null;
     }).filter(Boolean) as WebContentProviderView[];
 
@@ -347,7 +380,7 @@ export default function Page() {
     );
 
     return [...ordered, ...additional];
-  }, [contentProviders]);
+  }, [contentProviders, hasSharedExaKey]);
 
   const currentContentProviderType =
     getCurrentContentProviderType(contentProviders);
@@ -468,7 +501,12 @@ export default function Page() {
       onClose: () => {
         dispatchSearchModal({ type: "CLOSE" });
       },
-      mutate: mutateSearchProviders,
+      mutate: async () => {
+        await mutateSearchProviders();
+        if (selectedProviderType === "exa") {
+          await mutateContentProviders();
+        }
+      },
     });
   };
 
@@ -678,6 +716,23 @@ export default function Page() {
         selectedContentProviderType
       : "";
 
+    if (selectedContentProviderType === "exa") {
+      return (
+        <>
+          Paste your{" "}
+          <a
+            href="https://dashboard.exa.ai/api-keys"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            API key
+          </a>{" "}
+          from Exa to enable crawling.
+        </>
+      );
+    }
+
     return selectedContentProviderType === "firecrawl" ? (
       <>
         Paste your <span className="underline">API key</span> from Firecrawl to
@@ -719,7 +774,7 @@ export default function Page() {
     const storedBaseUrl = getSingleContentConfigFieldValueForForm(
       selectedContentProviderType,
       existingProvider,
-      "https://api.firecrawl.dev/v1/scrape"
+      "https://api.firecrawl.dev/v2/scrape"
     );
     const configChanged =
       selectedContentProviderType === "firecrawl" &&
@@ -729,6 +784,10 @@ export default function Page() {
     // Note: onyx_web_crawler doesn't go through this modal.
     dispatchContentModal({ type: "SET_PHASE", phase: "saving" });
     dispatchContentModal({ type: "CLEAR_MESSAGE" });
+
+    const apiKeyChangedForContentProvider =
+      contentModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
+      contentProviderValues.apiKey.length > 0;
 
     await connectProviderFlow({
       category: "content",
@@ -740,9 +799,7 @@ export default function Page() {
         CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ??
         selectedContentProviderType,
       providerRequiresApiKey: true,
-      apiKeyChangedForProvider:
-        contentModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
-        contentProviderValues.apiKey.length > 0,
+      apiKeyChangedForProvider: apiKeyChangedForContentProvider,
       apiKey: contentProviderValues.apiKey,
       config,
       configChanged,
@@ -759,7 +816,12 @@ export default function Page() {
       onClose: () => {
         dispatchContentModal({ type: "CLOSE" });
       },
-      mutate: mutateContentProviders,
+      mutate: async () => {
+        await mutateContentProviders();
+        if (selectedContentProviderType === "exa") {
+          await mutateSearchProviders();
+        }
+      },
     });
   };
 
@@ -923,11 +985,11 @@ export default function Page() {
                       </div>
                       <div className="flex items-center justify-end gap-2">
                         {isConfigured && (
-                          <IconButton
+                          <OpalButton
                             icon={SvgEdit}
                             tooltip="Edit"
-                            internal
-                            tertiary
+                            prominence="tertiary"
+                            size="sm"
                             onClick={() => {
                               if (!canOpenModal) return;
                               openSearchModal(
@@ -1052,7 +1114,8 @@ export default function Page() {
 
                   const canActivate =
                     providerId > 0 ||
-                    provider.provider_type === "onyx_web_crawler";
+                    provider.provider_type === "onyx_web_crawler" ||
+                    isConfigured;
 
                   return {
                     label: "Set as Default",
@@ -1105,7 +1168,7 @@ export default function Page() {
                         alt: `${label} logo`,
                         fallback:
                           provider.provider_type === "onyx_web_crawler" ? (
-                            <SvgOnyxLogo width={16} height={16} />
+                            <SvgOnyxLogo size={16} />
                           ) : undefined,
                         size: 16,
                         isHighlighted: isCurrentCrawler,
@@ -1122,11 +1185,11 @@ export default function Page() {
                     <div className="flex items-center justify-end gap-2">
                       {provider.provider_type !== "onyx_web_crawler" &&
                         isConfigured && (
-                          <IconButton
+                          <OpalButton
                             icon={SvgEdit}
                             tooltip="Edit"
-                            internal
-                            tertiary
+                            prominence="tertiary"
+                            size="sm"
                             onClick={() => {
                               openContentModal(
                                 provider.provider_type,
@@ -1318,7 +1381,7 @@ export default function Page() {
           } logo`,
           fallback:
             selectedContentProviderType === "onyx_web_crawler" ? (
-              <SvgOnyxLogo width={24} height={24} className="text-text-05" />
+              <SvgOnyxLogo size={24} className="text-text-05" />
             ) : undefined,
           size: 24,
           containerSize: 28,

@@ -5,15 +5,9 @@ import {
   setDefaultVisionProvider,
 } from "@/lib/llm/visionLLM";
 import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
+import { toast } from "@/hooks/useToast";
 
-// Define a type for the popup setter function
-type SetPopup = (popup: {
-  message: string;
-  type: "success" | "error" | "info";
-}) => void;
-
-// Accept the setPopup function as a parameter
-export function useVisionProviders(setPopup: SetPopup) {
+export function useVisionProviders() {
   const [visionProviders, setVisionProviders] = useState<VisionProvider[]>([]);
   const [visionLLM, setVisionLLM] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,12 +45,11 @@ export function useVisionProviders(setPopup: SetPopup) {
       setError(
         error instanceof Error ? error.message : "Unknown error occurred"
       );
-      setPopup({
-        message: `Failed to load vision providers: ${
+      toast.error(
+        `Failed to load vision providers: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`,
-        type: "error",
-      });
+        }`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -65,10 +58,7 @@ export function useVisionProviders(setPopup: SetPopup) {
   const updateDefaultVisionProvider = useCallback(
     async (llmValue: string | null) => {
       if (!llmValue) {
-        setPopup({
-          message: "Please select a valid vision model",
-          type: "error",
-        });
+        toast.error("Please select a valid vision model");
         return false;
       }
 
@@ -83,10 +73,7 @@ export function useVisionProviders(setPopup: SetPopup) {
 
         await setDefaultVisionProvider(providerObj.id, modelName);
 
-        setPopup({
-          message: "Default vision provider updated successfully!",
-          type: "success",
-        });
+        toast.success("Default vision provider updated successfully!");
         setVisionLLM(llmValue);
 
         // Refresh the list to reflect the change
@@ -96,14 +83,13 @@ export function useVisionProviders(setPopup: SetPopup) {
         console.error("Error setting default vision provider:", error);
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error occurred";
-        setPopup({
-          message: `Failed to update default vision provider: ${errorMessage}`,
-          type: "error",
-        });
+        toast.error(
+          `Failed to update default vision provider: ${errorMessage}`
+        );
         return false;
       }
     },
-    [visionProviders, setPopup, loadVisionProviders]
+    [visionProviders, loadVisionProviders]
   );
 
   // Load providers on mount

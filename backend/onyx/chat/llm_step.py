@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
@@ -13,6 +14,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
+from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
@@ -34,6 +36,10 @@ from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.utils import model_needs_formatting_reenabled
+from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
@@ -42,14 +48,22 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.tools.models import TOOL_CALL_MSG_ARGUMENTS
-from onyx.tools.models import TOOL_CALL_MSG_FUNC_NAME
 from onyx.tools.models import ToolCallKickoff
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
+
+
+def _sanitize_llm_output(value: str) -> str:
+    """Remove characters that PostgreSQL's text/JSONB types cannot store.
+
+    - NULL bytes (\x00): Not allowed in PostgreSQL text types
+    - UTF-16 surrogates (\ud800-\udfff): Invalid in UTF-8 encoding
+    """
+    return "".join(c for c in value if c != "\x00" and not ("\ud800" <= c <= "\udfff"))
 
 
 def _try_parse_json_string(value: Any) -> Any:
@@ -98,10 +112,18 @@ def _parse_tool_args_to_dict(raw_args: Any) -> dict[str, Any]:
 
     if isinstance(raw_args, dict):
         # Parse any string values that look like JSON arrays/objects
-        return {k: _try_parse_json_string(v) for k, v in raw_args.items()}
+        return {
+            k: _try_parse_json_string(
+                _sanitize_llm_output(v) if isinstance(v, str) else v
+            )
+            for k, v in raw_args.items()
+        }
 
     if not isinstance(raw_args, str):
         return {}
+
+    # Sanitize before parsing to remove NULL bytes and surrogates
+    raw_args = _sanitize_llm_output(raw_args)
 
     try:
         parsed1: Any = json.loads(raw_args)
@@ -136,12 +158,11 @@ def _format_message_history_for_logging(
 
     separator = "================================================"
 
-    # Handle string input
-    if isinstance(message_history, str):
-        formatted_lines.append("Message [string]:")
-        formatted_lines.append(separator)
-        formatted_lines.append(f"{message_history}")
-        return "\n".join(formatted_lines)
+    # Handle single ChatCompletionMessage - wrap in list for uniform processing
+    if isinstance(
+        message_history, (SystemMessage, UserMessage, AssistantMessage, ToolMessage)
+    ):
+        message_history = [message_history]
 
     # Handle sequence of messages
     for i, msg in enumerate(message_history):
@@ -211,7 +232,8 @@ def _update_tool_call_with_delta(
 
     if index not in tool_calls_in_progress:
         tool_calls_in_progress[index] = {
-            "id": None,
+            # Fallback ID in case the provider never sends one via deltas.
+            "id": f"fallback_{uuid.uuid4().hex}",
             "name": None,
             "arguments": "",
         }
@@ -277,6 +299,202 @@ def _extract_tool_call_kickoffs(
     return tool_calls
 
 
+def extract_tool_calls_from_response_text(
+    response_text: str | None,
+    tool_definitions: list[dict],
+    placement: Placement,
+) -> list[ToolCallKickoff]:
+    """Extract tool calls from LLM response text by matching JSON against tool definitions.
+
+    This is a fallback mechanism for when the LLM was expected to return tool calls
+    but didn't use the proper tool call format. It searches for JSON objects in the
+    response text that match the structure of available tools.
+
+    Args:
+        response_text: The LLM's text response to search for tool calls
+        tool_definitions: List of tool definitions to match against
+        placement: Placement information for the tool calls
+
+    Returns:
+        List of ToolCallKickoff objects for any matched tool calls
+    """
+    if not response_text or not tool_definitions:
+        return []
+
+    # Build a map of tool names to their definitions
+    tool_name_to_def: dict[str, dict] = {}
+    for tool_def in tool_definitions:
+        if tool_def.get("type") == "function" and "function" in tool_def:
+            func_def = tool_def["function"]
+            tool_name = func_def.get("name")
+            if tool_name:
+                tool_name_to_def[tool_name] = func_def
+
+    if not tool_name_to_def:
+        return []
+
+    # Find all JSON objects in the response text
+    json_objects = find_all_json_objects(response_text)
+
+    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
+    prev_json_obj: dict[str, Any] | None = None
+    prev_tool_call: tuple[str, dict[str, Any]] | None = None
+
+    for json_obj in json_objects:
+        matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
+        if not matched_tool_call:
+            continue
+
+        # `find_all_json_objects` can return both an outer tool-call object and
+        # its nested arguments object. If both resolve to the same tool call,
+        # drop only this nested duplicate artifact.
+        if (
+            prev_json_obj is not None
+            and prev_tool_call is not None
+            and matched_tool_call == prev_tool_call
+            and _is_nested_arguments_duplicate(
+                previous_json_obj=prev_json_obj,
+                current_json_obj=json_obj,
+                tool_name_to_def=tool_name_to_def,
+            )
+        ):
+            continue
+
+        matched_tool_calls.append(matched_tool_call)
+        prev_json_obj = json_obj
+        prev_tool_call = matched_tool_call
+
+    tool_calls: list[ToolCallKickoff] = []
+    for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
+        tool_calls.append(
+            ToolCallKickoff(
+                tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
+                tool_name=tool_name,
+                tool_args=tool_args,
+                placement=Placement(
+                    turn_index=placement.turn_index,
+                    tab_index=tab_index,
+                    sub_turn_index=placement.sub_turn_index,
+                ),
+            )
+        )
+
+    logger.info(
+        f"Extracted {len(tool_calls)} tool call(s) from response text as fallback"
+    )
+
+    return tool_calls
+
+
+def _try_match_json_to_tool(
+    json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> tuple[str, dict[str, Any]] | None:
+    """Try to match a JSON object to a tool definition.
+
+    Supports several formats:
+    1. Direct tool call format: {"name": "tool_name", "arguments": {...}}
+    2. Function call format: {"function": {"name": "tool_name", "arguments": {...}}}
+    3. Tool name as key: {"tool_name": {...arguments...}}
+    4. Arguments matching a tool's parameter schema
+
+    Args:
+        json_obj: The JSON object to match
+        tool_name_to_def: Map of tool names to their function definitions
+
+    Returns:
+        Tuple of (tool_name, tool_args) if matched, None otherwise
+    """
+    # Format 1: Direct tool call format {"name": "...", "arguments": {...}}
+    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
+        tool_name = json_obj["name"]
+        arguments = json_obj.get("arguments", json_obj.get("parameters", {}))
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                arguments = {}
+        if isinstance(arguments, dict):
+            return (tool_name, arguments)
+
+    # Format 2: Function call format {"function": {"name": "...", "arguments": {...}}}
+    if "function" in json_obj and isinstance(json_obj["function"], dict):
+        func_obj = json_obj["function"]
+        if "name" in func_obj and func_obj["name"] in tool_name_to_def:
+            tool_name = func_obj["name"]
+            arguments = func_obj.get("arguments", func_obj.get("parameters", {}))
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    arguments = {}
+            if isinstance(arguments, dict):
+                return (tool_name, arguments)
+
+    # Format 3: Tool name as key {"tool_name": {...arguments...}}
+    for tool_name in tool_name_to_def:
+        if tool_name in json_obj:
+            arguments = json_obj[tool_name]
+            if isinstance(arguments, dict):
+                return (tool_name, arguments)
+
+    # Format 4: Check if the JSON object matches a tool's parameter schema
+    for tool_name, func_def in tool_name_to_def.items():
+        params = func_def.get("parameters", {})
+        properties = params.get("properties", {})
+        required = params.get("required", [])
+
+        if not properties:
+            continue
+
+        # Check if all required parameters are present (empty required = all optional)
+        if all(req in json_obj for req in required):
+            # Check if any of the tool's properties are in the JSON object
+            matching_props = [prop for prop in properties if prop in json_obj]
+            if matching_props:
+                # Filter to only include known properties
+                filtered_args = {k: v for k, v in json_obj.items() if k in properties}
+                return (tool_name, filtered_args)
+
+    return None
+
+
+def _is_nested_arguments_duplicate(
+    previous_json_obj: dict[str, Any],
+    current_json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> bool:
+    """Detect when current object is the nested args object from previous tool call."""
+    extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
+    return extracted_args is not None and current_json_obj == extracted_args
+
+
+def _extract_nested_arguments_obj(
+    json_obj: dict[str, Any],
+    tool_name_to_def: dict[str, dict],
+) -> dict[str, Any] | None:
+    # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
+    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
+        args_obj = json_obj.get("arguments", json_obj.get("parameters"))
+        if isinstance(args_obj, dict):
+            return args_obj
+
+    # Format 2: {"function": {"name": "...", "arguments": {...}}}
+    if "function" in json_obj and isinstance(json_obj["function"], dict):
+        function_obj = json_obj["function"]
+        if "name" in function_obj and function_obj["name"] in tool_name_to_def:
+            args_obj = function_obj.get("arguments", function_obj.get("parameters"))
+            if isinstance(args_obj, dict):
+                return args_obj
+
+    # Format 3: {"tool_name": {...arguments...}}
+    for tool_name in tool_name_to_def:
+        if tool_name in json_obj and isinstance(json_obj[tool_name], dict):
+            return json_obj[tool_name]
+
+    return None
+
+
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
@@ -292,9 +510,10 @@ def translate_history_to_llm_format(
 
     for idx, msg in enumerate(history):
         # if the message is being added to the history
-        if msg.message_type in [
+        if PROMPT_CACHE_CHAT_HISTORY and msg.message_type in [
             MessageType.SYSTEM,
             MessageType.USER,
+            MessageType.USER_REMINDER,
             MessageType.ASSISTANT,
             MessageType.TOOL_CALL_RESPONSE,
         ]:
@@ -356,66 +575,37 @@ def translate_history_to_llm_format(
                 )
                 messages.append(user_msg_text)
 
+        elif msg.message_type == MessageType.USER_REMINDER:
+            # User reminder messages are wrapped with system-reminder tags
+            # and converted to UserMessage (LLM APIs don't have a native reminder type)
+            wrapped_content = f"{SYSTEM_REMINDER_TAG_OPEN}\n{msg.message}\n{SYSTEM_REMINDER_TAG_CLOSE}"
+            reminder_msg = UserMessage(
+                role="user",
+                content=wrapped_content,
+            )
+            messages.append(reminder_msg)
+
         elif msg.message_type == MessageType.ASSISTANT:
+            tool_calls_list: list[ToolCall] | None = None
+            if msg.tool_calls:
+                tool_calls_list = [
+                    ToolCall(
+                        id=tc.tool_call_id,
+                        type="function",
+                        function=FunctionCall(
+                            name=tc.tool_name,
+                            arguments=json.dumps(tc.tool_arguments),
+                        ),
+                    )
+                    for tc in msg.tool_calls
+                ]
+
             assistant_msg = AssistantMessage(
                 role="assistant",
                 content=msg.message or None,
-                tool_calls=None,
+                tool_calls=tool_calls_list,
             )
             messages.append(assistant_msg)
-
-        elif msg.message_type == MessageType.TOOL_CALL:
-            # Tool calls are represented as Assistant Messages with tool_calls field
-            # Try to reconstruct tool call structure if we have tool_call_id
-            tool_calls: list[ToolCall] = []
-            if msg.tool_call_id:
-                try:
-                    # Parse the message content (which should contain function_name and arguments)
-                    tool_call_data = json.loads(msg.message) if msg.message else {}
-
-                    if (
-                        isinstance(tool_call_data, dict)
-                        and TOOL_CALL_MSG_FUNC_NAME in tool_call_data
-                    ):
-                        function_name = tool_call_data.get(
-                            TOOL_CALL_MSG_FUNC_NAME, "unknown"
-                        )
-                        raw_args = tool_call_data.get(TOOL_CALL_MSG_ARGUMENTS, {})
-                    else:
-                        function_name = "unknown"
-                        raw_args = (
-                            tool_call_data if isinstance(tool_call_data, dict) else {}
-                        )
-
-                    # IMPORTANT: `FunctionCall.arguments` must be a JSON object string.
-                    # If `raw_args` is accidentally a JSON string literal of an object
-                    # (e.g. '"{\\"queries\\":[...]}"'), calling `json.dumps(raw_args)`
-                    # would produce a quoted JSON literal and break Anthropic tool parsing.
-                    tool_args = _parse_tool_args_to_dict(raw_args)
-
-                    # NOTE: if the model is trained on a different tool call format, this may slightly interfere
-                    # with the future tool calls, if it doesn't look like this. Almost certainly not a big deal.
-                    tool_call = ToolCall(
-                        id=msg.tool_call_id,
-                        type="function",
-                        function=FunctionCall(
-                            name=function_name,
-                            arguments=json.dumps(tool_args) if tool_args else "{}",
-                        ),
-                    )
-                    tool_calls.append(tool_call)
-                except (json.JSONDecodeError, ValueError) as e:
-                    logger.warning(
-                        f"Failed to parse tool call data for tool_call_id {msg.tool_call_id}: {e}. "
-                        "Including as content-only message."
-                    )
-
-            assistant_msg_with_tool = AssistantMessage(
-                role="assistant",
-                content=None,  # The tool call is parsed, doesn't need to be duplicated in the content
-                tool_calls=tool_calls or None,
-            )
-            messages.append(assistant_msg_with_tool)
 
         elif msg.message_type == MessageType.TOOL_CALL_RESPONSE:
             if not msg.tool_call_id:
@@ -434,6 +624,17 @@ def translate_history_to_llm_format(
             logger.warning(
                 f"Unknown message type {msg.message_type} in history. Skipping message."
             )
+
+    # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
+    # reasoning models need CODE_BLOCK_MARKDOWN prefix for correct markdown generation)
+    if model_needs_formatting_reenabled(llm_config.model_name):
+        for i, m in enumerate(messages):
+            if isinstance(m, SystemMessage):
+                messages[i] = SystemMessage(
+                    role="system",
+                    content=CODE_BLOCK_MARKDOWN + m.content,
+                )
+                break
 
     # prompt caching: rely on should_cache in ChatMessageSimple to
     # pick the split point for the cacheable prefix and suffix
@@ -471,7 +672,7 @@ def run_llm_step_pkt_generator(
     placement: Placement,
     state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
-    reasoning_effort: ReasoningEffort | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
@@ -481,6 +682,8 @@ def run_llm_step_pkt_generator(
     # TODO: Temporary handling of nested tool calls with agents, figure out a better way to handle this
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    pre_answer_processing_time: float | None = None,
+    timeout_override: int | None = None,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -536,9 +739,8 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = 0
 
-    # Uncomment the line below to log the entire message history to the console
     if LOG_ONYX_MODEL_INTERACTIONS:
-        logger.info(
+        logger.debug(
             f"Message history:\n{_format_message_history_for_logging(llm_msg_history)}"
         )
 
@@ -570,6 +772,7 @@ def run_llm_step_pkt_generator(
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
+            timeout_override=timeout_override,
         ):
             if packet.usage:
                 usage = packet.usage
@@ -581,6 +784,18 @@ def run_llm_step_pkt_generator(
                 }
                 # Note: LLM cost tracking is now handled in multi_llm.py
             delta = packet.choice.delta
+
+            # Weird behavior from some model providers, just log and ignore for now
+            if (
+                delta.content is None
+                and delta.reasoning_content is None
+                and delta.tool_calls is None
+            ):
+                logger.warning(
+                    f"LLM packet is empty (no contents, reasoning or tool calls). Skipping: {packet}"
+                )
+                continue
+
             if not first_action_recorded and _delta_has_action(delta):
                 span_generation.span_data.time_to_first_action_seconds = (
                     time.monotonic() - stream_start_time
@@ -669,6 +884,12 @@ def run_llm_step_pkt_generator(
                         reasoning_start = False
 
                     if not answer_start:
+                        # Store pre-answer processing time in state container for save_chat
+                        if state_container and pre_answer_processing_time is not None:
+                            state_container.set_pre_answer_processing_time(
+                                pre_answer_processing_time
+                            )
+
                         yield Packet(
                             placement=Placement(
                                 turn_index=turn_index,
@@ -677,6 +898,7 @@ def run_llm_step_pkt_generator(
                             ),
                             obj=AgentResponseStart(
                                 final_documents=final_documents,
+                                pre_answer_processing_seconds=pre_answer_processing_time,
                             ),
                         )
                         answer_start = True
@@ -707,6 +929,11 @@ def run_llm_step_pkt_generator(
                                     ),
                                     obj=result,
                                 )
+                                # Track emitted citation for saving
+                                if state_container:
+                                    state_container.add_emitted_citation(
+                                        result.citation_number
+                                    )
                     else:
                         # When citation_processor is None, use delta.content directly without modification
                         accumulated_answer += delta.content
@@ -790,6 +1017,10 @@ def run_llm_step_pkt_generator(
             )
             span_generation.span_data.output = [assistant_msg_no_tools.model_dump()]
 
+        # Record reasoning content for tracing (extended thinking from reasoning models)
+        if accumulated_reasoning:
+            span_generation.span_data.reasoning = accumulated_reasoning
+
     # This may happen if the custom token processor is used to modify other packets into reasoning
     # Then there won't necessarily be anything else to come after the reasoning tokens
     if reasoning_start:
@@ -833,6 +1064,9 @@ def run_llm_step_pkt_generator(
                     ),
                     obj=result,
                 )
+                # Track emitted citation for saving
+                if state_container:
+                    state_container.add_emitted_citation(result.citation_number)
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
@@ -840,14 +1074,14 @@ def run_llm_step_pkt_generator(
         logger.debug(f"Accumulated reasoning: {accumulated_reasoning}")
         logger.debug(f"Accumulated answer: {accumulated_answer}")
 
-    if tool_calls:
-        tool_calls_str = "\n".join(
-            f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
-            for tc in tool_calls
-        )
-        logger.debug(f"Tool calls:\n{tool_calls_str}")
-    else:
-        logger.debug("Tool calls: []")
+        if tool_calls:
+            tool_calls_str = "\n".join(
+                f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
+                for tc in tool_calls
+            )
+            logger.debug(f"Tool calls:\n{tool_calls_str}")
+        else:
+            logger.debug("Tool calls: []")
 
     return (
         LlmStepResult(
@@ -868,7 +1102,7 @@ def run_llm_step(
     placement: Placement,
     state_container: ChatStateContainer | None,
     citation_processor: DynamicCitationProcessor | None,
-    reasoning_effort: ReasoningEffort | None = None,
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
     final_documents: list[SearchDoc] | None = None,
     user_identity: LLMUserIdentity | None = None,
     custom_token_processor: (
@@ -877,6 +1111,8 @@ def run_llm_step(
     max_tokens: int | None = None,
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
+    pre_answer_processing_time: float | None = None,
+    timeout_override: int | None = None,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -898,6 +1134,8 @@ def run_llm_step(
         max_tokens=max_tokens,
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
+        pre_answer_processing_time=pre_answer_processing_time,
+        timeout_override=timeout_override,
     )
 
     while True:

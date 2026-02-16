@@ -16,6 +16,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -228,7 +229,7 @@ class ProductboardConnector(PollConnector):
                 "Access token is not set up, was load_credentials called?"
             )
 
-        document_batch: list[Document] = []
+        document_batch: list[Document | HierarchyNode] = []
 
         # NOTE: there is a concept of a "Note" in productboard, however
         # there is no read API for it atm. Additionally, comments are not

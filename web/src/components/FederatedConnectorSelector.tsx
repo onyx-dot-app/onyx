@@ -5,12 +5,12 @@ import {
   federatedSourceToRegularSource,
 } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
-import { Label } from "@/components/ui/label";
+import Label from "@/refresh-components/form/Label";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgX } from "@opal/icons";
+import { Button } from "@opal/components";
 
 interface FederatedConnectorSelectorProps {
   name: string;
@@ -128,7 +128,11 @@ export const FederatedConnectorSelector = ({
 
   return (
     <div className="flex flex-col w-full space-y-2 mb-4">
-      {label && <Label className="text-base font-medium">{label}</Label>}
+      {label && (
+        <Label>
+          <Text>{label}</Text>
+        </Label>
+      )}
 
       <Text as="p" mainUiMuted text03>
         Documents from selected federated connectors will be searched in
@@ -140,7 +144,7 @@ export const FederatedConnectorSelector = ({
           leftSearchIcon
           placeholder={effectivePlaceholder}
           value={searchQuery}
-          disabled={isInputDisabled}
+          variant={isInputDisabled ? "disabled" : undefined}
           onChange={(e) => {
             setSearchQuery(e.target.value);
             setOpen(true);
@@ -231,8 +235,9 @@ export const FederatedConnectorSelector = ({
                     )}
                   </div>
                   <div className="flex items-center ml-2 gap-1">
-                    <IconButton
-                      internal
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
                       type="button"
                       aria-label="Remove connector"
                       tooltip="Remove connector"

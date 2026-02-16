@@ -6,7 +6,9 @@ import onyx.tracing.framework._error_tracing as _error_tracing
 from onyx.chat.models import ChatMessageSimple
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
+from onyx.db.memory import UserMemoryContext
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import PacketException
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
@@ -17,8 +19,11 @@ from onyx.tools.models import PythonToolOverrideKwargs
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -33,6 +38,9 @@ logger = setup_logger()
 QUERIES_FIELD = "queries"
 URLS_FIELD = "urls"
 GENERIC_TOOL_ERROR_MESSAGE = "Tool failed with error: {error}"
+
+# 10 minute timeout for tool execution to prevent indefinite hangs
+TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60
 
 # Mapping of tool name to the field that should be merged when multiple calls exist
 MERGEABLE_TOOL_FIELDS: dict[str, str] = {
@@ -150,6 +158,33 @@ def _safe_run_single_tool(
                     },
                 )
             )
+        except ToolExecutionException as e:
+            # Unexpected error during tool execution
+            logger.error(f"Unexpected error running tool {tool.name}: {e}")
+            tool_response = ToolResponse(
+                rich_response=None,
+                llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(error=str(e)),
+            )
+            _error_tracing.attach_error_to_current_span(
+                SpanError(
+                    message="Tool execution error (unexpected)",
+                    data={
+                        "tool_name": tool.name,
+                        "tool_call_id": tool_call.tool_call_id,
+                        "tool_args": tool_call.tool_args,
+                        "error": str(e),
+                        "stack_trace": traceback.format_exc(),
+                        "error_type": type(e).__name__,
+                    },
+                )
+            )
+            if e.emit_error_packet:
+                tool.emitter.emit(
+                    Packet(
+                        placement=tool_call.placement,
+                        obj=PacketException(exception=e),
+                    )
+                )
         except Exception as e:
             # Unexpected error during tool execution
             logger.error(f"Unexpected error running tool {tool.name}: {e}")
@@ -189,7 +224,7 @@ def run_tool_calls(
     tools: list[Tool],
     # The stuff below is needed for the different individual built-in tools
     message_history: list[ChatMessageSimple],
-    memories: list[str] | None,
+    user_memory_context: UserMemoryContext | None,
     user_info: str | None,
     citation_mapping: dict[int, str],
     next_citation_num: int,
@@ -200,6 +235,11 @@ def run_tool_calls(
     skip_search_query_expansion: bool = False,
     # Files from the chat session to pass to tools like PythonTool
     chat_files: list[ChatFile] | None = None,
+    # A map of url -> summary for passing web results to open url tool
+    url_snippet_map: dict[str, str] = {},
+    # When False, don't pass memory context to search tools for query expansion
+    # (but still pass it to the memory tool for persistence)
+    inject_memories_in_prompt: bool = True,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -221,7 +261,7 @@ def run_tool_calls(
         tools: List of available tool instances.
         message_history: Chat message history (used to find the most recent user query
             for `SearchTool` override kwargs).
-        memories: User memories, if available (passed through to `SearchTool`).
+        user_memory_context: User memory context, if available (passed through to `SearchTool`).
         user_info: User information string, if available (passed through to `SearchTool`).
         citation_mapping: Current citation number to URL mapping. May be updated with
             new citations produced by search tools.
@@ -300,6 +340,7 @@ def run_tool_calls(
             | WebSearchToolOverrideKwargs
             | OpenURLToolOverrideKwargs
             | PythonToolOverrideKwargs
+            | MemoryToolOverrideKwargs
             | None
         ) = None
 
@@ -307,11 +348,20 @@ def run_tool_calls(
             if last_user_message is None:
                 raise ValueError("No user message found in message history")
 
+            search_memory_context = (
+                user_memory_context
+                if inject_memories_in_prompt
+                else (
+                    user_memory_context.without_memories()
+                    if user_memory_context
+                    else None
+                )
+            )
             override_kwargs = SearchToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
                 original_query=last_user_message,
                 message_history=minimal_history,
-                memories=memories,
+                user_memory_context=search_memory_context,
                 user_info=user_info,
                 skip_query_expansion=skip_search_query_expansion,
             )
@@ -330,12 +380,29 @@ def run_tool_calls(
             override_kwargs = OpenURLToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
                 citation_mapping=url_to_citation,
+                url_snippet_map=url_snippet_map,
             )
             starting_citation_num += 100
 
         elif isinstance(tool, PythonTool):
             override_kwargs = PythonToolOverrideKwargs(
                 chat_files=chat_files or [],
+            )
+        elif isinstance(tool, MemoryTool):
+            override_kwargs = MemoryToolOverrideKwargs(
+                user_name=(
+                    user_memory_context.user_info.name if user_memory_context else None
+                ),
+                user_email=(
+                    user_memory_context.user_info.email if user_memory_context else None
+                ),
+                user_role=(
+                    user_memory_context.user_info.role if user_memory_context else None
+                ),
+                existing_memories=(
+                    list(user_memory_context.memories) if user_memory_context else []
+                ),
+                chat_history=minimal_history,
             )
 
         tool_run_params.append((tool, tool_call, override_kwargs))
@@ -350,6 +417,7 @@ def run_tool_calls(
         functions_with_args,
         allow_failures=True,  # Continue even if some tools fail
         max_workers=max_concurrent_tools,
+        timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
     )
 
     # Process results and update citation_mapping

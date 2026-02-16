@@ -25,18 +25,13 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import ThreadMessage
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import POD_NAME
 from onyx.configs.app_configs import POD_NAMESPACE
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
-from onyx.configs.onyxbot_configs import ONYX_BOT_REPHRASE_MESSAGE
 from onyx.connectors.slack.utils import expert_info_from_slack_id
-from onyx.context.search.retrieval.search_runner import (
-    download_nltk_data,
-)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -83,6 +78,7 @@ from onyx.onyxbot.slack.handlers.handle_message import (
 from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.onyxbot.slack.models import SlackMessageInfo
+from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.onyxbot.slack.utils import check_message_limit
 from onyx.onyxbot.slack.utils import decompose_action_id
 from onyx.onyxbot.slack.utils import get_channel_name_from_id
@@ -90,7 +86,6 @@ from onyx.onyxbot.slack.utils import get_channel_type_from_id
 from onyx.onyxbot.slack.utils import get_onyx_bot_auth_ids
 from onyx.onyxbot.slack.utils import read_slack_thread
 from onyx.onyxbot.slack.utils import remove_onyx_bot_tag
-from onyx.onyxbot.slack.utils import rephrase_slack_message
 from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.redis.redis_pool import get_redis_client
@@ -221,14 +216,10 @@ class SlackbotHandler:
         - If the tokens have changed, close the existing socket client and reconnect.
         - If the tokens are new, warm up the model and start a new socket client.
         """
-        slack_bot_tokens = SlackBotTokens(
-            bot_token=bot.bot_token,
-            app_token=bot.app_token,
-        )
         tenant_bot_pair = (tenant_id, bot.id)
 
         # If the tokens are missing or empty, close the socket client and remove them.
-        if not slack_bot_tokens:
+        if not bot.bot_token or not bot.app_token:
             logger.debug(
                 f"No Slack bot tokens found for tenant={tenant_id}, bot {bot.id}"
             )
@@ -237,6 +228,11 @@ class SlackbotHandler:
                 del self.socket_clients[tenant_bot_pair]
                 del self.slack_bot_tokens[tenant_bot_pair]
             return
+
+        slack_bot_tokens = SlackBotTokens(
+            bot_token=bot.bot_token.get_value(apply_mask=False),
+            app_token=bot.app_token.get_value(apply_mask=False),
+        )
 
         tokens_exist = tenant_bot_pair in self.slack_bot_tokens
         tokens_changed = (
@@ -387,7 +383,23 @@ class SlackbotHandler:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
         # 2) Make sure tenants we're handling still have Slack bots
+        #    and haven't been suspended (gated)
         for tenant_id in list(self.tenant_ids):
+            if tenant_id in gated_tenants:
+                logger.info(
+                    f"Tenant {tenant_id} is now gated (suspended). Disconnecting."
+                )
+                self._remove_tenant(tenant_id)
+                if tenant_id in self.redis_locks and not DEV_MODE:
+                    try:
+                        self.redis_locks[tenant_id].release()
+                        del self.redis_locks[tenant_id]
+                    except Exception as e:
+                        logger.error(
+                            f"Error releasing lock for gated tenant {tenant_id}: {e}"
+                        )
+                continue
+
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(
                 tenant_id or POSTGRES_DEFAULT_SCHEMA
             )
@@ -538,7 +550,9 @@ class SlackbotHandler:
                 f"{pod_id=} {tenant_id=} {slack_bot_id=}"
             )
 
-    def shutdown(self, signum: int | None, frame: FrameType | None) -> None:
+    def shutdown(
+        self, signum: int | None, frame: FrameType | None  # noqa: ARG002
+    ) -> None:
         if not self.running:
             return
 
@@ -673,15 +687,6 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
 
             event_user = event.get("user", "")
             event_bot_id = event.get("bot_id", "")
-
-            # temporary debugging
-            if tenant_id == "tenant_i-04224818da13bf695":
-                logger.warning(
-                    f"{tenant_id=} "
-                    f"{bot_token_user_id=} "
-                    f"{bot_token_bot_id=} "
-                    f"{event=}"
-                )
 
             is_dm = event.get("channel_type") == "im"
             if bot_token_user_id and f"<@{bot_token_user_id}>" in msg:
@@ -842,15 +847,7 @@ def build_request_details(
 
         msg = remove_onyx_bot_tag(tenant_id, msg, client=client.web_client)
 
-        if ONYX_BOT_REPHRASE_MESSAGE:
-            logger.info(f"Rephrasing Slack message. Original message: {msg}")
-            try:
-                msg = rephrase_slack_message(msg)
-                logger.info(f"Rephrased message: {msg}")
-            except Exception as e:
-                logger.error(f"Error while trying to rephrase the Slack message: {e}")
-        else:
-            logger.info(f"Received Slack message: {msg}")
+        logger.info(f"Received Slack message: {msg}")
 
         event_type = event.get("type")
         if event_type == "app_mention":
@@ -880,7 +877,7 @@ def build_request_details(
         )
 
         if thread_ts != message_ts and thread_ts is not None:
-            thread_messages = read_slack_thread(
+            thread_messages: list[ThreadMessage] = read_slack_thread(
                 tenant_id=tenant_id,
                 channel=channel,
                 thread=thread_ts,
@@ -1080,6 +1077,78 @@ def view_routing(req: SocketModeRequest, client: TenantSocketModeClient) -> None
             return process_feedback(req, client)
 
 
+def _extract_channel_from_request(req: SocketModeRequest) -> str | None:
+    """Best-effort channel extraction from any Slack request type."""
+    if req.type == "events_api":
+        return cast(dict[str, Any], req.payload.get("event", {})).get("channel")
+    elif req.type == "slash_commands":
+        return req.payload.get("channel_id")
+    elif req.type == "interactive":
+        container = req.payload.get("container", {})
+        return container.get("channel_id") or req.payload.get("channel", {}).get("id")
+    return None
+
+
+def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) -> bool:
+    """Check if the current tenant is gated (suspended or license expired).
+
+    Multi-tenant: checks the gated tenants Redis set (populated by control plane).
+    Self-hosted: checks the cached license metadata for expiry.
+
+    Returns True if blocked.
+    """
+    from onyx.server.settings.models import ApplicationStatus
+
+    # Multi-tenant path: control plane marks gated tenants in Redis
+    is_gated: bool = fetch_ee_implementation_or_noop(
+        "onyx.server.tenants.product_gating",
+        "is_tenant_gated",
+        False,
+    )(get_current_tenant_id())
+
+    # Self-hosted path: check license metadata cache
+    if not is_gated:
+        get_cached_metadata = fetch_ee_implementation_or_noop(
+            "onyx.db.license",
+            "get_cached_license_metadata",
+            None,
+        )
+        metadata = get_cached_metadata()
+        if metadata is not None:
+            if metadata.status == ApplicationStatus.GATED_ACCESS:
+                is_gated = True
+
+    if not is_gated:
+        return False
+
+    # Only notify once per user action:
+    # - Skip bot messages (avoids feedback loop from our own response)
+    # - Skip app_mention events (Slack fires both app_mention AND message
+    #   for @mentions; we respond on the message event only)
+    event = req.payload.get("event", {}) if req.type == "events_api" else {}
+    is_bot_event = bool(
+        event.get("bot_id")
+        or event.get("bot_profile")
+        or event.get("subtype") == "bot_message"
+    )
+    is_duplicate_mention = event.get("type") == "app_mention"
+    if not is_bot_event and not is_duplicate_mention:
+        channel = _extract_channel_from_request(req)
+        thread_ts = event.get("thread_ts") or event.get("ts")
+        if channel:
+            respond_in_thread_or_channel(
+                client=client.web_client,
+                channel=channel,
+                thread_ts=thread_ts,
+                text=(
+                    "Your organization's subscription has expired. "
+                    "Please contact your Onyx administrator to restore access."
+                ),
+            )
+    logger.info(f"Blocked Slack request for gated tenant {get_current_tenant_id()}")
+    return True
+
+
 def create_process_slack_event() -> (
     Callable[[TenantSocketModeClient, SocketModeRequest], None]
 ):
@@ -1089,6 +1158,9 @@ def create_process_slack_event() -> (
         # Always respond right away, if Slack doesn't receive these frequently enough
         # it will assume the Bot is DEAD!!! :(
         acknowledge_message(req, client)
+
+        if _check_tenant_gated(client, req):
+            return
 
         try:
             if req.type == "interactive":
@@ -1138,9 +1210,6 @@ if __name__ == "__main__":
     tenant_handler = SlackbotHandler()
 
     set_is_ee_based_on_env_variable()
-
-    logger.info("Verifying query preprocessing (NLTK) data is downloaded")
-    download_nltk_data()
 
     try:
         # Keep the main thread alive

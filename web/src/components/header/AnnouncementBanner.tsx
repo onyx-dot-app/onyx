@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useContext } from "react";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
-import { SettingsContext } from "../settings/SettingsProvider";
+import { SettingsContext } from "@/providers/SettingsProvider";
 import Link from "next/link";
 import type { Route } from "next";
 import Cookies from "js-cookie";
@@ -82,7 +82,7 @@ export function AnnouncementBanner() {
                   Your trial is ending soon - submit your billing information to
                   continue using Onyx.{" "}
                   <Link
-                    href={"/ee/admin/billing" as Route}
+                    href={"/admin/billing" as Route}
                     className="ml-2 underline cursor-pointer"
                   >
                     Update here

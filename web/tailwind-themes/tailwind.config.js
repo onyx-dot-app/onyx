@@ -12,10 +12,20 @@ module.exports = {
     transparent: "transparent",
     current: "currentColor",
     extend: {
+      lineClamp: {
+        7: "7",
+        8: "8",
+        9: "9",
+        10: "10",
+      },
       transitionProperty: {
         spacing: "margin, padding",
       },
       keyframes: {
+        shimmer: {
+          "0%": { backgroundPosition: "100% 0" },
+          "100%": { backgroundPosition: "-100% 0" },
+        },
         "subtle-pulse": {
           "0%, 100%": { opacity: 0.9 },
           "50%": { opacity: 0.5 },
@@ -42,6 +52,7 @@ module.exports = {
         },
       },
       animation: {
+        shimmer: "shimmer 1.8s ease-out infinite",
         "fade-in-up": "fadeInUp 0.5s ease-out",
         "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",

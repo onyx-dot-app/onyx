@@ -5,67 +5,95 @@
  * Uses a vertical flex layout with automatic gap spacing between children.
  *
  * Features:
- * - Background color: background-tint-00
- * - Padding: 1rem (p-4)
- * - Flex column layout with 1rem gap (gap-4)
- * - Border with rounded-16 corners
- * - Accepts all standard div HTML attributes except className (enforced by WithoutStyles)
- * - Fixed styling - className prop not supported
+ * - Padding: 1rem by default (configurable)
+ * - Flex column layout with 1rem gap
+ * - Rounded-16 corners
+ * - Accepts optional className for custom styling
+ * - Accepts all standard div HTML attributes except style (enforced by WithoutStyles)
+ *
+ * Variants:
+ * - `primary`: Solid background with border. The default, most prominent card style.
+ * - `secondary`: Transparent background with border. Use for less prominent content or nested cards.
+ * - `tertiary`: Transparent background with dashed border. Use for placeholder or empty states.
+ * - `disabled`: Dimmed primary style with reduced opacity. Indicates unavailable or locked content.
+ * - `borderless`: Solid background without border. Use when cards are visually grouped or in tight layouts.
  *
  * @example
  * ```tsx
  * import { Card } from "@/refresh-components/cards";
  *
- * // Basic usage
+ * // Basic usage (primary variant)
  * <Card>
  *   <h2>Card Title</h2>
  *   <p>Card content goes here</p>
  * </Card>
  *
- * // With onClick handler
- * <Card onClick={handleClick}>
- *   <div>Clickable card</div>
+ * // Secondary variant for nested content
+ * <Card variant="secondary">
+ *   <div>Less prominent content</div>
  * </Card>
  *
- * // Multiple children - automatically spaced
- * <Card>
- *   <Text as="p" headingH3>Section 1</Text>
- *   <Text as="p" body>Some content</Text>
- *   <Button>Action</Button>
+ * // Tertiary variant for empty states
+ * <Card variant="tertiary">
+ *   <div>No items yet</div>
  * </Card>
  * ```
  */
 
+import { Section, SectionProps } from "@/layouts/general-layouts";
 import { cn } from "@/lib/utils";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 
-const classNames = {
-  main: ["bg-background-tint-00 border"],
-  translucent: ["bg-transparent border border-dashed"],
-  disabled: [
-    "cursor-not-allowed pointer-events-none bg-background-tint-00 border opacity-50",
-  ],
-} as const;
+type CardVariant =
+  // The main card variant.
+  | "primary"
+  // A background-colorless card variant.
+  | "secondary"
+  // A background-colorless card variant with a dashed border.
+  | "tertiary"
+  // A dimmed version of the primary variant (indicates that this card is unavailable).
+  | "disabled"
+  // A borderless version of the primary variant.
+  | "borderless";
 
-export interface CardProps extends GeneralLayouts.SectionProps {
-  // card variants
-  translucent?: boolean;
-  disabled?: boolean;
+export interface CardProps extends SectionProps {
+  // variants
+  variant?: CardVariant;
+  // Optional className to apply custom styles
+  className?: string;
+
+  ref?: React.Ref<HTMLDivElement>;
 }
 
 export default function Card({
-  translucent,
-  disabled,
-
+  variant = "primary",
   padding = 1,
-
+  className,
+  ref,
   ...props
 }: CardProps) {
-  const variant = translucent ? "translucent" : disabled ? "disabled" : "main";
+  const dataProps: Record<string, unknown> = {};
+  const sectionProps: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (key.startsWith("data-")) {
+      dataProps[key] = value;
+    } else {
+      sectionProps[key] = value;
+    }
+  }
 
   return (
-    <div className={cn("rounded-16 w-full h-full", classNames[variant])}>
-      <GeneralLayouts.Section alignItems="start" padding={padding} {...props} />
+    <div
+      ref={ref}
+      className={cn("card", className)}
+      data-variant={variant}
+      {...dataProps}
+    >
+      <Section
+        alignItems="start"
+        padding={padding}
+        height="fit"
+        {...sectionProps}
+      />
     </div>
   );
 }

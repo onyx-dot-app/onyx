@@ -115,7 +115,7 @@ async def refresh_access_token(
 
 @admin_router.put("")
 def admin_ee_put_settings(
-    settings: EnterpriseSettings, _: User | None = Depends(current_admin_user)
+    settings: EnterpriseSettings, _: User = Depends(current_admin_user)
 ) -> None:
     store_settings(settings)
 
@@ -134,12 +134,12 @@ def ee_fetch_settings() -> EnterpriseSettings:
 def put_logo(
     file: UploadFile,
     is_logotype: bool = False,
-    _: User | None = Depends(current_admin_user),
+    _: User = Depends(current_admin_user),
 ) -> None:
     upload_logo(file=file, is_logotype=is_logotype)
 
 
-def fetch_logo_helper(db_session: Session) -> Response:
+def fetch_logo_helper(db_session: Session) -> Response:  # noqa: ARG001
     try:
         file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
@@ -155,7 +155,7 @@ def fetch_logo_helper(db_session: Session) -> Response:
         return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
 
 
-def fetch_logotype_helper(db_session: Session) -> Response:
+def fetch_logotype_helper(db_session: Session) -> Response:  # noqa: ARG001
     try:
         file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
@@ -187,7 +187,7 @@ def fetch_logo(
 
 @admin_router.put("/custom-analytics-script")
 def upload_custom_analytics_script(
-    script_upload: AnalyticsScriptUpload, _: User | None = Depends(current_admin_user)
+    script_upload: AnalyticsScriptUpload, _: User = Depends(current_admin_user)
 ) -> None:
     try:
         store_analytics_script(script_upload)

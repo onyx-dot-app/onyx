@@ -11,10 +11,10 @@ export function getExtensionContext(): {
     return { isExtension: false, context: null };
 
   const pathname = window.location.pathname;
-  if (pathname.includes("/chat/nrf/side-panel")) {
+  if (pathname.includes("/app/nrf/side-panel")) {
     return { isExtension: true, context: "side_panel" };
   }
-  if (pathname.includes("/chat/nrf")) {
+  if (pathname.includes("/app/nrf")) {
     return { isExtension: true, context: "new_tab" };
   }
   return { isExtension: false, context: null };
@@ -50,21 +50,3 @@ export const useSendMessageToParent = () => {
     sendMessageToParent();
   }, []);
 };
-
-export function notifyExtensionOfThemeChange(
-  newTheme: string,
-  newBgUrl: string
-) {
-  if (typeof window !== "undefined" && window.parent) {
-    window.parent.postMessage(
-      {
-        type: CHROME_MESSAGE.PREFERENCES_UPDATED,
-        payload: {
-          theme: newTheme,
-          backgroundUrl: newBgUrl,
-        },
-      },
-      "*"
-    );
-  }
-}

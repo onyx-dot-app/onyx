@@ -88,92 +88,87 @@ const useInputSelectContext = () => {
  * ```
  */
 interface InputSelectRootProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> {
+  extends WithoutStyles<
+    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
+  > {
   /** Whether to show error styling */
   error?: boolean;
   /** Whether the select is disabled */
   disabled?: boolean;
-  /** Additional CSS classes for the wrapper element */
-  className?: string;
   children: React.ReactNode;
+  ref?: React.Ref<HTMLDivElement>;
 }
-const InputSelectRoot = React.forwardRef<HTMLDivElement, InputSelectRootProps>(
-  (
-    {
-      disabled,
-      error,
-      value,
-      defaultValue,
-      onValueChange,
-      className,
-      children,
-      ...props
-    },
-    ref
-  ) => {
-    const variant: Variants = disabled ? "disabled" : error ? "error" : "main";
+function InputSelectRoot({
+  disabled,
+  error,
+  value,
+  defaultValue,
+  onValueChange,
+  children,
+  ref,
+  ...props
+}: InputSelectRootProps) {
+  const variant: Variants = disabled ? "disabled" : error ? "error" : "primary";
 
-    // Support both controlled and uncontrolled modes
-    const isControlled = value !== undefined;
-    const [internalValue, setInternalValue] = React.useState<
-      string | undefined
-    >(defaultValue);
-    const currentValue = isControlled ? value : internalValue;
+  // Support both controlled and uncontrolled modes
+  const isControlled = value !== undefined;
+  const [internalValue, setInternalValue] = React.useState<string | undefined>(
+    defaultValue
+  );
+  const currentValue = isControlled ? value : internalValue;
 
-    React.useEffect(() => {
+  React.useEffect(() => {
+    if (isControlled) return;
+    setInternalValue(defaultValue);
+  }, [defaultValue, isControlled]);
+
+  const handleValueChange = React.useCallback(
+    (nextValue: string) => {
+      onValueChange?.(nextValue);
+
       if (isControlled) return;
-      setInternalValue(defaultValue);
-    }, [defaultValue, isControlled]);
+      setInternalValue(nextValue);
+    },
+    [isControlled, onValueChange]
+  );
 
-    const handleValueChange = React.useCallback(
-      (nextValue: string) => {
-        onValueChange?.(nextValue);
+  // Store the selected item's display data (children/icon refs)
+  // Only the currently selected item registers itself
+  const [selectedItemDisplay, setSelectedItemDisplay] =
+    React.useState<SelectedItemDisplay | null>(null);
 
-        if (isControlled) return;
-        setInternalValue(nextValue);
-      },
-      [isControlled, onValueChange]
-    );
+  React.useEffect(() => {
+    if (!currentValue) setSelectedItemDisplay(null);
+  }, [currentValue]);
 
-    // Store the selected item's display data (children/icon refs)
-    // Only the currently selected item registers itself
-    const [selectedItemDisplay, setSelectedItemDisplay] =
-      React.useState<SelectedItemDisplay | null>(null);
+  const contextValue = React.useMemo<InputSelectContextValue>(
+    () => ({
+      variant,
+      currentValue,
+      disabled,
+      selectedItemDisplay,
+      setSelectedItemDisplay,
+    }),
+    [variant, currentValue, disabled, selectedItemDisplay]
+  );
 
-    React.useEffect(() => {
-      if (!currentValue) setSelectedItemDisplay(null);
-    }, [currentValue]);
-
-    const contextValue = React.useMemo<InputSelectContextValue>(
-      () => ({
-        variant,
-        currentValue,
-        disabled,
-        selectedItemDisplay,
-        setSelectedItemDisplay,
-      }),
-      [variant, currentValue, disabled, selectedItemDisplay]
-    );
-
-    return (
-      <div className="w-full relative">
-        <InputSelectContext.Provider value={contextValue}>
-          <SelectPrimitive.Root
-            {...(isControlled ? { value: currentValue } : { defaultValue })}
-            onValueChange={handleValueChange}
-            disabled={disabled}
-            {...props}
-          >
-            <div ref={ref} className={className}>
-              {children}
-            </div>
-          </SelectPrimitive.Root>
-        </InputSelectContext.Provider>
-      </div>
-    );
-  }
-);
-InputSelectRoot.displayName = "InputSelect";
+  return (
+    <div className={cn("w-full relative")}>
+      <InputSelectContext.Provider value={contextValue}>
+        <SelectPrimitive.Root
+          {...(isControlled ? { value: currentValue } : { defaultValue })}
+          onValueChange={handleValueChange}
+          disabled={disabled}
+          {...props}
+        >
+          <div ref={ref} className="w-full">
+            {children}
+          </div>
+        </SelectPrimitive.Root>
+      </InputSelectContext.Provider>
+    </div>
+  );
+}
 
 // ============================================================================
 // InputSelect Trigger
@@ -194,16 +189,19 @@ InputSelectRoot.displayName = "InputSelect";
  * ```
  */
 interface InputSelectTriggerProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> {
+  extends WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Trigger>> {
   /** Placeholder when no value selected */
   placeholder?: React.ReactNode;
   /** Content to render on the right side of the trigger */
   rightSection?: React.ReactNode;
 }
-const InputSelectTrigger = React.forwardRef<
-  React.ComponentRef<typeof SelectPrimitive.Trigger>,
-  InputSelectTriggerProps
->(({ placeholder, rightSection, className, children, ...props }, ref) => {
+function InputSelectTrigger({
+  placeholder,
+  rightSection,
+  children,
+  ref,
+  ...props
+}: InputSelectTriggerProps) {
   const { variant, selectedItemDisplay } = useInputSelectContext();
 
   // Don't memoize - we need to read the latest ref values on every render
@@ -241,8 +239,7 @@ const InputSelectTrigger = React.forwardRef<
       className={cn(
         "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-none",
         wrapperClasses[variant],
-        variant === "main" && "data-[state=open]:border-border-05",
-        className
+        variant === "primary" && "data-[state=open]:border-border-05"
       )}
       {...props}
     >
@@ -265,8 +262,7 @@ const InputSelectTrigger = React.forwardRef<
       </div>
     </SelectPrimitive.Trigger>
   );
-});
-InputSelectTrigger.displayName = "InputSelectTrigger";
+}
 
 // ============================================================================
 // InputSelect Content
@@ -285,34 +281,33 @@ InputSelectTrigger.displayName = "InputSelectTrigger";
  * </InputSelect.Content>
  * ```
  */
-interface InputSelectContentProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> {}
-const InputSelectContent = React.forwardRef<
-  React.ComponentRef<typeof SelectPrimitive.Content>,
-  InputSelectContentProps
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Content
-      ref={ref}
-      className={cn(
-        "z-[4000] w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
-        "data-[state=open]:animate-in data-[state=closed]:animate-out",
-        "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-        "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-        className
-      )}
-      sideOffset={4}
-      position="popper"
-      onMouseDown={noProp()}
-      {...props}
-    >
-      <SelectPrimitive.Viewport className="flex flex-col gap-1">
-        {children}
-      </SelectPrimitive.Viewport>
-    </SelectPrimitive.Content>
-  </SelectPrimitive.Portal>
-));
-InputSelectContent.displayName = "InputSelectContent";
+function InputSelectContent({
+  children,
+  ref,
+  ...props
+}: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Content>>) {
+  return (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        ref={ref}
+        className={cn(
+          "z-popover w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
+          "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+          "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
+        )}
+        sideOffset={4}
+        position="popper"
+        onMouseDown={noProp()}
+        {...props}
+      >
+        <SelectPrimitive.Viewport className="flex flex-col gap-1">
+          {children}
+        </SelectPrimitive.Viewport>
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  );
+}
 
 // ============================================================================
 // InputSelect Item
@@ -334,16 +329,23 @@ InputSelectContent.displayName = "InputSelectContent";
  * </InputSelect.Item>
  * ```
  */
-interface InputSelectItemProps extends Omit<LineItemProps, "heavyForced"> {
+interface InputSelectItemProps
+  extends WithoutStyles<Omit<LineItemProps, "heavyForced" | "ref">> {
   /** Unique value for this option */
   value: string;
   /** Optional callback when item is selected */
   onClick?: (event: React.SyntheticEvent) => void;
+  ref?: React.Ref<React.ComponentRef<typeof SelectPrimitive.Item>>;
 }
-const InputSelectItem = React.forwardRef<
-  React.ComponentRef<typeof SelectPrimitive.Item>,
-  InputSelectItemProps
->(({ value, children, description, onClick, icon, ...props }, ref) => {
+function InputSelectItem({
+  value,
+  children,
+  description,
+  onClick,
+  icon,
+  ref,
+  ...props
+}: InputSelectItemProps) {
   const { currentValue, setSelectedItemDisplay } = useInputSelectContext();
   const isSelected = value === currentValue;
 
@@ -382,14 +384,12 @@ const InputSelectItem = React.forwardRef<
         emphasized
         description={description}
         onClick={noProp((event) => event.preventDefault())}
-        className={cn("w-full", props.className)}
       >
         {children}
       </LineItem>
     </SelectPrimitive.Item>
   );
-});
-InputSelectItem.displayName = "InputSelectItem";
+}
 
 // ============================================================================
 // InputSelect Group
@@ -409,17 +409,12 @@ InputSelectItem.displayName = "InputSelectItem";
  * </InputSelect.Group>
  * ```
  */
-interface InputSelectGroupProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Group> {}
-const InputSelectGroup = React.forwardRef<
-  React.ComponentRef<typeof SelectPrimitive.Group>,
-  InputSelectGroupProps
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Group ref={ref} className={cn("", className)} {...props}>
-    {children}
-  </SelectPrimitive.Group>
-));
-InputSelectGroup.displayName = "InputSelectGroup";
+function InputSelectGroup({
+  ref,
+  ...props
+}: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Group>>) {
+  return <SelectPrimitive.Group ref={ref} {...props} />;
+}
 
 // ============================================================================
 // InputSelect Label
@@ -435,24 +430,18 @@ InputSelectGroup.displayName = "InputSelectGroup";
  * <InputSelect.Label>Category Name</InputSelect.Label>
  * ```
  */
-interface InputSelectLabelProps
-  extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label> {}
-const InputSelectLabel = React.forwardRef<
-  React.ComponentRef<typeof SelectPrimitive.Label>,
-  InputSelectLabelProps
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Label
-    ref={ref}
-    className={cn(
-      "px-2 py-1.5 text-xs font-medium text-text-03 uppercase tracking-wide",
-      className
-    )}
-    {...props}
-  >
-    {children}
-  </SelectPrimitive.Label>
-));
-InputSelectLabel.displayName = "InputSelectLabel";
+function InputSelectLabel({
+  ref,
+  ...props
+}: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Label>>) {
+  return (
+    <SelectPrimitive.Label
+      ref={ref}
+      className="px-2 py-1.5 text-xs font-medium text-text-03 uppercase tracking-wide"
+      {...props}
+    />
+  );
+}
 
 // ============================================================================
 // InputSelect Separator
@@ -473,14 +462,22 @@ InputSelectLabel.displayName = "InputSelectLabel";
  * </InputSelect.Content>
  * ```
  */
-type InputSelectSeparatorProps = WithoutStyles<SeparatorProps>;
-const InputSelectSeparator = React.forwardRef<
-  React.ComponentRef<typeof Separator>,
-  InputSelectSeparatorProps
->(({ noPadding = true, ...props }, ref) => (
-  <Separator ref={ref} noPadding={noPadding} className="px-2 py-1" {...props} />
-));
-InputSelectSeparator.displayName = "InputSelectSeparator";
+function InputSelectSeparator({
+  noPadding = true,
+  ref,
+  ...props
+}: WithoutStyles<SeparatorProps> & {
+  ref?: React.Ref<React.ComponentRef<typeof Separator>>;
+}) {
+  return (
+    <Separator
+      ref={ref}
+      noPadding={noPadding}
+      className="px-2 py-1"
+      {...props}
+    />
+  );
+}
 
 // ============================================================================
 // Exports
@@ -531,9 +528,5 @@ export default Object.assign(InputSelectRoot, {
 export {
   type InputSelectRootProps,
   type InputSelectTriggerProps,
-  type InputSelectContentProps,
   type InputSelectItemProps,
-  type InputSelectGroupProps,
-  type InputSelectLabelProps,
-  type InputSelectSeparatorProps,
 };

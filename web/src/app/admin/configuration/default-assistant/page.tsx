@@ -9,12 +9,12 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Text from "@/refresh-components/texts/Text";
 import useSWR, { mutate } from "swr";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useAgents } from "@/hooks/useAgents";
 import Separator from "@/refresh-components/Separator";
 import { SubLabel } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import { useSettingsContext } from "@/components/settings/SettingsProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import Link from "next/link";
 import { Callout } from "@/components/ui/callout";
 import { ToolSnapshot, MCPServersResponse } from "@/lib/tools/interfaces";
@@ -37,7 +37,6 @@ interface DefaultAssistantUpdateRequest {
 
 function DefaultAssistantConfig() {
   const router = useRouter();
-  const { popup, setPopup } = usePopup();
   const { refresh: refreshAgents } = useAgents();
   const combinedSettings = useSettingsContext();
 
@@ -93,7 +92,6 @@ function DefaultAssistantConfig() {
   if (combinedSettings?.settings?.disable_default_assistant) {
     return (
       <div>
-        {popup}
         <Callout type="notice">
           <p className="mb-3">
             The default assistant is currently disabled in your workspace
@@ -124,7 +122,6 @@ function DefaultAssistantConfig() {
 
   return (
     <div>
-      {popup}
       <Formik
         enableReinitialize
         initialValues={{
@@ -169,15 +166,9 @@ function DefaultAssistantConfig() {
             router.refresh();
             await refreshAgents();
 
-            setPopup({
-              message: "Default assistant updated successfully!",
-              type: "success",
-            });
+            toast.success("Default assistant updated successfully!");
           } catch (error: any) {
-            setPopup({
-              message: error.message || "Failed to update assistant",
-              type: "error",
-            });
+            toast.error(error.message || "Failed to update assistant");
           } finally {
             setIsSubmitting(false);
           }
@@ -233,6 +224,13 @@ function DefaultAssistantConfig() {
                           found from search tools. This is not included if no
                           search tools are called.
                         </div>
+                        <div>
+                          <span className="font-mono font-semibold">
+                            {"{{REMINDER_TAG_DESCRIPTION}}"}
+                          </span>{" "}
+                          - Injects instructions for how the Agent should handle
+                          system reminder tags.
+                        </div>
                       </div>
                     }
                     direction="bottom"
@@ -280,6 +278,9 @@ function DefaultAssistantConfig() {
                 mcpServers={mcpServersResponse?.mcp_servers}
                 enabledToolsMap={values.enabled_tools_map}
                 setFieldValue={setFieldValue}
+                hideSearchTool={
+                  combinedSettings?.settings.vector_db_enabled === false
+                }
               />
 
               <div className="flex justify-end pt-4">
@@ -300,13 +301,7 @@ export default function Page() {
     <>
       <AdminPageTitle
         title="Default Assistant"
-        icon={
-          <SvgOnyxLogo
-            width={32}
-            height={32}
-            className="my-auto stroke-text-04"
-          />
-        }
+        icon={<SvgOnyxLogo size={32} className="my-auto stroke-text-04" />}
       />
       <DefaultAssistantConfig />
     </>

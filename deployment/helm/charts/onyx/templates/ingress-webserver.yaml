@@ -4,10 +4,15 @@ kind: Ingress
 metadata:
   name: {{ include "onyx.fullname" . }}-ingress-webserver
   annotations:
+    {{- if not .Values.ingress.className }}
     kubernetes.io/ingress.class: nginx
+    {{- end }}
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
     kubernetes.io/tls-acme: "true"
 spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.webserver.host }}
       http:

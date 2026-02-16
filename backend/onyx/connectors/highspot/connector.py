@@ -21,6 +21,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -143,7 +144,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
         """
         spots_to_process = self._fetch_spots_to_process()
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
         try:
             for spot in spots_to_process:
                 try:
@@ -360,9 +361,9 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
 
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        callback: IndexingHeartbeatInterface | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
         """
         Retrieve all document IDs from the configured spots.
@@ -378,7 +379,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
         """
         spots_to_process = self._fetch_spots_to_process()
 
-        slim_doc_batch: list[SlimDocument] = []
+        slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         try:
             for spot in spots_to_process:
                 try:

@@ -76,17 +76,21 @@ def wait_for_vespa_with_timeout(wait_interval: int = 5, wait_limit: int = 60) ->
     time_start = time.monotonic()
     logger.info("Vespa: Readiness probe starting.")
     while True:
+        url = f"{VESPA_APP_CONTAINER_URL}/state/v1/health"
         try:
             client = get_vespa_http_client()
-            response = client.get(f"{VESPA_APP_CONTAINER_URL}/state/v1/health")
+            response = client.get(url)
             response.raise_for_status()
 
             response_dict = response.json()
             if response_dict["status"]["code"] == "up":
                 logger.info("Vespa: Readiness probe succeeded. Continuing...")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                f"Vespa: Readiness probe failed trying to connect to {url}. "
+                f"Exception: {e}"
+            )
 
         time_elapsed = time.monotonic() - time_start
         if time_elapsed > wait_limit:

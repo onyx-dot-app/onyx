@@ -4,16 +4,15 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import nltk  # type: ignore
-
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_active_search_settings
+from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
+from onyx.setup import setup_document_indices
 from onyx.setup import setup_postgres
-from onyx.setup import setup_vespa
 from shared_configs import configs as shared_configs_module
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -24,6 +23,7 @@ _SETUP_COMPLETE: bool = False
 
 def ensure_full_deployment_setup(
     tenant_id: Optional[str] = None,
+    opensearch_available: bool = False,
 ) -> None:
     """Initialize test environment to mirror a real deployment, on demand.
 
@@ -32,7 +32,6 @@ def ensure_full_deployment_setup(
     - Runs setup_onyx (Postgres defaults, Vespa indices)
     - Initializes file store (best-effort)
     - Ensures Vespa indices exist
-    - Installs NLTK stopwords and punkt_tab
     """
     global _SETUP_COMPLETE
     if _SETUP_COMPLETE:
@@ -48,9 +47,6 @@ def ensure_full_deployment_setup(
 
     # Avoid warm-up network calls during setup
     shared_configs_module.SKIP_WARM_UP = True
-
-    nltk.download("stopwords", quiet=True)
-    nltk.download("punkt_tab", quiet=True)
 
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant)
     original_cwd = os.getcwd()
@@ -70,11 +66,21 @@ def ensure_full_deployment_setup(
         # Also ensure indices exist explicitly (no-op if already created)
         with get_session_with_current_tenant() as db_session:
             active = get_active_search_settings(db_session)
-            document_index = get_default_document_index(
-                active.primary, active.secondary
-            )
-            ok = setup_vespa(
-                document_index=document_index,
+            if opensearch_available:
+                # We use this special bool here instead of just relying on
+                # ENABLE_OPENSEARCH_INDEXING_FOR_ONYX because not all testing
+                # infra is configured for OpenSearch.
+                document_indices = get_all_document_indices(
+                    active.primary, active.secondary
+                )
+            else:
+                document_indices = [
+                    get_default_document_index(
+                        active.primary, active.secondary, db_session
+                    )
+                ]
+            ok = setup_document_indices(
+                document_indices=document_indices,
                 index_setting=IndexingSetting.from_db_model(active.primary),
                 secondary_index_setting=(
                     IndexingSetting.from_db_model(active.secondary)

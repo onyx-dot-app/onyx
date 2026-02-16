@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { openDocument } from "@/lib/search/utils";
-import { SubQuestionDetail } from "@/app/chat/interfaces";
+import { SubQuestionDetail } from "@/app/app/interfaces";
 import { getSourceDisplayName } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 import Text from "@/refresh-components/texts/Text";
@@ -90,7 +90,7 @@ export function Citation({
                          hover:bg-background-tint-04 shadow-sm"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
-              <Text figureSmallValue as="span" className="truncate">
+              <Text figureSmallValue className="truncate">
                 {citationText}
               </Text>
             </span>

@@ -17,12 +17,14 @@ from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_response import ModelResponse
+from onyx.llm.models import UserMessage
 from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
@@ -83,7 +85,7 @@ def build_litellm_passthrough_kwargs(
     if not (SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity):
         return model_kwargs
 
-    passthrough_kwargs = dict(model_kwargs)
+    passthrough_kwargs = copy.deepcopy(model_kwargs)
 
     if user_identity.user_id:
         passthrough_kwargs["user"] = truncate_litellm_user_id(user_identity.user_id)
@@ -94,7 +96,7 @@ def build_litellm_passthrough_kwargs(
         if existing_metadata is None:
             metadata = {}
         elif isinstance(existing_metadata, dict):
-            metadata = dict(existing_metadata)
+            metadata = copy.deepcopy(existing_metadata)
         else:
             metadata = None
 
@@ -320,7 +322,7 @@ def test_llm(llm: LLM) -> str | None:
     error_msg = None
     for _ in range(2):
         try:
-            llm.invoke("Do not respond")
+            llm.invoke(UserMessage(content="Do not respond"))
             return None
         except Exception as e:
             error_msg = str(e)
@@ -688,8 +690,11 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                     LLMProvider.provider == model_provider,
                 )
             )
-            if model_config and model_config.supports_image_input is not None:
-                return model_config.supports_image_input
+            if (
+                model_config
+                and LLMModelFlowType.VISION in model_config.llm_model_flow_types
+            ):
+                return True
     except Exception as e:
         logger.warning(
             f"Failed to query database for {model_provider} model {model_name} image support: {e}"
@@ -737,7 +742,7 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
 
         # Fallback: try using litellm.supports_reasoning() for newer models
         try:
-            logger.debug("Falling back to `litellm.supports_reasoning`")
+            # logger.debug("Falling back to `litellm.supports_reasoning`")
             full_model_name = (
                 f"{model_provider}/{model_name}"
                 if model_provider not in model_name

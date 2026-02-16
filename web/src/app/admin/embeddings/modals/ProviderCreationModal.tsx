@@ -186,7 +186,7 @@ export default function ProviderCreationModal({
 
   return (
     <Modal open onOpenChange={onCancel}>
-      <Modal.Content small>
+      <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgSettings}
           title={`Configure ${getFormattedProviderName(

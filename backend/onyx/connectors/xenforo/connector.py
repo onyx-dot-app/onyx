@@ -29,6 +29,7 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -162,7 +163,7 @@ class XenforoConnector(LoadConnector):
                 except ValueError:
                     pass
 
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
         all_threads = []
 
         # If the URL contains "boards/" or "forums/", find all threads.

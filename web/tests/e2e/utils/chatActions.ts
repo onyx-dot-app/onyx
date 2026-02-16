@@ -1,5 +1,5 @@
 import { Page } from "@playwright/test";
-import { expect } from "@chromatic-com/playwright";
+import { expect } from "@playwright/test";
 
 export async function verifyDefaultAssistantIsChosen(page: Page) {
   await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
@@ -32,14 +32,20 @@ export async function navigateToAssistantInHistorySidebar(
 }
 
 export async function sendMessage(page: Page, message: string) {
+  // Count existing AI messages before sending
+  const existingMessageCount = await page
+    .locator('[data-testid="onyx-ai-message"]')
+    .count();
+
   await page.locator("#onyx-chat-input-textarea").click();
   await page.locator("#onyx-chat-input-textarea").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
-  await page.waitForSelector('[data-testid="onyx-ai-message"]');
-  // Wait for the copy button to appear, which indicates the message is fully rendered
-  await page.waitForSelector('[data-testid="AIMessage/copy-button"]', {
-    timeout: 30000,
-  });
+
+  // Wait for a NEW AI message to appear (count should increase)
+  await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(
+    existingMessageCount + 1,
+    { timeout: 30000 }
+  );
 
   // Wait for up to 10 seconds for the URL to contain 'chatId='
   await page.waitForFunction(
@@ -51,13 +57,13 @@ export async function sendMessage(page: Page, message: string) {
 
 export async function verifyCurrentModel(page: Page, modelName: string) {
   const text = await page
-    .getByTestId("ChatInputBar/llm-popover-trigger")
+    .getByTestId("AppInputBar/llm-popover-trigger")
     .textContent();
   expect(text).toContain(modelName);
 }
 
 export async function switchModel(page: Page, modelName: string) {
-  await page.getByTestId("ChatInputBar/llm-popover-trigger").click();
+  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
 
   // Wait for the popover to open
   await page.waitForSelector('[role="dialog"]', { state: "visible" });

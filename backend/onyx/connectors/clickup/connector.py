@@ -17,6 +17,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -80,7 +81,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         start: int | None = None,
         end: int | None = None,
     ) -> GenerateDocumentsOutput:
-        doc_batch: list[Document] = []
+        doc_batch: list[Document | HierarchyNode] = []
         page: int = 0
         params = {
             "include_markdown_description": "true",

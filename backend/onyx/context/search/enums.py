@@ -13,13 +13,6 @@ class RecencyBiasSetting(str, Enum):
     AUTO = "auto"
 
 
-class OptionalSearchSetting(str, Enum):
-    ALWAYS = "always"
-    NEVER = "never"
-    # Determine whether to run search based on history and latest query
-    AUTO = "auto"
-
-
 class QueryType(str, Enum):
     """
     The type of first-pass query to use for hybrid search.
@@ -36,15 +29,3 @@ class SearchType(str, Enum):
     KEYWORD = "keyword"
     SEMANTIC = "semantic"
     INTERNET = "internet"
-
-
-class LLMEvaluationType(str, Enum):
-    AGENTIC = "agentic"  # applies agentic evaluation
-    BASIC = "basic"  # applies boolean evaluation
-    SKIP = "skip"  # skips evaluation
-    UNSPECIFIED = "unspecified"  # reverts to default
-
-
-class QueryFlow(str, Enum):
-    SEARCH = "search"
-    QUESTION_ANSWER = "question-answer"

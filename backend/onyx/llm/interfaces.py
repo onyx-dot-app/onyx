@@ -27,7 +27,7 @@ class LLMConfig(BaseModel):
     api_base: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
-    credentials_file: str | None = None
+    custom_config: dict[str, str] | None = None
     max_input_tokens: int
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
@@ -48,7 +48,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> "ModelResponse":
         raise NotImplementedError
@@ -61,7 +61,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort | None = None,
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         raise NotImplementedError

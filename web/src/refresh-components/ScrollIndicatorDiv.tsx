@@ -1,7 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
+
+// Throttle interval for scroll events (~60fps)
+const SCROLL_THROTTLE_MS = 16;
 
 export interface ScrollIndicatorDivProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -31,8 +34,10 @@ export default function ScrollIndicatorDiv({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showTopIndicator, setShowTopIndicator] = useState(false);
   const [showBottomIndicator, setShowBottomIndicator] = useState(false);
+  const throttleTimeoutRef = useRef<number | null>(null);
+  const isThrottledRef = useRef(false);
 
-  const updateScrollIndicators = () => {
+  const updateScrollIndicators = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -47,7 +52,20 @@ export default function ScrollIndicatorDiv({
     setShowBottomIndicator(
       isScrollable && scrollTop < scrollHeight - clientHeight - 1
     );
-  };
+  }, []);
+
+  // Throttled scroll handler for better performance
+  const handleScroll = useCallback(() => {
+    if (isThrottledRef.current) return;
+
+    isThrottledRef.current = true;
+    updateScrollIndicators();
+
+    throttleTimeoutRef.current = window.setTimeout(() => {
+      isThrottledRef.current = false;
+      updateScrollIndicators();
+    }, SCROLL_THROTTLE_MS);
+  }, [updateScrollIndicators]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -56,18 +74,21 @@ export default function ScrollIndicatorDiv({
     // Initial check
     updateScrollIndicators();
 
-    // Update on scroll
-    container.addEventListener("scroll", updateScrollIndicators);
+    // Update on scroll (throttled)
+    container.addEventListener("scroll", handleScroll, { passive: true });
 
     // Update on resize (in case content changes)
     const resizeObserver = new ResizeObserver(updateScrollIndicators);
     resizeObserver.observe(container);
 
     return () => {
-      container.removeEventListener("scroll", updateScrollIndicators);
+      container.removeEventListener("scroll", handleScroll);
       resizeObserver.disconnect();
+      if (throttleTimeoutRef.current) {
+        clearTimeout(throttleTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [updateScrollIndicators, handleScroll]);
 
   // Update when children change
   useEffect(() => {

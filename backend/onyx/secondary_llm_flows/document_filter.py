@@ -6,11 +6,15 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import UserMessage
 from onyx.prompts.search_prompts import DOCUMENT_CONTEXT_SELECTION_PROMPT
 from onyx.prompts.search_prompts import DOCUMENT_SELECTION_PROMPT
+from onyx.prompts.search_prompts import TRY_TO_FILL_TO_MAX_INSTRUCTIONS
 from onyx.tools.tool_implementations.search.constants import (
     MAX_CHUNKS_FOR_RELEVANCE,
 )
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -119,10 +123,18 @@ def classify_section_relevance(
     # Default to MAIN_SECTION_ONLY
     default_classification = ContextExpansionType.MAIN_SECTION_ONLY
 
-    # Call LLM for classification
+    # Call LLM for classification with Braintrust tracing
     try:
-        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
-        llm_response = response.choice.message.content
+        prompt_msg = UserMessage(content=prompt_text)
+        with llm_generation_span(
+            llm=llm, flow="classify_section_relevance", input_messages=[prompt_msg]
+        ) as span_generation:
+            response = llm.invoke(
+                prompt=prompt_msg,
+                reasoning_effort=ReasoningEffort.OFF,
+            )
+            record_llm_response(span_generation, response)
+            llm_response = response.choice.message.content
 
         if not llm_response:
             logger.warning(
@@ -130,16 +142,16 @@ def classify_section_relevance(
             )
             classification = default_classification
         else:
-            # Parse the response to extract the situation number (1-4)
-            numbers = re.findall(r"\b[1-4]\b", llm_response)
+            # Parse the response to extract the situation number (0-3)
+            numbers = re.findall(r"\b[0-3]\b", llm_response)
             if numbers:
                 situation = int(numbers[-1])
                 # Map situation number to ContextExpansionType
                 situation_to_type = {
-                    1: ContextExpansionType.NOT_RELEVANT,
-                    2: ContextExpansionType.MAIN_SECTION_ONLY,
-                    3: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
-                    4: ContextExpansionType.FULL_DOCUMENT,
+                    0: ContextExpansionType.NOT_RELEVANT,
+                    1: ContextExpansionType.MAIN_SECTION_ONLY,
+                    2: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
+                    3: ContextExpansionType.FULL_DOCUMENT,
                 }
                 classification = situation_to_type.get(
                     situation, default_classification
@@ -169,9 +181,9 @@ def select_sections_for_expansion(
     sections: list[InferenceSection],
     user_query: str,
     llm: LLM,
-    # This is also what's in the prompt, just an oppinionated hyperparameter
     max_sections: int = 10,
     max_chunks_per_section: int | None = MAX_CHUNKS_FOR_RELEVANCE,
+    try_to_fill_to_max: bool = False,
 ) -> tuple[list[InferenceSection], list[str] | None]:
     """Use LLM to select the most relevant document sections for expansion.
 
@@ -183,7 +195,11 @@ def select_sections_for_expansion(
         max_chunks_per_section: Maximum chunks to consider per section (default: MAX_CHUNKS_FOR_RELEVANCE)
 
     Returns:
-        Filtered list of InferenceSection objects selected by the LLM
+        A tuple of:
+        - Filtered list of InferenceSection objects selected by the LLM
+        - List of document IDs for sections marked with "!" by the LLM, or None if none.
+          Note: The "!" marker support exists in parsing but is not currently used because
+          the prompt does not instruct the LLM to use it.
     """
     if not sections:
         return [], None
@@ -247,16 +263,26 @@ def select_sections_for_expansion(
         sections_dict.append(section_dict)
 
     # Build the prompt
-    prompt_text = DOCUMENT_SELECTION_PROMPT.format(
-        max_sections=max_sections,
-        formatted_doc_sections=json.dumps(sections_dict, indent=2),
-        user_query=user_query,
+    extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
+    prompt_text = UserMessage(
+        content=DOCUMENT_SELECTION_PROMPT.format(
+            max_sections=max_sections,
+            extra_instructions=extra_instructions,
+            formatted_doc_sections=json.dumps(sections_dict, indent=2),
+            user_query=user_query,
+        )
     )
 
-    # Call LLM for selection
+    # Call LLM for selection with Braintrust tracing
     try:
-        response = llm.invoke(prompt=prompt_text, reasoning_effort=ReasoningEffort.OFF)
-        llm_response = response.choice.message.content
+        with llm_generation_span(
+            llm=llm, flow="select_sections_for_expansion", input_messages=[prompt_text]
+        ) as span_generation:
+            response = llm.invoke(
+                prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
+            )
+            record_llm_response(span_generation, response)
+            llm_response = response.choice.message.content
 
         if not llm_response:
             logger.warning(

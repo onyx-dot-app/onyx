@@ -1,9 +1,8 @@
 "use client";
 
-import { OnSubmitProps } from "@/app/chat/hooks/useChatController";
+import { OnSubmitProps } from "@/hooks/useChatController";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useCurrentAgent } from "@/hooks/useAgents";
-import { cn } from "@/lib/utils";
 
 export interface SuggestionsProps {
   onSubmit: (props: OnSubmitProps) => void;
@@ -28,7 +27,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   };
 
   return (
-    <div className={cn("flex flex-col w-full p-1 gap-1")}>
+    <div className="max-w-[var(--app-page-main-content-width)] flex flex-col w-full p-1 gap-1">
       {currentAgent.starter_messages.map(({ message }, index) => (
         <LineItem key={index} onClick={() => handleSuggestionClick(message)}>
           {message}

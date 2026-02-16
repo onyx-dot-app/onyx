@@ -23,6 +23,8 @@ from onyx.indexing.models import BuildMetadataAwareChunksResult
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
+from onyx.redis.redis_hierarchy import get_ancestors_from_raw_id
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -90,7 +92,7 @@ class DocumentIndexingBatchAdapter:
         tenant_id: str,
         context: DocumentBatchPrepareContext,
     ) -> BuildMetadataAwareChunksResult:
-        """Enrich chunks with access, document sets, boosts and token counts."""
+        """Enrich chunks with access, document sets, boosts, token counts, and hierarchy."""
 
         no_access = DocumentAccess.build(
             user_emails=[],
@@ -131,6 +133,11 @@ class DocumentIndexingBatchAdapter:
             for document_id in updatable_ids
         }
 
+        # Get ancestor hierarchy node IDs for each document
+        doc_id_to_ancestor_ids = self._get_ancestor_ids_for_documents(
+            context.updatable_docs, tenant_id
+        )
+
         access_aware_chunks = [
             DocMetadataAwareIndexChunk.from_index_chunk(
                 index_chunk=chunk,
@@ -146,6 +153,9 @@ class DocumentIndexingBatchAdapter:
                 ),
                 tenant_id=tenant_id,
                 aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
+                ancestor_hierarchy_node_ids=doc_id_to_ancestor_ids[
+                    chunk.source_document.id
+                ],
             )
             for chunk_num, chunk in enumerate(chunks_with_embeddings)
         ]
@@ -157,6 +167,39 @@ class DocumentIndexingBatchAdapter:
             user_file_id_to_raw_text={},
             user_file_id_to_token_count={},
         )
+
+    def _get_ancestor_ids_for_documents(
+        self,
+        documents: list[Document],
+        tenant_id: str,
+    ) -> dict[str, list[int]]:
+        """
+        Get ancestor hierarchy node IDs for a batch of documents.
+
+        Uses Redis cache for fast lookups - no DB calls are made unless
+        there's a cache miss. Documents provide parent_hierarchy_raw_node_id
+        directly from the connector.
+
+        Returns a mapping from document_id to list of ancestor node IDs.
+        """
+        if not documents:
+            return {}
+
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        result: dict[str, list[int]] = {}
+
+        for doc in documents:
+            # Use parent_hierarchy_raw_node_id directly from the document
+            # If None, get_ancestors_from_raw_id will return just the SOURCE node
+            ancestors = get_ancestors_from_raw_id(
+                redis_client=redis_client,
+                source=doc.source,
+                parent_hierarchy_raw_node_id=doc.parent_hierarchy_raw_node_id,
+                db_session=self.db_session,
+            )
+            result[doc.id] = ancestors
+
+        return result
 
     def post_index(
         self,

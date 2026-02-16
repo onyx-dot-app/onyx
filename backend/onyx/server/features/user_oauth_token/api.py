@@ -23,7 +23,7 @@ class OAuthTokenStatus(BaseModel):
 @router.get("/status")
 def get_user_oauth_token_status(
     db_session: Session = Depends(get_session),
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> list[OAuthTokenStatus]:
     """
     Get the OAuth token status for the current user across all OAuth configs.
@@ -31,16 +31,17 @@ def get_user_oauth_token_status(
     Returns information about which OAuth configs the user has authenticated with
     and whether their tokens are expired.
     """
-    # disabled auth doesn't support user oauth tokens
-    if user is None:
-        return []
-
     user_tokens = get_all_user_oauth_tokens(user.id, db_session)
-    return [
-        OAuthTokenStatus(
-            oauth_config_id=token.oauth_config_id,
-            expires_at=OAuthTokenManager.token_expiration_time(token.token_data),
-            is_expired=OAuthTokenManager.is_token_expired(token.token_data),
+    result = []
+    for token in user_tokens:
+        token_data = (
+            token.token_data.get_value(apply_mask=False) if token.token_data else {}
         )
-        for token in user_tokens
-    ]
+        result.append(
+            OAuthTokenStatus(
+                oauth_config_id=token.oauth_config_id,
+                expires_at=OAuthTokenManager.token_expiration_time(token_data),
+                is_expired=OAuthTokenManager.is_token_expired(token_data),
+            )
+        )
+    return result

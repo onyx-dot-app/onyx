@@ -85,6 +85,9 @@ def test_connector_skips_link_only_files_when_enabled() -> None:
         patch(
             "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
         ) as convert_mock,
+        patch(
+            "onyx.connectors.google_drive.connector.GoogleDriveConnector._get_new_ancestors_for_files"
+        ) as get_new_ancestors_mock,
     ):
         convert_mock.return_value = "doc"
         checkpoint = connector.build_dummy_checkpoint()
@@ -100,6 +103,7 @@ def test_connector_skips_link_only_files_when_enabled() -> None:
     assert results == []
     convert_mock.assert_not_called()
     fetch_mock.assert_called_once()
+    get_new_ancestors_mock.assert_called_once()
     assert (
         fetch_mock.call_args.kwargs["field_type"] == DriveFileFieldType.WITH_PERMISSIONS
     )
@@ -121,6 +125,9 @@ def test_connector_processes_files_when_option_disabled() -> None:
         patch(
             "onyx.connectors.google_drive.connector.convert_drive_item_to_document"
         ) as convert_mock,
+        patch(
+            "onyx.connectors.google_drive.connector.GoogleDriveConnector._get_new_ancestors_for_files"
+        ) as get_new_ancestors_mock,
     ):
         convert_mock.return_value = "doc"
         checkpoint = connector.build_dummy_checkpoint()
@@ -136,4 +143,5 @@ def test_connector_processes_files_when_option_disabled() -> None:
     assert len(results) == 1
     convert_mock.assert_called_once()
     fetch_mock.assert_called_once()
+    get_new_ancestors_mock.assert_called_once()
     assert fetch_mock.call_args.kwargs["field_type"] == DriveFileFieldType.STANDARD

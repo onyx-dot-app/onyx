@@ -5,7 +5,7 @@ import { ModelConfiguration } from "./interfaces";
 import { ManualErrorMessage, TextFormField } from "@/components/Field";
 import { useEffect, useState } from "react";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 function ModelConfigurationRow({
@@ -54,7 +54,7 @@ function ModelConfigurationRow({
         />
       </div>
       <div className="flex flex-col justify-center">
-        <IconButton
+        <Button
           disabled={formikProps.values.model_configurations.length <= 1}
           onClick={() => {
             if (formikProps.values.model_configurations.length > 1) {
@@ -63,7 +63,7 @@ function ModelConfigurationRow({
             }
           }}
           icon={SvgX}
-          secondary
+          prominence="secondary"
         />
       </div>
     </div>
@@ -140,7 +140,7 @@ export function ModelConfigurationField({
             {finalError && (
               <ManualErrorMessage>{finalError}</ManualErrorMessage>
             )}
-            <div>
+            <div className="mt-3">
               <CreateButton
                 onClick={() => {
                   arrayHelpers.push({
@@ -150,8 +150,6 @@ export function ModelConfigurationField({
                     max_input_tokens: null,
                   });
                 }}
-                className="mt-3"
-                type="button"
               >
                 Add New
               </CreateButton>

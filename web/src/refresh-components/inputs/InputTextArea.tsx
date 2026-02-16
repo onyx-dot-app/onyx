@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn, mergeRefs } from "@/lib/utils";
 import {
-  wrapperClasses,
   innerClasses,
+  textClasses,
+  Variants,
+  wrapperClasses,
 } from "@/refresh-components/inputs/styles";
 
 /**
@@ -23,13 +25,16 @@ import {
  *
  * // With error state
  * <InputTextArea
- *   error
+ *   variant="error"
  *   value={value}
  *   onChange={(e) => setValue(e.target.value)}
  * />
  *
  * // Disabled state
- * <InputTextArea disabled value="Cannot edit" />
+ * <InputTextArea variant="disabled" value="Cannot edit" />
+ *
+ * // Read-only state (non-editable, minimal styling)
+ * <InputTextArea variant="readOnly" value="Read-only value" />
  *
  * // Custom rows
  * <InputTextArea
@@ -39,43 +44,88 @@ import {
  * />
  *
  * // Internal styling (no border)
- * <InputTextArea internal value={value} onChange={handleChange} />
+ * <InputTextArea variant="internal" value={value} onChange={handleChange} />
  * ```
  */
 export interface InputTextAreaProps
-  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
-  // input-text-area variants
-  main?: boolean;
-  internal?: boolean;
-  error?: boolean;
-  disabled?: boolean;
+  extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "disabled"> {
+  variant?: Variants;
+  autoResize?: boolean;
+  maxRows?: number;
+  resizable?: boolean;
 }
 const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
-  ({ main, internal, error, disabled, className, rows = 4, ...props }, ref) => {
-    const variant = main
-      ? "main"
-      : internal
-        ? "internal"
-        : error
-          ? "error"
-          : disabled
-            ? "disabled"
-            : "main";
+  (
+    {
+      variant = "primary",
+      className,
+      rows = 4,
+      readOnly,
+      autoResize = false,
+      maxRows,
+      resizable = true,
+      ...props
+    },
+    ref
+  ) => {
+    const disabled = variant === "disabled";
+    const isReadOnlyVariant = variant === "readOnly";
+    const isReadOnly = isReadOnlyVariant || readOnly;
+
+    const internalRef = React.useRef<HTMLTextAreaElement | null>(null);
+    const cachedLineHeight = React.useRef<number | null>(null);
+
+    const adjustHeight = React.useCallback(() => {
+      const textarea = internalRef.current;
+      if (!textarea || !autoResize) return;
+
+      if (cachedLineHeight.current === null) {
+        cachedLineHeight.current =
+          parseFloat(getComputedStyle(textarea).lineHeight) || 20;
+      }
+      const lineHeight = cachedLineHeight.current;
+
+      // Reset to auto so scrollHeight reflects actual content
+      textarea.style.height = "auto";
+      textarea.style.overflowY = "hidden";
+
+      const minHeight = rows * lineHeight;
+      const maxHeight = maxRows ? maxRows * lineHeight : Infinity;
+
+      const contentHeight = textarea.scrollHeight;
+      const clampedHeight = Math.min(
+        Math.max(contentHeight, minHeight),
+        maxHeight
+      );
+
+      textarea.style.height = `${clampedHeight}px`;
+      textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+    }, [autoResize, rows, maxRows]);
+
+    React.useEffect(() => {
+      adjustHeight();
+    }, [adjustHeight, props.value]);
+
+    const resizeClass = autoResize || !resizable ? "resize-none" : "resize-y";
 
     return (
       <div
         className={cn(
           wrapperClasses[variant],
-          "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 bg-background-neutral-00 relative",
+          "flex flex-row items-start justify-between w-full h-fit p-1.5 rounded-08 relative",
+          !isReadOnlyVariant && "bg-background-neutral-00",
           className
         )}
       >
         <textarea
-          ref={ref}
+          ref={mergeRefs(internalRef, ref)}
           disabled={disabled}
+          readOnly={isReadOnly}
           className={cn(
+            "w-full min-h-[3rem] bg-transparent focus:outline-none p-0.5",
+            resizeClass,
             innerClasses[variant],
-            "w-full min-h-[3rem] bg-transparent focus:outline-none resize-y p-0.5"
+            textClasses[variant]
           )}
           rows={rows}
           {...props}

@@ -14,7 +14,9 @@ spec:
   maxReplicaCount: {{ .Values.webserver.autoscaling.maxReplicas }}
   pollingInterval: {{ .Values.webserver.autoscaling.pollingInterval | default 30 }}
   cooldownPeriod: {{ .Values.webserver.autoscaling.cooldownPeriod | default 300 }}
-  idleReplicaCount: {{ .Values.webserver.autoscaling.idleReplicaCount | default 1 }}
+  {{- if hasKey .Values.webserver.autoscaling "idleReplicaCount" }}
+  idleReplicaCount: {{ .Values.webserver.autoscaling.idleReplicaCount }}
+  {{- end }}
   fallback:
     failureThreshold: {{ .Values.webserver.autoscaling.failureThreshold | default 3 }}
     replicas: {{ .Values.webserver.autoscaling.fallbackReplicas | default 1 }}

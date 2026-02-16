@@ -45,6 +45,7 @@ class RedisConnectorPrune:
     )  # connectorpruning_generator_complete
 
     TASKSET_PREFIX = f"{PREFIX}_taskset"  # connectorpruning_taskset
+    TASKSET_TTL = FENCE_TTL
     SUBTASK_PREFIX = f"{PREFIX}+sub"  # connectorpruning+sub
 
     # used to signal the overall workflow is still active
@@ -184,6 +185,7 @@ class RedisConnectorPrune:
 
             # add to the tracking taskset in redis BEFORE creating the celery task.
             self.redis.sadd(self.taskset_key, custom_task_id)
+            self.redis.expire(self.taskset_key, self.TASKSET_TTL)
 
             # Priority on sync's triggered by new indexing should be medium
             result = celery_app.send_task(

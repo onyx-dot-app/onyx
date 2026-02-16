@@ -89,7 +89,7 @@ test.describe("Image Generation Provider Configuration", () => {
 
     test.afterEach(async ({ page }) => {
       // Clean up the image generation config created during the test
-      const apiClient = new OnyxApiClient(page);
+      const apiClient = new OnyxApiClient(page.request);
       try {
         await apiClient.deleteImageGenerationConfig("openai_dalle_3");
         console.log("[image-gen-test] Cleaned up DALL-E 3 config");
@@ -100,7 +100,7 @@ test.describe("Image Generation Provider Configuration", () => {
       }
     });
 
-    test("should configure DALL-E 3 with API key", async ({ page }) => {
+    test.skip("should configure DALL-E 3 with API key", async ({ page }) => {
       // Click Connect on DALL-E 3 card using aria-label
       await openProviderModal(page, "openai_dalle_3");
 

@@ -30,6 +30,7 @@ from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -740,7 +741,7 @@ class DrupalWikiConnector(
         Returns:
             Generator yielding batches of SlimDocument objects.
         """
-        slim_docs: list[SlimDocument] = []
+        slim_docs: list[SlimDocument | HierarchyNode] = []
         logger.info(
             f"Starting retrieve_all_slim_docs with include_all_spaces={self.include_all_spaces}, spaces={self.spaces}"
         )

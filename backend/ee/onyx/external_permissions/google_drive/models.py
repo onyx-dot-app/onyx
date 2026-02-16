@@ -30,6 +30,10 @@ class GoogleDrivePermission(BaseModel):
     type: PermissionType
     domain: str | None  # only applies to domain permissions
     permission_details: GoogleDrivePermissionDetails | None
+    # Whether this permission makes the file discoverable in search
+    # False means "anyone with the link" (not searchable/discoverable)
+    # Only applicable for domain/anyone permission types
+    allow_file_discovery: bool | None
 
     @classmethod
     def from_drive_permission(
@@ -46,6 +50,7 @@ class GoogleDrivePermission(BaseModel):
             email_address=drive_permission.get("emailAddress"),
             type=PermissionType(drive_permission["type"]),
             domain=drive_permission.get("domain"),
+            allow_file_discovery=drive_permission.get("allowFileDiscovery"),
             permission_details=(
                 GoogleDrivePermissionDetails(
                     permission_type=permission_details.get("type"),

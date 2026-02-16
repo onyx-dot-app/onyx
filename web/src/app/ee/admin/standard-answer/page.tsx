@@ -2,7 +2,7 @@
 
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ClipboardIcon, EditIcon } from "@/components/icons/icons";
-import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -29,8 +29,8 @@ import { PageSelector } from "@/components/PageSelector";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/refresh-components/buttons/CreateButton";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgTrash } from "@opal/icons";
+import { Button } from "@opal/components";
 const NUM_RESULTS_PER_PAGE = 10;
 
 type Displayable = JSX.Element | string;
@@ -142,7 +142,7 @@ const StandardAnswersTableRow = ({
         >
           {standardAnswer.answer}
         </ReactMarkdown>,
-        <IconButton
+        <Button
           key={`delete-${standardAnswer.id}`}
           icon={SvgTrash}
           onClick={() => handleDelete(standardAnswer.id)}
@@ -156,12 +156,10 @@ const StandardAnswersTable = ({
   standardAnswers,
   standardAnswerCategories,
   refresh,
-  setPopup,
 }: {
   standardAnswers: StandardAnswer[];
   standardAnswerCategories: StandardAnswerCategory[];
   refresh: () => void;
-  setPopup: (popup: PopupSpec | null) => void;
 }) => {
   const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -215,16 +213,10 @@ const StandardAnswersTable = ({
   const handleDelete = async (id: number) => {
     const response = await deleteStandardAnswer(id);
     if (response.ok) {
-      setPopup({
-        message: `Standard answer ${id} deleted`,
-        type: "success",
-      });
+      toast.success(`Standard answer ${id} deleted`);
     } else {
       const errorMsg = await response.text();
-      setPopup({
-        message: `Failed to delete standard answer - ${errorMsg}`,
-        type: "error",
-      });
+      toast.error(`Failed to delete standard answer - ${errorMsg}`);
     }
     refresh();
   };
@@ -353,7 +345,6 @@ const StandardAnswersTable = ({
 };
 
 const Main = () => {
-  const { popup, setPopup } = usePopup();
   const {
     data: standardAnswers,
     error: standardAnswersError,
@@ -396,8 +387,6 @@ const Main = () => {
 
   return (
     <div className="mb-8">
-      {popup}
-
       <Text className="mb-2">
         Manage the standard answers for pre-defined questions.
         <br />
@@ -420,7 +409,6 @@ const Main = () => {
           standardAnswers={standardAnswers}
           standardAnswerCategories={standardAnswerCategories}
           refresh={refreshStandardAnswers}
-          setPopup={setPopup}
         />
       </div>
     </div>
