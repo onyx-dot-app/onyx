@@ -101,7 +101,7 @@ class ACPClientState:
     """Internal state for the ACP client."""
 
     initialized: bool = False
-    current_session: ACPSession | None = None
+    sessions: dict[str, ACPSession] = field(default_factory=dict)
     next_request_id: int = 0
     agent_capabilities: dict[str, Any] = field(default_factory=dict)
     agent_info: dict[str, Any] = field(default_factory=dict)
@@ -157,15 +157,15 @@ class ACPExecClient:
             self._k8s_client = client.CoreV1Api()
         return self._k8s_client
 
-    def start(self, cwd: str = "/workspace", timeout: float = 30.0) -> str:
-        """Start the agent process via exec and initialize a session.
+    def start(self, cwd: str = "/workspace", timeout: float = 30.0) -> None:
+        """Start the agent process via exec and initialize the ACP connection.
+
+        Only performs the ACP `initialize` handshake. Sessions are created
+        separately via `create_session()` or `resume_session()`.
 
         Args:
-            cwd: Working directory for the agent
+            cwd: Working directory for the `opencode acp` process
             timeout: Timeout for initialization
-
-        Returns:
-            The session ID
 
         Raises:
             RuntimeError: If startup fails
@@ -205,25 +205,10 @@ class ACPExecClient:
             # Give process a moment to start
             time.sleep(0.5)
 
-            # Initialize ACP connection
+            # Initialize ACP connection (no session creation)
             self._initialize(timeout=timeout)
 
-            # Try to resume an existing session first (handles multi-replica).
-            # When multiple API server replicas connect to the same sandbox
-            # pod, a previous replica may have already created a session for
-            # this workspace.  Resuming preserves conversation context.
-            session_id = self._try_resume_existing_session(cwd, timeout)
-            resumed = session_id is not None
-
-            if not session_id:
-                # No existing session found — create a new one
-                session_id = self._create_session(cwd=cwd, timeout=timeout)
-
-            logger.info(
-                f"[ACP] Client started: pod={self._pod_name} "
-                f"acp_session={session_id} resumed={resumed}"
-            )
-            return session_id
+            logger.info(f"[ACP] Client started: pod={self._pod_name}")
 
         except Exception as e:
             logger.error(f"[ACP] Client start failed: pod={self._pod_name} error={e}")
@@ -376,14 +361,10 @@ class ACPExecClient:
 
     def stop(self) -> None:
         """Stop the exec session and clean up."""
-        acp_session = (
-            self._state.current_session.session_id
-            if self._state.current_session
-            else "none"
-        )
+        session_ids = list(self._state.sessions.keys())
         logger.info(
             f"[ACP] Stopping client: pod={self._pod_name} "
-            f"acp_session={acp_session} prompts_sent={self._prompt_count}"
+            f"sessions={session_ids} prompts_sent={self._prompt_count}"
         )
         self._stop_reader.set()
 
@@ -511,7 +492,8 @@ class ACPExecClient:
         if not session_id:
             raise RuntimeError("No session ID returned from session/new")
 
-        self._state.current_session = ACPSession(session_id=session_id, cwd=cwd)
+        self._state.sessions[session_id] = ACPSession(session_id=session_id, cwd=cwd)
+        logger.info(f"[ACP] Created session: acp_session={session_id} cwd={cwd}")
 
         return session_id
 
@@ -557,7 +539,7 @@ class ACPExecClient:
 
         # The response should contain the session ID
         resumed_id = result.get("sessionId", session_id)
-        self._state.current_session = ACPSession(session_id=resumed_id, cwd=cwd)
+        self._state.sessions[resumed_id] = ACPSession(session_id=resumed_id, cwd=cwd)
 
         logger.info(f"[ACP] Resumed session: acp_session={resumed_id} cwd={cwd}")
         return resumed_id
@@ -614,24 +596,90 @@ class ACPExecClient:
             )
             return None
 
+    def create_session(self, cwd: str, timeout: float = 30.0) -> str:
+        """Create a new ACP session on this connection.
+
+        Args:
+            cwd: Working directory for the session
+            timeout: Timeout for the request
+
+        Returns:
+            The ACP session ID
+        """
+        if not self._state.initialized:
+            raise RuntimeError("Client not initialized. Call start() first.")
+        return self._create_session(cwd=cwd, timeout=timeout)
+
+    def resume_session(self, session_id: str, cwd: str, timeout: float = 30.0) -> str:
+        """Resume an existing ACP session on this connection.
+
+        Args:
+            session_id: The ACP session ID to resume
+            cwd: Working directory for the session
+            timeout: Timeout for the request
+
+        Returns:
+            The ACP session ID
+        """
+        if not self._state.initialized:
+            raise RuntimeError("Client not initialized. Call start() first.")
+        return self._resume_session(session_id=session_id, cwd=cwd, timeout=timeout)
+
+    def get_or_create_session(self, cwd: str, timeout: float = 30.0) -> str:
+        """Get an existing session for this cwd, or create/resume one.
+
+        Tries in order:
+        1. Return an already-tracked session for this cwd
+        2. Resume an existing session from opencode's storage (multi-replica)
+        3. Create a new session
+
+        Args:
+            cwd: Working directory for the session
+            timeout: Timeout for ACP requests
+
+        Returns:
+            The ACP session ID
+        """
+        if not self._state.initialized:
+            raise RuntimeError("Client not initialized. Call start() first.")
+
+        # Check if we already have a session for this cwd
+        for sid, session in self._state.sessions.items():
+            if session.cwd == cwd:
+                logger.info(
+                    f"[ACP] Reusing existing session: " f"acp_session={sid} cwd={cwd}"
+                )
+                return sid
+
+        # Try to resume from opencode's persisted storage
+        resumed_id = self._try_resume_existing_session(cwd, timeout)
+        if resumed_id:
+            return resumed_id
+
+        # Create a new session
+        return self._create_session(cwd=cwd, timeout=timeout)
+
     def send_message(
         self,
         message: str,
+        session_id: str,
         timeout: float = ACP_MESSAGE_TIMEOUT,
     ) -> Generator[ACPEvent, None, None]:
-        """Send a message and stream response events.
+        """Send a message to a specific session and stream response events.
 
         Args:
             message: The message content to send
+            session_id: The ACP session ID to send the message to
             timeout: Maximum time to wait for complete response (defaults to ACP_MESSAGE_TIMEOUT env var)
 
         Yields:
             Typed ACP schema event objects
         """
-        if self._state.current_session is None:
-            raise RuntimeError("No active session. Call start() first.")
-
-        session_id = self._state.current_session.session_id
+        if session_id not in self._state.sessions:
+            raise RuntimeError(
+                f"Unknown session {session_id}. "
+                f"Known sessions: {list(self._state.sessions.keys())}"
+            )
         packet_logger = get_packet_logger()
         self._prompt_count += 1
         prompt_num = self._prompt_count
@@ -682,6 +730,18 @@ class ACPExecClient:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
                 last_event_time = time.time()
                 messages_processed += 1
+
+                # Log every dequeued message for prompt #2+ to diagnose
+                # why the response isn't being matched.
+                if prompt_num >= 2:
+                    msg_id = message_data.get("id")
+                    logger.info(
+                        f"[ACP] Prompt #{prompt_num} dequeued: "
+                        f"id={msg_id} type(id)={type(msg_id).__name__} "
+                        f"method={message_data.get('method')} "
+                        f"keys={list(message_data.keys())} "
+                        f"request_id={request_id}"
+                    )
             except Empty:
                 # Check if reader thread is still alive
                 if (
@@ -815,10 +875,17 @@ class ACPExecClient:
                 )
 
             else:
-                logger.debug(
+                # Elevate to INFO — if the JSON-RPC response is arriving
+                # but failing the is_response check, this will reveal it.
+                logger.info(
                     f"[ACP] Unhandled message: "
                     f"id={message_data.get('id')} "
-                    f"method={message_data.get('method')}"
+                    f"type(id)={type(message_data.get('id')).__name__} "
+                    f"method={message_data.get('method')} "
+                    f"keys={list(message_data.keys())} "
+                    f"request_id={request_id} "
+                    f"has_result={'result' in message_data} "
+                    f"has_error={'error' in message_data}"
                 )
 
     def _process_session_update(
@@ -865,15 +932,24 @@ class ACPExecClient:
 
         self._ws_client.write_stdin(json.dumps(response) + "\n")
 
-    def cancel(self) -> None:
-        """Cancel the current operation."""
-        if self._state.current_session is None:
-            return
+    def cancel(self, session_id: str | None = None) -> None:
+        """Cancel the current operation on a session.
 
-        self._send_notification(
-            "session/cancel",
-            {"sessionId": self._state.current_session.session_id},
-        )
+        Args:
+            session_id: The ACP session ID to cancel. If None, cancels all sessions.
+        """
+        if session_id:
+            if session_id in self._state.sessions:
+                self._send_notification(
+                    "session/cancel",
+                    {"sessionId": session_id},
+                )
+        else:
+            for sid in self._state.sessions:
+                self._send_notification(
+                    "session/cancel",
+                    {"sessionId": sid},
+                )
 
     def health_check(self, timeout: float = 5.0) -> bool:  # noqa: ARG002
         """Check if we can exec into the pod."""
@@ -900,11 +976,9 @@ class ACPExecClient:
         return self._ws_client is not None and self._ws_client.is_open()
 
     @property
-    def session_id(self) -> str | None:
-        """Get the current session ID, if any."""
-        if self._state.current_session:
-            return self._state.current_session.session_id
-        return None
+    def session_ids(self) -> list[str]:
+        """Get all tracked session IDs."""
+        return list(self._state.sessions.keys())
 
     def __enter__(self) -> "ACPExecClient":
         """Context manager entry."""

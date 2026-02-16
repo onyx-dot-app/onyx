@@ -353,14 +353,18 @@ class KubernetesSandboxManager(SandboxManager):
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 
+        # One long-lived ACP client per sandbox (Zed-style architecture).
+        # Multiple craft sessions share one `opencode acp` process per sandbox.
+        self._acp_clients: dict[UUID, ACPExecClient] = {}
+
+        # Maps (sandbox_id, craft_session_id) → ACP session ID.
+        # Each craft session has its own ACP session on the shared client.
+        self._acp_session_ids: dict[tuple[UUID, UUID], str] = {}
+
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
         self._skills_path = Path(__file__).parent / "docker" / "skills"
-
-        # Track ACP exec clients in memory - keyed by (sandbox_id, session_id) tuple
-        # Each session within a sandbox has its own ACP client (WebSocket connection)
-        self._acp_clients: dict[tuple[UUID, UUID], ACPExecClient] = {}
 
         logger.info(
             f"KubernetesSandboxManager initialized: "
@@ -1165,24 +1169,27 @@ done
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
 
-        Deletes the Service and Pod for the sandbox.
+        Stops the shared ACP client and removes all session mappings for this
+        sandbox, then deletes the Service and Pod.
 
         Args:
             sandbox_id: The sandbox ID to terminate
         """
-        # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
-        clients_to_stop = [
-            (key, cl) for key, cl in self._acp_clients.items() if key[0] == sandbox_id
-        ]
-        for key, cl in clients_to_stop:
+        # Stop the shared ACP client for this sandbox
+        acp_client = self._acp_clients.pop(sandbox_id, None)
+        if acp_client:
             try:
-                cl.stop()
-                del self._acp_clients[key]
+                acp_client.stop()
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop ACP client for sandbox {sandbox_id}, "
-                    f"session {key[1]}: {e}"
+                    f"[SANDBOX-ACP] Failed to stop ACP client for "
+                    f"sandbox {sandbox_id}: {e}"
                 )
+
+        # Remove all session mappings for this sandbox
+        keys_to_remove = [key for key in self._acp_session_ids if key[0] == sandbox_id]
+        for key in keys_to_remove:
+            del self._acp_session_ids[key]
 
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
@@ -1418,7 +1425,8 @@ echo "Session workspace setup complete"
     ) -> None:
         """Clean up a session workspace (on session delete).
 
-        Executes kubectl exec to remove the session directory.
+        Removes the ACP session mapping and executes kubectl exec to remove
+        the session directory. The shared ACP client persists for other sessions.
 
         Args:
             sandbox_id: The sandbox ID
@@ -1426,17 +1434,14 @@ echo "Session workspace setup complete"
             nextjs_port: Optional port where Next.js server is running (unused in K8s,
                         we use PID file instead)
         """
-        # Stop ACP client for this session
-        client_key = (sandbox_id, session_id)
-        acp_client = self._acp_clients.pop(client_key, None)
-        if acp_client:
-            try:
-                acp_client.stop()
-                logger.debug(f"Stopped ACP client for session {session_id}")
-            except Exception as e:
-                logger.warning(
-                    f"Failed to stop ACP client for session {session_id}: {e}"
-                )
+        # Remove the ACP session mapping (shared client persists)
+        session_key = (sandbox_id, session_id)
+        acp_session_id = self._acp_session_ids.pop(session_key, None)
+        if acp_session_id:
+            logger.info(
+                f"[SANDBOX-ACP] Removed ACP session mapping: "
+                f"session={session_id} acp_session={acp_session_id}"
+            )
 
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
@@ -1842,6 +1847,94 @@ echo "Session config regeneration complete"
         )
         return exec_client.health_check(timeout=timeout)
 
+    def _get_or_create_acp_client(self, sandbox_id: UUID) -> ACPExecClient:
+        """Get the shared ACP client for a sandbox, creating one if needed.
+
+        One long-lived `opencode acp` process per sandbox (Zed-style).
+        If the existing client's WebSocket has died, replaces it with a new one.
+
+        Args:
+            sandbox_id: The sandbox ID
+
+        Returns:
+            A running ACPExecClient for this sandbox
+        """
+        acp_client = self._acp_clients.get(sandbox_id)
+
+        if acp_client is not None and acp_client.is_running:
+            return acp_client
+
+        # Client is dead or doesn't exist — clean up stale one
+        if acp_client is not None:
+            logger.warning(
+                f"[SANDBOX-ACP] Stale ACP client for sandbox {sandbox_id}, "
+                f"replacing"
+            )
+            try:
+                acp_client.stop()
+            except Exception:
+                pass
+
+            # Clear session mappings — they're invalid on a new process
+            keys_to_remove = [
+                key for key in self._acp_session_ids if key[0] == sandbox_id
+            ]
+            for key in keys_to_remove:
+                del self._acp_session_ids[key]
+
+        pod_name = self._get_pod_name(str(sandbox_id))
+        new_client = ACPExecClient(
+            pod_name=pod_name,
+            namespace=self._namespace,
+            container="sandbox",
+        )
+        new_client.start(cwd="/workspace")
+        self._acp_clients[sandbox_id] = new_client
+
+        logger.info(
+            f"[SANDBOX-ACP] Created shared ACP client: "
+            f"sandbox={sandbox_id} pod={pod_name} "
+            f"api_pod={_API_SERVER_HOSTNAME}"
+        )
+        return new_client
+
+    def _get_or_create_acp_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        acp_client: ACPExecClient,
+    ) -> str:
+        """Get the ACP session ID for a craft session, creating one if needed.
+
+        Uses the session mapping cache first, then falls back to
+        `get_or_create_session()` which handles resume from opencode's
+        persisted storage (multi-replica support).
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The craft session ID
+            acp_client: The shared ACP client for this sandbox
+
+        Returns:
+            The ACP session ID
+        """
+        session_key = (sandbox_id, session_id)
+        acp_session_id = self._acp_session_ids.get(session_key)
+
+        if acp_session_id and acp_session_id in acp_client.session_ids:
+            return acp_session_id
+
+        # Session not tracked or was lost — get or create it
+        session_path = f"/workspace/sessions/{session_id}"
+        acp_session_id = acp_client.get_or_create_session(cwd=session_path)
+        self._acp_session_ids[session_key] = acp_session_id
+
+        logger.info(
+            f"[SANDBOX-ACP] Session mapped: "
+            f"craft_session={session_id} acp_session={acp_session_id}"
+        )
+        return acp_session_id
+
     def send_message(
         self,
         sandbox_id: UUID,
@@ -1850,8 +1943,9 @@ echo "Session config regeneration complete"
     ) -> Generator[ACPEvent, None, None]:
         """Send a message to the CLI agent and stream ACP events.
 
-        Runs `opencode acp` via kubectl exec in the sandbox pod.
-        The agent runs in the session-specific workspace.
+        Uses a shared ACP client per sandbox (one `opencode acp` process).
+        Each craft session has its own ACP session ID on that shared process.
+        Switching between sessions is client-side — just use the right sessionId.
 
         Args:
             sandbox_id: The sandbox ID
@@ -1862,54 +1956,20 @@ echo "Session config regeneration complete"
             Typed ACP schema event objects
         """
         packet_logger = get_packet_logger()
-        pod_name = self._get_pod_name(str(sandbox_id))
-        session_path = f"/workspace/sessions/{session_id}"
 
-        # Get or create ACP client for this session
-        client_key = (sandbox_id, session_id)
-        client = self._acp_clients.get(client_key)
+        # Get or create the shared ACP client for this sandbox
+        acp_client = self._get_or_create_acp_client(sandbox_id)
 
-        if client is None or not client.is_running:
-            # Clean up stale client if it exists but is no longer running
-            if client is not None:
-                logger.info(
-                    f"[SANDBOX-ACP] Cleaning up stale client: "
-                    f"session={session_id} acp_session={client.session_id}"
-                )
-                try:
-                    client.stop()
-                except Exception:
-                    pass
+        # Get or create the ACP session for this craft session
+        acp_session_id = self._get_or_create_acp_session(
+            sandbox_id, session_id, acp_client
+        )
 
-            logger.info(
-                f"[SANDBOX-ACP] Creating ACP client: "
-                f"session={session_id} pod={pod_name} "
-                f"api_pod={_API_SERVER_HOSTNAME}"
-            )
-
-            # Create and start ACP client for this session.
-            # start() will try to resume an existing session from the pod
-            # (handles multi-replica: another API pod may have created
-            # the session earlier).
-            client = ACPExecClient(
-                pod_name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-            )
-            client.start(cwd=session_path)
-            self._acp_clients[client_key] = client
-
-            logger.info(
-                f"[SANDBOX-ACP] ACP client ready: "
-                f"session={session_id} acp_session={client.session_id} "
-                f"api_pod={_API_SERVER_HOSTNAME}"
-            )
-        else:
-            logger.info(
-                f"[SANDBOX-ACP] Reusing cached client: "
-                f"session={session_id} acp_session={client.session_id} "
-                f"api_pod={_API_SERVER_HOSTNAME}"
-            )
+        logger.info(
+            f"[SANDBOX-ACP] Sending message: "
+            f"session={session_id} acp_session={acp_session_id} "
+            f"api_pod={_API_SERVER_HOSTNAME}"
+        )
 
         # Log the send_message call at sandbox manager level
         packet_logger.log_session_start(session_id, sandbox_id, message)
@@ -1917,7 +1977,7 @@ echo "Session config regeneration complete"
         events_count = 0
         got_prompt_response = False
         try:
-            for event in client.send_message(message):
+            for event in acp_client.send_message(message, session_id=acp_session_id):
                 events_count += 1
                 if isinstance(event, PromptResponse):
                     got_prompt_response = True
