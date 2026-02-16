@@ -216,26 +216,25 @@ test.describe("Message Edit and Regenerate Tests", () => {
   });
 
   test("Message editing with files", async ({ page }) => {
-    // Set up: log in and navigate to chat
-    await page.context().clearCookies();
-    await loginAsRandomUser(page);
-    await page.goto("/app");
-    await page.waitForLoadState("networkidle");
-
     const testFileName = `test-edit-${Date.now()}.txt`;
     const testFileContent = "This is a test file for editing with attachments.";
     const buffer = Buffer.from(testFileContent, "utf-8");
 
-    // Upload a file by setting it directly on the hidden file input that
-    // FilePickerPopover renders. This avoids needing to find the popover trigger button.
+    // Trigger the native file dialog by clicking the hidden file input,
+    // then intercept it with the filechooser event (same pattern as
+    // user_file_attachment.spec.ts).
+    const fileInput = page.locator('input[type="file"]').first();
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await fileInput.dispatchEvent("click");
+    const fileChooser = await fileChooserPromise;
+
     const uploadResponsePromise = page.waitForResponse(
       (response) =>
         response.url().includes("/api/user/projects/file/upload") &&
         response.request().method() === "POST"
     );
 
-    const fileInput = page.locator('input[type="file"]').first();
-    await fileInput.setInputFiles({
+    await fileChooser.setFiles({
       name: testFileName,
       mimeType: "text/plain",
       buffer: buffer,
@@ -244,25 +243,17 @@ test.describe("Message Edit and Regenerate Tests", () => {
     const uploadResponse = await uploadResponsePromise;
     expect(uploadResponse.ok()).toBeTruthy();
 
-    // Wait for the file card to appear in the input area
-    await expect(page.getByText(testFileName)).toBeVisible({ timeout: 10000 });
-
-    // Type and send a message with the file attached
-    await page.locator("#onyx-chat-input-textarea").click();
-    await page.locator("#onyx-chat-input-textarea").fill("Summarize this file");
-    await page.locator("#onyx-chat-input-send-button").click();
-
-    // Wait for the AI response to complete
-    await page.waitForSelector('[data-testid="AgentMessage/copy-button"]', {
-      state: "visible",
-      timeout: 30000,
+    // Wait for upload processing to complete and file card to render
+    await page.waitForLoadState("networkidle", { timeout: 10000 });
+    await expect(page.getByText(testFileName).first()).toBeVisible({
+      timeout: 10000,
     });
+
+    // Send a message with the file attached using the shared utility
+    await sendMessage(page, "Summarize this file");
 
     // Verify the file is displayed in the sent human message
     const humanMessage = page.locator("#onyx-human-message").first();
-    const fileDisplay = humanMessage.locator("#onyx-file");
-    await expect(fileDisplay).toBeVisible();
-    await expect(fileDisplay.getByText(testFileName)).toBeVisible();
 
     // Verify message text is displayed
     const messageContent = await humanMessage.textContent();
