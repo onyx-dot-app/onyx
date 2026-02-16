@@ -1404,6 +1404,10 @@ async def _get_or_create_user_from_jwt(
                 return None
 
     await _sync_jwt_oidc_expiry(user_manager, user, payload)
+    # Explicitly commit JWT auth writes (provisioning/expiry updates) so this path
+    # does not depend on fastapi-users internal commit behavior.
+    if async_db_session.in_transaction():
+        await async_db_session.commit()
     return user
 
 
@@ -1448,11 +1452,8 @@ async def optional_user(
         return user
     finally:
         # Authentication checks are read-heavy and run before long-lived streaming responses.
-        # Roll back any open transaction so async connections can be returned to the pool.
-        try:
-            await async_db_session.rollback()
-        except Exception:
-            logger.exception("Failed to rollback async auth session")
+        # Close the async session so DB connections can be returned to the pool.
+        await async_db_session.close()
 
 
 def get_anonymous_user() -> User:
