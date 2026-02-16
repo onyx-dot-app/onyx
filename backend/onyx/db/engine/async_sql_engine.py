@@ -124,16 +124,12 @@ async def get_async_session(
             yield session
         return
 
-    # Create connection with schema translation to handle querying the right schema
+    # Bind the session to an execution-options engine so connections are checked out
+    # lazily and can be returned between transactions.
     schema_translate_map = {None: tenant_id}
-    async with engine.connect() as connection:
-        connection = await connection.execution_options(
-            schema_translate_map=schema_translate_map
-        )
-        async with AsyncSession(
-            bind=connection, expire_on_commit=False
-        ) as async_session:
-            yield async_session
+    session_bind = engine.execution_options(schema_translate_map=schema_translate_map)
+    async with AsyncSession(bind=session_bind, expire_on_commit=False) as async_session:
+        yield async_session
 
 
 def get_async_session_context_manager(

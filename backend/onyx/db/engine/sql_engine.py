@@ -352,13 +352,12 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
             yield session
         return
 
-    # Create connection with schema translation to handle querying the right schema
+    # Bind the session to an execution-options engine so connections are checked out
+    # lazily and can be returned between transactions.
     schema_translate_map = {None: tenant_id}
-    with engine.connect().execution_options(
-        schema_translate_map=schema_translate_map
-    ) as connection:
-        with Session(bind=connection, expire_on_commit=False) as session:
-            yield session
+    session_bind = engine.execution_options(schema_translate_map=schema_translate_map)
+    with Session(bind=session_bind, expire_on_commit=False) as session:
+        yield session
 
 
 def get_session() -> Generator[Session, None, None]:

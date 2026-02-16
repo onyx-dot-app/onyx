@@ -813,6 +813,10 @@ def handle_stream_message_objects(
             value=True,
         )
 
+        # Setup above performs many reads before the long-running LLM stream starts.
+        # End that transaction now so the DB connection is not held for the entire stream.
+        db_session.commit()
+
         # Use external state container if provided, otherwise create internal one
         # External container allows non-streaming callers to access accumulated state
         state_container = external_state_container or ChatStateContainer()

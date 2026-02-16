@@ -1431,21 +1431,28 @@ async def optional_user(
     async_db_session: AsyncSession = Depends(get_async_session),
     user: User | None = Depends(optional_fastapi_current_user),
 ) -> User | None:
-
-    if user := await _check_for_saml_and_jwt(request, user, async_db_session):
-        # If user is already set, _check_for_saml_and_jwt returns the same user object
-        return user
-
     try:
-        if hashed_pat := get_hashed_pat_from_request(request):
-            user = await fetch_user_for_pat(hashed_pat, async_db_session)
-        elif hashed_api_key := get_hashed_api_key_from_request(request):
-            user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
-    except ValueError:
-        logger.warning("Issue with validating authentication token")
-        return None
+        if user := await _check_for_saml_and_jwt(request, user, async_db_session):
+            # If user is already set, _check_for_saml_and_jwt returns the same user object
+            return user
 
-    return user
+        try:
+            if hashed_pat := get_hashed_pat_from_request(request):
+                user = await fetch_user_for_pat(hashed_pat, async_db_session)
+            elif hashed_api_key := get_hashed_api_key_from_request(request):
+                user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+        except ValueError:
+            logger.warning("Issue with validating authentication token")
+            return None
+
+        return user
+    finally:
+        # Authentication checks are read-heavy and run before long-lived streaming responses.
+        # Roll back any open transaction so async connections can be returned to the pool.
+        try:
+            await async_db_session.rollback()
+        except Exception:
+            logger.exception("Failed to rollback async auth session")
 
 
 def get_anonymous_user() -> User:
