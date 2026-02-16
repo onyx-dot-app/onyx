@@ -27,6 +27,7 @@ import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
 import Checkbox from "@/refresh-components/inputs/Checkbox";
 
+import { Section } from "@/layouts/general-layouts";
 import { cn, transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
@@ -742,7 +743,7 @@ export const BooleanFormField = memo(function BooleanFormField({
               tooltip={disabledTooltip}
               side={disabledTooltipSide}
             >
-              <div className="flex w-fit items-center text-sm">
+              <Section flexDirection="row" width="fit" height="fit" gap={0}>
                 <Checkbox
                   aria-label={`${label
                     .toLowerCase()
@@ -774,7 +775,7 @@ export const BooleanFormField = memo(function BooleanFormField({
                     {subtext && <SubLabel>{subtext}</SubLabel>}
                   </div>
                 )}
-              </div>
+              </Section>
             </SimpleTooltip>
           );
         }}
