@@ -114,13 +114,8 @@ function DefaultAssistantConfig() {
   }
 
   const enabledToolsMap: { [key: number]: boolean } = {};
-  const hasExistingConfig = config.tool_ids.length > 0;
   tools.forEach((tool) => {
-    // Use default_enabled only when no tools have been configured yet (fresh state).
-    // Once tools have been saved, respect the saved config exclusively.
-    enabledToolsMap[tool.id] = hasExistingConfig
-      ? config.tool_ids.includes(tool.id)
-      : tool.default_enabled;
+    enabledToolsMap[tool.id] = config.tool_ids.includes(tool.id);
   });
 
   return (
