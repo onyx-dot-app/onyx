@@ -5,6 +5,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 from typing import cast
+from typing import TypeVar
 
 import httpx
 
@@ -16,6 +17,7 @@ from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
 )
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
@@ -31,9 +33,11 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 PRUNING_CHECKPOINTED_BATCH_SIZE = 32
 
+CT = TypeVar("CT", bound=ConnectorCheckpoint)
+
 
 def _checkpointed_batched_doc_ids(
-    connector: CheckpointedConnector,
+    connector: CheckpointedConnector[CT],
     start: float,
     end: float,
     batch_size: int,
@@ -50,7 +54,7 @@ def _checkpointed_batched_doc_ids(
         checkpoint_output = connector.load_from_checkpoint(
             start=start, end=end, checkpoint=checkpoint
         )
-        wrapper = CheckpointOutputWrapper()
+        wrapper: CheckpointOutputWrapper[CT] = CheckpointOutputWrapper()
         batch: set[str] = set()
         for document, _hierarchy_node, failure, next_checkpoint in wrapper(
             checkpoint_output
