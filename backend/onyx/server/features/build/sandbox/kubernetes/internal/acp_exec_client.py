@@ -210,12 +210,21 @@ class ACPExecClient:
             # Initialize ACP connection
             self._initialize(timeout=timeout)
 
-            # Create session
-            session_id = self._create_session(cwd=cwd, timeout=timeout)
+            # Try to resume an existing session first (handles multi-replica).
+            # When multiple API server replicas connect to the same sandbox
+            # pod, a previous replica may have already created a session for
+            # this workspace.  Resuming preserves conversation context.
+            session_id = self._try_resume_existing_session(cwd, timeout)
+            resumed = session_id is not None
+
+            if not session_id:
+                # No existing session found — create a new one
+                session_id = self._create_session(cwd=cwd, timeout=timeout)
 
             logger.info(
                 f"[ACP-LIFECYCLE] ACP client started successfully: "
-                f"pod={self._pod_name}, acp_session_id={session_id}, cwd={cwd}"
+                f"pod={self._pod_name}, acp_session_id={session_id}, "
+                f"cwd={cwd}, resumed={resumed}"
             )
             return session_id
 
@@ -499,6 +508,126 @@ class ACPExecClient:
         self._state.current_session = ACPSession(session_id=session_id, cwd=cwd)
 
         return session_id
+
+    def _list_sessions(self, cwd: str, timeout: float = 10.0) -> list[dict[str, Any]]:
+        """List available ACP sessions, filtered by working directory.
+
+        Returns:
+            List of session info dicts with keys like 'sessionId', 'cwd', 'title'.
+            Empty list if session/list is not supported or fails.
+        """
+        try:
+            request_id = self._send_request("session/list", {"cwd": cwd})
+            result = self._wait_for_response(request_id, timeout)
+            sessions = result.get("sessions", [])
+            logger.info(
+                f"[ACP-LIFECYCLE] session/list returned {len(sessions)} sessions "
+                f"for cwd={cwd} pod={self._pod_name}"
+            )
+            return sessions
+        except Exception as e:
+            logger.info(
+                f"[ACP-LIFECYCLE] session/list failed (may not be supported): "
+                f"{e} pod={self._pod_name}"
+            )
+            return []
+
+    def _resume_session(self, session_id: str, cwd: str, timeout: float = 30.0) -> str:
+        """Resume an existing ACP session.
+
+        Args:
+            session_id: The ACP session ID to resume
+            cwd: Working directory for the session
+            timeout: Timeout for the resume request
+
+        Returns:
+            The session ID
+
+        Raises:
+            RuntimeError: If resume fails
+        """
+        params = {
+            "sessionId": session_id,
+            "cwd": cwd,
+            "mcpServers": [],
+        }
+
+        request_id = self._send_request("session/resume", params)
+        result = self._wait_for_response(request_id, timeout)
+
+        # The response should contain the session ID
+        resumed_id = result.get("sessionId", session_id)
+        self._state.current_session = ACPSession(session_id=resumed_id, cwd=cwd)
+
+        logger.info(
+            f"[ACP-LIFECYCLE] Resumed session: acp_session={resumed_id} "
+            f"cwd={cwd} pod={self._pod_name}"
+        )
+        return resumed_id
+
+    def _try_resume_existing_session(self, cwd: str, timeout: float) -> str | None:
+        """Try to find and resume an existing session for this workspace.
+
+        When multiple API server replicas connect to the same sandbox pod,
+        a previous replica may have already created an ACP session for this
+        workspace. This method discovers and resumes that session so the
+        agent retains conversation context.
+
+        Args:
+            cwd: Working directory to search for sessions
+            timeout: Timeout for ACP requests
+
+        Returns:
+            The resumed session ID, or None if no session could be resumed
+        """
+        # Check if the agent supports session/list + session/resume
+        session_caps = self._state.agent_capabilities.get("sessionCapabilities", {})
+        supports_list = session_caps.get("list") is not None
+        supports_resume = session_caps.get("resume") is not None
+
+        if not supports_list:
+            logger.info(
+                "[ACP-LIFECYCLE] Agent does not support session/list, "
+                "skipping session resume"
+            )
+            return None
+
+        if not supports_resume:
+            logger.info(
+                "[ACP-LIFECYCLE] Agent does not support session/resume, "
+                "skipping session resume"
+            )
+            return None
+
+        # List sessions for this workspace directory
+        sessions = self._list_sessions(cwd, timeout=min(timeout, 10.0))
+        if not sessions:
+            return None
+
+        # Pick the most recent session (first in list, assuming sorted)
+        target = sessions[0]
+        target_id = target.get("sessionId")
+        if not target_id:
+            logger.warning(
+                "[ACP-LIFECYCLE] session/list returned session without sessionId"
+            )
+            return None
+
+        logger.info(
+            f"[ACP-LIFECYCLE] Found {len(sessions)} existing session(s), "
+            f"attempting resume of acp_session={target_id} "
+            f"title={target.get('title')} pod={self._pod_name}"
+        )
+
+        try:
+            return self._resume_session(target_id, cwd, timeout)
+        except Exception as e:
+            logger.warning(
+                f"[ACP-LIFECYCLE] session/resume failed for "
+                f"acp_session={target_id}: {e}, "
+                f"falling back to session/new"
+            )
+            return None
 
     def send_message(
         self,

@@ -98,6 +98,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# API server pod hostname — used to identify which replica is handling a request.
+# In K8s, HOSTNAME is set to the pod name (e.g., "api-server-dpgg7").
+_API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
+
 # Constants for pod configuration
 # Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
@@ -1874,7 +1878,8 @@ echo "Session config regeneration complete"
                     f"[SANDBOX-ACP] Cleaning up stale client: "
                     f"sandbox={sandbox_id} session={session_id} "
                     f"is_running={client.is_running} "
-                    f"acp_session={client.session_id}"
+                    f"acp_session={client.session_id} "
+                    f"api_pod={_API_SERVER_HOSTNAME}"
                 )
                 try:
                     client.stop()
@@ -1889,10 +1894,14 @@ echo "Session config regeneration complete"
                 f"[SANDBOX-ACP] Creating NEW ACP client: "
                 f"sandbox={sandbox_id} session={session_id} "
                 f"reason={cache_reason} pod={pod_name} cwd={session_path} "
-                f"total_cached_clients={total_cached}"
+                f"total_cached_clients={total_cached} "
+                f"api_pod={_API_SERVER_HOSTNAME}"
             )
 
-            # Create and start ACP client for this session
+            # Create and start ACP client for this session.
+            # start() will try to resume an existing session from the pod
+            # (handles multi-replica: another API pod may have created
+            # the session earlier).
             client = ACPExecClient(
                 pod_name=pod_name,
                 namespace=self._namespace,
@@ -1905,7 +1914,8 @@ echo "Session config regeneration complete"
                 f"[SANDBOX-ACP] ACP client created and cached: "
                 f"sandbox={sandbox_id} session={session_id} "
                 f"acp_session={client.session_id} pod={pod_name} "
-                f"total_cached_clients={len(self._acp_clients)}"
+                f"total_cached_clients={len(self._acp_clients)} "
+                f"api_pod={_API_SERVER_HOSTNAME}"
             )
         else:
             logger.info(
@@ -1913,7 +1923,8 @@ echo "Session config regeneration complete"
                 f"sandbox={sandbox_id} session={session_id} "
                 f"acp_session={client.session_id} pod={pod_name} "
                 f"is_running={client.is_running} "
-                f"total_cached_clients={total_cached}"
+                f"total_cached_clients={total_cached} "
+                f"api_pod={_API_SERVER_HOSTNAME}"
             )
 
         # Log the send_message call at sandbox manager level
