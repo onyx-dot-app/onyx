@@ -144,6 +144,7 @@ class ACPExecClient:
         self._reader_thread: threading.Thread | None = None
         self._stop_reader = threading.Event()
         self._k8s_client: client.CoreV1Api | None = None
+        self._prompt_count: int = 0  # Track how many prompts sent on this client
 
     def _get_k8s_client(self) -> client.CoreV1Api:
         """Get or create kubernetes client."""
@@ -176,6 +177,11 @@ class ACPExecClient:
         # Start opencode acp via exec
         exec_command = ["opencode", "acp", "--cwd", cwd]
 
+        logger.info(
+            f"[ACP-LIFECYCLE] Starting ACP client: pod={self._pod_name}, "
+            f"namespace={self._namespace}, cwd={cwd}"
+        )
+
         try:
             self._ws_client = k8s_stream(
                 k8s.connect_get_namespaced_pod_exec,
@@ -207,9 +213,17 @@ class ACPExecClient:
             # Create session
             session_id = self._create_session(cwd=cwd, timeout=timeout)
 
+            logger.info(
+                f"[ACP-LIFECYCLE] ACP client started successfully: "
+                f"pod={self._pod_name}, acp_session_id={session_id}, cwd={cwd}"
+            )
             return session_id
 
         except Exception as e:
+            logger.error(
+                f"[ACP-LIFECYCLE] ACP client start FAILED: "
+                f"pod={self._pod_name}, error={e}"
+            )
             self.stop()
             raise RuntimeError(f"Failed to start ACP exec client: {e}") from e
 
@@ -217,16 +231,28 @@ class ACPExecClient:
         """Background thread to read responses from the exec stream."""
         buffer = ""
         packet_logger = get_packet_logger()
+        messages_read = 0
+
+        logger.info(f"[ACP-READER] Reader thread started for pod={self._pod_name}")
 
         try:
             while not self._stop_reader.is_set():
                 if self._ws_client is None:
+                    logger.warning("[ACP-READER] WebSocket client is None, exiting")
                     break
 
                 try:
                     if self._ws_client.is_open():
                         # Read available data
                         self._ws_client.update(timeout=0.1)
+
+                        # Read stderr (channel 2) - log any agent errors
+                        stderr_data = self._ws_client.read_stderr(timeout=0.01)
+                        if stderr_data:
+                            logger.warning(
+                                f"[ACP-STDERR] pod={self._pod_name}: "
+                                f"{stderr_data.strip()[:500]}"
+                            )
 
                         # Read stdout (channel 1)
                         data = self._ws_client.read_stdout(timeout=0.1)
@@ -240,9 +266,31 @@ class ACPExecClient:
                                 if line:
                                     try:
                                         message = json.loads(line)
+                                        messages_read += 1
                                         # Log the raw incoming message
                                         packet_logger.log_jsonrpc_raw_message(
                                             "IN", message, context="k8s"
+                                        )
+                                        # Log key fields for every message
+                                        msg_id = message.get("id")
+                                        msg_method = message.get("method")
+                                        update_type = None
+                                        if msg_method == "session/update":
+                                            update = message.get("params", {}).get(
+                                                "update", {}
+                                            )
+                                            update_type = update.get("sessionUpdate")
+                                        acp_sid = (
+                                            self._state.current_session.session_id
+                                            if self._state.current_session
+                                            else "none"
+                                        )
+                                        logger.info(
+                                            f"[ACP-READER] #{messages_read} "
+                                            f"id={msg_id} method={msg_method} "
+                                            f"update_type={update_type} "
+                                            f"queue={self._response_queue.qsize()} "
+                                            f"acp_session={acp_sid}"
                                         )
                                         self._response_queue.put(message)
                                     except json.JSONDecodeError:
@@ -258,6 +306,10 @@ class ACPExecClient:
                                         )
 
                     else:
+                        logger.warning(
+                            f"[ACP-READER] WebSocket closed: pod={self._pod_name}, "
+                            f"total_messages_read={messages_read}"
+                        )
                         packet_logger.log_raw(
                             "K8S-WEBSOCKET-CLOSED",
                             {"pod": self._pod_name, "namespace": self._namespace},
@@ -266,11 +318,14 @@ class ACPExecClient:
 
                 except Exception as e:
                     if not self._stop_reader.is_set():
+                        logger.warning(
+                            f"[ACP-READER] Error: {e}, pod={self._pod_name}, "
+                            f"total_messages_read={messages_read}"
+                        )
                         packet_logger.log_raw(
                             "K8S-READER-ERROR",
                             {"error": str(e), "pod": self._pod_name},
                         )
-                        logger.debug(f"Reader error: {e}")
                     break
         finally:
             # Flush any remaining data in buffer (e.g., PromptResponse without
@@ -283,14 +338,34 @@ class ACPExecClient:
                         "IN", message, context="k8s-flush"
                     )
                     self._response_queue.put(message)
+                    logger.info(
+                        f"[ACP-READER] Flushed remaining buffer: "
+                        f"id={message.get('id')} method={message.get('method')}"
+                    )
                 except json.JSONDecodeError:
                     packet_logger.log_raw(
                         "K8S-BUFFER-FLUSH-FAILED",
                         {"remaining": remaining[:500]},
                     )
 
+            logger.info(
+                f"[ACP-READER] Reader thread exiting: pod={self._pod_name}, "
+                f"total_messages_read={messages_read}, "
+                f"queue_size={self._response_queue.qsize()}"
+            )
+
     def stop(self) -> None:
         """Stop the exec session and clean up."""
+        acp_session = (
+            self._state.current_session.session_id
+            if self._state.current_session
+            else "none"
+        )
+        logger.info(
+            f"[ACP-LIFECYCLE] Stopping ACP client: pod={self._pod_name} "
+            f"acp_session={acp_session} prompts_sent={self._prompt_count} "
+            f"queue_size={self._response_queue.qsize()}"
+        )
         self._stop_reader.set()
 
         if self._ws_client is not None:
@@ -305,6 +380,10 @@ class ACPExecClient:
             self._reader_thread = None
 
         self._state = ACPClientState()
+        logger.info(
+            f"[ACP-LIFECYCLE] ACP client stopped: pod={self._pod_name} "
+            f"acp_session={acp_session}"
+        )
 
     def _get_next_id(self) -> int:
         """Get the next request ID."""
@@ -440,6 +519,51 @@ class ACPExecClient:
 
         session_id = self._state.current_session.session_id
         packet_logger = get_packet_logger()
+        self._prompt_count += 1
+        prompt_num = self._prompt_count
+
+        # Check WebSocket and reader thread health before sending
+        ws_open = self._ws_client is not None and self._ws_client.is_open()
+        reader_alive = (
+            self._reader_thread is not None and self._reader_thread.is_alive()
+        )
+        queue_size_before = self._response_queue.qsize()
+
+        logger.info(
+            f"[ACP-SEND] === Prompt #{prompt_num} START === "
+            f"acp_session={session_id} pod={self._pod_name} "
+            f"ws_open={ws_open} reader_alive={reader_alive} "
+            f"queue_size_before_drain={queue_size_before}"
+        )
+
+        # Drain any leftover messages from the queue before sending prompt.
+        # These are messages that arrived between the previous prompt's
+        # completion and this prompt's start (e.g., session_info_update,
+        # available_commands_update).
+        drained_count = 0
+        while not self._response_queue.empty():
+            try:
+                stale_msg = self._response_queue.get_nowait()
+                drained_count += 1
+                stale_method = stale_msg.get("method")
+                stale_id = stale_msg.get("id")
+                stale_update_type = None
+                if stale_method == "session/update":
+                    stale_update = stale_msg.get("params", {}).get("update", {})
+                    stale_update_type = stale_update.get("sessionUpdate")
+                logger.info(
+                    f"[ACP-SEND] Drained stale message #{drained_count}: "
+                    f"id={stale_id} method={stale_method} "
+                    f"update_type={stale_update_type}"
+                )
+            except Empty:
+                break
+
+        if drained_count > 0:
+            logger.info(
+                f"[ACP-SEND] Drained {drained_count} stale messages from queue "
+                f"before prompt #{prompt_num}"
+            )
 
         # Log the start of message processing
         packet_logger.log_raw(
@@ -448,10 +572,14 @@ class ACPExecClient:
                 "session_id": session_id,
                 "pod": self._pod_name,
                 "namespace": self._namespace,
+                "prompt_num": prompt_num,
                 "message_preview": (
                     message[:200] + "..." if len(message) > 200 else message
                 ),
                 "timeout": timeout,
+                "queue_drained": drained_count,
+                "ws_open": ws_open,
+                "reader_alive": reader_alive,
             },
         )
 
@@ -462,18 +590,35 @@ class ACPExecClient:
         }
 
         request_id = self._send_request("session/prompt", params)
+        logger.info(
+            f"[ACP-SEND] Sent session/prompt: request_id={request_id} "
+            f"acp_session={session_id} prompt_num={prompt_num}"
+        )
         start_time = time.time()
-        last_event_time = time.time()  # Track time since last event for keepalive
+        last_event_time = time.time()
         events_yielded = 0
+        messages_processed = 0
+        completion_reason = "unknown"
 
         while True:
             remaining = timeout - (time.time() - start_time)
             if remaining <= 0:
+                completion_reason = "timeout"
+                logger.warning(
+                    f"[ACP-SEND] TIMEOUT: prompt #{prompt_num} "
+                    f"acp_session={session_id} request_id={request_id} "
+                    f"elapsed_ms={(time.time() - start_time) * 1000:.0f} "
+                    f"events_yielded={events_yielded} "
+                    f"messages_processed={messages_processed}"
+                )
                 packet_logger.log_raw(
                     "ACP-TIMEOUT-K8S",
                     {
                         "session_id": session_id,
+                        "prompt_num": prompt_num,
                         "elapsed_ms": (time.time() - start_time) * 1000,
+                        "events_yielded": events_yielded,
+                        "messages_processed": messages_processed,
                     },
                 )
                 yield Error(code=-1, message="Timeout waiting for response")
@@ -481,33 +626,42 @@ class ACPExecClient:
 
             try:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
-                last_event_time = time.time()  # Reset keepalive timer on event
+                last_event_time = time.time()
+                messages_processed += 1
 
-                # Diagnostic: log every dequeued message with id comparison
+                # Log every dequeued message with comprehensive detail
                 msg_id = message_data.get("id")
                 msg_method = message_data.get("method")
-                msg_keys = list(message_data.keys())
-                logger.debug(
-                    f"[ACP-DIAG] Dequeued message: id={msg_id} (type={type(msg_id).__name__}), "
-                    f"method={msg_method}, keys={msg_keys}, "
-                    f"request_id={request_id} (type={type(request_id).__name__}), "
-                    f"id_match={msg_id == request_id}"
+                update_type = None
+                if msg_method == "session/update":
+                    update = message_data.get("params", {}).get("update", {})
+                    update_type = update.get("sessionUpdate")
+                logger.info(
+                    f"[ACP-SEND] Dequeued #{messages_processed}: "
+                    f"id={msg_id}({type(msg_id).__name__}) "
+                    f"method={msg_method} update_type={update_type} "
+                    f"request_id={request_id} id_match={msg_id == request_id} "
+                    f"acp_session={session_id} prompt_num={prompt_num} "
+                    f"queue_remaining={self._response_queue.qsize()}"
                 )
             except Empty:
-                # Check if reader thread is still alive (equivalent to
-                # process.poll() in the local agent client). If the reader
-                # thread died, the WebSocket connection is gone and no more
-                # data will arrive — break instead of emitting keepalives
-                # forever.
+                # Check if reader thread is still alive
                 if (
                     self._reader_thread is not None
                     and not self._reader_thread.is_alive()
                 ):
+                    completion_reason = "reader_thread_dead"
                     # Drain any final messages the reader flushed before dying
+                    found_response = False
                     while not self._response_queue.empty():
                         try:
                             final_msg = self._response_queue.get_nowait()
+                            logger.info(
+                                f"[ACP-SEND] Final drain: id={final_msg.get('id')} "
+                                f"method={final_msg.get('method')}"
+                            )
                             if final_msg.get("id") == request_id:
+                                found_response = True
                                 if "error" in final_msg:
                                     error_data = final_msg["error"]
                                     yield Error(
@@ -526,37 +680,49 @@ class ACPExecClient:
                         except Empty:
                             break
 
+                    logger.warning(
+                        f"[ACP-SEND] Reader thread DEAD: prompt #{prompt_num} "
+                        f"acp_session={session_id} request_id={request_id} "
+                        f"found_response={found_response} "
+                        f"events_yielded={events_yielded} "
+                        f"messages_processed={messages_processed}"
+                    )
                     packet_logger.log_raw(
                         "ACP-CONNECTION-LOST-K8S",
                         {
                             "session_id": session_id,
+                            "prompt_num": prompt_num,
                             "events_yielded": events_yielded,
+                            "found_response_in_drain": found_response,
                         },
-                    )
-                    logger.warning(
-                        f"Reader thread died for session {session_id}, "
-                        "ending message stream"
                     )
                     break
 
                 # Check if we need to send an SSE keepalive
                 idle_time = time.time() - last_event_time
                 if idle_time >= SSE_KEEPALIVE_INTERVAL:
+                    logger.info(
+                        f"[ACP-SEND] SSE keepalive: prompt #{prompt_num} "
+                        f"acp_session={session_id} idle={idle_time:.1f}s "
+                        f"elapsed={(time.time() - start_time):.1f}s "
+                        f"events_yielded={events_yielded} "
+                        f"messages_processed={messages_processed} "
+                        f"ws_open={self._ws_client is not None and self._ws_client.is_open()} "
+                        f"reader_alive={self._reader_thread is not None and self._reader_thread.is_alive()}"
+                    )
                     packet_logger.log_raw(
                         "SSE-KEEPALIVE-YIELD",
                         {
                             "session_id": session_id,
+                            "prompt_num": prompt_num,
                             "idle_seconds": idle_time,
                         },
                     )
                     yield SSEKeepalive()
-                    last_event_time = time.time()  # Reset after yielding keepalive
+                    last_event_time = time.time()
                 continue
 
-            # Check for response to our prompt request.
-            # A JSON-RPC response has "id" but no "method" field.
-            # Use str() comparison as a fallback — some ACP servers may echo
-            # the id back as a string even though we sent it as an integer.
+            # Check for JSON-RPC response to our prompt request.
             msg_id = message_data.get("id")
             is_response = "method" not in message_data and (
                 msg_id == request_id
@@ -564,12 +730,20 @@ class ACPExecClient:
             )
             if is_response and msg_id != request_id:
                 logger.warning(
-                    f"[ACP] ID type mismatch: got {type(msg_id).__name__}({msg_id}), "
+                    f"[ACP-SEND] ID type mismatch: "
+                    f"got {type(msg_id).__name__}({msg_id}), "
                     f"expected {type(request_id).__name__}({request_id})"
                 )
             if is_response:
+                completion_reason = "jsonrpc_response"
                 if "error" in message_data:
                     error_data = message_data["error"]
+                    completion_reason = "jsonrpc_error"
+                    logger.warning(
+                        f"[ACP-SEND] JSON-RPC ERROR response: prompt #{prompt_num} "
+                        f"acp_session={session_id} request_id={request_id} "
+                        f"error={error_data}"
+                    )
                     packet_logger.log_jsonrpc_response(
                         request_id, error=error_data, context="k8s"
                     )
@@ -579,6 +753,13 @@ class ACPExecClient:
                     )
                 else:
                     result = message_data.get("result", {})
+                    logger.info(
+                        f"[ACP-SEND] PromptResponse via JSON-RPC: "
+                        f"prompt #{prompt_num} acp_session={session_id} "
+                        f"request_id={request_id} "
+                        f"stop_reason={result.get('stopReason')} "
+                        f"result_keys={list(result.keys())}"
+                    )
                     packet_logger.log_jsonrpc_response(
                         request_id, result=result, context="k8s"
                     )
@@ -590,19 +771,32 @@ class ACPExecClient:
                         events_yielded += 1
                         yield prompt_response
                     except ValidationError as e:
+                        logger.error(
+                            f"[ACP-SEND] PromptResponse VALIDATION FAILED: "
+                            f"prompt #{prompt_num} error={e} result={result}"
+                        )
                         packet_logger.log_raw(
                             "ACP-VALIDATION-ERROR-K8S",
                             {"type": "prompt_response", "error": str(e)},
                         )
 
-                # Log completion summary
+                # Log completion
                 elapsed_ms = (time.time() - start_time) * 1000
+                logger.info(
+                    f"[ACP-SEND] === Prompt #{prompt_num} COMPLETE === "
+                    f"reason={completion_reason} acp_session={session_id} "
+                    f"request_id={request_id} events={events_yielded} "
+                    f"messages={messages_processed} elapsed={elapsed_ms:.0f}ms"
+                )
                 packet_logger.log_raw(
                     "ACP-SEND-MESSAGE-COMPLETE-K8S",
                     {
                         "session_id": session_id,
+                        "prompt_num": prompt_num,
                         "events_yielded": events_yielded,
+                        "messages_processed": messages_processed,
                         "elapsed_ms": elapsed_ms,
+                        "completion_reason": completion_reason,
                     },
                 )
                 break
@@ -611,45 +805,60 @@ class ACPExecClient:
             if message_data.get("method") == "session/update":
                 params_data = message_data.get("params", {})
                 update = params_data.get("update", {})
+                update_type_val = update.get("sessionUpdate")
 
-                # Log the notification
                 packet_logger.log_jsonrpc_notification(
                     "session/update",
-                    {"update_type": update.get("sessionUpdate")},
+                    {"update_type": update_type_val, "prompt_num": prompt_num},
                     context="k8s",
                 )
 
                 prompt_complete = False
                 for event in self._process_session_update(update):
                     events_yielded += 1
-                    # Log each yielded event
                     event_type = self._get_event_type_name(event)
                     packet_logger.log_acp_event_yielded(event_type, event)
                     yield event
-                    # If PromptResponse arrived via notification, break
                     if isinstance(event, PromptResponse):
                         prompt_complete = True
                         break
 
                 if prompt_complete:
-                    # Log completion summary
+                    completion_reason = "prompt_response_via_notification"
                     elapsed_ms = (time.time() - start_time) * 1000
+                    logger.info(
+                        f"[ACP-SEND] === Prompt #{prompt_num} COMPLETE === "
+                        f"reason={completion_reason} acp_session={session_id} "
+                        f"request_id={request_id} events={events_yielded} "
+                        f"messages={messages_processed} elapsed={elapsed_ms:.0f}ms"
+                    )
                     packet_logger.log_raw(
                         "ACP-SEND-MESSAGE-COMPLETE-K8S",
                         {
                             "session_id": session_id,
+                            "prompt_num": prompt_num,
                             "events_yielded": events_yielded,
+                            "messages_processed": messages_processed,
                             "elapsed_ms": elapsed_ms,
-                            "via": "session_update_notification",
+                            "completion_reason": completion_reason,
                         },
                     )
                     break
 
             # Handle requests from agent - send error response
             elif "method" in message_data and "id" in message_data:
+                logger.info(
+                    f"[ACP-SEND] Agent request (unsupported): "
+                    f"method={message_data['method']} id={message_data['id']} "
+                    f"prompt_num={prompt_num} acp_session={session_id}"
+                )
                 packet_logger.log_raw(
                     "ACP-UNSUPPORTED-REQUEST-K8S",
-                    {"method": message_data["method"], "id": message_data["id"]},
+                    {
+                        "method": message_data["method"],
+                        "id": message_data["id"],
+                        "prompt_num": prompt_num,
+                    },
                 )
                 self._send_error_response(
                     message_data["id"],
@@ -658,12 +867,15 @@ class ACPExecClient:
                 )
 
             else:
-                # Message didn't match any handler — silently dropped
+                # Message didn't match any handler
                 logger.warning(
-                    f"[ACP-DIAG] Dropped message: id={message_data.get('id')}, "
-                    f"method={message_data.get('method')}, "
-                    f"keys={list(message_data.keys())}, "
-                    f"request_id={request_id}"
+                    f"[ACP-SEND] UNHANDLED message: "
+                    f"id={message_data.get('id')} "
+                    f"method={message_data.get('method')} "
+                    f"keys={list(message_data.keys())} "
+                    f"request_id={request_id} prompt_num={prompt_num} "
+                    f"acp_session={session_id} "
+                    f"raw_preview={json.dumps(message_data)[:300]}"
                 )
 
     def _get_event_type_name(self, event: ACPEvent) -> str:

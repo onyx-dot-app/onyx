@@ -50,6 +50,7 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+from acp.schema import PromptResponse
 from kubernetes import client  # type: ignore
 from kubernetes import config
 from kubernetes.client.rest import ApiException  # type: ignore
@@ -1863,10 +1864,18 @@ echo "Session config regeneration complete"
         # Get or create ACP client for this session
         client_key = (sandbox_id, session_id)
         client = self._acp_clients.get(client_key)
+        total_cached = len(self._acp_clients)
 
         if client is None or not client.is_running:
+            cache_reason = "not_found" if client is None else "not_running"
             # Clean up stale client if it exists but is no longer running
             if client is not None:
+                logger.info(
+                    f"[SANDBOX-ACP] Cleaning up stale client: "
+                    f"sandbox={sandbox_id} session={session_id} "
+                    f"is_running={client.is_running} "
+                    f"acp_session={client.session_id}"
+                )
                 try:
                     client.stop()
                 except Exception:
@@ -1877,7 +1886,10 @@ echo "Session config regeneration complete"
                 sandbox_id, session_id, session_path, context="k8s"
             )
             logger.info(
-                f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
+                f"[SANDBOX-ACP] Creating NEW ACP client: "
+                f"sandbox={sandbox_id} session={session_id} "
+                f"reason={cache_reason} pod={pod_name} cwd={session_path} "
+                f"total_cached_clients={total_cached}"
             )
 
             # Create and start ACP client for this session
@@ -1889,22 +1901,53 @@ echo "Session config regeneration complete"
             client.start(cwd=session_path)
             self._acp_clients[client_key] = client
 
+            logger.info(
+                f"[SANDBOX-ACP] ACP client created and cached: "
+                f"sandbox={sandbox_id} session={session_id} "
+                f"acp_session={client.session_id} pod={pod_name} "
+                f"total_cached_clients={len(self._acp_clients)}"
+            )
+        else:
+            logger.info(
+                f"[SANDBOX-ACP] REUSING cached ACP client: "
+                f"sandbox={sandbox_id} session={session_id} "
+                f"acp_session={client.session_id} pod={pod_name} "
+                f"is_running={client.is_running} "
+                f"total_cached_clients={total_cached}"
+            )
+
         # Log the send_message call at sandbox manager level
         packet_logger.log_session_start(session_id, sandbox_id, message)
 
         events_count = 0
+        got_prompt_response = False
         try:
             for event in client.send_message(message):
                 events_count += 1
+                if isinstance(event, PromptResponse):
+                    got_prompt_response = True
                 yield event
 
             # Log successful completion
+            logger.info(
+                f"[SANDBOX-ACP] send_message completed: "
+                f"sandbox={sandbox_id} session={session_id} "
+                f"acp_session={client.session_id} "
+                f"events_count={events_count} "
+                f"got_prompt_response={got_prompt_response}"
+            )
             packet_logger.log_session_end(
                 session_id, success=True, events_count=events_count
             )
         except GeneratorExit:
             # Generator was closed by consumer (client disconnect, timeout, broken pipe)
-            # This is the most common failure mode for SSE streaming
+            logger.warning(
+                f"[SANDBOX-ACP] GeneratorExit during send_message: "
+                f"sandbox={sandbox_id} session={session_id} "
+                f"acp_session={client.session_id} "
+                f"events_count={events_count} "
+                f"got_prompt_response={got_prompt_response}"
+            )
             packet_logger.log_session_end(
                 session_id,
                 success=False,
@@ -1913,7 +1956,12 @@ echo "Session config regeneration complete"
             )
             raise
         except Exception as e:
-            # Log failure from normal exceptions
+            logger.error(
+                f"[SANDBOX-ACP] Exception during send_message: "
+                f"sandbox={sandbox_id} session={session_id} "
+                f"acp_session={client.session_id} "
+                f"events_count={events_count} error={e}"
+            )
             packet_logger.log_session_end(
                 session_id,
                 success=False,
@@ -1922,8 +1970,11 @@ echo "Session config regeneration complete"
             )
             raise
         except BaseException as e:
-            # Log failure from other base exceptions (SystemExit, KeyboardInterrupt, etc.)
             exception_type = type(e).__name__
+            logger.error(
+                f"[SANDBOX-ACP] {exception_type} during send_message: "
+                f"sandbox={sandbox_id} session={session_id} error={e}"
+            )
             packet_logger.log_session_end(
                 session_id,
                 success=False,
