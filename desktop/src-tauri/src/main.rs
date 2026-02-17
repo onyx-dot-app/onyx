@@ -20,9 +20,9 @@ use tauri::Wry;
 use tauri::{
     webview::PageLoadPayload, AppHandle, Manager, Webview, WebviewUrl, WebviewWindowBuilder,
 };
-use url::Url;
 #[cfg(target_os = "macos")]
 use tokio::time::sleep;
+use url::Url;
 #[cfg(target_os = "macos")]
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
@@ -40,6 +40,82 @@ const TRAY_MENU_OPEN_APP_ID: &str = "tray_open_app";
 const TRAY_MENU_OPEN_CHAT_ID: &str = "tray_open_chat";
 const TRAY_MENU_SHOW_IN_BAR_ID: &str = "tray_show_in_menu_bar";
 const TRAY_MENU_QUIT_ID: &str = "tray_quit";
+const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
+(() => {
+  if (window.__ONYX_CHAT_LINK_INTERCEPT_INSTALLED__) {
+    return;
+  }
+
+  window.__ONYX_CHAT_LINK_INTERCEPT_INSTALLED__ = true;
+
+  function isChatSessionPage() {
+    try {
+      const currentUrl = new URL(window.location.href);
+      return (
+        currentUrl.pathname.startsWith("/app") &&
+        currentUrl.searchParams.has("chatId")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (!isChatSessionPage() || event.defaultPrevented) {
+        return;
+      }
+
+      const element = event.target;
+      if (!(element instanceof Element)) {
+        return;
+      }
+
+      const anchor = element.closest("a");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      const target = (anchor.getAttribute("target") || "").toLowerCase();
+      if (target !== "_blank") {
+        return;
+      }
+
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#")) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      window.location.assign(href);
+    },
+    true
+  );
+
+  const nativeWindowOpen = window.open;
+  window.open = function(url, target, features) {
+    const resolvedTarget = typeof target === "string" ? target.toLowerCase() : "";
+    const shouldNavigateInPlace = resolvedTarget === "" || resolvedTarget === "_blank";
+
+    if (
+      isChatSessionPage() &&
+      shouldNavigateInPlace &&
+      url != null &&
+      String(url).length > 0
+    ) {
+      window.location.assign(String(url));
+      return null;
+    }
+
+    if (typeof nativeWindowOpen === "function") {
+      return nativeWindowOpen.call(window, url, target, features);
+    }
+    return null;
+  };
+})();
+"##;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -219,6 +295,53 @@ fn open_settings(app: &AppHandle) {
     }
 }
 
+fn same_origin(left: &Url, right: &Url) -> bool {
+    left.scheme() == right.scheme()
+        && left.host_str() == right.host_str()
+        && left.port_or_known_default() == right.port_or_known_default()
+}
+
+fn is_chat_session_url(url: &Url) -> bool {
+    url.path().starts_with("/app") && url.query_pairs().any(|(key, _)| key == "chatId")
+}
+
+fn should_open_in_external_browser(current_url: &Url, destination_url: &Url) -> bool {
+    if !is_chat_session_url(current_url) {
+        return false;
+    }
+
+    match destination_url.scheme() {
+        "mailto" | "tel" => true,
+        "http" | "https" => !same_origin(current_url, destination_url),
+        _ => false,
+    }
+}
+
+fn open_in_default_browser(url: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return Command::new("open").arg(url).spawn().is_ok();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return Command::new("xdg-open").arg(url).spawn().is_ok();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Command::new("rundll32")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(url)
+            .spawn()
+            .is_ok();
+    }
+    #[allow(unreachable_code)]
+    false
+}
+
+fn inject_chat_link_intercept(webview: &Webview) {
+    let _ = webview.eval(CHAT_LINK_INTERCEPT_SCRIPT);
+}
+
 // ============================================================================
 // Tauri Commands
 // ============================================================================
@@ -240,8 +363,8 @@ struct BootstrapState {
 fn get_bootstrap_state(state: tauri::State<ConfigState>) -> BootstrapState {
     let server_url = state.config.read().unwrap().server_url.clone();
     let config_initialized = *state.config_initialized.read().unwrap();
-    let config_exists = config_initialized
-        && get_config_path().map(|path| path.exists()).unwrap_or(false);
+    let config_exists =
+        config_initialized && get_config_path().map(|path| path.exists()).unwrap_or(false);
 
     BootstrapState {
         server_url,
@@ -462,7 +585,13 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
         true,
         Some("CmdOrCtrl+Shift+N"),
     )?;
-    let settings_item = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("CmdOrCtrl+Comma"))?;
+    let settings_item = MenuItem::with_id(
+        app,
+        "open_settings",
+        "Settings...",
+        true,
+        Some("CmdOrCtrl+Comma"),
+    )?;
     let docs_item = MenuItem::with_id(app, "open_docs", "Onyx Documentation", true, None::<&str>)?;
 
     if let Some(file_menu) = menu
@@ -501,13 +630,7 @@ fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
-    let open_app = MenuItem::with_id(
-        app,
-        TRAY_MENU_OPEN_APP_ID,
-        "Open Onyx",
-        true,
-        None::<&str>,
-    )?;
+    let open_app = MenuItem::with_id(app, TRAY_MENU_OPEN_APP_ID, "Open Onyx", true, None::<&str>)?;
     let open_chat = MenuItem::with_id(
         app,
         TRAY_MENU_OPEN_CHAT_ID,
@@ -598,6 +721,27 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(
+            tauri::plugin::Builder::<Wry>::new("chat-external-navigation-handler")
+                .on_navigation(|webview, destination_url| {
+                    let Ok(current_url) = webview.url() else {
+                        return true;
+                    };
+
+                    if should_open_in_external_browser(&current_url, destination_url) {
+                        if !open_in_default_browser(destination_url.as_str()) {
+                            eprintln!(
+                                "Failed to open external URL in default browser: {}",
+                                destination_url
+                            );
+                        }
+                        return false;
+                    }
+
+                    true
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(ConfigState {
             config: RwLock::new(config),
@@ -661,10 +805,12 @@ fn main() {
 
             Ok(())
         })
-        .on_page_load(|_webview: &Webview, _payload: &PageLoadPayload| {
+        .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {
+            inject_chat_link_intercept(webview);
+
             // Re-inject titlebar after every navigation/page load (macOS only)
             #[cfg(target_os = "macos")]
-            let _ = _webview.eval(TITLEBAR_SCRIPT);
+            let _ = webview.eval(TITLEBAR_SCRIPT);
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
