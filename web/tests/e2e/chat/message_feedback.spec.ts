@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import {
+  expectScreenshot,
+  expectElementScreenshot,
+} from "@tests/e2e/utils/visualRegression";
 
 test.describe("Message feedback thumbs controls", () => {
   test.beforeEach(async ({ page }) => {
@@ -63,10 +67,20 @@ test.describe("Message feedback thumbs controls", () => {
     await expect(likeButton).toBeVisible({ timeout: 15000 });
     await expect(dislikeButton).toBeVisible();
 
+    // Capture the AI message with feedback buttons visible
+    await expectElementScreenshot(aiMessage, {
+      name: "message-feedback-ai-message-with-controls",
+    });
+
     // Thumbs up opens the feedback modal with optional feedback
     await likeButton.click();
     const modalTitle = page.getByText("Feedback").first();
     await expect(modalTitle).toBeVisible({ timeout: 5000 });
+
+    // Capture the thumbs-up feedback modal (submit enabled without text)
+    await expectScreenshot(page, {
+      name: "message-feedback-thumbsup-modal-open",
+    });
 
     // Submit without entering feedback (optional for thumbs up)
     const submitButton = page.getByRole("button", { name: "Submit" });
@@ -103,6 +117,11 @@ test.describe("Message feedback thumbs controls", () => {
     const submitButtonDislike = page.getByRole("button", { name: "Submit" });
     await expect(submitButtonDislike).toBeDisabled();
 
+    // Capture the thumbs-down modal with submit locked (no text yet)
+    await expectScreenshot(page, {
+      name: "message-feedback-thumbsdown-modal-empty",
+    });
+
     // Enter feedback (mandatory for thumbs down)
     const feedbackInput = page.getByPlaceholder(
       /What did you .* about this response\?/i
@@ -111,6 +130,11 @@ test.describe("Message feedback thumbs controls", () => {
 
     // Submit button should now be enabled
     await expect(submitButtonDislike).toBeEnabled();
+
+    // Capture the thumbs-down modal with text filled and submit enabled
+    await expectScreenshot(page, {
+      name: "message-feedback-thumbsdown-modal-filled",
+    });
 
     await Promise.all([
       page.waitForRequest("**/api/chat/create-chat-message-feedback"),

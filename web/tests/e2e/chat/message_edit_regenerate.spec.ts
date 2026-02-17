@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { sendMessage, switchModel } from "@tests/e2e/utils/chatActions";
+import {
+  expectScreenshot,
+  expectElementScreenshot,
+} from "@tests/e2e/utils/visualRegression";
 
 test.describe("Message Edit and Regenerate Tests", () => {
   test.beforeEach(async ({ page }) => {
@@ -27,6 +31,11 @@ test.describe("Message Edit and Regenerate Tests", () => {
 
     let textarea = userMessage.locator("textarea");
     await textarea.fill("This edit will be cancelled");
+
+    // Capture the edit mode UI with cancel/submit buttons visible
+    await expectElementScreenshot(userMessage, {
+      name: "message-edit-edit-mode-with-cancel",
+    });
 
     const cancelButton = userMessage.locator('button:has-text("Cancel")');
     await cancelButton.click();
@@ -69,6 +78,12 @@ test.describe("Message Edit and Regenerate Tests", () => {
     let messageSwitcher = page.getByTestId("MessageSwitcher/container").first();
     await expect(messageSwitcher).toBeVisible();
     await expect(messageSwitcher).toContainText("2/2");
+
+    // Capture the version switcher showing 2/2 after first edit
+    await expectElementScreenshot(
+      page.locator('[data-testid="MessageSwitcher/container"]').first(),
+      { name: "message-edit-version-switcher-2of2" }
+    );
 
     // Edit again to create a third version
     userMessage = page.locator("#onyx-human-message").first();
@@ -125,6 +140,11 @@ test.describe("Message Edit and Regenerate Tests", () => {
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("1/3");
 
+    // Capture the chat at version 1/3 (original message)
+    await expectScreenshot(page, {
+      name: "message-edit-version-switcher-1of3",
+    });
+
     // Navigate forward using next button - click the last svg icon's parent (right chevron)
     await switcherSpan
       .locator("..")
@@ -163,6 +183,11 @@ test.describe("Message Edit and Regenerate Tests", () => {
     // Wait for dropdown to appear and select GPT-4o Mini
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
+    // Capture the regenerate model picker dialog
+    await expectElementScreenshot(page.locator('[role="dialog"]'), {
+      name: "message-edit-regenerate-model-picker",
+    });
+
     // Look for the GPT-4o Mini option in the dropdown
     const gpt4oMiniOption = page
       .locator('[role="dialog"]')
@@ -183,6 +208,11 @@ test.describe("Message Edit and Regenerate Tests", () => {
       .first();
     await expect(messageSwitcher).toBeVisible({ timeout: 5000 });
     await expect(messageSwitcher).toContainText("2/2");
+
+    // Capture the chat after regeneration with version switcher showing 2/2
+    await expectScreenshot(page, {
+      name: "message-edit-regenerate-after-2of2",
+    });
 
     // Navigate to previous version
     await messageSwitcher
@@ -294,6 +324,12 @@ test.describe("Message Edit and Regenerate Tests", () => {
     const editedFileDisplay = editedHumanMessage.locator("#onyx-file");
     await expect(editedFileDisplay).toBeVisible();
     await expect(editedFileDisplay.getByText(testFileName)).toBeVisible();
+
+    // Capture the edited human message with file attachment still present
+    await expectElementScreenshot(editedHumanMessage, {
+      name: "message-edit-with-file-attachment-after-edit",
+      mask: [`#onyx-file`], // mask filename to avoid timestamp-based diffs
+    });
 
     // Verify the version switcher shows 2/2 (original + edited)
     const messageSwitcher = page
