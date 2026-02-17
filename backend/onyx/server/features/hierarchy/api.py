@@ -30,16 +30,27 @@ OPENSEARCH_NOT_ENABLED_MESSAGE = (
     "OpenSearch indexing must be enabled to use this feature."
 )
 
+MIGRATION_STATUS_MESSAGE = (
+    "Our records indicate that the transition to OpenSearch is still in progress. "
+    "OpenSearch retrieval is necessary to use this feature. "
+    "You can still use Document Sets, though! "
+    "If you would like to manually switch to OpenSearch, "
+    'Go to the "Document Index Migration" section in the Admin panel.'
+)
+
 router = APIRouter(prefix=HIERARCHY_NODES_PREFIX)
 
 
 def _require_opensearch(db_session: Session) -> None:
-    if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX or not get_opensearch_retrieval_state(
-        db_session
-    ):
+    if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         raise HTTPException(
             status_code=403,
             detail=OPENSEARCH_NOT_ENABLED_MESSAGE,
+        )
+    if not get_opensearch_retrieval_state(db_session):
+        raise HTTPException(
+            status_code=403,
+            detail=MIGRATION_STATUS_MESSAGE,
         )
 
 
