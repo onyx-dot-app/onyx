@@ -506,12 +506,13 @@ const MemoizedAppSidebarInner = memo(
             folded={folded}
             transient={activeSidebarTab.isMoreAgents()}
             lowlight={!folded}
+            onClick={() => router.push("/app/agents")}
           >
             {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
           </SidebarTab>
         </div>
       ),
-      [folded, activeSidebarTab, visibleAgents]
+      [folded, activeSidebarTab, visibleAgents, router]
     );
     const newProjectButton = useMemo(
       () => (
