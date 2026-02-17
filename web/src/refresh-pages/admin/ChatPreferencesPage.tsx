@@ -23,7 +23,6 @@ import {
   SvgActions,
   SvgExpand,
   SvgFold,
-  SvgTrash,
   SvgExternalLink,
 } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
