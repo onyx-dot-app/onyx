@@ -300,6 +300,7 @@ jobs:
           # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
           LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
+          INTEGRATION_TESTS_MODE=true
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false

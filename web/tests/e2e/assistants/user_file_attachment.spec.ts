@@ -20,6 +20,72 @@ const getKnowledgeToggle = (page: Page) =>
 const getCreateSubmitButton = (page: Page) =>
   page.locator('button[type="submit"]:has-text("Create")');
 
+const extractAssistantIdFromCreateResponse = (
+  payload: Record<string, unknown> | null
+): number | null => {
+  if (!payload) {
+    return null;
+  }
+  const rawId = payload.id ?? payload.assistant_id ?? payload.persona_id;
+  if (typeof rawId === "number" && Number.isFinite(rawId)) {
+    return rawId;
+  }
+  if (typeof rawId === "string") {
+    const parsed = Number(rawId);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const createAssistantAndGetId = async (page: Page): Promise<number> => {
+  const createResponsePromise = page.waitForResponse(
+    (response) => {
+      if (response.request().method() !== "POST" || !response.ok()) {
+        return false;
+      }
+      try {
+        const pathname = new URL(response.url()).pathname;
+        return /^\/api\/persona\/?$/.test(pathname);
+      } catch {
+        return false;
+      }
+    },
+    { timeout: 30000 }
+  );
+
+  await getCreateSubmitButton(page).click();
+
+  const createResponse = await createResponsePromise;
+
+  await page.waitForURL(
+    (url) => {
+      const href = typeof url === "string" ? url : url.toString();
+      return /\/app\?assistantId=\d+/.test(href) || /\/app\?chatId=/.test(href);
+    },
+    { timeout: 20000 }
+  );
+
+  const assistantIdFromUrl = page.url().match(/assistantId=(\d+)/);
+  if (assistantIdFromUrl?.[1]) {
+    return Number(assistantIdFromUrl[1]);
+  }
+
+  const createPayload = (await createResponse
+    .json()
+    .catch(() => null)) as Record<string, unknown> | null;
+  const assistantIdFromResponse =
+    extractAssistantIdFromCreateResponse(createPayload);
+  if (assistantIdFromResponse !== null) {
+    return assistantIdFromResponse;
+  }
+
+  throw new Error(
+    `Assistant ID missing from URL (${page.url()}) and create response payload`
+  );
+};
+
 // Helper to navigate to files view in the Knowledge UI
 const navigateToFilesView = async (page: Page) => {
   // Check if we need to click "View / Edit" or "Add" button to open the knowledge panel
@@ -215,16 +281,8 @@ test.describe("User File Attachment to Assistant", () => {
     const fileText = page.getByText(testFileName).first();
     await expect(fileText).toBeVisible();
 
-    // Submit the assistant creation form
-    await getCreateSubmitButton(page).click();
-
-    // Verify redirection to chat page with the new assistant ID
-    await page.waitForURL(/.*\/app\?assistantId=\d+.*/, { timeout: 15000 });
-    const url = page.url();
-    const assistantIdMatch = url.match(/assistantId=(\d+)/);
-    expect(assistantIdMatch).toBeTruthy();
-    const assistantId = assistantIdMatch ? assistantIdMatch[1] : null;
-    expect(assistantId).not.toBeNull();
+    // Submit the assistant creation form and resolve assistant ID from URL or API response.
+    const assistantId = await createAssistantAndGetId(page);
 
     console.log(
       `[test] Created assistant ${assistantName} with ID ${assistantId}, now verifying file persistence...`
@@ -311,15 +369,8 @@ test.describe("User File Attachment to Assistant", () => {
     // NOTE: We do NOT call selectFileByName because uploadTestFile
     // already adds files to user_file_ids. Clicking would toggle them OFF.
 
-    // Create the assistant
-    await getCreateSubmitButton(page).click();
-
-    // Wait for redirect and get assistant ID
-    await page.waitForURL(/.*\/app\?assistantId=\d+.*/, { timeout: 15000 });
-    const url = page.url();
-    const assistantIdMatch = url.match(/assistantId=(\d+)/);
-    expect(assistantIdMatch).toBeTruthy();
-    const assistantId = assistantIdMatch![1];
+    // Create the assistant and resolve assistant ID from URL or API response.
+    const assistantId = await createAssistantAndGetId(page);
 
     // Go to edit page
     await page.goto(`/app/agents/edit/${assistantId}`);
