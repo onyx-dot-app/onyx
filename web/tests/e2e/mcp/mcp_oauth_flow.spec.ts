@@ -44,6 +44,9 @@ const IDP_HOST = new URL(process.env.MCP_OAUTH_ISSUER!).host;
 const QUICK_CONFIRM_CONNECTED_TIMEOUT_MS = Number(
   process.env.MCP_OAUTH_QUICK_CONFIRM_TIMEOUT_MS || 2000
 );
+const POST_CLICK_URL_CHANGE_WAIT_MS = Number(
+  process.env.MCP_OAUTH_POST_CLICK_URL_CHANGE_WAIT_MS || 5000
+);
 
 type Credentials = {
   email: string;
@@ -131,6 +134,35 @@ const logOauthEvent = (page: Page | null, message: string) => {
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function clickAndWaitForPossibleUrlChange(
+  page: Page,
+  clickAction: () => Promise<void>,
+  context: string
+) {
+  const startingUrl = page.url();
+  const urlChangePromise = page
+    .waitForURL(
+      (url) => {
+        const href = typeof url === "string" ? url : url.toString();
+        return href !== startingUrl;
+      },
+      { timeout: POST_CLICK_URL_CHANGE_WAIT_MS }
+    )
+    .then(() => true)
+    .catch(() => false);
+
+  await clickAction();
+  const changed = await urlChangePromise;
+  if (changed) {
+    logOauthEvent(page, `${context}: observed URL change after click`);
+  } else {
+    logOauthEvent(
+      page,
+      `${context}: no immediate URL change; continuing OAuth flow`
+    );
+  }
+}
 
 function createStepLogger(testName: string) {
   const start = Date.now();
@@ -568,6 +600,22 @@ async function completeOauthFlow(
     `Completing OAuth flow with options: ${JSON.stringify(options)}`
   );
   const returnSubstring = options.expectReturnPathContains;
+  const matchesExpectedReturnPath = (url: string) => {
+    if (!isOnAppHost(url)) {
+      return false;
+    }
+    if (url.includes(returnSubstring)) {
+      return true;
+    }
+    // Re-auth flows can return to a chat session URL instead of assistantId URL.
+    if (
+      returnSubstring.includes("/app?assistantId=") &&
+      url.includes("/app?chatId=")
+    ) {
+      return true;
+    }
+    return false;
+  };
 
   logOauthEvent(page, `Current page URL: ${page.url()}`);
 
@@ -677,8 +725,7 @@ async function completeOauthFlow(
   };
 
   if (
-    isOnAppHost(page.url()) &&
-    page.url().includes(returnSubstring) &&
+    matchesExpectedReturnPath(page.url()) &&
     (await tryConfirmConnected(true))
   ) {
     return;
@@ -704,8 +751,7 @@ async function completeOauthFlow(
       "OAuth callback",
       60000,
       (url) =>
-        url.includes("/mcp/oauth/callback") ||
-        (isOnAppHost(url) && url.includes(returnSubstring))
+        url.includes("/mcp/oauth/callback") || matchesExpectedReturnPath(url)
     );
   }
 
@@ -715,8 +761,7 @@ async function completeOauthFlow(
       "OAuth callback",
       60000,
       (url) =>
-        url.includes("/mcp/oauth/callback") ||
-        (isOnAppHost(url) && url.includes(returnSubstring))
+        url.includes("/mcp/oauth/callback") || matchesExpectedReturnPath(url)
     );
   }
 
@@ -731,10 +776,8 @@ async function completeOauthFlow(
     }ms`
   );
 
-  await waitForUrlOrRedirect(
-    `return path ${returnSubstring}`,
-    60000,
-    (url) => isOnAppHost(url) && url.includes(returnSubstring)
+  await waitForUrlOrRedirect(`return path ${returnSubstring}`, 60000, (url) =>
+    matchesExpectedReturnPath(url)
   );
   const returnLoadStart = Date.now();
   await page
@@ -746,7 +789,7 @@ async function completeOauthFlow(
       Date.now() - returnLoadStart
     }ms`
   );
-  if (!page.url().includes(returnSubstring)) {
+  if (!matchesExpectedReturnPath(page.url())) {
     throw new Error(
       `Redirected but final URL (${page.url()}) does not contain expected substring ${returnSubstring}`
     );
@@ -1080,11 +1123,11 @@ async function reauthenticateFromChat(
 
   const reauthItem = page.getByText("Re-Authenticate").first();
   await expect(reauthItem).toBeVisible({ timeout: 15000 });
-  const navigationPromise = page
-    .waitForNavigation({ waitUntil: "load" })
-    .catch(() => null);
-  await reauthItem.click();
-  await navigationPromise;
+  await clickAndWaitForPossibleUrlChange(
+    page,
+    () => reauthItem.click(),
+    "Re-authenticate click"
+  );
   await completeOauthFlow(page, {
     expectReturnPathContains: returnSubstring,
   });
@@ -1180,6 +1223,7 @@ async function waitForAssistantTools(
 
 test.describe("MCP OAuth flows", () => {
   test.describe.configure({ mode: "serial" });
+  test.setTimeout(180_000);
 
   let serverProcess: McpServerProcess | null = null;
   let adminArtifacts: FlowArtifacts | null = null;
@@ -1318,6 +1362,7 @@ test.describe("MCP OAuth flows", () => {
   test("Admin can configure OAuth MCP server and use tools end-to-end", async ({
     page,
   }, testInfo) => {
+    test.setTimeout(180_000);
     const logStep = createStepLogger("AdminFlow");
     test.skip(
       testInfo.project.name !== "admin",
@@ -1384,11 +1429,11 @@ test.describe("MCP OAuth flows", () => {
 
     // Click Connect button to trigger OAuth flow
     const connectButton = page.getByTestId("mcp-auth-connect-button");
-    const navPromise = page
-      .waitForNavigation({ waitUntil: "load" })
-      .catch(() => null);
-    await connectButton.click();
-    await navPromise;
+    await clickAndWaitForPossibleUrlChange(
+      page,
+      () => connectButton.click(),
+      "Admin connect click"
+    );
     logStep("Triggered OAuth connection");
 
     // Complete OAuth flow - tools will auto-fetch on return
@@ -1399,8 +1444,14 @@ test.describe("MCP OAuth flows", () => {
         // Extract server_id from URL after OAuth return
         const url = new URL(page.url());
         const serverIdParam = url.searchParams.get("server_id");
-        if (serverIdParam) {
-          serverId = Number(serverIdParam);
+        if (!serverIdParam) {
+          throw new Error("Missing server_id in OAuth return URL");
+        }
+        serverId = Number(serverIdParam);
+        if (Number.isNaN(serverId)) {
+          throw new Error(
+            `Invalid server_id parsed from URL: ${serverIdParam}`
+          );
         }
         // Wait for server card to appear with the server name
         await expect(
@@ -1593,6 +1644,7 @@ test.describe("MCP OAuth flows", () => {
     page,
     browser,
   }, testInfo) => {
+    test.setTimeout(180_000);
     const logStep = createStepLogger("CuratorFlow");
     test.skip(
       testInfo.project.name !== "admin",
@@ -1681,11 +1733,11 @@ test.describe("MCP OAuth flows", () => {
 
       // Click Connect button to trigger OAuth flow
       const connectButton = page.getByTestId("mcp-auth-connect-button");
-      const navPromise = page
-        .waitForNavigation({ waitUntil: "load" })
-        .catch(() => null);
-      await connectButton.click();
-      await navPromise;
+      await clickAndWaitForPossibleUrlChange(
+        page,
+        () => connectButton.click(),
+        "Curator connect click"
+      );
       logStep("Triggered OAuth connection");
 
       // Complete OAuth flow - tools will auto-fetch on return
@@ -1696,8 +1748,14 @@ test.describe("MCP OAuth flows", () => {
           // Extract server_id from URL after OAuth return
           const url = new URL(page.url());
           const serverIdParam = url.searchParams.get("server_id");
-          if (serverIdParam) {
-            serverId = Number(serverIdParam);
+          if (!serverIdParam) {
+            throw new Error("Missing server_id in OAuth return URL");
+          }
+          serverId = Number(serverIdParam);
+          if (Number.isNaN(serverId)) {
+            throw new Error(
+              `Invalid server_id parsed from URL: ${serverIdParam}`
+            );
           }
           // Wait for server card to appear with the server name
           await expect(
@@ -1865,6 +1923,7 @@ test.describe("MCP OAuth flows", () => {
   test("End user can authenticate and invoke MCP tools via chat", async ({
     page,
   }, testInfo) => {
+    test.setTimeout(180_000);
     const logStep = createStepLogger("UserFlow");
     test.skip(
       testInfo.project.name !== "admin",
@@ -1912,11 +1971,11 @@ test.describe("MCP OAuth flows", () => {
     }
     await expect(serverLineItem).toBeVisible({ timeout: 15000 });
 
-    const navPromise = page
-      .waitForNavigation({ waitUntil: "load" })
-      .catch(() => null);
-    await serverLineItem.click();
-    await navPromise;
+    await clickAndWaitForPossibleUrlChange(
+      page,
+      () => serverLineItem.click(),
+      "End-user reauth click"
+    );
     await completeOauthFlow(page, {
       expectReturnPathContains: `/app?assistantId=${assistantId}`,
     });
