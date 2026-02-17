@@ -218,9 +218,6 @@ class ACPExecClient:
         """Background thread to read responses from the exec stream."""
         buffer = ""
         packet_logger = get_packet_logger()
-        # Stale cycle counter: when the buffer has unterminated content
-        # and no new data arrives, we try to parse after a few cycles.
-        buffer_stale_cycles = 0
 
         try:
             while not self._stop_reader.is_set():
@@ -243,7 +240,6 @@ class ACPExecClient:
                         data = self._ws_client.read_stdout(timeout=0.1)
                         if data:
                             buffer += data
-                            buffer_stale_cycles = 0
 
                             while "\n" in buffer:
                                 line, buffer = buffer.split("\n", 1)
@@ -260,22 +256,6 @@ class ACPExecClient:
                                             f"[ACP] Invalid JSON from agent: "
                                             f"{line[:100]}"
                                         )
-                        elif buffer.strip():
-                            # No new data but buffer has unterminated content.
-                            # After a few cycles (~0.5s), try to parse it —
-                            # the agent may have omitted the trailing newline.
-                            buffer_stale_cycles += 1
-                            if buffer_stale_cycles >= 3:
-                                try:
-                                    message = json.loads(buffer.strip())
-                                    packet_logger.log_jsonrpc_raw_message(
-                                        "IN", message, context="k8s-unterminated"
-                                    )
-                                    self._response_queue.put(message)
-                                    buffer = ""
-                                    buffer_stale_cycles = 0
-                                except json.JSONDecodeError:
-                                    pass
 
                     else:
                         logger.warning(f"[ACP] WebSocket closed: pod={self._pod_name}")
@@ -286,19 +266,7 @@ class ACPExecClient:
                         logger.warning(f"[ACP] Reader error: {e}, pod={self._pod_name}")
                     break
         finally:
-            # Flush any remaining data in buffer
-            remaining = buffer.strip()
-            if remaining:
-                try:
-                    message = json.loads(remaining)
-                    packet_logger.log_jsonrpc_raw_message(
-                        "IN", message, context="k8s-flush"
-                    )
-                    self._response_queue.put(message)
-                except json.JSONDecodeError:
-                    logger.warning(
-                        f"[ACP] Buffer flush failed (not JSON): {remaining[:200]}"
-                    )
+            pass
 
     def stop(self) -> None:
         """Stop the exec session and clean up."""
