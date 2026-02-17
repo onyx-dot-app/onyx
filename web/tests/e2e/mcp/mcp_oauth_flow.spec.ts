@@ -1051,6 +1051,111 @@ async function waitForServerRow(
   return null;
 }
 
+async function clickServerRowWithRetry(
+  page: Page,
+  serverName: string,
+  timeoutMs: number = 15_000
+): Promise<boolean> {
+  let serverLocator: Locator | null = await waitForServerRow(
+    page,
+    serverName,
+    timeoutMs
+  );
+  if (!serverLocator) {
+    return false;
+  }
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (!serverLocator) {
+      const refreshedServerLocator = await waitForServerRow(
+        page,
+        serverName,
+        5000
+      );
+      if (!refreshedServerLocator) {
+        continue;
+      }
+      serverLocator = refreshedServerLocator;
+    }
+    const locatorToClick = serverLocator;
+    try {
+      await locatorToClick.click({ force: true, timeout: 3000 });
+      return true;
+    } catch {
+      if (attempt === 4) {
+        break;
+      }
+      await page.waitForTimeout(150);
+      await ensureActionPopoverInPrimaryView(page);
+      const refreshedServerLocator = await waitForServerRow(
+        page,
+        serverName,
+        5000
+      );
+      if (refreshedServerLocator) {
+        serverLocator = refreshedServerLocator;
+      }
+    }
+  }
+
+  return false;
+}
+
+async function clickServerRowAndWaitForPossibleUrlChangeWithRetry(
+  page: Page,
+  serverName: string,
+  actionName: string,
+  timeoutMs: number = 15_000
+): Promise<boolean> {
+  let serverLocator: Locator | null = await waitForServerRow(
+    page,
+    serverName,
+    timeoutMs
+  );
+  if (!serverLocator) {
+    return false;
+  }
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (!serverLocator) {
+      const refreshedServerLocator = await waitForServerRow(
+        page,
+        serverName,
+        5000
+      );
+      if (!refreshedServerLocator) {
+        continue;
+      }
+      serverLocator = refreshedServerLocator;
+    }
+    const locatorToClick = serverLocator;
+    try {
+      await clickAndWaitForPossibleUrlChange(
+        page,
+        () => locatorToClick.click({ force: true, timeout: 3000 }),
+        actionName
+      );
+      return true;
+    } catch {
+      if (attempt === 4) {
+        break;
+      }
+      await page.waitForTimeout(150);
+      await ensureActionPopoverInPrimaryView(page);
+      const refreshedServerLocator = await waitForServerRow(
+        page,
+        serverName,
+        5000
+      );
+      if (refreshedServerLocator) {
+        serverLocator = refreshedServerLocator;
+      }
+    }
+  }
+
+  return false;
+}
+
 async function ensureToolOptionVisible(
   page: Page,
   toolName: string,
@@ -1194,21 +1299,23 @@ async function reauthenticateFromChat(
   returnSubstring: string
 ) {
   await openActionsPopover(page);
-  const serverLineItem = await waitForServerRow(page, serverName, 15_000);
-  if (!serverLineItem) {
+  const clickedServerRow = await clickServerRowWithRetry(
+    page,
+    serverName,
+    15_000
+  );
+  if (!clickedServerRow) {
     const entries = await collectActionPopoverEntries(page);
     await logPageStateWithTag(
       page,
-      `reauthenticateFromChat could not find ${serverName}; visible entries: ${JSON.stringify(
+      `reauthenticateFromChat could not click ${serverName}; visible entries: ${JSON.stringify(
         entries
       )}`
     );
     throw new Error(
-      `Unable to locate MCP server row ${serverName} while reauthenticating`
+      `Unable to click MCP server row ${serverName} while reauthenticating`
     );
   }
-  await expect(serverLineItem).toBeVisible({ timeout: 15000 });
-  await serverLineItem.click();
 
   const reauthItem = page.getByText("Re-Authenticate").first();
   await expect(reauthItem).toBeVisible({ timeout: 15000 });
@@ -2080,11 +2187,26 @@ test.describe("MCP OAuth flows", () => {
     }
     await expect(serverLineItem).toBeVisible({ timeout: 15000 });
 
-    await clickAndWaitForPossibleUrlChange(
-      page,
-      () => serverLineItem.click(),
-      "End-user reauth click"
-    );
+    const clickedServerRow =
+      await clickServerRowAndWaitForPossibleUrlChangeWithRetry(
+        page,
+        serverName,
+        "End-user reauth click",
+        15_000
+      );
+    if (!clickedServerRow) {
+      const entries = await collectActionPopoverEntries(page);
+      await logPageStateWithTag(
+        page,
+        `UserFlow reauth click failed for ${serverName}; visible entries: ${JSON.stringify(
+          entries
+        )}`
+      );
+      throw new Error(
+        `Unable to click MCP server row ${serverName} for user reauth`
+      );
+    }
+
     await completeOauthFlow(page, {
       expectReturnPathContains: `/app?assistantId=${assistantId}`,
     });
