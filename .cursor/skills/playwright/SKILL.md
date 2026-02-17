@@ -55,16 +55,11 @@ Both test projects set `storageState: "admin_auth.json"`, so **every test starts
 When a test needs a different user, use API-based login — never drive the login UI:
 
 ```typescript
-import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 
-// Switch to a different pre-provisioned user
 await page.context().clearCookies();
 await loginAs(page, "user");    // user1@example.com
 await loginAs(page, "admin2");  // admin2_user@example.com
-
-// Or create and login as a disposable user
-await page.context().clearCookies();
-const { email, password } = await loginAsRandomUser(page);
 ```
 
 ## Test Structure
@@ -83,16 +78,14 @@ test.describe("Feature Name", () => {
 });
 ```
 
-**Non-admin user tests** — clear cookies and re-login in `beforeEach`:
+**User isolation** — tests that modify visible app state (e.g. creating assistants that populate the sidebar, sending chat messages) should run as `"user"` instead of admin. This prevents side effects from leaking into other parallel tests' screenshots and assertions. Switch to admin only for privileged setup, then back:
 
 ```typescript
-import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 
 test.beforeEach(async ({ page }) => {
   await page.context().clearCookies();
-  await loginAsRandomUser(page);
-  await page.goto("/app");
-  await page.waitForLoadState("networkidle");
+  await loginAs(page, "user");
 });
 ```
 
@@ -205,7 +198,7 @@ await page.waitForResponse(resp => resp.url().includes("/api/chat") && resp.stat
 
 1. **Descriptive test names** — clearly state expected behavior: `"should display greeting message when opening new chat"`
 2. **API-first setup** — use `OnyxApiClient` for backend state; reserve UI interactions for the behavior under test
-3. **Clean state** — most tests rely on the pre-authenticated admin session; only clear cookies + re-login when testing as a different user. Always cleanup API-created resources in `afterAll`
+3. **User isolation** — tests that modify visible app state (sidebar, chat history) should run as `"user"` to avoid polluting the admin session used by other parallel tests. Always cleanup API-created resources in `afterAll`
 4. **DRY helpers** — extract reusable logic into `utils/` with JSDoc comments
 5. **No hardcoded waits** — use `waitFor`, `waitForLoadState`, or web-first assertions
 6. **Parallel-safe** — no shared mutable state between tests; use unique names with timestamps (`\`test-${Date.now()}\``)
