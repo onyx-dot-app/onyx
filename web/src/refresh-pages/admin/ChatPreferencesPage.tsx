@@ -24,6 +24,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgTrash,
+  SvgExternalLink,
 } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -476,7 +477,7 @@ function ChatPreferencesForm() {
                         <Button
                           href="/admin/indexing/status"
                           prominence="tertiary"
-                          icon={SvgTrash}
+                          rightIcon={SvgExternalLink}
                         >
                           Manage All
                         </Button>
