@@ -122,9 +122,12 @@ export async function waitForAnimations(page: Page): Promise<void> {
       requestAnimationFrame(() => resolve())
     );
     // Wait for every currently-registered animation to finish (or be cancelled)
-    await Promise.allSettled(
-      document.getAnimations().map((animation) => animation.finished)
-    );
+    const animations = document
+      .getAnimations()
+      .filter(
+        (animation) => animation.effect?.getTiming().iterations !== Infinity
+      );
+    await Promise.allSettled(animations.map((animation) => animation.finished));
   });
 }
 
