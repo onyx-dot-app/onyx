@@ -47,6 +47,7 @@ from onyx.tools.tool_implementations.web_search.utils import (
 from onyx.tools.tool_implementations.web_search.utils import MAX_CHARS_PER_URL
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.url import normalize_url as normalize_web_content_url
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -802,6 +803,10 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             doc_id = url_to_doc_id.get(url)
             indexed_section = indexed_by_doc_id.get(doc_id) if doc_id else None
             crawled_section = crawled_by_url.get(url)
+            if crawled_section is None:
+                # WebContent.link is normalized (query/fragment stripped). Match on the
+                # same normalized form to avoid dropping successful crawl results.
+                crawled_section = crawled_by_url.get(normalize_web_content_url(url))
 
             if indexed_section and indexed_section.combined_content:
                 # Prefer indexed
