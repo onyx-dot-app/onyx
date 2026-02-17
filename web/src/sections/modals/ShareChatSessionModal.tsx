@@ -1,14 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
-import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { toast } from "@/hooks/useToast";
-import { structureValue } from "@/lib/llm/utils";
-import { LlmDescriptor, useLlmManager } from "@/lib/hooks";
-import { useCurrentAgent } from "@/hooks/useAgents";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
@@ -16,11 +11,8 @@ import Modal from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Separator from "@/refresh-components/Separator";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import Message from "@/refresh-components/messages/Message";
 import Text from "@/refresh-components/texts/Text";
-import { SvgCopy, SvgLink, SvgShare, SvgUsers } from "@opal/icons";
+import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
 
@@ -52,36 +44,6 @@ async function deleteShareLink(chatSessionId: string) {
   });
 
   return response.ok;
-}
-
-async function generateSeedLink(
-  message?: string,
-  assistantId?: number,
-  modelOverride?: LlmDescriptor
-) {
-  const baseUrl = `${window.location.protocol}//${window.location.host}`;
-  const model = modelOverride
-    ? structureValue(
-        modelOverride.name,
-        modelOverride.provider,
-        modelOverride.modelName
-      )
-    : null;
-  return `${baseUrl}/app${
-    message
-      ? `?${SEARCH_PARAM_NAMES.USER_PROMPT}=${encodeURIComponent(message)}`
-      : ""
-  }${
-    assistantId
-      ? `${message ? "&" : "?"}${SEARCH_PARAM_NAMES.PERSONA_ID}=${assistantId}`
-      : ""
-  }${
-    model
-      ? `${message || assistantId ? "&" : "?"}${
-          SEARCH_PARAM_NAMES.STRUCTURED_MODEL
-        }=${encodeURIComponent(model)}`
-      : ""
-  }${message ? `&${SEARCH_PARAM_NAMES.SEND_ON_LOAD}=true` : ""}`;
 }
 
 interface PrivacyOptionProps {
@@ -154,12 +116,6 @@ export default function ShareChatSessionModal({
     isCurrentlyPublic ? buildShareLink(chatSession.id) : ""
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-
-  const currentAgent = useCurrentAgent();
-  const searchParams = useSearchParams();
-  const message = searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || "";
-  const llmManager = useLlmManager(chatSession, currentAgent || undefined);
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );
@@ -266,64 +222,6 @@ export default function ShareChatSessionModal({
                   />
                 }
               />
-            )}
-          </Section>
-
-          <Separator className="py-0" />
-
-          <Section
-            justifyContent="start"
-            alignItems="stretch"
-            gap={0.5}
-            height="auto"
-          >
-            <AdvancedOptionsToggle
-              showAdvancedOptions={showAdvancedOptions}
-              setShowAdvancedOptions={setShowAdvancedOptions}
-              title="Advanced Options"
-            />
-
-            {showAdvancedOptions && (
-              <Section
-                justifyContent="start"
-                alignItems="stretch"
-                gap={0.5}
-                height="auto"
-              >
-                <Message
-                  static
-                  info
-                  medium
-                  className="w-full"
-                  text="Seed New Chat"
-                  description="Generate a link to a new chat session with the same settings as this chat (including the assistant and model)."
-                  close={false}
-                />
-                <Button
-                  leftIcon={SvgCopy}
-                  onClick={async () => {
-                    try {
-                      const seedLink = await generateSeedLink(
-                        message,
-                        currentAgent?.id,
-                        llmManager.currentLlm
-                      );
-                      if (!seedLink) {
-                        toast.error("Failed to generate seed link");
-                      } else {
-                        copyAll(seedLink);
-                        toast.success("Link copied to clipboard!");
-                      }
-                    } catch (e) {
-                      console.error(e);
-                      toast.error("Failed to generate or copy link.");
-                    }
-                  }}
-                  secondary
-                >
-                  Generate and Copy Seed Link
-                </Button>
-              </Section>
             )}
           </Section>
         </Modal.Body>
