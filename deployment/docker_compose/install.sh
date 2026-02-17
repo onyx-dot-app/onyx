@@ -654,16 +654,9 @@ else
     sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
     print_success "IMAGE_TAG set to $VERSION"
 
-    # Configure authentication settings based on selection
-    if [ "$AUTH_SCHEMA" = "disabled" ]; then
-        # Disable authentication in .env file
-        sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=disabled/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Authentication disabled in configuration"
-    else
-        # Enable basic authentication
-        sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Basic authentication enabled in configuration"
-    fi
+    # Configure basic authentication (default)
+    sed -i.bak 's/^AUTH_TYPE=.*/AUTH_TYPE=basic/' "$ENV_FILE" 2>/dev/null || true
+    print_success "Basic authentication enabled in configuration"
 
     # Configure Craft based on flag or if using a craft-* image tag
     # By default, env.template has Craft commented out (disabled)

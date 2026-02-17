@@ -21,7 +21,7 @@ services:
     env_file:
       - .env_eval
     environment:
-      - AUTH_TYPE=disabled
+      - AUTH_TYPE=basic
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
       - REDIS_HOST=cache
@@ -59,7 +59,7 @@ services:
       - .env_eval
     environment:
       - USE_LIGHTWEIGHT_BACKGROUND_WORKER=${USE_LIGHTWEIGHT_BACKGROUND_WORKER:-true}
-      - AUTH_TYPE=disabled
+      - AUTH_TYPE=basic
       - POSTGRES_HOST=relational_db
       - VESPA_HOST=index
       - REDIS_HOST=cache
