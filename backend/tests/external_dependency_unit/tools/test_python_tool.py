@@ -973,7 +973,7 @@ class CapturedRequest:
 class _MockCIHandler(BaseHTTPRequestHandler):
     """HTTP handler that records every request and returns canned responses."""
 
-    server: MockCodeInterpreterServer  # type: ignore[assignment]
+    server: MockCodeInterpreterServer
 
     def do_POST(self) -> None:
         body = self._read_body()
@@ -1035,7 +1035,8 @@ class MockCodeInterpreterServer(HTTPServer):
 
     @property
     def url(self) -> str:
-        return f"http://{self.server_address[0]}:{self.server_address[1]}"
+        host, port = self.server_address
+        return f"http://{host!s}:{port}"
 
     def start(self) -> None:
         threading.Thread(target=self.serve_forever, daemon=True).start()
@@ -1062,7 +1063,7 @@ class MockCodeInterpreterServer(HTTPServer):
 def mock_ci_server() -> Generator[MockCodeInterpreterServer, None, None]:
     server = MockCodeInterpreterServer()
     server.start()
-    yield server  # type: ignore[misc]
+    yield server
     server.shutdown()
 
 
