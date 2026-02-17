@@ -65,7 +65,7 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.monitoring",
               "worker",
-              "--loglevel=INFO",
+              {{ printf "--loglevel=%s" .Values.celery_worker_monitoring.logLevel | quote }},
               "--hostname=monitoring@%n",
               "-Q",
               "monitoring",
