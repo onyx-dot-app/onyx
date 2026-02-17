@@ -65,8 +65,8 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     const noticeToggle = page.locator(
       '[data-label="first-visit-notice-toggle"]'
     );
-    const isChecked = await noticeToggle.getAttribute("data-state");
-    if (isChecked === "checked") {
+    const isChecked = await noticeToggle.getAttribute("aria-checked");
+    if (isChecked === "true") {
       await noticeToggle.click();
       await page.waitForTimeout(300);
     }
@@ -128,8 +128,8 @@ test.describe("Appearance Theme Settings @exclusive", () => {
 
     // 9. Enable Consent Requirement (only if not already enabled)
     const consentToggle = page.locator('[data-label="require-consent-toggle"]');
-    const consentState = await consentToggle.getAttribute("data-state");
-    if (consentState !== "checked") {
+    const consentState = await consentToggle.getAttribute("aria-checked");
+    if (consentState !== "true") {
       await consentToggle.click();
     }
 

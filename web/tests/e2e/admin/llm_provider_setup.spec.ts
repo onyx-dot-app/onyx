@@ -160,7 +160,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     const editModal = await openProviderEditModal(page, providerName);
     const autoUpdateSwitch = editModal.getByRole("switch").first();
     const initialAutoModeState =
-      (await autoUpdateSwitch.getAttribute("data-state")) === "checked";
+      (await autoUpdateSwitch.getAttribute("aria-checked")) === "true";
     await autoUpdateSwitch.click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });

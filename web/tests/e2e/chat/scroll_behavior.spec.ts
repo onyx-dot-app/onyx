@@ -28,13 +28,16 @@ async function setAutoScroll(page: Page, enabled: boolean) {
   await autoScrollSwitch.waitFor({ state: "visible" });
 
   const isCurrentlyChecked =
-    (await autoScrollSwitch.getAttribute("data-state")) === "checked";
+    (await autoScrollSwitch.getAttribute("aria-checked")) === "true";
 
   if (isCurrentlyChecked !== enabled) {
     await autoScrollSwitch.click();
     // Wait for the switch state to update
-    const expectedState = enabled ? "checked" : "unchecked";
-    await expect(autoScrollSwitch).toHaveAttribute("data-state", expectedState);
+    const expectedState = enabled ? "true" : "false";
+    await expect(autoScrollSwitch).toHaveAttribute(
+      "aria-checked",
+      expectedState
+    );
   }
 
   await page.locator('a[href="/app"]').click({ force: true });
