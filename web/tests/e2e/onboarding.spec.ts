@@ -6,17 +6,25 @@ import { OnyxApiClient } from "./utils/onyxApiClient";
 /**
  * Onboarding E2E tests.
  *
- * The onboarding flow appears on `/app` for users who:
+ * The admin onboarding flow (Welcome → Name → LLM Setup → Complete) appears
+ * on `/app` for admin users who:
  *   1. Have zero chat sessions, AND
- *   2. Have not set `hasFinishedOnboarding_{userId}` in localStorage.
+ *   2. Have no LLM providers configured (`hasAnyProvider === false`).
  *
- * Admin users see a multi-step flow:
- *   Welcome → Name → LLM Setup → Complete (Finish Setup)
+ * Both conditions are enforced by `useShowOnboarding` in
+ * `web/src/hooks/useShowOnboarding.ts`.  There is no localStorage key
+ * involved — the check is purely server-state-driven.
  *
- * Non-admin users see a simpler single-step name prompt.
+ * Non-admin users see a simpler single-step name prompt whenever
+ * `user.personalization.name` is not set, regardless of LLM providers.
  *
  * Every test registers a **fresh throwaway user** so the onboarding is
  * guaranteed to appear.
+ *
+ * Admin tests use a beforeEach/afterEach that deletes all LLM providers
+ * before each test and restores a public provider afterwards, mirroring
+ * the pattern in onboarding_flow.spec.ts.  This ensures `showOnboarding`
+ * is reliably `true` even when other test suites have created providers.
  *
  * NOTE: Many text elements on this page are rendered via the `Truncated`
  * component, which places a hidden offscreen copy for width measurement.
@@ -29,8 +37,21 @@ test.describe.configure({ mode: "parallel" });
 const THEMES = ["light", "dark"] as const;
 
 // ---------------------------------------------------------------------------
-// Helper — create a fresh admin user and log in
+// Helpers
 // ---------------------------------------------------------------------------
+
+async function deleteAllProviders(client: OnyxApiClient): Promise<void> {
+  const providers = await client.listLlmProviders();
+  for (const provider of providers) {
+    try {
+      await client.deleteProvider(provider.id);
+    } catch (error) {
+      console.warn(
+        `Failed to delete provider ${provider.id}: ${String(error)}`
+      );
+    }
+  }
+}
 
 async function loginAsFreshAdmin(page: Page): Promise<void> {
   // 1. Register a random (basic) user — navigates to /app
@@ -54,13 +75,30 @@ async function loginAsFreshAdmin(page: Page): Promise<void> {
 for (const theme of THEMES) {
   test.describe(`Admin onboarding — ${theme}`, () => {
     test.beforeEach(async ({ page }) => {
+      // Inject theme before any navigation
       await page.addInitScript((t: string) => {
         localStorage.setItem("theme", t);
       }, theme);
+
+      // Remove all LLM providers so useShowOnboarding sets showOnboarding=true
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const adminClient = new OnyxApiClient(page.request);
+      await deleteAllProviders(adminClient);
+
+      // Create and log in as a fresh admin user (no chat history, no name)
+      await loginAsFreshAdmin(page);
+    });
+
+    test.afterEach(async ({ page }) => {
+      // Restore at least one public provider so other test suites are unaffected
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      const adminClient = new OnyxApiClient(page.request);
+      await adminClient.ensurePublicProvider();
     });
 
     test("Welcome step renders correctly", async ({ page }) => {
-      await loginAsFreshAdmin(page);
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
@@ -81,7 +119,6 @@ for (const theme of THEMES) {
     });
 
     test("Name step renders after clicking Let's Go", async ({ page }) => {
-      await loginAsFreshAdmin(page);
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
@@ -107,7 +144,6 @@ for (const theme of THEMES) {
     });
 
     test("Name step with filled name", async ({ page }) => {
-      await loginAsFreshAdmin(page);
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
@@ -130,7 +166,6 @@ for (const theme of THEMES) {
     });
 
     test("LLM setup step renders", async ({ page }) => {
-      await loginAsFreshAdmin(page);
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
@@ -175,7 +210,6 @@ for (const theme of THEMES) {
     });
 
     test("Complete step shows final setup items", async ({ page }) => {
-      await loginAsFreshAdmin(page);
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
@@ -226,7 +260,6 @@ for (const theme of THEMES) {
     });
 
     test("Finish Setup dismisses onboarding", async ({ page }) => {
-      await loginAsFreshAdmin(page);
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
@@ -269,7 +302,6 @@ for (const theme of THEMES) {
     });
 
     test("Full page screenshot at each step", async ({ page }) => {
-      await loginAsFreshAdmin(page);
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
@@ -413,10 +445,24 @@ test.describe("Onboarding persistence", () => {
     await page.addInitScript(() => {
       localStorage.setItem("theme", "light");
     });
+
+    // Remove all LLM providers so the admin onboarding flow is triggered
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const adminClient = new OnyxApiClient(page.request);
+    await deleteAllProviders(adminClient);
+
+    await loginAsFreshAdmin(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const adminClient = new OnyxApiClient(page.request);
+    await adminClient.ensurePublicProvider();
   });
 
   test("Onboarding does not reappear after Finish Setup", async ({ page }) => {
-    await loginAsFreshAdmin(page);
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
@@ -473,12 +519,26 @@ test.describe("Onboarding — keyboard interaction", () => {
     await page.addInitScript(() => {
       localStorage.setItem("theme", "light");
     });
+
+    // Remove all LLM providers so the admin onboarding flow is triggered
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const adminClient = new OnyxApiClient(page.request);
+    await deleteAllProviders(adminClient);
+
+    await loginAsFreshAdmin(page);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const adminClient = new OnyxApiClient(page.request);
+    await adminClient.ensurePublicProvider();
   });
 
   test("Pressing Enter in name field advances to next step", async ({
     page,
   }) => {
-    await loginAsFreshAdmin(page);
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
