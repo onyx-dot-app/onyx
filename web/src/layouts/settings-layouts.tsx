@@ -191,8 +191,11 @@ function SettingsHeader({
 }: SettingsHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
+  const isSticky = !!rightChildren; //headers with actions are always sticky, others are not
 
   useEffect(() => {
+    if (!isSticky) return;
+
     // IMPORTANT: This component relies on SettingsRoot having the ID "page-wrapper-scroll-container"
     // on its scrollable container. If that ID is removed or changed, the scroll shadow will not work.
     const scrollContainer = document.getElementById(
@@ -209,13 +212,14 @@ function SettingsHeader({
     handleScroll(); // Check initial state
 
     return () => scrollContainer.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [isSticky]);
 
   return (
     <div
       ref={headerRef}
       className={cn(
-        "sticky top-0 z-settings-header w-full bg-background-tint-01",
+        "w-full bg-background-tint-01",
+        isSticky && "sticky top-0 z-settings-header",
         backButton ? "md:pt-4" : "md:pt-10"
       )}
     >
@@ -256,15 +260,18 @@ function SettingsHeader({
           <Separator noPadding className="px-4" />
         </>
       )}
-      <div
-        className={cn(
-          "absolute left-0 right-0 h-[0.5rem] pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
-          showShadow && "opacity-100"
-        )}
-        style={{
-          background: "linear-gradient(to bottom, var(--mask-02), transparent)",
-        }}
-      />
+      {isSticky && (
+        <div
+          className={cn(
+            "absolute left-0 right-0 h-[0.5rem] pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
+            showShadow && "opacity-100"
+          )}
+          style={{
+            background:
+              "linear-gradient(to bottom, var(--mask-02), transparent)",
+          }}
+        />
+      )}
     </div>
   );
 }
