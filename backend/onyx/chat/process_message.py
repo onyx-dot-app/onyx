@@ -88,6 +88,7 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatFile
 from onyx.tools.models import SearchToolUsage
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
@@ -166,6 +167,29 @@ def _should_enable_slack_search(
     return (source_types is not None and DocumentSource.SLACK in source_types) or (
         persona.id == DEFAULT_PERSONA_ID and source_types is None
     )
+
+
+def _convert_loaded_files_to_chat_files(
+    loaded_files: list[ChatLoadedFile],
+) -> list[ChatFile]:
+    """Convert ChatLoadedFile objects to ChatFile for tool usage (e.g., PythonTool).
+
+    Args:
+        loaded_files: List of ChatLoadedFile objects from the chat history
+
+    Returns:
+        List of ChatFile objects that can be passed to tools
+    """
+    chat_files = []
+    for loaded_file in loaded_files:
+        if len(loaded_file.content) > 0:
+            chat_files.append(
+                ChatFile(
+                    filename=loaded_file.filename or f"file_{loaded_file.file_id}",
+                    content=loaded_file.content,
+                )
+            )
+    return chat_files
 
 
 def _extract_project_file_texts_and_images(
@@ -733,6 +757,9 @@ def handle_stream_message_objects(
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(chat_history, db_session)
 
+        # Convert loaded files to ChatFile format for tools like PythonTool
+        chat_files_for_tools = _convert_loaded_files_to_chat_files(files)
+
         # TODO Need to think of some way to support selected docs from the sidebar
 
         # Reserve a message id for the assistant response for frontend to track packets
@@ -883,6 +910,7 @@ def handle_stream_message_objects(
                 forced_tool_id=forced_tool_id,
                 user_identity=user_identity,
                 chat_session_id=str(chat_session.id),
+                chat_files=chat_files_for_tools,
                 include_citations=new_msg_req.include_citations,
                 all_injected_file_metadata=all_injected_file_metadata,
                 inject_memories_in_prompt=user.use_memories,

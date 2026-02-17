@@ -918,3 +918,259 @@
 # if __name__ == "__main__":
 #     # Run with: python -m pytest tests/external_dependency_unit/tools/test_python_tool.py -v
 #     pytest.main([__file__, "-v"])
+
+
+from __future__ import annotations
+
+import io
+import json
+import threading
+from collections.abc import Generator
+from http.server import BaseHTTPRequestHandler
+from http.server import HTTPServer
+from typing import Any
+from unittest.mock import patch
+
+import pytest
+from fastapi import UploadFile
+from sqlalchemy.orm import Session
+from starlette.datastructures import Headers
+
+import onyx.tools.tool_implementations.python.code_interpreter_client as ci_mod
+from onyx.chat.process_message import handle_stream_message_objects
+from onyx.db.models import Persona
+from onyx.db.tools import get_builtin_tool
+from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import FileDescriptor
+from onyx.server.features.projects.api import upload_user_files
+from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
+from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
+from tests.external_dependency_unit.mock_llm import use_mock_llm
+
+
+# ---------------------------------------------------------------------------
+# Mock Code Interpreter Server
+# ---------------------------------------------------------------------------
+
+
+class CapturedRequest:
+    """A single HTTP request captured by the mock server."""
+
+    def __init__(self, method: str, path: str, body: bytes) -> None:
+        self.method = method
+        self.path = path
+        self.body = body
+
+    def json_body(self) -> dict[str, Any]:
+        return json.loads(self.body)
+
+
+class _MockCIHandler(BaseHTTPRequestHandler):
+    """HTTP handler that records every request and returns canned responses."""
+
+    server: MockCodeInterpreterServer
+
+    def do_POST(self) -> None:
+        body = self._read_body()
+        self._capture("POST", body)
+
+        if self.path == "/v1/files":
+            self.server._file_counter += 1
+            self._respond_json(
+                200, {"file_id": f"mock-ci-file-{self.server._file_counter}"}
+            )
+        elif self.path == "/v1/execute":
+            self._respond_json(
+                200,
+                {
+                    "stdout": "mock output\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "timed_out": False,
+                    "duration_ms": 50,
+                    "files": [],
+                },
+            )
+        else:
+            self._respond_json(404, {"error": "not found"})
+
+    def do_DELETE(self) -> None:
+        self._capture("DELETE", b"")
+        self.send_response(200)
+        self.end_headers()
+
+    def _read_body(self) -> bytes:
+        length = int(self.headers.get("Content-Length", 0))
+        return self.rfile.read(length) if length else b""
+
+    def _capture(self, method: str, body: bytes) -> None:
+        self.server.captured_requests.append(
+            CapturedRequest(method=method, path=self.path, body=body)
+        )
+
+    def _respond_json(self, status: int, data: dict[str, Any]) -> None:
+        payload = json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+        pass
+
+
+class MockCodeInterpreterServer(HTTPServer):
+    """HTTPServer wrapper that records requests for assertions."""
+
+    def __init__(self) -> None:
+        super().__init__(("localhost", 0), _MockCIHandler)
+        self.captured_requests: list[CapturedRequest] = []
+        self._file_counter = 0
+
+    @property
+    def url(self) -> str:
+        host, port = self.server_address
+        return f"http://{host!s}:{port}"
+
+    def start(self) -> None:
+        threading.Thread(target=self.serve_forever, daemon=True).start()
+
+    def get_requests(
+        self,
+        method: str | None = None,
+        path: str | None = None,
+    ) -> list[CapturedRequest]:
+        results = self.captured_requests
+        if method:
+            results = [r for r in results if r.method == method]
+        if path:
+            results = [r for r in results if r.path == path]
+        return results
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def mock_ci_server() -> Generator[MockCodeInterpreterServer, None, None]:
+    server = MockCodeInterpreterServer()
+    server.start()
+    yield server
+    server.shutdown()
+
+
+@pytest.fixture()
+def _attach_python_tool_to_default_persona(db_session: Session) -> None:
+    """Ensure the default persona (id=0) has the PythonTool attached."""
+    python_tool_db = get_builtin_tool(db_session, PythonTool)
+    persona = db_session.get(Persona, 0)
+    assert persona is not None, "Default persona (id=0) not found"
+
+    if python_tool_db not in persona.tools:
+        persona.tools.append(python_tool_db)
+        db_session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Test
+# ---------------------------------------------------------------------------
+
+
+def test_code_interpreter_receives_chat_files(
+    db_session: Session,
+    mock_ci_server: MockCodeInterpreterServer,
+    _attach_python_tool_to_default_persona: None,
+    initialize_file_store: None,  # noqa: ARG001
+) -> None:
+    mock_ci_server.captured_requests.clear()
+    mock_ci_server._file_counter = 0
+    mock_url = mock_ci_server.url
+
+    user = create_test_user(db_session, "ci_test_admin")
+    chat_session = create_chat_session(db_session=db_session, user=user)
+
+    # Upload a test CSV
+    csv_content = b"name,age,city\nAlice,30,NYC\nBob,25,SF\n"
+    result = upload_user_files(
+        files=[
+            UploadFile(
+                file=io.BytesIO(csv_content),
+                filename="data.csv",
+                size=len(csv_content),
+                headers=Headers({"content-type": "text/csv"}),
+            )
+        ],
+        project_id=None,
+        temp_id_map=json.dumps({"0|data.csv": "data.csv"}),
+        user=user,
+        db_session=db_session,
+    )
+    assert len(result.user_files) == 1
+    user_file = result.user_files[0]
+
+    file_descriptor: FileDescriptor = {
+        "id": user_file.file_id,
+        "type": ChatFileType.CSV,
+        "name": "data.csv",
+        "user_file_id": str(user_file.id),
+    }
+
+    code = "import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df)"
+    msg_req = SendMessageRequest(
+        message="Read the CSV and print it.",
+        chat_session_id=chat_session.id,
+        file_descriptors=[file_descriptor],
+        stream=True,
+    )
+
+    original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
+    with (
+        use_mock_llm() as mock_llm,
+        patch(
+            "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
+            mock_url,
+        ),
+        patch(
+            "onyx.tools.tool_implementations.python.code_interpreter_client.CODE_INTERPRETER_BASE_URL",
+            mock_url,
+        ),
+    ):
+        mock_llm.add_response(
+            LLMToolCallResponse(
+                tool_name="python",
+                tool_call_id="call_test_1",
+                tool_call_argument_tokens=[json.dumps({"code": code})],
+            )
+        )
+        mock_llm.forward_till_end()
+
+        ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
+        try:
+            list(
+                handle_stream_message_objects(
+                    new_msg_req=msg_req, user=user, db_session=db_session
+                )
+            )
+        finally:
+            ci_mod.CodeInterpreterClient.__init__.__defaults__ = original_defaults
+
+    # Verify: file uploaded, code executed, staged file cleaned up
+    assert len(mock_ci_server.get_requests(method="POST", path="/v1/files")) == 1
+    assert len(mock_ci_server.get_requests(method="POST", path="/v1/execute")) == 1
+
+    delete_requests = mock_ci_server.get_requests(method="DELETE")
+    assert len(delete_requests) == 1
+    assert delete_requests[0].path.startswith("/v1/files/")
+
+    execute_body = mock_ci_server.get_requests(method="POST", path="/v1/execute")[
+        0
+    ].json_body()
+    assert execute_body["code"] == code
+    assert len(execute_body["files"]) == 1
+    assert execute_body["files"][0]["path"] == "data.csv"
