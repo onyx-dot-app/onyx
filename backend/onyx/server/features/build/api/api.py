@@ -393,47 +393,174 @@ def _check_webapp_access(
 
 
 def _offline_html_response() -> Response:
-    """Return a friendly HTML page when the sandbox is not reachable."""
+    """Return a branded Craft HTML page when the sandbox is not reachable.
+
+    Design mirrors the default Craft web template (outputs/web/app/page.tsx):
+    terminal window aesthetic with Minecraft-themed typing animation.
+    """
     html = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="refresh" content="15" />
-  <title>App starting…</title>
+  <title>Craft — Starting up</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0a0a0a;
-      color: #e5e5e5;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      background: linear-gradient(to bottom right, #030712, #111827, #030712);
+      min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+      gap: 1.5rem;
       padding: 2rem;
     }
-    .card {
+
+    /* Terminal window */
+    .terminal {
+      width: 100%;
+      max-width: 580px;
+      border: 2px solid #374151;
+      border-radius: 2px;
+    }
+
+    /* Title bar */
+    .titlebar {
+      background: #1f2937;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid #374151;
+    }
+
+    /* Square traffic-light buttons (not circles) */
+    .btn { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+    .btn-red    { background: #ef4444; }
+    .btn-yellow { background: #eab308; }
+    .btn-green  { background: #22c55e; }
+
+    .title-label {
+      flex: 1;
       text-align: center;
-      max-width: 360px;
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-right: 36px; /* offset for buttons width so label is visually centred */
     }
-    .icon {
-      font-size: 2.5rem;
-      margin-bottom: 1rem;
-      opacity: 0.6;
+
+    /* Terminal body */
+    .body {
+      background: #111827;
+      padding: 1.5rem;
+      min-height: 200px;
+      font-size: 0.875rem;
+      color: #d1d5db;
     }
-    h1 { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; }
-    p  { font-size: 0.875rem; color: #a1a1aa; line-height: 1.5; }
-    .hint { margin-top: 1rem; font-size: 0.75rem; color: #52525b; }
+
+    /* History lines (completed) */
+    .history { margin-bottom: 0.25rem; }
+    .history .prompt { color: #10b981; }
+    .history .text   { color: #6b7280; }
+
+    /* Active typing line */
+    .active {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    .prompt { color: #10b981; user-select: none; }
+    #typed  { color: #d1d5db; }
+
+    /* Block cursor */
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 1.1em;
+      background: #10b981;
+      vertical-align: text-bottom;
+      animation: blink 1s step-start infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    /* Tagline */
+    .tagline {
+      font-size: 0.8125rem;
+      color: #4b5563;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="icon">⚡</div>
-    <h1>App is starting…</h1>
-    <p>The app server is warming up. This page will refresh automatically.</p>
-    <p class="hint">If it stays offline, the owner needs to have their Craft session open.</p>
+  <div class="terminal">
+    <div class="titlebar">
+      <div class="btn btn-red"></div>
+      <div class="btn btn-yellow"></div>
+      <div class="btn btn-green"></div>
+      <span class="title-label">crafting_table</span>
+    </div>
+    <div class="body">
+      <div id="history"></div>
+      <div class="active">
+        <span class="prompt">/&gt;</span>
+        <span id="typed"></span><span class="cursor"></span>
+      </div>
+    </div>
   </div>
+  <p class="tagline">Ask the owner to open their Craft session to wake it up.</p>
+
+  <script>
+    var messages = [
+      "Sandbox is asleep...",
+      "Waiting for owner to wake it up...",
+      "Ask the owner to open their Craft session.",
+      "This page will refresh automatically.",
+      "/status: idle"
+    ];
+
+    var msgIndex = 0;
+    var charIndex = 0;
+    var typedEl = document.getElementById("typed");
+    var historyEl = document.getElementById("history");
+    var HISTORY_MAX = 3;
+    var history = [];
+
+    function addHistory(text) {
+      history.push(text);
+      if (history.length > HISTORY_MAX) history.shift();
+      historyEl.innerHTML = history.map(function(t) {
+        return '<div class="history"><span class="prompt">/&gt; </span><span class="text">' +
+          t.replace(/&/g,"&amp;").replace(/</g,"&lt;") + "</span></div>";
+      }).join("");
+    }
+
+    function typeChar() {
+      var msg = messages[msgIndex];
+      if (charIndex < msg.length) {
+        typedEl.textContent += msg[charIndex];
+        charIndex++;
+        setTimeout(typeChar, 55 + Math.random() * 40);
+      } else {
+        setTimeout(nextMessage, 1600);
+      }
+    }
+
+    function nextMessage() {
+      addHistory(messages[msgIndex]);
+      msgIndex = (msgIndex + 1) % messages.length;
+      charIndex = 0;
+      typedEl.textContent = "";
+      setTimeout(typeChar, 300);
+    }
+
+    typeChar();
+  </script>
 </body>
 </html>"""
     return Response(content=html, status_code=503, media_type="text/html")
