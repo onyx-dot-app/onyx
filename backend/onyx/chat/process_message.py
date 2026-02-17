@@ -182,7 +182,7 @@ def _convert_loaded_files_to_chat_files(
     """
     chat_files = []
     for loaded_file in loaded_files:
-        if loaded_file.content is not None:
+        if len(loaded_file.content) > 0:
             chat_files.append(
                 ChatFile(
                     filename=loaded_file.filename or f"file_{loaded_file.file_id}",
