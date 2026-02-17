@@ -198,6 +198,23 @@ export async function updateSessionName(
   }
 }
 
+export async function setSessionPublic(
+  sessionId: string,
+  isPublic: boolean
+): Promise<{ session_id: string; is_public: boolean }> {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/public`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_public: isPublic }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to update session visibility: ${res.status}`);
+  }
+
+  return res.json();
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   const res = await fetch(`${API_BASE}/sessions/${sessionId}`, {
     method: "DELETE",

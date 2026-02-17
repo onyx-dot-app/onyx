@@ -38,6 +38,8 @@ export interface UrlBarProps {
   isDownloading?: boolean;
   /** Optional refresh callback — shows a refresh icon at the right edge of the URL pill */
   onRefresh?: () => void;
+  /** Optional share button node — shown on the far right of the URL bar */
+  shareButton?: React.ReactNode;
 }
 
 /**
@@ -60,6 +62,7 @@ export default function UrlBar({
   onDownload,
   isDownloading = false,
   onRefresh,
+  shareButton,
 }: UrlBarProps) {
   const handleOpenInNewTab = () => {
     if (previewUrl) {
@@ -152,6 +155,8 @@ export default function UrlBar({
             {isDownloading ? "Exporting..." : "Export to .docx"}
           </Button>
         )}
+        {/* Share button — shown on the far right when a webapp is active */}
+        {shareButton}
       </div>
     </div>
   );

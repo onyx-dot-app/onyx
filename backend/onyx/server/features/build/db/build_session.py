@@ -159,6 +159,26 @@ def update_session_status(
         logger.info(f"Updated build session {session_id} status to {status}")
 
 
+def set_build_session_public_status(
+    session_id: UUID,
+    user_id: UUID,
+    is_public: bool,
+    db_session: Session,
+) -> BuildSession | None:
+    """Set the public/private status of a build session.
+
+    Only the session owner can change this setting.
+    Returns the updated session, or None if not found/unauthorized.
+    """
+    session = get_build_session(session_id, user_id, db_session)
+    if not session:
+        return None
+    session.is_public = is_public
+    db_session.commit()
+    logger.info(f"Set build session {session_id} is_public={is_public}")
+    return session
+
+
 def delete_build_session__no_commit(
     session_id: UUID,
     user_id: UUID,

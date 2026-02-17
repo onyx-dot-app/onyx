@@ -107,6 +107,7 @@ class SessionResponse(BaseModel):
     nextjs_port: int | None
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
+    is_public: bool
 
     @classmethod
     def from_model(
@@ -129,6 +130,7 @@ class SessionResponse(BaseModel):
             nextjs_port=session.nextjs_port,
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
+            is_public=session.is_public,
         )
 
 
@@ -157,6 +159,19 @@ class SessionListResponse(BaseModel):
     """Response containing list of sessions."""
 
     sessions: list[SessionResponse]
+
+
+class SetSessionPublicRequest(BaseModel):
+    """Request to set the public status of a session."""
+
+    is_public: bool
+
+
+class SetSessionPublicResponse(BaseModel):
+    """Response after setting session public status."""
+
+    session_id: str
+    is_public: bool
 
 
 # ===== Message Models =====
@@ -244,6 +259,7 @@ class WebappInfo(BaseModel):
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
     ready: bool  # Whether the NextJS dev server is actually responding
+    is_public: bool  # Whether the webapp is publicly accessible without auth
 
 
 # ===== File Upload Models =====

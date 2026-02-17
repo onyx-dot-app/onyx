@@ -89,8 +89,16 @@ class LocalSandboxManager(SandboxManager):
         self._acp_clients: dict[tuple[UUID, UUID], ACPAgentClient] = {}
 
         # Track Next.js processes - keyed by (sandbox_id, session_id) tuple
-        # Used for clean shutdown when sessions are deleted
+        # Used for clean shutdown when sessions are deleted.
+        # Mutated from background threads; all access must hold _nextjs_lock.
         self._nextjs_processes: dict[tuple[UUID, UUID], subprocess.Popen[bytes]] = {}
+
+        # Track sessions currently being (re)started - prevents concurrent restarts.
+        # Mutated from background threads; all access must hold _nextjs_lock.
+        self._nextjs_starting: set[tuple[UUID, UUID]] = set()
+
+        # Lock guarding both _nextjs_processes and _nextjs_starting
+        self._nextjs_lock = threading.Lock()
 
         # Validate templates exist (raises RuntimeError if missing)
         self._validate_templates()
@@ -326,16 +334,18 @@ class LocalSandboxManager(SandboxManager):
             RuntimeError: If termination fails
         """
         # Stop all Next.js processes for this sandbox (keyed by (sandbox_id, session_id))
-        processes_to_stop = [
-            (key, process)
-            for key, process in self._nextjs_processes.items()
-            if key[0] == sandbox_id
-        ]
+        with self._nextjs_lock:
+            processes_to_stop = [
+                (key, process)
+                for key, process in self._nextjs_processes.items()
+                if key[0] == sandbox_id
+            ]
         for key, process in processes_to_stop:
             session_id = key[1]
             try:
                 self._stop_nextjs_process(process, session_id)
-                del self._nextjs_processes[key]
+                with self._nextjs_lock:
+                    self._nextjs_processes.pop(key, None)
             except Exception as e:
                 logger.warning(
                     f"Failed to stop Next.js for sandbox {sandbox_id}, "
@@ -516,7 +526,8 @@ class LocalSandboxManager(SandboxManager):
                 web_dir, nextjs_port
             )
             # Store process for clean shutdown on session delete
-            self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
+            with self._nextjs_lock:
+                self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
             logger.info("Next.js server started successfully")
 
             # Setup venv and AGENTS.md
@@ -575,7 +586,8 @@ class LocalSandboxManager(SandboxManager):
         """
         # Stop Next.js dev server - try stored process first, then fallback to port lookup
         process_key = (sandbox_id, session_id)
-        nextjs_process = self._nextjs_processes.pop(process_key, None)
+        with self._nextjs_lock:
+            nextjs_process = self._nextjs_processes.pop(process_key, None)
         if nextjs_process is not None:
             self._stop_nextjs_process(nextjs_process, session_id)
         elif nextjs_port is not None:
@@ -765,6 +777,87 @@ class LocalSandboxManager(SandboxManager):
         session_path = self._get_session_path(sandbox_id, session_id)
         outputs_path = session_path / "outputs"
         return outputs_path.exists()
+
+    def ensure_nextjs_running(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        nextjs_port: int,
+    ) -> None:
+        """Start Next.js server for a session if not already running.
+
+        Called when the server is detected as unreachable (e.g., after API server restart).
+        Returns immediately — the actual startup runs in a background daemon thread.
+        A per-session guard prevents concurrent restarts from racing.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID
+            nextjs_port: The port number for the Next.js server
+        """
+        process_key = (sandbox_id, session_id)
+
+        with self._nextjs_lock:
+            # Already have a live tracked process
+            existing = self._nextjs_processes.get(process_key)
+            if existing is not None and existing.poll() is None:
+                return
+
+            # Already being started by another thread
+            if process_key in self._nextjs_starting:
+                return
+
+            # Check if the port is already responding (orphan process that survived restart)
+            try:
+                import httpx
+
+                with httpx.Client(timeout=1.0) as client:
+                    client.get(f"http://localhost:{nextjs_port}")
+                logger.info(
+                    f"Port {nextjs_port} already alive for session {session_id} "
+                    "(orphan process) — skipping restart"
+                )
+                return
+            except Exception:
+                pass  # Port is dead; proceed to restart
+
+            self._nextjs_starting.add(process_key)
+
+        logger.info(
+            f"Scheduling background Next.js restart for session {session_id} "
+            f"on port {nextjs_port}"
+        )
+
+        def _start_in_background() -> None:
+            try:
+                sandbox_path = self._get_sandbox_path(sandbox_id)
+                web_dir = self._directory_manager.get_web_path(
+                    sandbox_path, str(session_id)
+                )
+                if not web_dir.exists():
+                    logger.warning(
+                        f"Web dir missing for session {session_id}: {web_dir} — "
+                        "cannot restart Next.js"
+                    )
+                    return
+                process = self._process_manager.start_nextjs_server(
+                    web_dir, nextjs_port
+                )
+                with self._nextjs_lock:
+                    self._nextjs_processes[process_key] = process
+                logger.info(
+                    f"Auto-restarted Next.js for session {session_id} "
+                    f"on port {nextjs_port}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to auto-restart Next.js for session {session_id}: {e}"
+                )
+            finally:
+                with self._nextjs_lock:
+                    self._nextjs_starting.discard(process_key)
+
+        threading.Thread(target=_start_in_background, daemon=True).start()
 
     def restore_snapshot(
         self,

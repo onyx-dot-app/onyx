@@ -4712,6 +4712,9 @@ class BuildSession(Base):
     demo_data_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
