@@ -13,8 +13,7 @@ const THEMES = ["light", "dark"] as const;
 for (const theme of THEMES) {
   test.describe(`Welcome page — /app (${theme} mode)`, () => {
     test.beforeEach(async ({ page }) => {
-      // Always log in before each test to ensure a valid session, regardless of
-      // any cookie state left by other tests (e.g. login.spec.ts clears cookies).
+      // Always log in before each test to ensure a valid session.
       await loginAs(page, "admin");
 
       // Inject theme into localStorage so next-themes picks it up immediately.
