@@ -806,12 +806,13 @@ class HierarchyNode(Base):
         "HierarchyNode", remote_side=[id], back_populates="children"
     )
     children: Mapped[list["HierarchyNode"]] = relationship(
-        "HierarchyNode", back_populates="parent"
+        "HierarchyNode", back_populates="parent", passive_deletes=True
     )
     child_documents: Mapped[list["Document"]] = relationship(
         "Document",
         back_populates="parent_hierarchy_node",
         foreign_keys="Document.parent_hierarchy_node_id",
+        passive_deletes=True,
     )
     # Personas that have this hierarchy node attached for scoped search
     personas: Mapped[list["Persona"]] = relationship(
@@ -936,6 +937,7 @@ class Document(Base):
         "HierarchyNode",
         back_populates="document",
         foreign_keys="HierarchyNode.document_id",
+        passive_deletes=True,
     )
     # Personas that have this document directly attached for scoped search
     attached_personas: Mapped[list["Persona"]] = relationship(
