@@ -232,7 +232,7 @@ function SettingsHeader({
             <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
             {rightChildren}
           </div>
-          <div className="flex flex-col pb-2">
+          <div className={cn("flex flex-col", separator ? "pb-6" : "pb-2")}>
             <div aria-label="admin-page-title">
               <Text as="p" headingH2>
                 {title}
@@ -249,7 +249,6 @@ function SettingsHeader({
       </div>
       {separator && (
         <>
-          <Spacer rem={1.5} />
           <Separator noPadding className="px-4" />
         </>
       )}

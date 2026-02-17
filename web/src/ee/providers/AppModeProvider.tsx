@@ -4,6 +4,7 @@ import React, { useState, useCallback } from "react";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { AppModeContext, AppMode } from "@/providers/AppModeProvider";
 import { useUser } from "@/providers/UserProvider";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export interface AppModeProviderProps {
   children: React.ReactNode;
@@ -17,14 +18,17 @@ export interface AppModeProviderProps {
  * - **chat**: Forces chat mode - conversation with follow-up questions
  *
  * The initial mode is read from the user's persisted `default_app_mode` preference.
+ * When `search_ui_enabled` is false (admin setting), the mode is locked to "chat".
  */
 export function AppModeProvider({ children }: AppModeProviderProps) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
   const { user } = useUser();
+  const settings = useSettingsContext();
+  const searchUiEnabled = settings.settings.search_ui_enabled !== false;
 
   const persistedMode = user?.preferences?.default_app_mode;
   const initialMode: AppMode =
-    isPaidEnterpriseFeaturesEnabled && persistedMode
+    isPaidEnterpriseFeaturesEnabled && searchUiEnabled && persistedMode
       ? (persistedMode.toLowerCase() as AppMode)
       : "chat";
 
@@ -32,10 +36,10 @@ export function AppModeProvider({ children }: AppModeProviderProps) {
 
   const setAppMode = useCallback(
     (mode: AppMode) => {
-      if (!isPaidEnterpriseFeaturesEnabled) return;
+      if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) return;
       setAppModeState(mode);
     },
-    [isPaidEnterpriseFeaturesEnabled]
+    [isPaidEnterpriseFeaturesEnabled, searchUiEnabled]
   );
 
   return (

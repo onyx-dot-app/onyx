@@ -62,6 +62,8 @@ import { SvgCheck } from "@opal/icons";
 import { cn } from "@/lib/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import SimpleTooltip from "@/refresh-components/SimpleTooltip";
 
 interface PAT {
   id: number;
@@ -748,6 +750,8 @@ function ChatPreferencesSettings() {
     updateUserDefaultAppMode,
   } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const settings = useSettingsContext();
+  const searchUiEnabled = settings.settings.search_ui_enabled !== false;
   const llmManager = useLlmManager();
 
   const {
@@ -803,24 +807,35 @@ function ChatPreferencesSettings() {
           </InputLayouts.Horizontal>
 
           {isPaidEnterpriseFeaturesEnabled && (
-            <InputLayouts.Horizontal
-              title="Default App Mode"
-              description="Choose whether new sessions start in Search or Chat mode."
-              center
+            <SimpleTooltip
+              tooltip={
+                searchUiEnabled
+                  ? undefined
+                  : "Search UI is disabled and can only be enabled by an admin."
+              }
+              side="top"
             >
-              <InputSelect
-                value={user?.preferences.default_app_mode ?? "CHAT"}
-                onValueChange={(value) => {
-                  void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
-                }}
+              <InputLayouts.Horizontal
+                title="Default App Mode"
+                description="Choose whether new sessions start in Search or Chat mode."
+                center
+                disabled={!searchUiEnabled}
               >
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
-                  <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </InputLayouts.Horizontal>
+                <InputSelect
+                  value={user?.preferences.default_app_mode ?? "CHAT"}
+                  onValueChange={(value) => {
+                    void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                  }}
+                  disabled={!searchUiEnabled}
+                >
+                  <InputSelect.Trigger />
+                  <InputSelect.Content>
+                    <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
+                    <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+              </InputLayouts.Horizontal>
+            </SimpleTooltip>
           )}
         </Card>
       </Section>
