@@ -17,18 +17,12 @@ description: Write and maintain Playwright end-to-end tests for the Onyx applica
 ## Running Tests
 
 ```bash
-# Run all tests
-npx playwright test
-
 # Run a specific test file
 npx playwright test web/tests/e2e/chat/default_assistant.spec.ts
 
 # Run a specific project
 npx playwright test --project admin
 npx playwright test --project exclusive
-
-# Debug mode (headed browser + inspector)
-npx playwright test --debug
 ```
 
 ## Test Projects
