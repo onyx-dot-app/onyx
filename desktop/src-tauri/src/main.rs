@@ -67,10 +67,46 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
       if (!["http:", "https:", "mailto:", "tel:"].includes(scheme)) {
         return null;
       }
-      return parsed.toString();
+      return parsed;
     } catch {
       return null;
     }
+  }
+
+  async function openWithTauri(url) {
+    try {
+      const invoke =
+        window.__TAURI__?.core?.invoke || window.__TAURI_INTERNALS__?.invoke;
+      if (typeof invoke !== "function") {
+        return false;
+      }
+
+      await invoke("open_in_browser", { url });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function handleChatNavigation(rawUrl) {
+    const parsedUrl = getAllowedNavigationUrl(rawUrl);
+    if (!parsedUrl) {
+      return false;
+    }
+
+    const safeUrl = parsedUrl.toString();
+    const scheme = parsedUrl.protocol.toLowerCase();
+    if (scheme === "mailto:" || scheme === "tel:") {
+      void openWithTauri(safeUrl).then((opened) => {
+        if (!opened) {
+          window.location.assign(safeUrl);
+        }
+      });
+      return true;
+    }
+
+    window.location.assign(safeUrl);
+    return true;
   }
 
   document.addEventListener(
@@ -100,14 +136,12 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
         return;
       }
 
-      const safeUrl = getAllowedNavigationUrl(href);
-      if (!safeUrl) {
+      if (!handleChatNavigation(href)) {
         return;
       }
 
       event.preventDefault();
       event.stopPropagation();
-      window.location.assign(safeUrl);
     },
     true
   );
@@ -123,12 +157,9 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
       url != null &&
       String(url).length > 0
     ) {
-      const safeUrl = getAllowedNavigationUrl(url);
-      if (!safeUrl) {
+      if (!handleChatNavigation(url)) {
         return null;
       }
-
-      window.location.assign(safeUrl);
       return null;
     }
 
@@ -344,6 +375,21 @@ fn open_in_default_browser(url: &str) -> bool {
     }
     #[allow(unreachable_code)]
     false
+}
+
+#[tauri::command]
+fn open_in_browser(url: String) -> Result<(), String> {
+    let parsed_url = Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
+    match parsed_url.scheme() {
+        "http" | "https" | "mailto" | "tel" => {}
+        _ => return Err("Unsupported URL scheme".to_string()),
+    }
+
+    if open_in_default_browser(parsed_url.as_str()) {
+        Ok(())
+    } else {
+        Err("Failed to open URL in default browser".to_string())
+    }
 }
 
 fn inject_chat_link_intercept(webview: &Webview) {
@@ -761,6 +807,7 @@ fn main() {
             get_bootstrap_state,
             set_server_url,
             get_config_path_cmd,
+            open_in_browser,
             open_config_file,
             open_config_directory,
             navigate_to,
