@@ -244,23 +244,32 @@ function ChatPreferencesForm() {
 
   const saveToolIds = useCallback(
     async (newToolIds: number[]) => {
+      // Optimistic update so subsequent toggles read fresh state
+      const optimisticData = defaultAssistantConfig
+        ? { ...defaultAssistantConfig, tool_ids: newToolIds }
+        : undefined;
       try {
-        const response = await fetch("/api/admin/default-assistant", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tool_ids: newToolIds }),
-        });
-        if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          throw new Error(errorMsg);
-        }
-        await mutateDefaultAssistant();
+        await mutateDefaultAssistant(
+          async () => {
+            const response = await fetch("/api/admin/default-assistant", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tool_ids: newToolIds }),
+            });
+            if (!response.ok) {
+              const errorMsg = (await response.json()).detail;
+              throw new Error(errorMsg);
+            }
+            return optimisticData;
+          },
+          { optimisticData, revalidate: true }
+        );
         toast.success("Tools updated");
       } catch {
         toast.error("Failed to update tools");
       }
     },
-    [mutateDefaultAssistant]
+    [defaultAssistantConfig, mutateDefaultAssistant]
   );
 
   const toggleTool = useCallback(

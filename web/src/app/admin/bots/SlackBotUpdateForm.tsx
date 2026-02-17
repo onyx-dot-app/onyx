@@ -5,6 +5,8 @@ import { SlackBot, ValidSources } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
+import { SlackTokensForm } from "./SlackTokensForm";
+
 function Checkbox({
   label,
   checked,
@@ -26,7 +28,6 @@ function Checkbox({
     </label>
   );
 }
-import { SlackTokensForm } from "./SlackTokensForm";
 import { SourceIcon } from "@/components/SourceIcon";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
