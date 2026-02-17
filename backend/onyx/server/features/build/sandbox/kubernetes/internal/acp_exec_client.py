@@ -21,6 +21,7 @@ Usage:
 """
 
 import json
+import shlex
 import threading
 import time
 from collections.abc import Generator
@@ -177,8 +178,17 @@ class ACPExecClient:
 
         k8s = self._get_k8s_client()
 
-        # Start opencode acp via exec
-        exec_command = ["opencode", "acp", "--cwd", cwd]
+        # Start opencode acp via exec.
+        # Set XDG_DATA_HOME so opencode stores session data on the shared
+        # workspace volume (accessible from file-sync container for snapshots)
+        # instead of the container-local ~/.local/share/ filesystem.
+        data_dir = shlex.quote(f"{cwd}/.opencode-data")
+        safe_cwd = shlex.quote(cwd)
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            f"XDG_DATA_HOME={data_dir} exec opencode acp --cwd {safe_cwd}",
+        ]
 
         logger.info(f"[ACP] Starting client: pod={self._pod_name} cwd={cwd}")
 

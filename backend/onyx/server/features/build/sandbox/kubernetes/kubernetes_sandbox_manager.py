@@ -1472,6 +1472,7 @@ echo "Session cleanup complete"
         the snapshot and upload to S3. Captures:
         - sessions/$session_id/outputs/ (generated artifacts, web apps)
         - sessions/$session_id/attachments/ (user uploaded files)
+        - sessions/$session_id/.opencode-data/ (opencode session data for resumption)
 
         Args:
             sandbox_id: The sandbox ID
@@ -1496,9 +1497,10 @@ echo "Session cleanup complete"
             f"{session_id_str}/{snapshot_id}.tar.gz"
         )
 
-        # Exec into pod to create and upload snapshot (outputs + attachments)
-        # Uses s5cmd pipe to stream tar.gz directly to S3
-        # Only snapshot if outputs/ exists. Include attachments/ only if non-empty.
+        # Create tar and upload to S3 via file-sync container.
+        # .opencode-data/ is already on the shared workspace volume because we set
+        # XDG_DATA_HOME to the session directory when starting opencode (see
+        # ACPExecClient.start()). No cross-container copy needed.
         exec_command = [
             "/bin/sh",
             "-c",
@@ -1511,6 +1513,7 @@ if [ ! -d outputs ]; then
 fi
 dirs="outputs"
 [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
+[ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
 tar -czf - $dirs | /s5cmd pipe {s3_path}
 echo "SNAPSHOT_CREATED"
 """,
@@ -1632,6 +1635,7 @@ echo "SNAPSHOT_CREATED"
         Steps:
         1. Exec s5cmd cat in file-sync container to stream snapshot from S3
         2. Pipe directly to tar for extraction in the shared workspace volume
+           (.opencode-data/ is restored automatically since XDG_DATA_HOME points here)
         3. Regenerate configuration files (AGENTS.md, opencode.json, files symlink)
         4. Start the NextJS dev server
 
@@ -1815,7 +1819,9 @@ echo "Session config regeneration complete"
         )
         return exec_client.health_check(timeout=timeout)
 
-    def _create_ephemeral_acp_client(self, sandbox_id: UUID) -> ACPExecClient:
+    def _create_ephemeral_acp_client(
+        self, sandbox_id: UUID, session_path: str
+    ) -> ACPExecClient:
         """Create a new ephemeral ACP client for a single message exchange.
 
         Each call starts a fresh `opencode acp` process in the sandbox pod.
@@ -1826,6 +1832,9 @@ echo "Session config regeneration complete"
 
         Args:
             sandbox_id: The sandbox ID
+            session_path: Working directory for the session (e.g. /workspace/sessions/{id}).
+                XDG_DATA_HOME is set relative to this so opencode's session data
+                lives inside the snapshot directory.
 
         Returns:
             A running ACPExecClient (caller must stop it when done)
@@ -1836,7 +1845,7 @@ echo "Session config regeneration complete"
             namespace=self._namespace,
             container="sandbox",
         )
-        acp_client.start(cwd="/workspace")
+        acp_client.start(cwd=session_path)
 
         logger.info(
             f"[SANDBOX-ACP] Created ephemeral ACP client: "
@@ -1869,13 +1878,13 @@ echo "Session config regeneration complete"
             Typed ACP schema event objects
         """
         packet_logger = get_packet_logger()
+        session_path = f"/workspace/sessions/{session_id}"
 
         # Create an ephemeral ACP client for this message
-        acp_client = self._create_ephemeral_acp_client(sandbox_id)
+        acp_client = self._create_ephemeral_acp_client(sandbox_id, session_path)
 
         try:
             # Resume (or create) the ACP session from opencode's on-disk storage
-            session_path = f"/workspace/sessions/{session_id}"
             acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
 
             logger.info(
