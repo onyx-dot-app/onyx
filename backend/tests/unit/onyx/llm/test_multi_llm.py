@@ -25,6 +25,11 @@ from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.utils import get_max_input_tokens
 
+VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
+    "claude-opus-4-5@20251101",
+    "claude-opus-4-6",
+]
+
 
 def _create_delta(
     role: str | None = None,
@@ -420,15 +425,16 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         )
 
 
-def test_vertex_stream_omits_stream_options() -> None:
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
+def test_vertex_stream_omits_stream_options(model_name: str) -> None:
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
         model_provider=LlmProviderNames.VERTEX_AI,
-        model_name="claude-opus-4-5@20251101",
+        model_name=model_name,
         max_input_tokens=get_max_input_tokens(
             model_provider=LlmProviderNames.VERTEX_AI,
-            model_name="claude-opus-4-5@20251101",
+            model_name=model_name,
         ),
     )
 
@@ -468,15 +474,16 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
         assert kwargs["reasoning"]["effort"] == "medium"
 
 
-def test_vertex_opus_4_5_omits_reasoning_effort() -> None:
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
+def test_vertex_opus_omits_reasoning_effort(model_name: str) -> None:
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
         model_provider=LlmProviderNames.VERTEX_AI,
-        model_name="claude-opus-4-5@20251101",
+        model_name=model_name,
         max_input_tokens=get_max_input_tokens(
             model_provider=LlmProviderNames.VERTEX_AI,
-            model_name="claude-opus-4-5@20251101",
+            model_name=model_name,
         ),
     )
 
