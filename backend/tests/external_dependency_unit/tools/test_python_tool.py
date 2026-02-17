@@ -1088,6 +1088,7 @@ def test_code_interpreter_receives_chat_files(
     db_session: Session,
     mock_ci_server: MockCodeInterpreterServer,
     _attach_python_tool_to_default_persona: None,
+    initialize_file_store: None,  # noqa: ARG001
 ) -> None:
     mock_ci_server.captured_requests.clear()
     mock_ci_server._file_counter = 0
