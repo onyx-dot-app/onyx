@@ -79,7 +79,7 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import UserAvatarPopover from "@/sections/sidebar/UserAvatarPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
-import { useAppMode } from "@/providers/AppModeProvider";
+import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
@@ -432,9 +432,7 @@ const MemoizedAppSidebarInner = memo(
     const activeSidebarTab = useAppFocus();
     const createProjectModal = useCreateModal();
     const defaultAppMode =
-      (user?.preferences?.default_app_mode?.toLowerCase() as
-        | "chat"
-        | "search") ?? "chat";
+      (user?.preferences?.default_app_mode?.toLowerCase() as AppMode) ?? "chat";
     const newSessionButton = useMemo(() => {
       const href =
         combinedSettings?.settings?.disable_default_assistant && currentAgent

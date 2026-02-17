@@ -45,7 +45,7 @@ interface UserContextType {
   ) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
-  updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
+  updateUserDefaultAppMode: (mode: "AUTO" | "CHAT" | "SEARCH") => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -433,7 +433,7 @@ export function UserProvider({
     }
   };
 
-  const updateUserDefaultAppMode = async (mode: "CHAT" | "SEARCH") => {
+  const updateUserDefaultAppMode = async (mode: "AUTO" | "CHAT" | "SEARCH") => {
     try {
       setUpToDateUser((prevUser) => {
         if (prevUser) {
