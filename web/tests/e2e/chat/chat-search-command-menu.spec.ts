@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from "@playwright/test";
-import { OnyxApiClient } from "./utils/onyxApiClient";
+import { OnyxApiClient } from "../utils/onyxApiClient";
 
 test.use({ storageState: "admin_auth.json" });
 

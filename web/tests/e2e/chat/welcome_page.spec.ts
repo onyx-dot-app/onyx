@@ -2,9 +2,9 @@ import { test, expect } from "@playwright/test";
 import {
   expectScreenshot,
   expectElementScreenshot,
-} from "./utils/visualRegression";
+} from "../utils/visualRegression";
 import { GREETING_MESSAGES } from "@/lib/chat/greetingMessages";
-import { loginAs } from "./utils/auth";
+import { loginAs } from "../utils/auth";
 
 test.describe.configure({ mode: "parallel" });
 
