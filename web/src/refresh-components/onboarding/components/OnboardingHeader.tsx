@@ -39,7 +39,7 @@ const OnboardingHeader = React.memo(
     }
 
     return (
-      <Card padding={0.5}>
+      <Card padding={0.5} data-label="onboarding-header">
         <LineItemLayout
           icon={(props) => (
             <SvgProgressCircle value={iconPercentage} {...props} />

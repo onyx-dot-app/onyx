@@ -31,22 +31,6 @@ async function ensureOnboardingComplete(page: Page): Promise<void> {
     } catch {
       // ignore personalization failures
     }
-
-    const baseKey = "hasFinishedOnboarding";
-    localStorage.setItem(baseKey, "true");
-
-    try {
-      const meRes = await fetch("/api/me", { credentials: "include" });
-      if (meRes.ok) {
-        const me = await meRes.json();
-        const userId = me.id ?? me.user?.id ?? me.user_id;
-        if (userId) {
-          localStorage.setItem(`${baseKey}_${userId}`, "true");
-        }
-      }
-    } catch {
-      // ignore
-    }
   });
 
   await page.reload();

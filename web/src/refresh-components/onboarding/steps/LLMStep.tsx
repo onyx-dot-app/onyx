@@ -118,7 +118,10 @@ const LLMStepInner = ({
   ) {
     return (
       <Disabled disabled={disabled} allowClick>
-        <div className="flex flex-col items-center justify-between w-full max-w-[800px] p-1 rounded-16 border border-border-01 bg-background-tint-00">
+        <div
+          className="flex flex-col items-center justify-between w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
+          aria-label="onboarding-llm-step"
+        >
           <div className="flex gap-2 justify-between h-full w-full">
             <div className="flex mx-2 mt-2 gap-1">
               <div className="h-full p-0.5">
@@ -216,7 +219,7 @@ const LLMStepInner = ({
     return (
       <button
         type="button"
-        className="flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01 opacity-50"
+        className="flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 opacity-50"
         onClick={() => {
           onboardingActions.setButtonActive(true);
           onboardingActions.goToStep(OnboardingStep.LlmSetup);

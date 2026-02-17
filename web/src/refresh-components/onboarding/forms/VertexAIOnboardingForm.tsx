@@ -149,7 +149,7 @@ function VertexAIFormFields(
         )}
       />
 
-      <Separator className="my-0" />
+      <Separator className="py-0" />
 
       <FormikField<string>
         name={FIELD_DEFAULT_MODEL_NAME}

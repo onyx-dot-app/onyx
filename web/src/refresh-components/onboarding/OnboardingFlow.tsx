@@ -10,6 +10,7 @@ import { UserRole } from "@/lib/types";
 import NonAdminStep from "./components/NonAdminStep";
 
 type OnboardingFlowProps = {
+  showOnboarding: boolean;
   handleHideOnboarding: () => void;
   handleFinishOnboarding: () => void;
   state: OnboardingState;
@@ -18,6 +19,7 @@ type OnboardingFlowProps = {
 };
 
 const OnboardingFlowInner = ({
+  showOnboarding,
   handleHideOnboarding,
   handleFinishOnboarding,
   state: onboardingState,
@@ -28,39 +30,50 @@ const OnboardingFlowInner = ({
   const hasStarted = onboardingState.currentStep !== OnboardingStep.Welcome;
 
   return user?.role === UserRole.ADMIN ? (
-    <div className="flex flex-col items-center justify-center w-full max-w-[var(--app-page-main-content-width)] gap-2 mb-4">
-      <OnboardingHeader
-        state={onboardingState}
-        actions={onboardingActions}
-        handleHideOnboarding={handleHideOnboarding}
-        handleFinishOnboarding={handleFinishOnboarding}
-      />
-      {hasStarted && (
-        <div className="relative w-full overflow-hidden">
-          <div className="flex flex-col gap-2 animate-in slide-in-from-right duration-500 ease-out">
-            <NameStep state={onboardingState} actions={onboardingActions} />
-            <LLMStep
-              state={onboardingState}
-              actions={onboardingActions}
-              llmDescriptors={llmDescriptors}
-              disabled={onboardingState.currentStep !== OnboardingStep.LlmSetup}
-            />
-            <div
-              className={
-                "transition-all duration-500 ease-out " +
-                (onboardingState.currentStep === OnboardingStep.Complete
-                  ? "opacity-100 translate-x-0"
-                  : "opacity-0 translate-x-full")
-              }
-            >
-              {onboardingState.currentStep === OnboardingStep.Complete && (
-                <FinalStep />
-              )}
+    showOnboarding ? (
+      <div
+        className="flex flex-col items-center justify-center w-full max-w-[var(--app-page-main-content-width)] gap-2 mb-4"
+        aria-label="onboarding-flow"
+      >
+        <OnboardingHeader
+          state={onboardingState}
+          actions={onboardingActions}
+          handleHideOnboarding={handleHideOnboarding}
+          handleFinishOnboarding={handleFinishOnboarding}
+        />
+        {hasStarted && (
+          <div className="relative w-full overflow-hidden">
+            <div className="flex flex-col gap-2 animate-in slide-in-from-right duration-500 ease-out">
+              <NameStep state={onboardingState} actions={onboardingActions} />
+              <LLMStep
+                state={onboardingState}
+                actions={onboardingActions}
+                llmDescriptors={llmDescriptors}
+                disabled={
+                  onboardingState.currentStep !== OnboardingStep.LlmSetup
+                }
+              />
+              <div
+                className={
+                  "transition-all duration-500 ease-out " +
+                  (onboardingState.currentStep === OnboardingStep.Complete
+                    ? "opacity-100 translate-x-0"
+                    : "opacity-0 translate-x-full")
+                }
+              >
+                {onboardingState.currentStep === OnboardingStep.Complete && (
+                  <FinalStep />
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    ) : (
+      // When showOnboarding is false, the parent only renders this component
+      // if the admin hasn't set their name.
+      <NonAdminStep />
+    )
   ) : !user?.personalization?.name ? (
     <NonAdminStep />
   ) : null;

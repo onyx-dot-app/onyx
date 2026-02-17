@@ -27,7 +27,7 @@ export default function NonAdminStep() {
   }, [user?.personalization?.name, savedName]);
 
   const containerClasses = cn(
-    "flex items-center justify-between w-full max-w-[800px] p-3 bg-background-tint-00 rounded-16 border border-border-01 mb-4"
+    "flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 mb-4"
   );
 
   const handleSave = () => {
@@ -36,17 +36,24 @@ export default function NonAdminStep() {
         setSavedName(name);
         setShowHeader(true);
         setIsEditing(false);
-        refreshUser();
       })
       .catch((error) => {
         console.error(error);
       });
   };
 
+  const handleDismissConfirmation = () => {
+    setShowHeader(false);
+    refreshUser();
+  };
+
   return (
     <>
       {showHeader && (
-        <div className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2">
+        <div
+          className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2"
+          aria-label="non-admin-confirmation"
+        >
           <div className="flex items-center gap-1">
             <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
             <Text as="p" text03 mainUiBody>
@@ -57,7 +64,7 @@ export default function NonAdminStep() {
             prominence="tertiary"
             size="sm"
             icon={SvgX}
-            onClick={() => setShowHeader(false)}
+            onClick={handleDismissConfirmation}
           />
         </div>
       )}
@@ -66,6 +73,7 @@ export default function NonAdminStep() {
           className={containerClasses}
           onClick={() => inputRef.current?.focus()}
           role="group"
+          aria-label="non-admin-name-prompt"
         >
           <div className="flex items-center gap-1 h-full">
             <div className="h-full p-0.5">
