@@ -4,8 +4,8 @@ import {
   expectElementScreenshot,
 } from "./utils/visualRegression";
 import { GREETING_MESSAGES } from "@/lib/chat/greetingMessages";
+import { loginAs } from "./utils/auth";
 
-test.use({ storageState: "admin_auth.json" });
 test.describe.configure({ mode: "parallel" });
 
 const THEMES = ["light", "dark"] as const;
@@ -13,6 +13,9 @@ const THEMES = ["light", "dark"] as const;
 for (const theme of THEMES) {
   test.describe(`Welcome page — /app (${theme} mode)`, () => {
     test.beforeEach(async ({ page }) => {
+      // Always log in before each test to ensure a valid session.
+      await loginAs(page, "admin");
+
       // Inject theme into localStorage so next-themes picks it up immediately.
       await page.addInitScript((t: string) => {
         localStorage.setItem("theme", t);

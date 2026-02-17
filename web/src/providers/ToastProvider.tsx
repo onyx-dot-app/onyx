@@ -65,6 +65,7 @@ function ToastContainer() {
 
   return (
     <div
+      data-testid="toast-container"
       className={cn(
         "fixed bottom-4 right-4 z-[10000]",
         "flex flex-col gap-2 items-end"

@@ -25,6 +25,12 @@ const DEFAULT_MASK_SELECTORS: string[] = [
   // '[data-testid="user-avatar"]',
 ];
 
+/**
+ * Default selectors to hide (visibility: hidden) across all screenshots.
+ * These elements are overlays or ephemeral UI that would cause spurious diffs.
+ */
+const DEFAULT_HIDE_SELECTORS: string[] = ['[data-testid="toast-container"]'];
+
 interface ScreenshotOptions {
   /**
    * Name for the screenshot file. If omitted, Playwright auto-generates one
@@ -128,11 +134,14 @@ export async function expectScreenshot(
     threshold,
   } = options;
 
+  // Merge default hide selectors with per-call selectors
+  const allHideSelectors = [...DEFAULT_HIDE_SELECTORS, ...hide];
+
   // Hide elements by setting visibility: hidden
   let styleHandle;
-  if (hide.length > 0) {
+  if (allHideSelectors.length > 0) {
     styleHandle = await page.addStyleTag({
-      content: hide
+      content: allHideSelectors
         .map((selector) => `${selector} { visibility: hidden !important; }`)
         .join("\n"),
     });
@@ -208,11 +217,14 @@ export async function expectElementScreenshot(
 
   const page = locator.page();
 
+  // Merge default hide selectors with per-call selectors
+  const allHideSelectors = [...DEFAULT_HIDE_SELECTORS, ...hide];
+
   // Hide elements by setting visibility: hidden
   let styleHandle;
-  if (hide.length > 0) {
+  if (allHideSelectors.length > 0) {
     styleHandle = await page.addStyleTag({
-      content: hide
+      content: allHideSelectors
         .map((selector) => `${selector} { visibility: hidden !important; }`)
         .join("\n"),
     });
