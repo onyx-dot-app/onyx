@@ -11,10 +11,15 @@ export function getExtensionContext(): {
     return { isExtension: false, context: null };
 
   const pathname = window.location.pathname;
-  if (pathname.includes("/nrf/side-panel")) {
+  // Check for side panel paths (both /nrf and legacy /app/nrf)
+  if (
+    pathname.includes("/nrf/side-panel") ||
+    pathname.includes("/app/nrf/side-panel")
+  ) {
     return { isExtension: true, context: "side_panel" };
   }
-  if (pathname.includes("/nrf")) {
+  // Check for new tab paths (both /nrf and legacy /app/nrf)
+  if (pathname.includes("/nrf") || pathname.includes("/app/nrf")) {
     return { isExtension: true, context: "new_tab" };
   }
   return { isExtension: false, context: null };

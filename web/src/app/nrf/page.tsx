@@ -5,7 +5,7 @@ import { NRFPreferencesProvider } from "@/components/context/NRFPreferencesConte
 import { ProjectsProvider } from "@/providers/ProjectsContext";
 
 /**
- * NRF Side Panel Route - No Auth Required
+ * NRF (New Tab Page) Route - No Auth Required
  *
  * This route is placed outside /app/app/ to bypass the authentication
  * requirement in /app/app/layout.tsx. The NRFPage component handles
@@ -19,7 +19,7 @@ export default async function Page() {
     <ProjectsProvider>
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
-        <NRFPage isSidePanel />
+        <NRFPage />
       </NRFPreferencesProvider>
     </ProjectsProvider>
   );
