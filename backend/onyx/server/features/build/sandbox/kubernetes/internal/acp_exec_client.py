@@ -29,6 +29,7 @@ from dataclasses import field
 from queue import Empty
 from queue import Queue
 from typing import Any
+from typing import cast
 
 from acp.schema import AgentMessageChunk
 from acp.schema import AgentPlanUpdate
@@ -42,6 +43,7 @@ from kubernetes import client  # type: ignore
 from kubernetes import config
 from kubernetes.stream import stream as k8s_stream  # type: ignore
 from kubernetes.stream.ws_client import WSClient  # type: ignore
+from pydantic import BaseModel
 from pydantic import ValidationError
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
@@ -673,12 +675,14 @@ class ACPExecClient:
     ) -> Generator[ACPEvent, None, None]:
         """Process a session/update notification and yield typed ACP schema objects."""
         update_type = update.get("sessionUpdate")
+        if not isinstance(update_type, str):
+            return
 
         # Map update types to their ACP schema classes.
         # Note: prompt_response is included because ACP sometimes sends it as a
         # notification WITHOUT a corresponding JSON-RPC response. We accept
         # either signal as turn completion (first one wins).
-        type_map: dict[str, type] = {
+        type_map: dict[str, type[BaseModel]] = {
             "agent_message_chunk": AgentMessageChunk,
             "agent_thought_chunk": AgentThoughtChunk,
             "tool_call": ToolCallStart,
@@ -688,10 +692,10 @@ class ACPExecClient:
             "prompt_response": PromptResponse,
         }
 
-        model_class = type_map.get(update_type)  # type: ignore[arg-type]
+        model_class = type_map.get(update_type)
         if model_class is not None:
             try:
-                yield model_class.model_validate(update)
+                yield cast(ACPEvent, model_class.model_validate(update))
             except ValidationError as e:
                 logger.warning(f"[ACP] Validation error for {update_type}: {e}")
         elif update_type not in (
