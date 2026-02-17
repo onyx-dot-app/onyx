@@ -128,6 +128,8 @@ export async function selectModelFromInputPopover(
     }
   }
 
+  // Clear the last search term so fallback can see all available models.
+  await searchInput.fill("");
   const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
   if ((await nonSelectedOptions.count()) > 0) {
     const fallback = nonSelectedOptions.first();

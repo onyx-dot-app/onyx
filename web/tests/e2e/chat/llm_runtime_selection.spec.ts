@@ -8,7 +8,7 @@ import {
 } from "../utils/chatActions";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 
-const PROVIDER_API_KEY = "e2e-placeholder-api-key-not-used";
+const E2E_PLACEHOLDER_API_KEY = "e2e-placeholder-api-key-not-used";
 
 type SendChatMessagePayload = {
   llm_override?: {
@@ -44,7 +44,7 @@ async function createLlmProvider(
       data: {
         name: params.name,
         provider: params.provider,
-        api_key: PROVIDER_API_KEY,
+        api_key: E2E_PLACEHOLDER_API_KEY,
         default_model_name: params.defaultModelName,
         is_public: params.isPublic,
         groups: params.groupIds ?? [],
