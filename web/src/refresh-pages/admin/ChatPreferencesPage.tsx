@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
-import { Section } from "@/layouts/general-layouts";
+import { Section, LineItemLayout } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -23,8 +23,12 @@ import {
   SvgActions,
   SvgExpand,
   SvgFold,
+  SvgTrash,
 } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import useCCPairs from "@/hooks/useCCPairs";
+import { getSourceMetadata } from "@/lib/sources";
+import EmptyMessage from "@/refresh-components/EmptyMessage";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -201,6 +205,10 @@ function ChatPreferencesForm() {
   const fileReaderTool = availableTools.find(
     (t) => t.in_code_tool_id === FILE_READER_TOOL_ID
   );
+
+  // Connectors
+  const { ccPairs } = useCCPairs();
+  const uniqueSources = Array.from(new Set(ccPairs.map((p) => p.source)));
 
   // MCP servers and OpenAPI tools
   const { mcpData } = useMcpServersForAgentEditor();
@@ -412,22 +420,20 @@ function ChatPreferencesForm() {
             title="System Prompt"
             description="Base prompt for all chats, agents, and projects. Modify with caution: Significant changes may degrade response quality."
           >
-            <div className="w-fit">
-              <Button
-                prominence="tertiary"
-                icon={SvgAddLines}
-                onClick={() => {
-                  setSystemPromptValue(
-                    defaultAssistantConfig?.system_prompt ??
-                      defaultAssistantConfig?.default_system_prompt ??
-                      ""
-                  );
-                  setSystemPromptModalOpen(true);
-                }}
-              >
-                Modify Prompt
-              </Button>
-            </div>
+            <Button
+              prominence="tertiary"
+              icon={SvgAddLines}
+              onClick={() => {
+                setSystemPromptValue(
+                  defaultAssistantConfig?.system_prompt ??
+                    defaultAssistantConfig?.default_system_prompt ??
+                    ""
+                );
+                setSystemPromptModalOpen(true);
+              }}
+            >
+              Modify Prompt
+            </Button>
           </InputLayouts.Horizontal>
 
           <Separator noPadding />
@@ -438,7 +444,45 @@ function ChatPreferencesForm() {
                 {/* Connectors */}
                 <Section gap={0.75}>
                   <InputLayouts.Title title="Connectors" />
-                  {/* TODO: Add connector selection UI */}
+
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    alignItems="center"
+                    gap={0.25}
+                  >
+                    {uniqueSources.length === 0 ? (
+                      <EmptyMessage title="No connectors set up" />
+                    ) : (
+                      <>
+                        {uniqueSources.map((source) => {
+                          const meta = getSourceMetadata(source);
+                          return (
+                            <Card
+                              key={source}
+                              padding={0.75}
+                              className="!w-[10rem]"
+                            >
+                              <LineItemLayout
+                                icon={meta.icon}
+                                title={meta.displayName}
+                                variant="secondary"
+                                center
+                              />
+                            </Card>
+                          );
+                        })}
+
+                        <Button
+                          href="/admin/indexing/status"
+                          prominence="tertiary"
+                          icon={SvgTrash}
+                        >
+                          Manage All
+                        </Button>
+                      </>
+                    )}
+                  </Section>
                 </Section>
 
                 {/* Actions & Tools */}
