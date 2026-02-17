@@ -110,6 +110,17 @@ const nextConfig = {
         destination: "/app/:path*",
         permanent: true,
       },
+      // Redirect old NRF paths to new auth-bypass routes
+      {
+        source: "/app/nrf/side-panel",
+        destination: "/nrf/side-panel",
+        permanent: true,
+      },
+      {
+        source: "/app/nrf",
+        destination: "/nrf",
+        permanent: true,
+      },
     ];
   },
 };
