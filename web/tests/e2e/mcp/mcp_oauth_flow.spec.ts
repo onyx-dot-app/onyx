@@ -875,21 +875,15 @@ async function findMcpToolLineItemButton(
   const toolRegex = new RegExp(escapeRegex(toolName), "i");
 
   while (Date.now() < deadline) {
-    const lineItems = page
+    const lineItem = page
       .locator(
         `${ACTION_POPOVER_SELECTOR} [data-testid^="tool-option-"] ${LINE_ITEM_SELECTOR}, ` +
           `${ACTION_POPOVER_SELECTOR} ${LINE_ITEM_SELECTOR}`
       )
-      .filter({ hasText: toolRegex });
-    const count = await lineItems.count();
-    for (let i = 0; i < count; i++) {
-      const lineItem = lineItems.nth(i);
-      const textContent = await lineItem.evaluate(
-        (el) => el.textContent?.trim().replace(/\s+/g, " ") || ""
-      );
-      if (toolRegex.test(textContent)) {
-        return lineItem;
-      }
+      .filter({ hasText: toolRegex })
+      .first();
+    if ((await lineItem.count()) > 0) {
+      return lineItem;
     }
     await page.waitForTimeout(200);
   }
@@ -899,9 +893,21 @@ async function findMcpToolLineItemButton(
 
 async function logActionPopoverHtml(page: Page, context: string) {
   try {
-    const html = await page
-      .locator(ACTION_POPOVER_SELECTOR)
-      .evaluate((node) => node.innerHTML || "");
+    const popover = page.locator(ACTION_POPOVER_SELECTOR);
+    if ((await popover.count()) === 0) {
+      console.log(
+        `[mcp-oauth-debug] ${context} action-popover-html="<unavailable>" reason=popover-missing`
+      );
+      return;
+    }
+    const isVisible = await popover.isVisible().catch(() => false);
+    if (!isVisible) {
+      console.log(
+        `[mcp-oauth-debug] ${context} action-popover-html="<unavailable>" reason=popover-hidden`
+      );
+      return;
+    }
+    const html = await popover.evaluate((node) => node.innerHTML || "");
     const snippet = html.replace(/\s+/g, " ").slice(0, 2000);
     console.log(
       `[mcp-oauth-debug] ${context} action-popover-html=${JSON.stringify(
@@ -940,6 +946,50 @@ async function closeActionsPopover(page: Page) {
   if (!page.isClosed()) {
     await page.keyboard.press("Escape").catch(() => {});
   }
+}
+
+async function openActionsPopover(page: Page) {
+  const popover = page.locator(ACTION_POPOVER_SELECTOR);
+  const isVisible = await popover.isVisible().catch(() => false);
+  if (!isVisible) {
+    await page.locator('[data-testid="action-management-toggle"]').click();
+    await popover.waitFor({ state: "visible", timeout: 10000 });
+  }
+  await ensureActionPopoverInPrimaryView(page);
+}
+
+async function restoreAssistantContext(page: Page, assistantId: number) {
+  const assistantPath = `/app?assistantId=${assistantId}`;
+  logOauthEvent(
+    page,
+    `Restoring assistant context for assistantId=${assistantId} (current url=${page.url()})`
+  );
+
+  // Clear chat-focused URL state first, then explicitly reselect assistant.
+  await page.goto(`${APP_BASE_URL}/app`, { waitUntil: "domcontentloaded" });
+  await page
+    .waitForLoadState("networkidle", { timeout: 10000 })
+    .catch(() => {});
+
+  const assistantLink = page
+    .locator(`a[href*="assistantId=${assistantId}"]`)
+    .first();
+  if ((await assistantLink.count()) > 0) {
+    await clickAndWaitForPossibleUrlChange(
+      page,
+      () => assistantLink.click(),
+      `Restore assistant ${assistantId} from sidebar`
+    );
+  } else {
+    await page.goto(`${APP_BASE_URL}${assistantPath}`, {
+      waitUntil: "domcontentloaded",
+    });
+  }
+
+  await page
+    .waitForLoadState("networkidle", { timeout: 10000 })
+    .catch(() => {});
+  logOauthEvent(page, `Assistant context restore landed on ${page.url()}`);
 }
 
 function getServerRowLocator(page: Page, serverName: string) {
@@ -1022,7 +1072,7 @@ async function ensureToolOptionVisible(
   }
 
   await ensureActionPopoverInPrimaryView(page);
-  const serverLocator = await waitForServerRow(page, serverName, 10_000);
+  let serverLocator = await waitForServerRow(page, serverName, 10_000);
   if (!serverLocator) {
     const entries = await collectActionPopoverEntries(page);
     await logPageStateWithTag(
@@ -1034,12 +1084,54 @@ async function ensureToolOptionVisible(
     throw new Error(`Unable to locate MCP server row for ${serverName}`);
   }
 
-  await serverLocator.click();
+  let serverClicked = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await serverLocator.click({ force: true, timeout: 3000 });
+      serverClicked = true;
+      break;
+    } catch (error) {
+      if (attempt === 2) {
+        throw error;
+      }
+      await page.waitForTimeout(150);
+      await ensureActionPopoverInPrimaryView(page);
+      const refreshedServerLocator = await waitForServerRow(
+        page,
+        serverName,
+        5000
+      );
+      if (refreshedServerLocator) {
+        serverLocator = refreshedServerLocator;
+      }
+    }
+  }
+  if (!serverClicked) {
+    throw new Error(`Unable to click MCP server row for ${serverName}`);
+  }
+
   await waitForMcpSecondaryView(page);
 
-  const mcpToolButton = await findMcpToolLineItemButton(page, toolName, 7000);
-  if (mcpToolButton) {
-    return mcpToolButton;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const mcpToolButton = await findMcpToolLineItemButton(page, toolName, 7000);
+    if (mcpToolButton) {
+      return mcpToolButton;
+    }
+    if (attempt === 0) {
+      await closeActionsPopover(page);
+      await openActionsPopover(page);
+      await ensureActionPopoverInPrimaryView(page);
+      const refreshedServerLocator = await waitForServerRow(
+        page,
+        serverName,
+        7000
+      );
+      if (!refreshedServerLocator) {
+        break;
+      }
+      await refreshedServerLocator.click({ force: true, timeout: 3000 });
+      await waitForMcpSecondaryView(page);
+    }
   }
 
   await logPageStateWithTag(
@@ -1060,8 +1152,7 @@ async function verifyMcpToolRowVisible(
   serverName: string,
   toolName: string
 ) {
-  await page.locator('[data-testid="action-management-toggle"]').click();
-  await ensureActionPopoverInPrimaryView(page);
+  await openActionsPopover(page);
   const toolButton = await ensureToolOptionVisible(page, toolName, serverName);
   await expect(toolButton).toBeVisible({ timeout: 5000 });
   await closeActionsPopover(page);
@@ -1072,8 +1163,7 @@ async function ensureMcpToolEnabledInActions(
   serverName: string,
   toolName: string
 ) {
-  await page.locator('[data-testid="action-management-toggle"]').click();
-  await ensureActionPopoverInPrimaryView(page);
+  await openActionsPopover(page);
   const toolButton = await ensureToolOptionVisible(page, toolName, serverName);
   await expect(toolButton).toBeVisible({ timeout: 5000 });
 
@@ -1103,8 +1193,7 @@ async function reauthenticateFromChat(
   serverName: string,
   returnSubstring: string
 ) {
-  await page.locator('[data-testid="action-management-toggle"]').click();
-  await ensureActionPopoverInPrimaryView(page);
+  await openActionsPopover(page);
   const serverLineItem = await waitForServerRow(page, serverName, 15_000);
   if (!serverLineItem) {
     const entries = await collectActionPopoverEntries(page);
@@ -1133,12 +1222,24 @@ async function reauthenticateFromChat(
   });
 }
 
-async function ensureServerVisibleInActions(page: Page, serverName: string) {
-  await page.locator('[data-testid="action-management-toggle"]').click();
-  await ensureActionPopoverInPrimaryView(page);
-  const locatorToUse = await waitForServerRow(page, serverName, 15_000);
+async function ensureServerVisibleInActions(
+  page: Page,
+  serverName: string,
+  options?: {
+    assistantId?: number;
+  }
+) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.keyboard.press("Escape").catch(() => {});
+    await openActionsPopover(page);
+    const locatorToUse = await waitForServerRow(page, serverName, 15_000);
 
-  if (!locatorToUse) {
+    if (locatorToUse) {
+      await expect(locatorToUse).toBeVisible({ timeout: 15000 });
+      await page.keyboard.press("Escape").catch(() => {});
+      return;
+    }
+
     const entries = await collectActionPopoverEntries(page);
     await logPageStateWithTag(
       page,
@@ -1146,11 +1247,19 @@ async function ensureServerVisibleInActions(page: Page, serverName: string) {
         entries
       )}`
     );
+    await page.keyboard.press("Escape").catch(() => {});
+
+    if (attempt === 0 && options?.assistantId) {
+      logOauthEvent(
+        page,
+        `Server ${serverName} missing in actions, retrying after restoring assistant ${options.assistantId} context`
+      );
+      await restoreAssistantContext(page, options.assistantId);
+      continue;
+    }
+
     throw new Error(`Server ${serverName} not visible in actions popover`);
   }
-
-  await expect(locatorToUse).toBeVisible({ timeout: 15000 });
-  await page.keyboard.press("Escape").catch(() => {});
 }
 
 async function waitForUserRecord(
@@ -1593,7 +1702,7 @@ test.describe("MCP OAuth flows", () => {
       TOOL_NAMES.admin
     );
 
-    await ensureServerVisibleInActions(page, serverName);
+    await ensureServerVisibleInActions(page, serverName, { assistantId });
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
     await ensureMcpToolEnabledInActions(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible before reauth");
@@ -1610,7 +1719,7 @@ test.describe("MCP OAuth flows", () => {
       serverName,
       `/app?assistantId=${assistantId}`
     );
-    await ensureServerVisibleInActions(page, serverName);
+    await ensureServerVisibleInActions(page, serverName, { assistantId });
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
     await ensureMcpToolEnabledInActions(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible after reauth");
@@ -1865,7 +1974,7 @@ test.describe("MCP OAuth flows", () => {
         TOOL_NAMES.curator,
       ]);
 
-      await ensureServerVisibleInActions(page, serverName);
+      await ensureServerVisibleInActions(page, serverName, { assistantId });
       await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.curator);
       logStep("Verified curator MCP tool row visible before reauth");
 
@@ -1874,7 +1983,7 @@ test.describe("MCP OAuth flows", () => {
         serverName,
         `/app?assistantId=${assistantId}`
       );
-      await ensureServerVisibleInActions(page, serverName);
+      await ensureServerVisibleInActions(page, serverName, { assistantId });
       await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.curator);
       logStep("Verified curator MCP tool row visible after reauth");
 
@@ -1952,10 +2061,10 @@ test.describe("MCP OAuth flows", () => {
     await page.goto(`/app?assistantId=${assistantId}`, {
       waitUntil: "load",
     });
-    await ensureServerVisibleInActions(page, serverName);
+    await ensureServerVisibleInActions(page, serverName, { assistantId });
     logStep("Opened chat as user and ensured server visible");
 
-    await page.locator('[data-testid="action-management-toggle"]').click();
+    await openActionsPopover(page);
     const serverLineItem = await waitForServerRow(page, serverName, 15_000);
     if (!serverLineItem) {
       const entries = await collectActionPopoverEntries(page);
@@ -1981,6 +2090,7 @@ test.describe("MCP OAuth flows", () => {
     });
     logStep("Completed user OAuth reauthentication");
 
+    await ensureServerVisibleInActions(page, serverName, { assistantId });
     await verifyMcpToolRowVisible(page, serverName, toolName);
     await ensureMcpToolEnabledInActions(page, serverName, toolName);
     logStep("Verified user MCP tool row visible after reauth");
