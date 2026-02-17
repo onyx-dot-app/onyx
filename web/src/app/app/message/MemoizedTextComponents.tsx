@@ -178,6 +178,29 @@ export const MemoizedLink = memo(
 
     const url = ensureHrefProtocol(href);
 
+    const isChatFile =
+      url?.includes("/api/chat/file/") &&
+      (!url.startsWith("http") ||
+        new URL(url).origin === window.location.origin);
+    if (isChatFile && updatePresentingDocument) {
+      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename = value?.toString() || "download";
+      return (
+        <a
+          type="button"
+          onClick={() =>
+            updatePresentingDocument({
+              document_id: fileId,
+              semantic_identifier: filename,
+            } as OnyxDocument)
+          }
+          className="cursor-pointer text-link hover:text-link-hover"
+        >
+          {rest.children}
+        </a>
+      );
+    }
+
     return (
       <a
         href={url}
