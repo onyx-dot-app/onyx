@@ -17,6 +17,7 @@ import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/hooks/useAgents";
+import { FetchError } from "@/lib/fetcher";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useChatController from "@/hooks/useChatController";
@@ -75,7 +76,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const existingChatSessionId = null; // NRF always starts new chats
 
   // Get agents for assistant selection
-  const { agents: availableAssistants } = useAgents();
+  const { agents: availableAssistants, error: agentsError } = useAgents();
+
+  // Check if we have an authentication error (status 403)
+  // This happens when the user's session has expired or they're not logged in
+  const isAuthError =
+    agentsError instanceof FetchError && agentsError.status === 403;
+
+  // Show login modal if user is not authenticated OR if we get an auth error from API calls
+  const needsAuthentication = !user || isAuthError;
 
   // Projects context for file handling
   const {
@@ -462,16 +471,24 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         </>
       )}
 
-      {!user && (
+      {needsAuthentication && (
         <Modal open onOpenChange={() => {}}>
           <Modal.Content width="sm" height="sm">
-            <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
+            <Modal.Header
+              icon={SvgUser}
+              title={isAuthError ? "Session Expired" : "Welcome to Onyx"}
+            />
             <Modal.Body>
+              {isAuthError && (
+                <p className="text-sm text-text-02 mb-4">
+                  Your session has expired. Please log in again to continue.
+                </p>
+              )}
               {authTypeMetadata.authType === AuthType.BASIC ? (
                 <LoginPage
                   authUrl={null}
                   authTypeMetadata={authTypeMetadata}
-                  nextUrl="/nrf"
+                  nextUrl="/app/nrf"
                 />
               ) : (
                 <div className="flex flex-col items-center">
@@ -495,17 +512,20 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         </Modal>
       )}
 
-      {user && !llmManager.isLoadingProviders && !llmManager.hasAnyProvider && (
-        <Button
-          className="w-full"
-          secondary
-          onClick={() => {
-            window.location.href = "/admin/configuration/llm";
-          }}
-        >
-          Set up an LLM.
-        </Button>
-      )}
+      {user &&
+        !needsAuthentication &&
+        !llmManager.isLoadingProviders &&
+        !llmManager.hasAnyProvider && (
+          <Button
+            className="w-full"
+            secondary
+            onClick={() => {
+              window.location.href = "/admin/configuration/llm";
+            }}
+          >
+            Set up an LLM.
+          </Button>
+        )}
     </div>
   );
 }
