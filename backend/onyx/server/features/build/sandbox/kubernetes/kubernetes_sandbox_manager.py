@@ -1472,6 +1472,7 @@ echo "Session cleanup complete"
         the snapshot and upload to S3. Captures:
         - sessions/$session_id/outputs/ (generated artifacts, web apps)
         - sessions/$session_id/attachments/ (user uploaded files)
+        - sessions/$session_id/.opencode-data/ (opencode session data for resumption)
 
         Args:
             sandbox_id: The sandbox ID
@@ -1496,9 +1497,10 @@ echo "Session cleanup complete"
             f"{session_id_str}/{snapshot_id}.tar.gz"
         )
 
-        # Exec into pod to create and upload snapshot (outputs + attachments)
-        # Uses s5cmd pipe to stream tar.gz directly to S3
-        # Only snapshot if outputs/ exists. Include attachments/ only if non-empty.
+        # Create tar and upload to S3 via file-sync container.
+        # .opencode-data/ is already on the shared workspace volume because we set
+        # XDG_DATA_HOME to the session directory when starting opencode (see
+        # ACPExecClient.start()). No cross-container copy needed.
         exec_command = [
             "/bin/sh",
             "-c",
@@ -1511,6 +1513,7 @@ if [ ! -d outputs ]; then
 fi
 dirs="outputs"
 [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
+[ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
 tar -czf - $dirs | /s5cmd pipe {s3_path}
 echo "SNAPSHOT_CREATED"
 """,
@@ -1632,6 +1635,7 @@ echo "SNAPSHOT_CREATED"
         Steps:
         1. Exec s5cmd cat in file-sync container to stream snapshot from S3
         2. Pipe directly to tar for extraction in the shared workspace volume
+           (.opencode-data/ is restored automatically since XDG_DATA_HOME points here)
         3. Regenerate configuration files (AGENTS.md, opencode.json, files symlink)
         4. Start the NextJS dev server
 
