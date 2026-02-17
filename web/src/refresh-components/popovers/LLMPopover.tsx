@@ -140,6 +140,7 @@ export function groupLlmOptions(
 
 export default function LLMPopover({
   llmManager,
+  requiresImageGeneration,
   folded,
   onSelect,
   currentModelName,
@@ -186,19 +187,23 @@ export default function LLMPopover({
     [llmProviders, currentModelName]
   );
 
-  // Filter options by search query
+  // Filter options by vision capability (when images are uploaded) and search query
   const filteredOptions = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return llmOptions;
+    let result = llmOptions;
+    if (requiresImageGeneration) {
+      result = result.filter((opt) => opt.supportsImageInput);
     }
-    const query = searchQuery.toLowerCase();
-    return llmOptions.filter(
-      (opt) =>
-        opt.displayName.toLowerCase().includes(query) ||
-        opt.modelName.toLowerCase().includes(query) ||
-        (opt.vendor && opt.vendor.toLowerCase().includes(query))
-    );
-  }, [llmOptions, searchQuery]);
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (opt) =>
+          opt.displayName.toLowerCase().includes(query) ||
+          opt.modelName.toLowerCase().includes(query) ||
+          (opt.vendor && opt.vendor.toLowerCase().includes(query))
+      );
+    }
+    return result;
+  }, [llmOptions, searchQuery, requiresImageGeneration]);
 
   // Group options by provider using backend-provided display names and ordering
   // For aggregator providers (bedrock, openrouter, vertex_ai), flatten to "Provider/Vendor" format
