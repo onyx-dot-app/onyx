@@ -10,9 +10,10 @@ export interface AppModeProviderProps {
 }
 
 /**
- * Provider for application mode (Search/Chat).
+ * Provider for application mode (Auto/Search/Chat).
  *
  * This controls how user queries are handled:
+ * - **auto**: Chooses search or chat per prompt via classifier
  * - **search**: Forces search mode - quick document lookup
  * - **chat**: Forces chat mode - conversation with follow-up questions
  *

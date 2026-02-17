@@ -76,7 +76,7 @@ import { eeGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = eeGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
-import { useAppMode } from "@/providers/AppModeProvider";
+import { AppMode, useAppMode } from "@/providers/AppModeProvider";
 
 interface FadeProps {
   show: boolean;
@@ -477,8 +477,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { submit: submitQuery, classification } = useQueryController();
 
   const defaultAppMode =
-    (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
-    "chat";
+    (user?.preferences?.default_app_mode?.toLowerCase() as AppMode) ?? "chat";
 
   // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.

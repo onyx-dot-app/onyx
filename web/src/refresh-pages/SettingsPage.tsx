@@ -805,17 +805,20 @@ function ChatPreferencesSettings() {
           {isPaidEnterpriseFeaturesEnabled && (
             <InputLayouts.Horizontal
               title="Default App Mode"
-              description="Choose whether new sessions start in Search or Chat mode."
+              description="Choose whether new sessions start in Auto, Search, or Chat mode."
               center
             >
               <InputSelect
                 value={user?.preferences.default_app_mode ?? "CHAT"}
                 onValueChange={(value) => {
-                  void updateUserDefaultAppMode(value as "CHAT" | "SEARCH");
+                  void updateUserDefaultAppMode(
+                    value as "AUTO" | "CHAT" | "SEARCH"
+                  );
                 }}
               >
                 <InputSelect.Trigger />
                 <InputSelect.Content>
+                  <InputSelect.Item value="AUTO">Auto</InputSelect.Item>
                   <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
                   <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
                 </InputSelect.Content>

@@ -52,6 +52,7 @@ import { LineItemLayout } from "@/layouts/general-layouts";
 import { useAppSidebarContext } from "@/providers/AppSidebarProvider";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
+  SvgArrowExchange,
   SvgBubbleText,
   SvgFolderIn,
   SvgMoreHorizontal,
@@ -320,14 +321,33 @@ function Header() {
                 <Popover.Trigger asChild>
                   <OpenButton
                     icon={
-                      effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
+                      effectiveMode === "search"
+                        ? SvgSearchMenu
+                        : effectiveMode === "chat"
+                          ? SvgBubbleText
+                          : SvgArrowExchange
                     }
                   >
-                    {effectiveMode === "search" ? "Search" : "Chat"}
+                    {effectiveMode === "search"
+                      ? "Search"
+                      : effectiveMode === "chat"
+                        ? "Chat"
+                        : "Auto"}
                   </OpenButton>
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">
                   <Popover.Menu>
+                    <LineItem
+                      icon={SvgArrowExchange}
+                      selected={effectiveMode === "auto"}
+                      description="Automatically choose search or chat per prompt"
+                      onClick={noProp(() => {
+                        setAppMode("auto");
+                        setModePopoverOpen(false);
+                      })}
+                    >
+                      Auto
+                    </LineItem>
                     <LineItem
                       icon={SvgSearchMenu}
                       selected={effectiveMode === "search"}
