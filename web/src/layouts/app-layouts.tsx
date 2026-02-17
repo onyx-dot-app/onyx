@@ -376,6 +376,7 @@ function Header() {
                 transient={showShareModal}
                 tertiary
                 onClick={() => setShowShareModal(true)}
+                aria-label="share-chat-button"
               >
                 Share Chat
               </Button>

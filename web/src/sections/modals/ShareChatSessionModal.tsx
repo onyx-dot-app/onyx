@@ -52,6 +52,7 @@ interface PrivacyOptionProps {
   description: string;
   selected: boolean;
   onClick: () => void;
+  ariaLabel?: string;
 }
 
 function PrivacyOption({
@@ -60,6 +61,7 @@ function PrivacyOption({
   description,
   selected,
   onClick,
+  ariaLabel,
 }: PrivacyOptionProps) {
   return (
     <div
@@ -69,6 +71,7 @@ function PrivacyOption({
         "hover:bg-background-tint-02"
       )}
       onClick={onClick}
+      aria-label={ariaLabel}
     >
       <div className="flex flex-row gap-1 items-center">
         <div className="flex w-5 p-[2px] self-stretch justify-center">
@@ -200,6 +203,7 @@ export default function ShareChatSessionModal({
                 description="Only you have access to this chat."
                 selected={selectedPrivacy === "private"}
                 onClick={() => setSelectedPrivacy("private")}
+                ariaLabel="share-modal-option-private"
               />
               <PrivacyOption
                 icon={SvgUsers}
@@ -207,27 +211,31 @@ export default function ShareChatSessionModal({
                 description="Anyone in your organization can view this chat."
                 selected={selectedPrivacy === "public"}
                 onClick={() => setSelectedPrivacy("public")}
+                ariaLabel="share-modal-option-public"
               />
             </Section>
 
             {isShared && (
-              <InputTypeIn
-                readOnly
-                value={shareLink}
-                rightSection={
-                  <CopyIconButton
-                    getCopyText={() => shareLink}
-                    tooltip="Copy link"
-                    size="sm"
-                  />
-                }
-              />
+              <div aria-label="share-modal-link-input">
+                <InputTypeIn
+                  readOnly
+                  value={shareLink}
+                  rightSection={
+                    <CopyIconButton
+                      getCopyText={() => shareLink}
+                      tooltip="Copy link"
+                      size="sm"
+                      aria-label="share-modal-copy-link"
+                    />
+                  }
+                />
+              </div>
             )}
           </Section>
         </Modal.Body>
         <Modal.Footer>
           {!isShared && (
-            <Button secondary onClick={onClose}>
+            <Button secondary onClick={onClose} aria-label="share-modal-cancel">
               Cancel
             </Button>
           )}
@@ -236,6 +244,7 @@ export default function ShareChatSessionModal({
             disabled={isLoading}
             leftIcon={isShared ? SvgLink : undefined}
             className={isShared ? "w-full" : undefined}
+            aria-label="share-modal-submit"
           >
             {submitButtonText}
           </Button>
