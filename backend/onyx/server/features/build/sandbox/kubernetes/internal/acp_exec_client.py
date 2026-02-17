@@ -218,20 +218,26 @@ class ACPExecClient:
         """Background thread to read responses from the exec stream."""
         buffer = ""
         packet_logger = get_packet_logger()
-        # Stale cycle counter: when the buffer has unterminated content
-        # and no new data arrives, we try to parse after a few cycles.
+        messages_enqueued = 0
         buffer_stale_cycles = 0
+        empty_reads = 0
+
+        logger.info(f"[ACP] Reader thread started: pod={self._pod_name}")
 
         try:
             while not self._stop_reader.is_set():
                 if self._ws_client is None:
+                    logger.warning(
+                        f"[ACP] Reader: ws_client is None, exiting: "
+                        f"pod={self._pod_name}"
+                    )
                     break
 
                 try:
                     if self._ws_client.is_open():
                         self._ws_client.update(timeout=0.1)
 
-                        # Read stderr - log any agent errors
+                        # Read stderr
                         stderr_data = self._ws_client.read_stderr(timeout=0.01)
                         if stderr_data:
                             logger.warning(
@@ -244,6 +250,16 @@ class ACPExecClient:
                         if data:
                             buffer += data
                             buffer_stale_cycles = 0
+                            empty_reads = 0
+
+                            # Log raw data chunks for debugging
+                            newline_count = data.count("\n")
+                            logger.info(
+                                f"[ACP] Reader: received {len(data)} bytes, "
+                                f"{newline_count} newlines, "
+                                f"buffer_total={len(buffer)}b "
+                                f"pod={self._pod_name}"
+                            )
 
                             while "\n" in buffer:
                                 line, buffer = buffer.split("\n", 1)
@@ -251,6 +267,29 @@ class ACPExecClient:
                                 if line:
                                     try:
                                         message = json.loads(line)
+                                        messages_enqueued += 1
+
+                                        # Identify the message for logging
+                                        msg_id = message.get("id")
+                                        method = message.get("method")
+                                        update_type = (
+                                            message.get("params", {})
+                                            .get("update", {})
+                                            .get("sessionUpdate", "")
+                                        )
+                                        has_result = "result" in message
+                                        has_error = "error" in message
+
+                                        logger.info(
+                                            f"[ACP] Reader enqueue #{messages_enqueued}: "
+                                            f"id={msg_id} method={method} "
+                                            f"update={update_type} "
+                                            f"has_result={has_result} "
+                                            f"has_error={has_error} "
+                                            f"queue_size={self._response_queue.qsize()} "
+                                            f"pod={self._pod_name}"
+                                        )
+
                                         packet_logger.log_jsonrpc_raw_message(
                                             "IN", message, context="k8s"
                                         )
@@ -258,37 +297,88 @@ class ACPExecClient:
                                     except json.JSONDecodeError:
                                         logger.warning(
                                             f"[ACP] Invalid JSON from agent: "
-                                            f"{line[:100]}"
+                                            f"{line[:200]}"
                                         )
-                        elif buffer.strip():
-                            # No new data but buffer has unterminated content.
-                            # After a few cycles (~0.5s), try to parse it —
-                            # the agent may have omitted the trailing newline.
-                            buffer_stale_cycles += 1
-                            if buffer_stale_cycles >= 3:
-                                try:
-                                    message = json.loads(buffer.strip())
-                                    packet_logger.log_jsonrpc_raw_message(
-                                        "IN", message, context="k8s-unterminated"
+
+                            # Log if there's partial data left in the buffer
+                            if buffer.strip():
+                                logger.info(
+                                    f"[ACP] Reader: partial buffer after parse: "
+                                    f"{len(buffer)}b "
+                                    f"preview={buffer.strip()[:200]} "
+                                    f"pod={self._pod_name}"
+                                )
+                        else:
+                            empty_reads += 1
+
+                            if buffer.strip():
+                                buffer_stale_cycles += 1
+                                if buffer_stale_cycles == 1:
+                                    logger.info(
+                                        f"[ACP] Reader: unterminated buffer: "
+                                        f"{len(buffer)}b "
+                                        f"preview={buffer.strip()[:200]} "
+                                        f"pod={self._pod_name}"
                                     )
-                                    self._response_queue.put(message)
-                                    buffer = ""
-                                    buffer_stale_cycles = 0
-                                except json.JSONDecodeError:
-                                    pass
+                                if buffer_stale_cycles >= 3:
+                                    try:
+                                        message = json.loads(buffer.strip())
+                                        messages_enqueued += 1
+                                        logger.info(
+                                            f"[ACP] Reader: parsed unterminated "
+                                            f"buffer as message "
+                                            f"#{messages_enqueued}: "
+                                            f"id={message.get('id')} "
+                                            f"method={message.get('method')} "
+                                            f"pod={self._pod_name}"
+                                        )
+                                        packet_logger.log_jsonrpc_raw_message(
+                                            "IN",
+                                            message,
+                                            context="k8s-unterminated",
+                                        )
+                                        self._response_queue.put(message)
+                                        buffer = ""
+                                        buffer_stale_cycles = 0
+                                    except json.JSONDecodeError:
+                                        pass
+
+                            # Log every ~3s of silence
+                            if empty_reads > 0 and empty_reads % 30 == 0:
+                                logger.info(
+                                    f"[ACP] Reader idle: "
+                                    f"no data for {empty_reads} cycles "
+                                    f"(~{empty_reads * 0.1:.0f}s) "
+                                    f"ws_open={self._ws_client.is_open()} "
+                                    f"buffer={len(buffer)}b "
+                                    f"enqueued={messages_enqueued} "
+                                    f"queue_size={self._response_queue.qsize()} "
+                                    f"pod={self._pod_name}"
+                                )
 
                     else:
-                        logger.warning(f"[ACP] WebSocket closed: pod={self._pod_name}")
+                        logger.warning(
+                            f"[ACP] WebSocket closed: pod={self._pod_name} "
+                            f"enqueued={messages_enqueued}"
+                        )
                         break
 
                 except Exception as e:
                     if not self._stop_reader.is_set():
-                        logger.warning(f"[ACP] Reader error: {e}, pod={self._pod_name}")
+                        logger.warning(
+                            f"[ACP] Reader error: {e}, "
+                            f"enqueued={messages_enqueued} "
+                            f"pod={self._pod_name}"
+                        )
                     break
         finally:
-            # Flush any remaining data in buffer
             remaining = buffer.strip()
             if remaining:
+                logger.info(
+                    f"[ACP] Reader: flushing buffer on exit: "
+                    f"{len(remaining)}b preview={remaining[:200]} "
+                    f"pod={self._pod_name}"
+                )
                 try:
                     message = json.loads(remaining)
                     packet_logger.log_jsonrpc_raw_message(
@@ -299,6 +389,12 @@ class ACPExecClient:
                     logger.warning(
                         f"[ACP] Buffer flush failed (not JSON): {remaining[:200]}"
                     )
+
+            logger.info(
+                f"[ACP] Reader thread exiting: pod={self._pod_name} "
+                f"enqueued={messages_enqueued} "
+                f"queue_size={self._response_queue.qsize()}"
+            )
 
     def stop(self) -> None:
         """Stop the exec session and clean up."""
