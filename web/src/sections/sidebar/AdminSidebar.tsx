@@ -22,7 +22,7 @@ import {
   SlackIconSkeleton,
   BrainIcon,
 } from "@/components/icons/icons";
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import SidebarTab from "@/refresh-components/buttons/SidebarTab";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
 import {
@@ -30,6 +30,7 @@ import {
   SvgActivity,
   SvgArrowUpCircle,
   SvgBarChart,
+  SvgBubbleText,
   SvgCpu,
   SvgFileText,
   SvgFolder,
@@ -41,7 +42,6 @@ import {
   SvgOnyxOctagon,
   SvgSearch,
   SvgServer,
-  SvgSettings,
   SvgShield,
   SvgThumbsUp,
   SvgUploadCloud,
@@ -194,6 +194,11 @@ const collections = (
                 link: "/admin/configuration/default-assistant",
               },
               {
+                name: "Chat Preferences",
+                icon: SvgBubbleText,
+                link: "/admin/configuration/chat-preferences",
+              },
+              {
                 name: "LLM",
                 icon: SvgCpu,
                 link: "/admin/configuration/llm",
@@ -298,11 +303,6 @@ const collections = (
           {
             name: "Settings",
             items: [
-              {
-                name: "Workspace Settings",
-                icon: SvgSettings,
-                link: "/admin/settings",
-              },
               ...(enableEnterprise
                 ? [
                     {

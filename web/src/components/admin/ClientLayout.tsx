@@ -3,14 +3,31 @@
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { ApplicationStatus } from "@/app/admin/settings/interfaces";
+import { ApplicationStatus } from "@/interfaces/settings";
 import Button from "@/refresh-components/buttons/Button";
+import { cn } from "@/lib/utils";
 
 export interface ClientLayoutProps {
   children: React.ReactNode;
   enableEnterprise: boolean;
   enableCloud: boolean;
 }
+
+// TODO (@raunakab): Migrate ALL admin pages to use SettingsLayouts from
+// `@/layouts/settings-layouts`. Once every page manages its own layout,
+// the `py-10 px-4 md:px-12` padding below can be removed entirely and
+// this prefix list can be deleted.
+const SETTINGS_LAYOUT_PREFIXES = [
+  "/admin/configuration/chat-preferences",
+  "/admin/configuration/image-generation",
+  "/admin/configuration/web-search",
+  "/admin/actions/mcp",
+  "/admin/actions/open-api",
+  "/admin/billing",
+  "/admin/document-index-migration",
+  "/admin/discord-bot",
+  "/admin/theme",
+];
 
 export function ClientLayout({
   children,
@@ -25,6 +42,11 @@ export function ClientLayout({
   const hasCustomSidebar =
     pathname.startsWith("/admin/connectors") ||
     pathname.startsWith("/admin/embeddings");
+
+  // Pages using SettingsLayouts handle their own padding/centering.
+  const hasOwnLayout = SETTINGS_LAYOUT_PREFIXES.some((prefix) =>
+    pathname.startsWith(prefix)
+  );
 
   return (
     <div className="h-screen w-screen flex overflow-hidden">
@@ -49,7 +71,12 @@ export function ClientLayout({
             enableCloudSS={enableCloud}
             enableEnterpriseSS={enableEnterprise}
           />
-          <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-y-auto py-10 px-4 md:px-12">
+          <div
+            className={cn(
+              "flex flex-1 flex-col min-w-0 min-h-0 overflow-y-auto",
+              !hasOwnLayout && "py-10 px-4 md:px-12"
+            )}
+          >
             {children}
           </div>
         </>

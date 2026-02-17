@@ -172,7 +172,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
 export interface SettingsHeaderProps {
   icon: React.FunctionComponent<IconProps>;
   title: string;
-  description?: React.ReactNode;
+  description?: string;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
   backButton?: boolean;
@@ -232,20 +232,17 @@ function SettingsHeader({
             <Icon className="stroke-text-04 h-[1.75rem] w-[1.75rem]" />
             {rightChildren}
           </div>
-          <div className="flex flex-col">
+          <div className="flex flex-col pb-2">
             <div aria-label="admin-page-title">
               <Text as="p" headingH2>
                 {title}
               </Text>
             </div>
-            {description &&
-              (typeof description === "string" ? (
-                <Text as="p" secondaryBody text03>
-                  {description}
-                </Text>
-              ) : (
-                description
-              ))}
+            {description && (
+              <Text secondaryBody text03>
+                {description}
+              </Text>
+            )}
           </div>
         </div>
         {children}

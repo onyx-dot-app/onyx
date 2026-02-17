@@ -4,7 +4,7 @@ import {
   ApplicationStatus,
   Settings,
   QueryHistoryType,
-} from "@/app/admin/settings/interfaces";
+} from "@/interfaces/settings";
 import {
   CUSTOM_ANALYTICS_ENABLED,
   HOST_URL,

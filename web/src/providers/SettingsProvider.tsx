@@ -1,6 +1,6 @@
 "use client";
 
-import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { CombinedSettings } from "@/interfaces/settings";
 import { createContext, useContext, useEffect, useState, JSX } from "react";
 
 export function SettingsProvider({

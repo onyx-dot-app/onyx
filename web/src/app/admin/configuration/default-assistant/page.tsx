@@ -99,8 +99,11 @@ function DefaultAssistantConfig() {
           </p>
           <p>
             To configure the default assistant, you must first enable it in{" "}
-            <Link href="/admin/settings" className="text-link font-medium">
-              Workspace Settings
+            <Link
+              href="/admin/configuration/chat-preferences"
+              className="text-link font-medium"
+            >
+              Chat Preferences
             </Link>
             .
           </p>
