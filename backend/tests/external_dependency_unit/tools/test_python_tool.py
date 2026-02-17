@@ -938,19 +938,17 @@ from starlette.datastructures import Headers
 
 import onyx.tools.tool_implementations.python.code_interpreter_client as ci_mod
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Persona
 from onyx.db.tools import get_builtin_tool
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.projects.api import upload_user_files
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from tests.external_dependency_unit.answer.stream_test_utils import create_chat_session
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.mock_llm import LLMToolCallResponse
+from tests.external_dependency_unit.mock_llm import use_mock_llm
 
 
 # ---------------------------------------------------------------------------
@@ -1095,21 +1093,6 @@ def test_code_interpreter_receives_chat_files(
     mock_url = mock_ci_server.url
 
     user = create_test_user(db_session, "ci_test_admin")
-
-    upsert_llm_provider(
-        LLMProviderUpsertRequest(
-            name="test_ci_openai",
-            provider=LlmProviderNames.OPENAI,
-            api_key="sk-test-key-00000000000000000000000000000000000",
-            api_key_changed=True,
-            default_model_name="gpt-4o-mini",
-            model_configurations=[
-                ModelConfigurationUpsertRequest(name="gpt-4o-mini", is_visible=True)
-            ],
-        ),
-        db_session=db_session,
-    )
-
     chat_session = create_chat_session(db_session=db_session, user=user)
 
     # Upload a test CSV
@@ -1138,21 +1121,17 @@ def test_code_interpreter_receives_chat_files(
         "user_file_id": str(user_file.id),
     }
 
-    # Mock LLM response that triggers a python tool call
-    mock_code = "import pandas as pd\\ndf = pd.read_csv('data.csv')\\nprint(df)"
+    code = "import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df)"
     msg_req = SendMessageRequest(
         message="Read the CSV and print it.",
         chat_session_id=chat_session.id,
         file_descriptors=[file_descriptor],
         stream=True,
-        forced_tool_id=get_builtin_tool(db_session, PythonTool).id,
-        mock_llm_response=(
-            '{"name":"python",' '"arguments":{"code":"' + mock_code + '"}}'
-        ),
     )
 
     original_defaults = ci_mod.CodeInterpreterClient.__init__.__defaults__
     with (
+        use_mock_llm() as mock_llm,
         patch(
             "onyx.tools.tool_implementations.python.python_tool.CODE_INTERPRETER_BASE_URL",
             mock_url,
@@ -1162,6 +1141,15 @@ def test_code_interpreter_receives_chat_files(
             mock_url,
         ),
     ):
+        mock_llm.add_response(
+            LLMToolCallResponse(
+                tool_name="python",
+                tool_call_id="call_test_1",
+                tool_call_argument_tokens=[json.dumps({"code": code})],
+            )
+        )
+        mock_llm.forward_till_end()
+
         ci_mod.CodeInterpreterClient.__init__.__defaults__ = (mock_url,)
         try:
             list(
@@ -1183,8 +1171,6 @@ def test_code_interpreter_receives_chat_files(
     execute_body = mock_ci_server.get_requests(method="POST", path="/v1/execute")[
         0
     ].json_body()
-    assert execute_body["code"] == (
-        "import pandas as pd\ndf = pd.read_csv('data.csv')\nprint(df)"
-    )
+    assert execute_body["code"] == code
     assert len(execute_body["files"]) == 1
     assert execute_body["files"][0]["path"] == "data.csv"

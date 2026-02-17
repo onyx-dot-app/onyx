@@ -1,4 +1,3 @@
-import os
 from collections.abc import Generator
 from uuid import uuid4
 
@@ -16,8 +15,6 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.full_setup import (
     ensure_full_deployment_setup,
 )
-
-os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
 
 @pytest.fixture(scope="function")
