@@ -349,11 +349,11 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
     }
+  }
 
-    // Track image generation for header display
-    if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
-      state.isGeneratingImage = true;
-    }
+  // Track image generation for header display (regardless of group position)
+  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
+    state.isGeneratingImage = true;
   }
 
   // Count generated images from DELTA packets
