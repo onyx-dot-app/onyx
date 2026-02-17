@@ -4,8 +4,9 @@ This client runs `opencode acp` directly in the sandbox pod via kubernetes exec,
 using stdin/stdout for JSON-RPC communication. This bypasses the HTTP server
 and uses the native ACP subprocess protocol.
 
-This module includes comprehensive logging for debugging ACP communication.
-Enable logging by setting LOG_LEVEL=DEBUG or BUILD_PACKET_LOGGING=true.
+Each message creates an ephemeral client (start → resume_or_create_session →
+send_message → stop) to prevent concurrent processes from corrupting
+opencode's flat file session storage.
 
 Usage:
     client = ACPExecClient(
@@ -13,7 +14,8 @@ Usage:
         namespace="onyx-sandboxes",
     )
     client.start(cwd="/workspace")
-    for event in client.send_message("What files are here?"):
+    session_id = client.resume_or_create_session(cwd="/workspace/sessions/abc")
+    for event in client.send_message("What files are here?", session_id=session_id):
         print(event)
     client.stop()
 """
@@ -27,6 +29,7 @@ from dataclasses import field
 from queue import Empty
 from queue import Queue
 from typing import Any
+from typing import cast
 
 from acp.schema import AgentMessageChunk
 from acp.schema import AgentPlanUpdate
@@ -40,6 +43,7 @@ from kubernetes import client  # type: ignore
 from kubernetes import config
 from kubernetes.stream import stream as k8s_stream  # type: ignore
 from kubernetes.stream.ws_client import WSClient  # type: ignore
+from pydantic import BaseModel
 from pydantic import ValidationError
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
@@ -100,7 +104,7 @@ class ACPClientState:
     """Internal state for the ACP client."""
 
     initialized: bool = False
-    current_session: ACPSession | None = None
+    sessions: dict[str, ACPSession] = field(default_factory=dict)
     next_request_id: int = 0
     agent_capabilities: dict[str, Any] = field(default_factory=dict)
     agent_info: dict[str, Any] = field(default_factory=dict)
@@ -155,15 +159,15 @@ class ACPExecClient:
             self._k8s_client = client.CoreV1Api()
         return self._k8s_client
 
-    def start(self, cwd: str = "/workspace", timeout: float = 30.0) -> str:
-        """Start the agent process via exec and initialize a session.
+    def start(self, cwd: str = "/workspace", timeout: float = 30.0) -> None:
+        """Start the agent process via exec and initialize the ACP connection.
+
+        Only performs the ACP `initialize` handshake. Sessions are created
+        separately via `resume_or_create_session()`.
 
         Args:
-            cwd: Working directory for the agent
+            cwd: Working directory for the `opencode acp` process
             timeout: Timeout for initialization
-
-        Returns:
-            The session ID
 
         Raises:
             RuntimeError: If startup fails
@@ -175,6 +179,8 @@ class ACPExecClient:
 
         # Start opencode acp via exec
         exec_command = ["opencode", "acp", "--cwd", cwd]
+
+        logger.info(f"[ACP] Starting client: pod={self._pod_name} cwd={cwd}")
 
         try:
             self._ws_client = k8s_stream(
@@ -201,15 +207,12 @@ class ACPExecClient:
             # Give process a moment to start
             time.sleep(0.5)
 
-            # Initialize ACP connection
+            # Initialize ACP connection (no session creation)
             self._initialize(timeout=timeout)
 
-            # Create session
-            session_id = self._create_session(cwd=cwd, timeout=timeout)
-
-            return session_id
-
+            logger.info(f"[ACP] Client started: pod={self._pod_name}")
         except Exception as e:
+            logger.error(f"[ACP] Client start failed: pod={self._pod_name} error={e}")
             self.stop()
             raise RuntimeError(f"Failed to start ACP exec client: {e}") from e
 
@@ -224,56 +227,52 @@ class ACPExecClient:
 
             try:
                 if self._ws_client.is_open():
-                    # Read available data
                     self._ws_client.update(timeout=0.1)
 
-                    # Read stdout (channel 1)
+                    # Read stderr - log any agent errors
+                    stderr_data = self._ws_client.read_stderr(timeout=0.01)
+                    if stderr_data:
+                        logger.warning(
+                            f"[ACP] stderr pod={self._pod_name}: "
+                            f"{stderr_data.strip()[:500]}"
+                        )
+
+                    # Read stdout
                     data = self._ws_client.read_stdout(timeout=0.1)
                     if data:
                         buffer += data
 
-                        # Process complete lines
                         while "\n" in buffer:
                             line, buffer = buffer.split("\n", 1)
                             line = line.strip()
                             if line:
                                 try:
                                     message = json.loads(line)
-                                    # Log the raw incoming message
                                     packet_logger.log_jsonrpc_raw_message(
                                         "IN", message, context="k8s"
                                     )
                                     self._response_queue.put(message)
                                 except json.JSONDecodeError:
-                                    packet_logger.log_raw(
-                                        "JSONRPC-PARSE-ERROR-K8S",
-                                        {
-                                            "raw_line": line[:500],
-                                            "error": "JSON decode failed",
-                                        },
-                                    )
                                     logger.warning(
-                                        f"Invalid JSON from agent: {line[:100]}"
+                                        f"[ACP] Invalid JSON from agent: "
+                                        f"{line[:100]}"
                                     )
 
                 else:
-                    packet_logger.log_raw(
-                        "K8S-WEBSOCKET-CLOSED",
-                        {"pod": self._pod_name, "namespace": self._namespace},
-                    )
+                    logger.warning(f"[ACP] WebSocket closed: pod={self._pod_name}")
                     break
 
             except Exception as e:
                 if not self._stop_reader.is_set():
-                    packet_logger.log_raw(
-                        "K8S-READER-ERROR",
-                        {"error": str(e), "pod": self._pod_name},
-                    )
-                    logger.debug(f"Reader error: {e}")
+                    logger.warning(f"[ACP] Reader error: {e}, pod={self._pod_name}")
                 break
 
     def stop(self) -> None:
         """Stop the exec session and clean up."""
+        session_ids = list(self._state.sessions.keys())
+        logger.info(
+            f"[ACP] Stopping client: pod={self._pod_name} " f"sessions={session_ids}"
+        )
         self._stop_reader.set()
 
         if self._ws_client is not None:
@@ -400,42 +399,150 @@ class ACPExecClient:
         if not session_id:
             raise RuntimeError("No session ID returned from session/new")
 
-        self._state.current_session = ACPSession(session_id=session_id, cwd=cwd)
+        self._state.sessions[session_id] = ACPSession(session_id=session_id, cwd=cwd)
+        logger.info(f"[ACP] Created session: acp_session={session_id} cwd={cwd}")
 
         return session_id
+
+    def _list_sessions(self, cwd: str, timeout: float = 10.0) -> list[dict[str, Any]]:
+        """List available ACP sessions, filtered by working directory.
+
+        Returns:
+            List of session info dicts with keys like 'sessionId', 'cwd', 'title'.
+            Empty list if session/list is not supported or fails.
+        """
+        try:
+            request_id = self._send_request("session/list", {"cwd": cwd})
+            result = self._wait_for_response(request_id, timeout)
+            sessions = result.get("sessions", [])
+            logger.info(f"[ACP] session/list: {len(sessions)} sessions for cwd={cwd}")
+            return sessions
+        except Exception as e:
+            logger.info(f"[ACP] session/list unavailable: {e}")
+            return []
+
+    def _resume_session(self, session_id: str, cwd: str, timeout: float = 30.0) -> str:
+        """Resume an existing ACP session.
+
+        Args:
+            session_id: The ACP session ID to resume
+            cwd: Working directory for the session
+            timeout: Timeout for the resume request
+
+        Returns:
+            The session ID
+
+        Raises:
+            RuntimeError: If resume fails
+        """
+        params = {
+            "sessionId": session_id,
+            "cwd": cwd,
+            "mcpServers": [],
+        }
+
+        request_id = self._send_request("session/resume", params)
+        result = self._wait_for_response(request_id, timeout)
+
+        # The response should contain the session ID
+        resumed_id = result.get("sessionId", session_id)
+        self._state.sessions[resumed_id] = ACPSession(session_id=resumed_id, cwd=cwd)
+
+        logger.info(f"[ACP] Resumed session: acp_session={resumed_id} cwd={cwd}")
+        return resumed_id
+
+    def _try_resume_existing_session(self, cwd: str, timeout: float) -> str | None:
+        """Try to find and resume an existing session for this workspace.
+
+        When multiple API server replicas connect to the same sandbox pod,
+        a previous replica may have already created an ACP session for this
+        workspace. This method discovers and resumes that session so the
+        agent retains conversation context.
+
+        Args:
+            cwd: Working directory to search for sessions
+            timeout: Timeout for ACP requests
+
+        Returns:
+            The resumed session ID, or None if no session could be resumed
+        """
+        # List sessions for this workspace directory
+        sessions = self._list_sessions(cwd, timeout=min(timeout, 10.0))
+        if not sessions:
+            return None
+
+        # Pick the most recent session (first in list, assuming sorted)
+        target = sessions[0]
+        target_id = target.get("sessionId")
+        if not target_id:
+            logger.warning("[ACP] session/list returned session without sessionId")
+            return None
+
+        logger.info(
+            f"[ACP] Resuming existing session: acp_session={target_id} "
+            f"(found {len(sessions)})"
+        )
+
+        try:
+            return self._resume_session(target_id, cwd, timeout)
+        except Exception as e:
+            logger.warning(
+                f"[ACP] session/resume failed for {target_id}: {e}, "
+                f"falling back to session/new"
+            )
+            return None
+
+    def resume_or_create_session(self, cwd: str, timeout: float = 30.0) -> str:
+        """Resume a session from opencode's on-disk storage, or create a new one.
+
+        With ephemeral clients (one process per message), this always hits disk.
+        Tries resume first to preserve conversation context, falls back to new.
+
+        Args:
+            cwd: Working directory for the session
+            timeout: Timeout for ACP requests
+
+        Returns:
+            The ACP session ID
+        """
+        if not self._state.initialized:
+            raise RuntimeError("Client not initialized. Call start() first.")
+
+        # Try to resume from opencode's persisted storage
+        resumed_id = self._try_resume_existing_session(cwd, timeout)
+        if resumed_id:
+            return resumed_id
+
+        # Create a new session
+        return self._create_session(cwd=cwd, timeout=timeout)
 
     def send_message(
         self,
         message: str,
+        session_id: str,
         timeout: float = ACP_MESSAGE_TIMEOUT,
     ) -> Generator[ACPEvent, None, None]:
-        """Send a message and stream response events.
+        """Send a message to a specific session and stream response events.
 
         Args:
             message: The message content to send
+            session_id: The ACP session ID to send the message to
             timeout: Maximum time to wait for complete response (defaults to ACP_MESSAGE_TIMEOUT env var)
 
         Yields:
             Typed ACP schema event objects
         """
-        if self._state.current_session is None:
-            raise RuntimeError("No active session. Call start() first.")
-
-        session_id = self._state.current_session.session_id
+        if session_id not in self._state.sessions:
+            raise RuntimeError(
+                f"Unknown session {session_id}. "
+                f"Known sessions: {list(self._state.sessions.keys())}"
+            )
         packet_logger = get_packet_logger()
 
-        # Log the start of message processing
-        packet_logger.log_raw(
-            "ACP-SEND-MESSAGE-START-K8S",
-            {
-                "session_id": session_id,
-                "pod": self._pod_name,
-                "namespace": self._namespace,
-                "message_preview": (
-                    message[:200] + "..." if len(message) > 200 else message
-                ),
-                "timeout": timeout,
-            },
+        logger.info(
+            f"[ACP] Sending prompt: "
+            f"acp_session={session_id} pod={self._pod_name} "
+            f"queue_backlog={self._response_queue.qsize()}"
         )
 
         prompt_content = [{"type": "text", "text": message}]
@@ -446,44 +553,53 @@ class ACPExecClient:
 
         request_id = self._send_request("session/prompt", params)
         start_time = time.time()
-        last_event_time = time.time()  # Track time since last event for keepalive
+        last_event_time = time.time()
         events_yielded = 0
+        keepalive_count = 0
+        completion_reason = "unknown"
 
         while True:
             remaining = timeout - (time.time() - start_time)
             if remaining <= 0:
-                packet_logger.log_raw(
-                    "ACP-TIMEOUT-K8S",
-                    {
-                        "session_id": session_id,
-                        "elapsed_ms": (time.time() - start_time) * 1000,
-                    },
+                completion_reason = "timeout"
+                logger.warning(
+                    f"[ACP] Prompt timeout: "
+                    f"acp_session={session_id} events={events_yielded}, "
+                    f"sending session/cancel"
                 )
+                try:
+                    self.cancel(session_id=session_id)
+                except Exception as cancel_err:
+                    logger.warning(
+                        f"[ACP] session/cancel failed on timeout: {cancel_err}"
+                    )
                 yield Error(code=-1, message="Timeout waiting for response")
                 break
 
             try:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
-                last_event_time = time.time()  # Reset keepalive timer on event
+                last_event_time = time.time()
             except Empty:
-                # Check if we need to send an SSE keepalive
+                # Send SSE keepalive if idle
                 idle_time = time.time() - last_event_time
                 if idle_time >= SSE_KEEPALIVE_INTERVAL:
-                    packet_logger.log_raw(
-                        "SSE-KEEPALIVE-YIELD",
-                        {
-                            "session_id": session_id,
-                            "idle_seconds": idle_time,
-                        },
-                    )
+                    keepalive_count += 1
                     yield SSEKeepalive()
-                    last_event_time = time.time()  # Reset after yielding keepalive
+                    last_event_time = time.time()
                 continue
 
-            # Check for response to our prompt request
-            if message_data.get("id") == request_id:
+            # Check for JSON-RPC response to our prompt request.
+            msg_id = message_data.get("id")
+            is_response = "method" not in message_data and (
+                msg_id == request_id
+                or (msg_id is not None and str(msg_id) == str(request_id))
+            )
+            if is_response:
+                completion_reason = "jsonrpc_response"
                 if "error" in message_data:
                     error_data = message_data["error"]
+                    completion_reason = "jsonrpc_error"
+                    logger.warning(f"[ACP] Prompt error: {error_data}")
                     packet_logger.log_jsonrpc_response(
                         request_id, error=error_data, context="k8s"
                     )
@@ -498,26 +614,16 @@ class ACPExecClient:
                     )
                     try:
                         prompt_response = PromptResponse.model_validate(result)
-                        packet_logger.log_acp_event_yielded(
-                            "prompt_response", prompt_response
-                        )
                         events_yielded += 1
                         yield prompt_response
                     except ValidationError as e:
-                        packet_logger.log_raw(
-                            "ACP-VALIDATION-ERROR-K8S",
-                            {"type": "prompt_response", "error": str(e)},
-                        )
+                        logger.error(f"[ACP] PromptResponse validation failed: {e}")
 
-                # Log completion summary
                 elapsed_ms = (time.time() - start_time) * 1000
-                packet_logger.log_raw(
-                    "ACP-SEND-MESSAGE-COMPLETE-K8S",
-                    {
-                        "session_id": session_id,
-                        "events_yielded": events_yielded,
-                        "elapsed_ms": elapsed_ms,
-                    },
+                logger.info(
+                    f"[ACP] Prompt complete: "
+                    f"reason={completion_reason} acp_session={session_id} "
+                    f"events={events_yielded} elapsed={elapsed_ms:.0f}ms"
                 )
                 break
 
@@ -526,25 +632,29 @@ class ACPExecClient:
                 params_data = message_data.get("params", {})
                 update = params_data.get("update", {})
 
-                # Log the notification
-                packet_logger.log_jsonrpc_notification(
-                    "session/update",
-                    {"update_type": update.get("sessionUpdate")},
-                    context="k8s",
-                )
-
+                prompt_complete = False
                 for event in self._process_session_update(update):
                     events_yielded += 1
-                    # Log each yielded event
-                    event_type = self._get_event_type_name(event)
-                    packet_logger.log_acp_event_yielded(event_type, event)
                     yield event
+                    if isinstance(event, PromptResponse):
+                        prompt_complete = True
+                        break
+
+                if prompt_complete:
+                    completion_reason = "prompt_response_via_notification"
+                    elapsed_ms = (time.time() - start_time) * 1000
+                    logger.info(
+                        f"[ACP] Prompt complete: "
+                        f"reason={completion_reason} acp_session={session_id} "
+                        f"events={events_yielded} elapsed={elapsed_ms:.0f}ms"
+                    )
+                    break
 
             # Handle requests from agent - send error response
             elif "method" in message_data and "id" in message_data:
-                packet_logger.log_raw(
-                    "ACP-UNSUPPORTED-REQUEST-K8S",
-                    {"method": message_data["method"], "id": message_data["id"]},
+                logger.debug(
+                    f"[ACP] Unsupported agent request: "
+                    f"method={message_data['method']}"
                 )
                 self._send_error_response(
                     message_data["id"],
@@ -552,113 +662,49 @@ class ACPExecClient:
                     f"Method not supported: {message_data['method']}",
                 )
 
-    def _get_event_type_name(self, event: ACPEvent) -> str:
-        """Get the type name for an ACP event."""
-        if isinstance(event, AgentMessageChunk):
-            return "agent_message_chunk"
-        elif isinstance(event, AgentThoughtChunk):
-            return "agent_thought_chunk"
-        elif isinstance(event, ToolCallStart):
-            return "tool_call_start"
-        elif isinstance(event, ToolCallProgress):
-            return "tool_call_progress"
-        elif isinstance(event, AgentPlanUpdate):
-            return "agent_plan_update"
-        elif isinstance(event, CurrentModeUpdate):
-            return "current_mode_update"
-        elif isinstance(event, PromptResponse):
-            return "prompt_response"
-        elif isinstance(event, Error):
-            return "error"
-        elif isinstance(event, SSEKeepalive):
-            return "sse_keepalive"
-        return "unknown"
+            else:
+                logger.warning(
+                    f"[ACP] Unhandled message: "
+                    f"id={message_data.get('id')} "
+                    f"method={message_data.get('method')} "
+                    f"keys={list(message_data.keys())}"
+                )
 
     def _process_session_update(
         self, update: dict[str, Any]
     ) -> Generator[ACPEvent, None, None]:
         """Process a session/update notification and yield typed ACP schema objects."""
         update_type = update.get("sessionUpdate")
-        packet_logger = get_packet_logger()
+        if not isinstance(update_type, str):
+            return
 
-        if update_type == "agent_message_chunk":
+        # Map update types to their ACP schema classes.
+        # Note: prompt_response is included because ACP sometimes sends it as a
+        # notification WITHOUT a corresponding JSON-RPC response. We accept
+        # either signal as turn completion (first one wins).
+        type_map: dict[str, type[BaseModel]] = {
+            "agent_message_chunk": AgentMessageChunk,
+            "agent_thought_chunk": AgentThoughtChunk,
+            "tool_call": ToolCallStart,
+            "tool_call_update": ToolCallProgress,
+            "plan": AgentPlanUpdate,
+            "current_mode_update": CurrentModeUpdate,
+            "prompt_response": PromptResponse,
+        }
+
+        model_class = type_map.get(update_type)
+        if model_class is not None:
             try:
-                yield AgentMessageChunk.model_validate(update)
+                yield cast(ACPEvent, model_class.model_validate(update))
             except ValidationError as e:
-                packet_logger.log_raw(
-                    "ACP-VALIDATION-ERROR-K8S",
-                    {"update_type": update_type, "error": str(e), "update": update},
-                )
-
-        elif update_type == "agent_thought_chunk":
-            try:
-                yield AgentThoughtChunk.model_validate(update)
-            except ValidationError as e:
-                packet_logger.log_raw(
-                    "ACP-VALIDATION-ERROR-K8S",
-                    {"update_type": update_type, "error": str(e), "update": update},
-                )
-
-        elif update_type == "user_message_chunk":
-            # Echo of user message - skip but log
-            packet_logger.log_raw(
-                "ACP-SKIPPED-UPDATE-K8S", {"type": "user_message_chunk"}
-            )
-
-        elif update_type == "tool_call":
-            try:
-                yield ToolCallStart.model_validate(update)
-            except ValidationError as e:
-                packet_logger.log_raw(
-                    "ACP-VALIDATION-ERROR-K8S",
-                    {"update_type": update_type, "error": str(e), "update": update},
-                )
-
-        elif update_type == "tool_call_update":
-            try:
-                yield ToolCallProgress.model_validate(update)
-            except ValidationError as e:
-                packet_logger.log_raw(
-                    "ACP-VALIDATION-ERROR-K8S",
-                    {"update_type": update_type, "error": str(e), "update": update},
-                )
-
-        elif update_type == "plan":
-            try:
-                yield AgentPlanUpdate.model_validate(update)
-            except ValidationError as e:
-                packet_logger.log_raw(
-                    "ACP-VALIDATION-ERROR-K8S",
-                    {"update_type": update_type, "error": str(e), "update": update},
-                )
-
-        elif update_type == "current_mode_update":
-            try:
-                yield CurrentModeUpdate.model_validate(update)
-            except ValidationError as e:
-                packet_logger.log_raw(
-                    "ACP-VALIDATION-ERROR-K8S",
-                    {"update_type": update_type, "error": str(e), "update": update},
-                )
-
-        elif update_type == "available_commands_update":
-            # Skip command updates
-            packet_logger.log_raw(
-                "ACP-SKIPPED-UPDATE-K8S", {"type": "available_commands_update"}
-            )
-
-        elif update_type == "session_info_update":
-            # Skip session info updates
-            packet_logger.log_raw(
-                "ACP-SKIPPED-UPDATE-K8S", {"type": "session_info_update"}
-            )
-
-        else:
-            # Unknown update types are logged
-            packet_logger.log_raw(
-                "ACP-UNKNOWN-UPDATE-TYPE-K8S",
-                {"update_type": update_type, "update": update},
-            )
+                logger.warning(f"[ACP] Validation error for {update_type}: {e}")
+        elif update_type not in (
+            "user_message_chunk",
+            "available_commands_update",
+            "session_info_update",
+            "usage_update",
+        ):
+            logger.debug(f"[ACP] Unknown update type: {update_type}")
 
     def _send_error_response(self, request_id: int, code: int, message: str) -> None:
         """Send an error response to an agent request."""
@@ -673,15 +719,24 @@ class ACPExecClient:
 
         self._ws_client.write_stdin(json.dumps(response) + "\n")
 
-    def cancel(self) -> None:
-        """Cancel the current operation."""
-        if self._state.current_session is None:
-            return
+    def cancel(self, session_id: str | None = None) -> None:
+        """Cancel the current operation on a session.
 
-        self._send_notification(
-            "session/cancel",
-            {"sessionId": self._state.current_session.session_id},
-        )
+        Args:
+            session_id: The ACP session ID to cancel. If None, cancels all sessions.
+        """
+        if session_id:
+            if session_id in self._state.sessions:
+                self._send_notification(
+                    "session/cancel",
+                    {"sessionId": session_id},
+                )
+        else:
+            for sid in self._state.sessions:
+                self._send_notification(
+                    "session/cancel",
+                    {"sessionId": sid},
+                )
 
     def health_check(self, timeout: float = 5.0) -> bool:  # noqa: ARG002
         """Check if we can exec into the pod."""
@@ -706,13 +761,6 @@ class ACPExecClient:
     def is_running(self) -> bool:
         """Check if the exec session is running."""
         return self._ws_client is not None and self._ws_client.is_open()
-
-    @property
-    def session_id(self) -> str | None:
-        """Get the current session ID, if any."""
-        if self._state.current_session:
-            return self._state.current_session.session_id
-        return None
 
     def __enter__(self) -> "ACPExecClient":
         """Context manager entry."""
