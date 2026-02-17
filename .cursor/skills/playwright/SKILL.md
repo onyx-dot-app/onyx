@@ -69,7 +69,7 @@ const { email, password } = await loginAsRandomUser(page);
 
 ## Test Structure
 
-**Default case** — admin tests (most common, no auth boilerplate):
+Tests start pre-authenticated as admin — navigate and test directly:
 
 ```typescript
 import { test, expect } from "@playwright/test";
@@ -83,59 +83,20 @@ test.describe("Feature Name", () => {
 });
 ```
 
-**With setup/teardown** — when tests need backend resources:
-
-```typescript
-import { test, expect } from "@playwright/test";
-import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-
-test.describe("Feature Name", () => {
-  let resourceId: string | null = null;
-
-  test.beforeAll(async ({ browser }) => {
-    const ctx = await browser.newContext({ storageState: "admin_auth.json" });
-    const page = await ctx.newPage();
-    const client = new OnyxApiClient(page.request);
-    resourceId = await client.createImageGenerationConfig(`test-${Date.now()}`);
-    await ctx.close();
-  });
-
-  test.afterAll(async ({ browser }) => {
-    if (!resourceId) return;
-    const ctx = await browser.newContext({ storageState: "admin_auth.json" });
-    const page = await ctx.newPage();
-    const client = new OnyxApiClient(page.request);
-    await client.deleteImageGenerationConfig(resourceId);
-    await ctx.close();
-  });
-
-  test("should do something with the resource", async ({ page }) => {
-    await page.goto("/app");
-    await page.waitForLoadState("networkidle");
-    // ...
-  });
-});
-```
-
 **Non-admin user tests** — clear cookies and re-login in `beforeEach`:
 
 ```typescript
-import { test, expect } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 
-test.describe("Regular User Feature", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.context().clearCookies();
-    await loginAsRandomUser(page);
-    await page.goto("/app");
-    await page.waitForLoadState("networkidle");
-  });
-
-  test("should work for non-admin users", async ({ page }) => {
-    // ...
-  });
+test.beforeEach(async ({ page }) => {
+  await page.context().clearCookies();
+  await loginAsRandomUser(page);
+  await page.goto("/app");
+  await page.waitForLoadState("networkidle");
 });
 ```
+
+**API resource setup** — only when tests need to create backend resources (image gen configs, web search providers, MCP servers). Use `beforeAll`/`afterAll` with `OnyxApiClient` to create and clean up. See `chat/default_assistant.spec.ts` or `mcp/mcp_oauth_flow.spec.ts` for examples. This is uncommon (~4 of 37 test files).
 
 ## Key Utilities
 
