@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 
 const WEB_SEARCH_URL = "/admin/configuration/web-search";
 

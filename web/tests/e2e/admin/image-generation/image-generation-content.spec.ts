@@ -1,6 +1,6 @@
 import { test, expect, Page, Locator } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
-import { OnyxApiClient } from "../../utils/onyxApiClient";
+import { loginAs } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const IMAGE_GENERATION_URL =
   "http://localhost:3000/admin/configuration/image-generation";

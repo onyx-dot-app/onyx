@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAs, loginAsRandomUser } from "../utils/auth";
+import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
 
 test.use({ storageState: "admin_auth.json" });
 

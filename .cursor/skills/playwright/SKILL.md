@@ -10,9 +10,21 @@ description: Write and maintain Playwright end-to-end tests for the Onyx applica
 - **Tests**: `web/tests/e2e/` — organized by feature (`auth/`, `admin/`, `chat/`, `assistants/`, `connectors/`, `mcp/`)
 - **Config**: `web/playwright.config.ts`
 - **Utilities**: `web/tests/e2e/utils/`
-- **Constants**: `web/tests/e2e/constants.js`
+- **Constants**: `web/tests/e2e/constants.ts`
 - **Global setup**: `web/tests/e2e/global-setup.ts`
 - **Output**: `web/output/playwright/`
+
+## Imports
+
+Always use absolute imports with the `@tests/e2e/` prefix — never relative paths (`../`, `../../`). The alias is defined in `web/tsconfig.json` and resolves to `web/tests/`.
+
+```typescript
+import { loginAs } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
+```
+
+All new files should be `.ts`, not `.js`.
 
 ## Running Tests
 

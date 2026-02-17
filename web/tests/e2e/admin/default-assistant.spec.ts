@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { loginAs } from "../utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 import {
   TOOL_IDS,
   waitForUnifiedGreeting,
   openActionManagement,
-} from "../utils/tools";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+} from "@tests/e2e/utils/tools";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 test.describe("Default Assistant Admin Page", () => {
   let testCcPairId: number | null = null;

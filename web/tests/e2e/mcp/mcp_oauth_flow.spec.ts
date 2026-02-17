@@ -1,14 +1,17 @@
 import { test, expect } from "@playwright/test";
-import type { Page, Locator } from "@playwright/test";
-import { loginAs, apiLogin } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
-import { startMcpOauthServer, McpServerProcess } from "../utils/mcpServer";
-import { TEST_ADMIN_CREDENTIALS } from "../constants";
-import { logPageState } from "../utils/pageStateLogger";
+import type { Page, Browser, Locator } from "@playwright/test";
+import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import {
+  startMcpOauthServer,
+  McpServerProcess,
+} from "@tests/e2e/utils/mcpServer";
+import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
+import { logPageState } from "@tests/e2e/utils/pageStateLogger";
 import {
   getPacketObjectsByType,
   sendMessageAndCaptureStreamPackets,
-} from "../utils/chatStream";
+} from "@tests/e2e/utils/chatStream";
 
 const REQUIRED_ENV_VARS = [
   "MCP_OAUTH_CLIENT_ID",

@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAs, loginAsRandomUser, apiLogin } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
-import { expectElementScreenshot } from "../utils/visualRegression";
+import { loginAs, loginAsRandomUser, apiLogin } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 /**
  * Onboarding Flow E2E Tests
