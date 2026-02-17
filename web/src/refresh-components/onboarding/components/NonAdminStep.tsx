@@ -52,7 +52,7 @@ export default function NonAdminStep() {
       {showHeader && (
         <div
           className="flex items-center justify-between w-full max-w-[800px] min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2"
-          data-label="non-admin-confirmation"
+          aria-label="non-admin-confirmation"
         >
           <div className="flex items-center gap-1">
             <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
@@ -73,7 +73,7 @@ export default function NonAdminStep() {
           className={containerClasses}
           onClick={() => inputRef.current?.focus()}
           role="group"
-          data-label="non-admin-name-prompt"
+          aria-label="non-admin-name-prompt"
         >
           <div className="flex items-center gap-1 h-full">
             <div className="h-full p-0.5">

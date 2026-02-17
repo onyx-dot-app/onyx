@@ -81,7 +81,7 @@ test.describe("Onboarding Flow @exclusive", () => {
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
-      const onboardingFlow = page.locator('[data-label="onboarding-flow"]');
+      const onboardingFlow = page.locator('[aria-label="onboarding-flow"]');
       await expect(onboardingFlow).toBeVisible({ timeout: 15000 });
 
       const header = page.locator('[data-label="onboarding-header"]');
@@ -99,8 +99,7 @@ test.describe("Onboarding Flow @exclusive", () => {
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
-      // Wait for the onboarding to appear
-      await expect(page.locator('[data-label="onboarding-flow"]')).toBeVisible({
+      await expect(page.locator('[aria-label="onboarding-flow"]')).toBeVisible({
         timeout: 15000,
       });
 
@@ -116,31 +115,23 @@ test.describe("Onboarding Flow @exclusive", () => {
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
-      // Welcome step
       const header = page.locator('[data-label="onboarding-header"]');
       await expect(header).toBeVisible({ timeout: 15000 });
-
-      // Click "Let's Go" to advance to Name step
       await header.getByRole("button", { name: "Let's Go" }).click();
 
-      // Name step
-      const nameStep = page.locator('[data-label="onboarding-name-step"]');
+      const nameStep = page.locator('[aria-label="onboarding-name-step"]');
       await expect(nameStep).toBeVisible({ timeout: 10000 });
-
-      // Enter a name and click Next
       await nameStep.getByPlaceholder("Your name").fill("Test Admin");
 
       await expectElementScreenshot(nameStep, {
         name: "onboarding-name-step",
       });
 
-      // Wait for the Next button to be enabled (debounce)
       const nextButton = header.getByRole("button", { name: "Next" });
       await expect(nextButton).toBeEnabled({ timeout: 10000 });
       await nextButton.click();
 
-      // LLM setup step
-      const llmStep = page.locator('[data-label="onboarding-llm-step"]');
+      const llmStep = page.locator('[aria-label="onboarding-llm-step"]');
       await expect(llmStep).toBeVisible({ timeout: 10000 });
 
       await expectElementScreenshot(llmStep, {
@@ -165,9 +156,8 @@ test.describe("Onboarding Flow @exclusive", () => {
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
-      // The full onboarding flow should NOT appear
       await expect(
-        page.locator('[data-label="onboarding-flow"]')
+        page.locator('[aria-label="onboarding-flow"]')
       ).not.toBeVisible({ timeout: 5000 });
     });
 
@@ -177,8 +167,7 @@ test.describe("Onboarding Flow @exclusive", () => {
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
-      // The NonAdminStep name prompt should appear for admins without a name
-      const namePrompt = page.locator('[data-label="non-admin-name-prompt"]');
+      const namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
       await expect(namePrompt).toBeVisible({ timeout: 15000 });
       await expect(
         namePrompt.getByRole("button", { name: "Save" })
@@ -193,7 +182,6 @@ test.describe("Onboarding Flow @exclusive", () => {
       await page.goto("/app");
       await page.waitForLoadState("networkidle");
 
-      // Wait for page to settle
       await expect(page.locator("#onyx-chat-input")).toBeVisible({
         timeout: 15000,
       });
@@ -225,7 +213,7 @@ test.describe("Onboarding Flow @exclusive", () => {
 
     test("shows NonAdminStep name prompt", async ({ page }) => {
       // loginAsRandomUser already navigates to /app
-      const namePrompt = page.locator('[data-label="non-admin-name-prompt"]');
+      const namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
       await expect(namePrompt).toBeVisible({ timeout: 15000 });
       await expect(
         namePrompt.getByRole("button", { name: "Save" })
@@ -237,12 +225,11 @@ test.describe("Onboarding Flow @exclusive", () => {
     });
 
     test("does NOT show full onboarding flow", async ({ page }) => {
-      // The full admin onboarding should not appear
       await expect(
-        page.locator('[data-label="onboarding-flow"]')
+        page.locator('[aria-label="onboarding-flow"]')
       ).not.toBeVisible({ timeout: 5000 });
       await expect(
-        page.locator('[data-label="onboarding-llm-step"]')
+        page.locator('[aria-label="onboarding-llm-step"]')
       ).not.toBeVisible();
     });
 
@@ -256,14 +243,14 @@ test.describe("Onboarding Flow @exclusive", () => {
     });
 
     test("can save name and see confirmation", async ({ page }) => {
-      const namePrompt = page.locator('[data-label="non-admin-name-prompt"]');
+      const namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
       await expect(namePrompt).toBeVisible({ timeout: 15000 });
 
       await namePrompt.getByPlaceholder("Your name").fill("Test User");
       await namePrompt.getByRole("button", { name: "Save" }).click();
 
       const confirmation = page.locator(
-        '[data-label="non-admin-confirmation"]'
+        '[aria-label="non-admin-confirmation"]'
       );
       await expect(confirmation).toBeVisible({ timeout: 10000 });
 
@@ -287,7 +274,7 @@ test.describe("Onboarding Flow @exclusive", () => {
 
     test("shows name prompt when name not set", async ({ page }) => {
       // loginAsRandomUser already navigates to /app
-      const namePrompt = page.locator('[data-label="non-admin-name-prompt"]');
+      const namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
       await expect(namePrompt).toBeVisible({ timeout: 15000 });
     });
 
@@ -303,15 +290,14 @@ test.describe("Onboarding Flow @exclusive", () => {
     test("after setting name, shows confirmation then no onboarding UI", async ({
       page,
     }) => {
-      const namePrompt = page.locator('[data-label="non-admin-name-prompt"]');
+      const namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
       await expect(namePrompt).toBeVisible({ timeout: 15000 });
 
       await namePrompt.getByPlaceholder("Your name").fill("E2E User");
       await namePrompt.getByRole("button", { name: "Save" }).click();
 
-      // Confirmation should appear
       const confirmation = page.locator(
-        '[data-label="non-admin-confirmation"]'
+        '[aria-label="non-admin-confirmation"]'
       );
       await expect(confirmation).toBeVisible({ timeout: 10000 });
 
@@ -319,10 +305,7 @@ test.describe("Onboarding Flow @exclusive", () => {
         name: "onboarding-nonadmin-with-llm-confirmation",
       });
 
-      // Dismiss the confirmation
       await confirmation.getByRole("button").first().click();
-
-      // No onboarding UI should remain
       await expect(namePrompt).not.toBeVisible({ timeout: 5000 });
       await expect(confirmation).not.toBeVisible();
     });

@@ -33,7 +33,7 @@ const OnboardingFlowInner = ({
     showOnboarding ? (
       <div
         className="flex flex-col items-center justify-center w-full max-w-[var(--app-page-main-content-width)] gap-2 mb-4"
-        data-label="onboarding-flow"
+        aria-label="onboarding-flow"
       >
         <OnboardingHeader
           state={onboardingState}
