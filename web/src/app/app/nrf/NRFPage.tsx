@@ -282,6 +282,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   );
 
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
+  const handleChatInputSubmit = useCallback(
     async (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
       // If we already have messages (chat session started), always use chat mode
@@ -300,6 +301,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       // - Route to chat (calls onChat callback)
       await submitQuery(submittedMessage, onChat);
     },
+    [
+      hasMessages,
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      resetInputBar,
+      submitQuery,
+      onChat,
+    ]
   );
 
   // Handle resubmit last message on error
