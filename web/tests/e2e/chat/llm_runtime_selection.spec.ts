@@ -1,16 +1,14 @@
 import { expect, Page, test } from "@playwright/test";
 import { loginAs } from "../utils/auth";
 import {
+  selectModelFromInputPopover,
   sendMessage,
   startNewChat,
   verifyCurrentModel,
 } from "../utils/chatActions";
 import { OnyxApiClient } from "../utils/onyxApiClient";
 
-const PROVIDER_API_KEY =
-  process.env.E2E_LLM_PROVIDER_API_KEY ||
-  process.env.OPENAI_API_KEY ||
-  "e2e-placeholder-api-key-not-used";
+const PROVIDER_API_KEY = "e2e-placeholder-api-key-not-used";
 
 type SendChatMessagePayload = {
   llm_override?: {
@@ -64,81 +62,6 @@ async function createLlmProvider(
   expect(response.ok()).toBeTruthy();
   const data = (await response.json()) as { id: number };
   return data.id;
-}
-
-async function selectModelFromInputPopover(
-  page: Page,
-  preferredModels: string[]
-): Promise<string> {
-  const currentModelText =
-    (
-      await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-    )?.trim() ?? "";
-
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
-  await page.waitForSelector('[role="dialog"]', {
-    state: "visible",
-    timeout: 10000,
-  });
-
-  const dialog = page.locator('[role="dialog"]');
-  const searchInput = dialog.getByPlaceholder("Search models...");
-
-  for (const modelName of preferredModels) {
-    await searchInput.fill(modelName);
-    const modelOptions = dialog.locator("button[data-selected]");
-    const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
-
-    if ((await modelOptions.count()) > 0) {
-      const candidate =
-        (await nonSelectedOptions.count()) > 0
-          ? nonSelectedOptions.first()
-          : modelOptions.first();
-
-      await candidate.click();
-      await page.waitForSelector('[role="dialog"]', { state: "hidden" });
-      const selectedText =
-        (
-          await page
-            .getByTestId("AppInputBar/llm-popover-trigger")
-            .textContent()
-        )?.trim() ?? "";
-      if (!selectedText) {
-        throw new Error(
-          "Failed to read selected model text from input trigger"
-        );
-      }
-      return selectedText;
-    }
-  }
-
-  const nonSelectedOptions = dialog.locator('button[data-selected="false"]');
-  if ((await nonSelectedOptions.count()) > 0) {
-    const fallback = nonSelectedOptions.first();
-    await expect(fallback).toBeVisible();
-    await fallback.click();
-    await page.waitForSelector('[role="dialog"]', { state: "hidden" });
-
-    const selectedText =
-      (
-        await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-      )?.trim() ?? "";
-    if (!selectedText) {
-      throw new Error("Failed to read selected model text from input trigger");
-    }
-    return selectedText;
-  }
-
-  await page.keyboard.press("Escape").catch(() => {});
-  await page
-    .waitForSelector('[role="dialog"]', { state: "hidden", timeout: 5000 })
-    .catch(() => {});
-
-  if (currentModelText) {
-    return currentModelText;
-  }
-
-  throw new Error("Unable to select a model from input popover");
 }
 
 async function sendMessageAndCapturePayload(
