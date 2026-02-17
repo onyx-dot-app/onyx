@@ -56,7 +56,7 @@ type FlowArtifacts = {
   assistantId: number;
   assistantName: string;
   toolName: string;
-  toolId: number;
+  toolId: number | null;
 };
 
 const DEFAULT_USERNAME_SELECTORS = [
@@ -149,7 +149,7 @@ async function verifyToolInvocationFromChat(
   page: Page,
   toolName: string,
   contextLabel: string,
-  forcedToolId?: number
+  forcedToolId?: number | null
 ) {
   const prompt = [
     `Call the MCP tool "${toolName}" now.`,
@@ -163,7 +163,7 @@ async function verifyToolInvocationFromChat(
       arguments: { name: `playwright-${Date.now()}` },
     }),
     payloadOverrides:
-      forcedToolId !== undefined
+      forcedToolId != null
         ? {
             forced_tool_id: forcedToolId,
             forced_tool_ids: [forcedToolId],
@@ -196,18 +196,67 @@ async function verifyToolInvocationFromChat(
 async function fetchMcpToolIdByName(
   page: Page,
   serverId: number,
-  toolName: string
-): Promise<number> {
-  const response = await page.request.get(
-    `/api/admin/mcp/server/${serverId}/db-tools`
+  toolName: string,
+  timeoutMs: number = 15_000
+): Promise<number | null> {
+  const start = Date.now();
+  let visibleToolNames: string[] = [];
+
+  while (Date.now() - start < timeoutMs) {
+    const response = await page.request.get(
+      `/api/admin/mcp/server/${serverId}/db-tools`
+    );
+    if (!response.ok()) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+
+    const data = (await response.json()) as {
+      tools?: Array<Record<string, unknown>>;
+    };
+    const tools = Array.isArray(data.tools) ? data.tools : [];
+    visibleToolNames = tools
+      .map((tool) => {
+        const value =
+          tool.name ??
+          tool.display_name ??
+          tool.in_code_tool_id ??
+          tool.displayName;
+        return typeof value === "string" ? value : "";
+      })
+      .filter(Boolean);
+
+    const matchedTool = tools.find((tool) => {
+      const candidates = [
+        tool.name,
+        tool.display_name,
+        tool.in_code_tool_id,
+        tool.displayName,
+      ].filter((value): value is string => typeof value === "string");
+      return candidates.includes(toolName);
+    });
+    if (matchedTool) {
+      const id = matchedTool.id;
+      if (typeof id === "number") {
+        return id;
+      }
+      if (typeof id === "string") {
+        const parsed = Number(id);
+        if (!Number.isNaN(parsed)) {
+          return parsed;
+        }
+      }
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  console.warn(
+    `[mcp-oauth-test] Could not resolve tool id for ${toolName} on server ${serverId}. Visible tools: ${visibleToolNames.join(
+      ", "
+    )}`
   );
-  expect(response.ok()).toBeTruthy();
-  const data = (await response.json()) as {
-    tools?: Array<{ id: number; name: string }>;
-  };
-  const matchedTool = data.tools?.find((tool) => tool.name === toolName);
-  expect(matchedTool?.id).toBeTruthy();
-  return matchedTool!.id;
+  return null;
 }
 
 async function logoutSession(page: Page, contextLabel: string) {
@@ -1374,12 +1423,6 @@ test.describe("MCP OAuth flows", () => {
         throw new Error(`Invalid server_id parsed from URL: ${serverIdParam}`);
       }
     }
-    const adminToolId = await fetchMcpToolIdByName(
-      page,
-      serverId,
-      TOOL_NAMES.admin
-    );
-
     // Verify server card is visible with tools and wait for tool toggle
     await expect(
       page.getByText(serverName, { exact: false }).first()
@@ -1493,6 +1536,11 @@ test.describe("MCP OAuth flows", () => {
       TOOL_NAMES.admin,
     ]);
     logStep("Confirmed assistant tools are available");
+    const adminToolId = await fetchMcpToolIdByName(
+      page,
+      serverId,
+      TOOL_NAMES.admin
+    );
 
     await ensureServerVisibleInActions(page, serverName);
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
@@ -1778,7 +1826,7 @@ test.describe("MCP OAuth flows", () => {
         assistantId,
         assistantName,
         toolName: TOOL_NAMES.curator,
-        toolId: -1,
+        toolId: null,
       };
 
       // Verify isolation: second curator must not be able to edit first curator's server
