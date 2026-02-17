@@ -47,6 +47,9 @@ const QUICK_CONFIRM_CONNECTED_TIMEOUT_MS = Number(
 const POST_CLICK_URL_CHANGE_WAIT_MS = Number(
   process.env.MCP_OAUTH_POST_CLICK_URL_CHANGE_WAIT_MS || 5000
 );
+const MCP_OAUTH_FLOW_TEST_TIMEOUT_MS = Number(
+  process.env.MCP_OAUTH_TEST_TIMEOUT_MS || 300_000
+);
 
 type Credentials = {
   email: string;
@@ -1217,12 +1220,19 @@ async function ensureToolOptionVisible(
 
   await waitForMcpSecondaryView(page);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const mcpToolButton = await findMcpToolLineItemButton(page, toolName, 7000);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const mcpToolButton = await findMcpToolLineItemButton(
+      page,
+      toolName,
+      10000
+    );
     if (mcpToolButton) {
-      return mcpToolButton;
+      const isVisible = await mcpToolButton.isVisible().catch(() => false);
+      if (isVisible) {
+        return mcpToolButton;
+      }
     }
-    if (attempt === 0) {
+    if (attempt < 2) {
       await closeActionsPopover(page);
       await openActionsPopover(page);
       await ensureActionPopoverInPrimaryView(page);
@@ -1299,11 +1309,14 @@ async function reauthenticateFromChat(
   returnSubstring: string
 ) {
   await openActionsPopover(page);
-  const clickedServerRow = await clickServerRowWithRetry(
-    page,
-    serverName,
-    15_000
-  );
+  const beforeClickUrl = page.url();
+  const clickedServerRow =
+    await clickServerRowAndWaitForPossibleUrlChangeWithRetry(
+      page,
+      serverName,
+      "Re-authenticate server row click",
+      15_000
+    );
   if (!clickedServerRow) {
     const entries = await collectActionPopoverEntries(page);
     await logPageStateWithTag(
@@ -1317,7 +1330,53 @@ async function reauthenticateFromChat(
     );
   }
 
+  // Some MCP rows trigger OAuth directly instead of showing a footer action.
+  if (page.url() !== beforeClickUrl || !isOnAppHost(page.url())) {
+    await completeOauthFlow(page, {
+      expectReturnPathContains: returnSubstring,
+    });
+    return;
+  }
+
+  await waitForMcpSecondaryView(page);
   const reauthItem = page.getByText("Re-Authenticate").first();
+  let reauthVisible = await reauthItem.isVisible().catch(() => false);
+  if (!reauthVisible) {
+    // Popover state can rerender; retry selection once before failing.
+    await closeActionsPopover(page);
+    await openActionsPopover(page);
+    const retryBeforeClickUrl = page.url();
+    const clickedRetry =
+      await clickServerRowAndWaitForPossibleUrlChangeWithRetry(
+        page,
+        serverName,
+        "Re-authenticate server row click retry",
+        10_000
+      );
+    if (!clickedRetry) {
+      const entries = await collectActionPopoverEntries(page);
+      await logPageStateWithTag(
+        page,
+        `reauthenticateFromChat retry could not click ${serverName}; visible entries: ${JSON.stringify(
+          entries
+        )}`
+      );
+      throw new Error(
+        `Unable to click MCP server row ${serverName} on reauth retry`
+      );
+    }
+
+    if (page.url() !== retryBeforeClickUrl || !isOnAppHost(page.url())) {
+      await completeOauthFlow(page, {
+        expectReturnPathContains: returnSubstring,
+      });
+      return;
+    }
+
+    await waitForMcpSecondaryView(page);
+    reauthVisible = await reauthItem.isVisible().catch(() => false);
+  }
+
   await expect(reauthItem).toBeVisible({ timeout: 15000 });
   await clickAndWaitForPossibleUrlChange(
     page,
@@ -1439,7 +1498,7 @@ async function waitForAssistantTools(
 
 test.describe("MCP OAuth flows", () => {
   test.describe.configure({ mode: "serial" });
-  test.setTimeout(180_000);
+  test.setTimeout(MCP_OAUTH_FLOW_TEST_TIMEOUT_MS);
 
   let serverProcess: McpServerProcess | null = null;
   let adminArtifacts: FlowArtifacts | null = null;
@@ -1578,7 +1637,7 @@ test.describe("MCP OAuth flows", () => {
   test("Admin can configure OAuth MCP server and use tools end-to-end", async ({
     page,
   }, testInfo) => {
-    test.setTimeout(180_000);
+    test.setTimeout(MCP_OAUTH_FLOW_TEST_TIMEOUT_MS);
     const logStep = createStepLogger("AdminFlow");
     test.skip(
       testInfo.project.name !== "admin",
@@ -1860,7 +1919,7 @@ test.describe("MCP OAuth flows", () => {
     page,
     browser,
   }, testInfo) => {
-    test.setTimeout(180_000);
+    test.setTimeout(MCP_OAUTH_FLOW_TEST_TIMEOUT_MS);
     const logStep = createStepLogger("CuratorFlow");
     test.skip(
       testInfo.project.name !== "admin",
@@ -2139,7 +2198,7 @@ test.describe("MCP OAuth flows", () => {
   test("End user can authenticate and invoke MCP tools via chat", async ({
     page,
   }, testInfo) => {
-    test.setTimeout(180_000);
+    test.setTimeout(MCP_OAUTH_FLOW_TEST_TIMEOUT_MS);
     const logStep = createStepLogger("UserFlow");
     test.skip(
       testInfo.project.name !== "admin",

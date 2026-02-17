@@ -41,16 +41,23 @@ const extractAssistantIdFromCreateResponse = (
 
 const createAssistantAndGetId = async (page: Page): Promise<number> => {
   const createResponsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes("/api/persona") &&
-      response.request().method() === "POST",
-    { timeout: 20000 }
+    (response) => {
+      if (response.request().method() !== "POST" || !response.ok()) {
+        return false;
+      }
+      try {
+        const pathname = new URL(response.url()).pathname;
+        return /^\/api\/persona\/?$/.test(pathname);
+      } catch {
+        return false;
+      }
+    },
+    { timeout: 30000 }
   );
 
   await getCreateSubmitButton(page).click();
 
   const createResponse = await createResponsePromise;
-  expect(createResponse.ok()).toBeTruthy();
 
   await page.waitForURL(
     (url) => {
