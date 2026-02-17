@@ -700,7 +700,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root enableBackground>
+      <AppLayouts.Root enableBackground={!appFocus.isProject()}>
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
