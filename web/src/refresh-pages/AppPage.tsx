@@ -27,7 +27,7 @@ import { useUser } from "@/providers/UserProvider";
 import NoAssistantModal from "@/components/modals/NoAssistantModal";
 import TextViewModal from "@/sections/modals/TextViewModal";
 import CodeViewModal from "@/sections/modals/CodeViewModal";
-import { getCodeLanguage } from "@/sections/modals/CodeViewContent";
+import { getCodeLanguage } from "@/lib/languages";
 import Modal from "@/refresh-components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
