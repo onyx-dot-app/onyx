@@ -20,6 +20,15 @@ import {
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
 
+function isSameOriginUrl(url: string): boolean {
+  if (!url.startsWith("http")) return true;
+  try {
+    return new URL(url).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 export const MemoizedAnchor = memo(
   ({
     docs,
@@ -178,10 +187,7 @@ export const MemoizedLink = memo(
 
     const url = ensureHrefProtocol(href);
 
-    const isChatFile =
-      url?.includes("/api/chat/file/") &&
-      (!url.startsWith("http") ||
-        new URL(url).origin === window.location.origin);
+    const isChatFile = url?.includes("/api/chat/file/") && isSameOriginUrl(url);
     if (isChatFile && updatePresentingDocument) {
       const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
       const filename = value?.toString() || "download";
