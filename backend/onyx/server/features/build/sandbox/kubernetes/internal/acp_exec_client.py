@@ -464,15 +464,6 @@ class ACPExecClient:
         Returns:
             The resumed session ID, or None if no session could be resumed
         """
-        # Check if the agent supports session/list + session/resume
-        session_caps = self._state.agent_capabilities.get("sessionCapabilities", {})
-        supports_list = session_caps.get("list") is not None
-        supports_resume = session_caps.get("resume") is not None
-
-        if not supports_list or not supports_resume:
-            logger.debug("[ACP] Agent does not support session resume")
-            return None
-
         # List sessions for this workspace directory
         sessions = self._list_sessions(cwd, timeout=min(timeout, 10.0))
         if not sessions:
