@@ -60,6 +60,19 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
     }
   }
 
+  function getAllowedNavigationUrl(rawUrl) {
+    try {
+      const parsed = new URL(String(rawUrl), window.location.href);
+      const scheme = parsed.protocol.toLowerCase();
+      if (!["http:", "https:", "mailto:", "tel:"].includes(scheme)) {
+        return null;
+      }
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
   document.addEventListener(
     "click",
     (event) => {
@@ -87,9 +100,14 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
         return;
       }
 
+      const safeUrl = getAllowedNavigationUrl(href);
+      if (!safeUrl) {
+        return;
+      }
+
       event.preventDefault();
       event.stopPropagation();
-      window.location.assign(href);
+      window.location.assign(safeUrl);
     },
     true
   );
@@ -105,7 +123,12 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
       url != null &&
       String(url).length > 0
     ) {
-      window.location.assign(String(url));
+      const safeUrl = getAllowedNavigationUrl(url);
+      if (!safeUrl) {
+        return null;
+      }
+
+      window.location.assign(safeUrl);
       return null;
     }
 
@@ -253,22 +276,7 @@ fn trigger_new_window(app: &AppHandle) {
 }
 
 fn open_docs() {
-    let url = "https://docs.onyx.app";
-    #[cfg(target_os = "macos")]
-    {
-        let _ = Command::new("open").arg(url).status();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = Command::new("xdg-open").arg(url).status();
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = Command::new("rundll32")
-            .arg("url.dll,FileProtocolHandler")
-            .arg(url)
-            .status();
-    }
+    let _ = open_in_default_browser("https://docs.onyx.app");
 }
 
 fn open_settings(app: &AppHandle) {
@@ -320,18 +328,18 @@ fn should_open_in_external_browser(current_url: &Url, destination_url: &Url) -> 
 fn open_in_default_browser(url: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
-        return Command::new("open").arg(url).spawn().is_ok();
+        return Command::new("open").arg(url).status().is_ok();
     }
     #[cfg(target_os = "linux")]
     {
-        return Command::new("xdg-open").arg(url).spawn().is_ok();
+        return Command::new("xdg-open").arg(url).status().is_ok();
     }
     #[cfg(target_os = "windows")]
     {
         return Command::new("rundll32")
             .arg("url.dll,FileProtocolHandler")
             .arg(url)
-            .spawn()
+            .status()
             .is_ok();
     }
     #[allow(unreachable_code)]
