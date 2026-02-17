@@ -1277,10 +1277,10 @@ test.describe("MCP OAuth flows", () => {
 
     for (let i = 0; i < toggleCount; i++) {
       const toggle = adminToolToggles.nth(i);
-      const isEnabled = await toggle.getAttribute("data-state");
-      if (isEnabled !== "checked") {
+      const isEnabled = await toggle.getAttribute("aria-checked");
+      if (isEnabled !== "true") {
         await toggle.click();
-        await expect(toggle).toHaveAttribute("data-state", "checked", {
+        await expect(toggle).toHaveAttribute("aria-checked", "true", {
           timeout: 5000,
         });
         logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.admin}`);
@@ -1558,10 +1558,10 @@ test.describe("MCP OAuth flows", () => {
 
       for (let i = 0; i < toggleCount; i++) {
         const toggle = curatorToolToggles.nth(i);
-        const isEnabled = await toggle.getAttribute("data-state");
-        if (isEnabled !== "checked") {
+        const isEnabled = await toggle.getAttribute("aria-checked");
+        if (isEnabled !== "true") {
           await toggle.click();
-          await expect(toggle).toHaveAttribute("data-state", "checked", {
+          await expect(toggle).toHaveAttribute("aria-checked", "true", {
             timeout: 5000,
           });
           logStep(`Enabled tool instance ${i + 1}: ${TOOL_NAMES.curator}`);

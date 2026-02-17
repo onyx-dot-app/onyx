@@ -260,10 +260,10 @@ test.describe("Default Assistant MCP Integration", () => {
       console.log(`[test] Found tool: ${toolId}`);
 
       // Disable if currently enabled (tools are enabled by default)
-      const state = await toolToggle.getAttribute("data-state");
-      if (state === "checked") {
+      const state = await toolToggle.getAttribute("aria-checked");
+      if (state === "true") {
         await toolToggle.click();
-        await expect(toolToggle).toHaveAttribute("data-state", "unchecked", {
+        await expect(toolToggle).toHaveAttribute("aria-checked", "false", {
           timeout: 5000,
         });
         disabledToolsCount++;
@@ -407,14 +407,14 @@ test.describe("Default Assistant MCP Integration", () => {
     console.log(`[test] Tool toggle is visible`);
 
     // Get initial state and toggle
-    const initialState = await toolToggle.getAttribute("data-state");
+    const initialState = await toolToggle.getAttribute("aria-checked");
     console.log(`[test] Initial toggle state: ${initialState}`);
     await toolToggle.click();
     await page.waitForTimeout(300);
 
     // Wait for state to change
-    const expectedState = initialState === "checked" ? "unchecked" : "checked";
-    await expect(toolToggle).toHaveAttribute("data-state", expectedState, {
+    const expectedState = initialState === "true" ? "false" : "true";
+    await expect(toolToggle).toHaveAttribute("aria-checked", expectedState, {
       timeout: 5000,
     });
     console.log(`[test] Toggle state changed to: ${expectedState}`);
@@ -422,7 +422,7 @@ test.describe("Default Assistant MCP Integration", () => {
     // Toggle back
     await toolToggle.click();
     await page.waitForTimeout(300);
-    await expect(toolToggle).toHaveAttribute("data-state", initialState!, {
+    await expect(toolToggle).toHaveAttribute("aria-checked", initialState!, {
       timeout: 5000,
     });
     console.log(`[test] Toggled back to original state: ${initialState}`);
@@ -438,7 +438,7 @@ test.describe("Default Assistant MCP Integration", () => {
 
       // Verify at least one toggle is now unchecked
       const anyUnchecked = await popover
-        .locator('[role="switch"][data-state="unchecked"]')
+        .locator('[role="switch"][aria-checked="false"]')
         .count();
       expect(anyUnchecked).toBeGreaterThan(0);
       console.log(`[test] Disabled all tools (${anyUnchecked} unchecked)`);
@@ -492,17 +492,17 @@ test.describe("Default Assistant MCP Integration", () => {
     );
     await mcpServerSwitch.scrollIntoViewIfNeeded();
     await mcpServerSwitch.click();
-    await expect(mcpServerSwitch).toHaveAttribute("data-state", "checked");
+    await expect(mcpServerSwitch).toHaveAttribute("aria-checked", "true");
 
     const firstToolToggle = page
       .locator(`button[role="switch"][name^="mcp_server_${serverId}.tool_"]`)
       .first();
     await expect(firstToolToggle).toBeVisible({ timeout: 15000 });
-    const toolState = await firstToolToggle.getAttribute("data-state");
-    if (toolState !== "checked") {
+    const toolState = await firstToolToggle.getAttribute("aria-checked");
+    if (toolState !== "true") {
       await firstToolToggle.click();
     }
-    await expect(firstToolToggle).toHaveAttribute("data-state", "checked");
+    await expect(firstToolToggle).toHaveAttribute("aria-checked", "true");
 
     await page.getByRole("button", { name: "Create" }).click();
 
