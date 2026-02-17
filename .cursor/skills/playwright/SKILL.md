@@ -123,10 +123,10 @@ Backend API client for test setup/teardown. Key methods:
 
 Use locators in this priority order:
 
-1. **`data-testid`** — preferred for Onyx components
+1. **`data-testid` / `aria-label`** — preferred for Onyx components
    ```typescript
    page.getByTestId("AppSidebar/new-session")
-   page.getByTestId("onyx-ai-message")
+   page.getByLabel("admin-page-title")
    ```
 
 2. **Role-based** — for standard HTML elements
