@@ -17,10 +17,7 @@ description: Write and maintain Playwright end-to-end tests for the Onyx applica
 ## Running Tests
 
 ```bash
-# Run a specific test file
 npx playwright test web/tests/e2e/chat/default_assistant.spec.ts
-
-# Run a specific project
 npx playwright test --project admin
 npx playwright test --project exclusive
 ```
@@ -52,8 +49,8 @@ When a test needs a different user, use API-based login — never drive the logi
 import { loginAs } from "@tests/e2e/utils/auth";
 
 await page.context().clearCookies();
-await loginAs(page, "user");    // user1@example.com
-await loginAs(page, "admin2");  // admin2_user@example.com
+await loginAs(page, "user");
+await loginAs(page, "admin2");
 ```
 
 ## Test Structure
@@ -67,7 +64,6 @@ test.describe("Feature Name", () => {
   test("should describe expected behavior clearly", async ({ page }) => {
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
-    // Already authenticated as admin — go straight to testing
   });
 });
 ```
@@ -154,19 +150,10 @@ Use locators in this priority order:
 Use web-first assertions — they auto-retry until the condition is met:
 
 ```typescript
-// Visibility
 await expect(page.getByTestId("onyx-logo")).toBeVisible({ timeout: 5000 });
-
-// Text content
 await expect(page.getByTestId("assistant-name-display")).toHaveText("My Assistant");
-
-// Count
 await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(2, { timeout: 30000 });
-
-// URL
 await expect(page).toHaveURL(/chatId=/);
-
-// Element state
 await expect(toggle).toBeChecked();
 await expect(button).toBeEnabled();
 ```
@@ -176,17 +163,13 @@ await expect(button).toBeEnabled();
 ## Waiting Strategy
 
 ```typescript
-// Wait for load state after navigation
 await page.goto("/app");
 await page.waitForLoadState("networkidle");
 
-// Wait for specific element
 await page.getByTestId("chat-intro").waitFor({ state: "visible", timeout: 10000 });
 
-// Wait for URL change
 await page.waitForFunction(() => window.location.href.includes("chatId="), null, { timeout: 10000 });
 
-// Wait for network response
 await page.waitForResponse(resp => resp.url().includes("/api/chat") && resp.status() === 200);
 ```
 
@@ -201,4 +184,4 @@ await page.waitForResponse(resp => resp.url().includes("/api/chat") && resp.stat
 7. **Error context** — catch and re-throw with useful debug info (page text, URL, etc.)
 8. **Tag slow tests** — mark serial/slow tests with `@exclusive` in the test title
 9. **Visual regression** — use `expectScreenshot()` for UI consistency checks
-10. **No code comments** — avoid inline comments in test code; use descriptive names and JSDoc on helpers instead
+10. **Minimal comments** — only comment to clarify non-obvious intent; never restate what the next line of code does
