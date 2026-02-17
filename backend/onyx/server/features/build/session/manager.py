@@ -15,14 +15,6 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from acp.schema import AgentMessageChunk
-from acp.schema import AgentPlanUpdate
-from acp.schema import AgentThoughtChunk
-from acp.schema import CurrentModeUpdate
-from acp.schema import Error as ACPError
-from acp.schema import PromptResponse
-from acp.schema import ToolCallProgress
-from acp.schema import ToolCallStart
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -62,8 +54,8 @@ from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
+from onyx.server.features.build.db.build_session import update_opencode_session_id
 from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
@@ -71,10 +63,15 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    SSEKeepalive,
-)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.opencode import OpenCodeAgentMessageChunk
+from onyx.server.features.build.sandbox.opencode import OpenCodeAgentThoughtChunk
+from onyx.server.features.build.sandbox.opencode import OpenCodeError
+from onyx.server.features.build.sandbox.opencode import OpenCodePromptResponse
+from onyx.server.features.build.sandbox.opencode import OpenCodeSessionEstablished
+from onyx.server.features.build.sandbox.opencode import OpenCodeSSEKeepalive
+from onyx.server.features.build.sandbox.opencode import OpenCodeToolCallProgress
+from onyx.server.features.build.sandbox.opencode import OpenCodeToolCallStart
 from onyx.server.features.build.sandbox.tasks.tasks import (
     _get_disabled_user_library_paths,
 )
@@ -99,9 +96,9 @@ class UploadLimitExceededError(ValueError):
 
 
 class BuildStreamingState:
-    """Container for accumulating state during ACP streaming.
+    """Container for accumulating state during OpenCode streaming.
 
-    Similar to ChatStateContainer but adapted for ACP packet types.
+    Similar to ChatStateContainer but adapted for build-mode packet types.
     Accumulates chunks and tracks pending tool calls until completion.
 
     Usage:
@@ -129,9 +126,6 @@ class BuildStreamingState:
         # Accumulated text chunks (similar to answer_tokens in ChatStateContainer)
         self.message_chunks: list[str] = []
         self.thought_chunks: list[str] = []
-
-        # For upserting agent_plan_update - track ID so we can update in place
-        self.plan_message_id: UUID | None = None
 
         # Track what type of chunk we were last receiving
         self._last_chunk_type: str | None = None
@@ -1103,18 +1097,17 @@ class SessionManager:
         - agent_thought_chunk: Accumulated, saved as one synthetic packet at end/type change
         - tool_call_start: Streamed to frontend only, not saved
         - tool_call_progress: Only saved when status="completed"
-        - agent_plan_update: Upserted (only latest plan kept per turn)
         """
 
-        def _serialize_acp_event(event: Any, event_type: str) -> str:
-            """Serialize an ACP event to SSE format, preserving ALL ACP data."""
+        def _serialize_event(event: Any, event_type: str) -> str:
+            """Serialize an event to SSE format, preserving all event data."""
             if hasattr(event, "model_dump"):
                 data = event.model_dump(mode="json", by_alias=True, exclude_none=False)
             else:
                 data = {"raw": str(event)}
 
             data["type"] = event_type
-            data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+            data.setdefault("timestamp", datetime.now(tz=timezone.utc).isoformat())
 
             return f"event: message\ndata: {json.dumps(data)}\n\n"
 
@@ -1123,7 +1116,7 @@ class SessionManager:
             return f"event: message\ndata: {packet.model_dump_json(by_alias=True)}\n\n"
 
         def _extract_text_from_content(content: Any) -> str:
-            """Extract text from ACP content structure."""
+            """Extract text from event content structures."""
             if content is None:
                 return ""
             if hasattr(content, "type") and content.type == "text":
@@ -1263,81 +1256,321 @@ class SessionManager:
                 },
             )
 
-            # Stream ACP events directly to frontend
-            for acp_event in self._sandbox_manager.send_message(
-                sandbox_id, session_id, user_message_content
+            if session.nextjs_port is None:
+                error_packet = ErrorPacket(
+                    message="Session is missing a Next.js port allocation."
+                )
+                packet_logger.log("error", error_packet.model_dump())
+                yield _format_packet_event(error_packet)
+                return
+
+            primary_opencode_session_id: str | None = session.opencode_session_id
+            saw_primary_opencode_session = False
+            task_call_to_subagent_session: dict[str, str] = {}
+            subagent_session_to_task_call: dict[str, str] = {}
+            buffered_subagent_packets_by_session: dict[str, list[dict[str, Any]]] = {}
+
+            def _extract_task_subagent_session_id(
+                event_data: dict[str, Any],
+            ) -> str | None:
+                raw_output_obj = (
+                    event_data.get("raw_output") or event_data.get("rawOutput") or {}
+                )
+                raw_output = raw_output_obj if isinstance(raw_output_obj, dict) else {}
+                metadata_obj = raw_output.get("metadata")
+                metadata = metadata_obj if isinstance(metadata_obj, dict) else {}
+
+                direct = (
+                    raw_output.get("sessionId")
+                    or raw_output.get("sessionID")
+                    or raw_output.get("session_id")
+                )
+                if isinstance(direct, str) and direct:
+                    return direct
+
+                nested = (
+                    metadata.get("sessionId")
+                    or metadata.get("sessionID")
+                    or metadata.get("session_id")
+                )
+                if isinstance(nested, str) and nested:
+                    return nested
+
+                return None
+
+            def _serialize_subagent_packet(
+                parent_tool_call_id: str,
+                subagent_session_id: str,
+                packet: dict[str, Any],
+            ) -> str:
+                payload = {
+                    "type": "subagent_packet",
+                    "parent_tool_call_id": parent_tool_call_id,
+                    "subagent_session_id": subagent_session_id,
+                    "packet": packet,
+                    "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                }
+                return f"event: message\ndata: {json.dumps(payload)}\n\n"
+
+            def _emit_subagent_packets(
+                parent_tool_call_id: str,
+                subagent_session_id: str,
+                packets: list[dict[str, Any]],
+            ) -> Generator[str, None, None]:
+                nonlocal events_emitted
+
+                for packet in packets:
+                    subagent_packet = {
+                        "type": "subagent_packet",
+                        "parent_tool_call_id": parent_tool_call_id,
+                        "subagent_session_id": subagent_session_id,
+                        "packet": packet,
+                        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                    }
+
+                    create_message(
+                        session_id=session_id,
+                        message_type=MessageType.ASSISTANT,
+                        turn_index=state.turn_index,
+                        message_metadata=subagent_packet,
+                        db_session=self._db_session,
+                    )
+
+                    packet_logger.log("subagent_packet", subagent_packet)
+                    packet_logger.log_sse_emit("subagent_packet", session_id)
+                    events_emitted += 1
+                    yield _serialize_subagent_packet(
+                        parent_tool_call_id=parent_tool_call_id,
+                        subagent_session_id=subagent_session_id,
+                        packet=packet,
+                    )
+
+            def _event_to_packet_dict(event: Any) -> dict[str, Any] | None:
+                if isinstance(
+                    event, (OpenCodeSSEKeepalive, OpenCodeSessionEstablished)
+                ):
+                    return None
+
+                event_type = self._get_event_type(event)
+                if not event_type or event_type == "unknown":
+                    return None
+
+                if hasattr(event, "model_dump"):
+                    data = event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                else:
+                    data = {"raw": str(event)}
+
+                data["type"] = event_type
+                data.setdefault("timestamp", datetime.now(tz=timezone.utc).isoformat())
+                return data
+
+            def _flush_buffered_subagent_packets(
+                subagent_session_id: str,
+            ) -> Generator[str, None, None]:
+                parent_tool_call_id = subagent_session_to_task_call.get(
+                    subagent_session_id
+                )
+                if not parent_tool_call_id:
+                    return
+
+                buffered_packets = buffered_subagent_packets_by_session.pop(
+                    subagent_session_id, []
+                )
+                if buffered_packets:
+                    yield from _emit_subagent_packets(
+                        parent_tool_call_id=parent_tool_call_id,
+                        subagent_session_id=subagent_session_id,
+                        packets=buffered_packets,
+                    )
+
+            def _persist_primary_opencode_session(
+                opencode_session_id: str,
+            ) -> None:
+                nonlocal primary_opencode_session_id
+
+                if primary_opencode_session_id == opencode_session_id:
+                    return
+
+                primary_opencode_session_id = opencode_session_id
+                if session.opencode_session_id != opencode_session_id:
+                    update_opencode_session_id(
+                        session_id=session_id,
+                        opencode_session_id=opencode_session_id,
+                        db_session=self._db_session,
+                    )
+                    session.opencode_session_id = opencode_session_id
+
+            # Stream OpenCode events directly to frontend.
+            for opencode_event in self._sandbox_manager.send_message(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                nextjs_port=session.nextjs_port,
+                message=user_message_content,
+                opencode_session_id=session.opencode_session_id,
             ):
-                # Handle SSE keepalive - send comment to keep connection alive
-                if isinstance(acp_event, SSEKeepalive):
-                    # SSE comments start with : and are ignored by EventSource
-                    # but keep the HTTP connection alive
+                # Handle SSE keepalive - send comment to keep connection alive.
+                if isinstance(opencode_event, OpenCodeSSEKeepalive):
                     packet_logger.log_sse_emit("keepalive", session_id)
                     yield ": keepalive\n\n"
                     continue
 
-                # Check if we need to finalize pending chunks before processing
-                event_type = self._get_event_type(acp_event)
+                # Internal event used for OpenCode session-id persistence.
+                if isinstance(opencode_event, OpenCodeSessionEstablished):
+                    if not saw_primary_opencode_session:
+                        saw_primary_opencode_session = True
+                        _persist_primary_opencode_session(
+                            opencode_event.opencode_session_id
+                        )
+                    packet_logger.log(
+                        "opencode_session_established",
+                        opencode_event.model_dump(
+                            mode="json", by_alias=True, exclude_none=False
+                        ),
+                    )
+                    continue
+
+                event_session_id = getattr(opencode_event, "opencode_session_id", None)
+                if (
+                    not saw_primary_opencode_session
+                    and isinstance(event_session_id, str)
+                    and event_session_id
+                ):
+                    saw_primary_opencode_session = True
+                    _persist_primary_opencode_session(event_session_id)
+
+                is_primary_event = (
+                    not isinstance(event_session_id, str)
+                    or not event_session_id
+                    or event_session_id == primary_opencode_session_id
+                )
+
+                if not is_primary_event:
+                    packet = _event_to_packet_dict(opencode_event)
+                    if packet is None:
+                        continue
+
+                    parent_tool_call_id = subagent_session_to_task_call.get(
+                        event_session_id
+                    )
+                    if parent_tool_call_id:
+                        yield from _emit_subagent_packets(
+                            parent_tool_call_id=parent_tool_call_id,
+                            subagent_session_id=event_session_id,
+                            packets=[packet],
+                        )
+                    else:
+                        buffered_subagent_packets_by_session.setdefault(
+                            event_session_id, []
+                        ).append(packet)
+                    continue
+
+                # Check if we need to finalize pending chunks before processing.
+                event_type = self._get_event_type(opencode_event)
                 if state.should_finalize_chunks(event_type):
                     _save_pending_chunks(state)
 
                 events_emitted += 1
 
-                # Pass through ACP events with snake_case type names
-                if isinstance(acp_event, AgentMessageChunk):
-                    text = _extract_text_from_content(acp_event.content)
+                if isinstance(opencode_event, OpenCodeAgentMessageChunk):
+                    text = _extract_text_from_content(opencode_event.content)
                     if text:
                         state.add_message_chunk(text)
-                    event_data = acp_event.model_dump(
+                    event_data = opencode_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "agent_message_chunk"
                     packet_logger.log("agent_message_chunk", event_data)
                     packet_logger.log_sse_emit("agent_message_chunk", session_id)
-                    yield _serialize_acp_event(acp_event, "agent_message_chunk")
+                    yield _serialize_event(opencode_event, "agent_message_chunk")
 
-                elif isinstance(acp_event, AgentThoughtChunk):
-                    text = _extract_text_from_content(acp_event.content)
+                elif isinstance(opencode_event, OpenCodeAgentThoughtChunk):
+                    text = _extract_text_from_content(opencode_event.content)
                     if text:
                         state.add_thought_chunk(text)
                     packet_logger.log(
                         "agent_thought_chunk",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                        opencode_event.model_dump(mode="json", by_alias=True),
                     )
                     packet_logger.log_sse_emit("agent_thought_chunk", session_id)
-                    yield _serialize_acp_event(acp_event, "agent_thought_chunk")
+                    yield _serialize_event(opencode_event, "agent_thought_chunk")
 
-                elif isinstance(acp_event, ToolCallStart):
-                    # Stream to frontend but don't save - wait for completion
+                elif isinstance(opencode_event, OpenCodeToolCallStart):
+                    # Stream to frontend but don't save - wait for completion.
                     packet_logger.log(
                         "tool_call_start",
-                        acp_event.model_dump(mode="json", by_alias=True),
+                        opencode_event.model_dump(mode="json", by_alias=True),
                     )
                     packet_logger.log_sse_emit("tool_call_start", session_id)
-                    yield _serialize_acp_event(acp_event, "tool_call_start")
+                    yield _serialize_event(opencode_event, "tool_call_start")
 
-                elif isinstance(acp_event, ToolCallProgress):
-                    event_data = acp_event.model_dump(
+                elif isinstance(opencode_event, OpenCodeToolCallProgress):
+                    event_data = opencode_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "tool_call_progress"
-                    event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+                    event_data.setdefault(
+                        "timestamp", datetime.now(tz=timezone.utc).isoformat()
+                    )
 
-                    # Check if this is a TodoWrite tool call
-                    tool_name = (event_data.get("title") or "").lower()
-                    is_todo_write = tool_name in ("todowrite", "todo_write")
+                    # Check if this is a TodoWrite tool call.
+                    tool_name = (
+                        event_data.get("tool_name")
+                        or event_data.get("toolName")
+                        or event_data.get("title")
+                        or ""
+                    )
+                    tool_name_lower = str(tool_name).lower()
+                    is_todo_write = tool_name_lower in ("todowrite", "todo_write")
 
-                    # Check if this is a Task (subagent) tool call
-                    raw_input = event_data.get("rawInput") or {}
+                    # Check if this is a Task (subagent) tool call.
+                    raw_input_obj = (
+                        event_data.get("raw_input") or event_data.get("rawInput") or {}
+                    )
+                    raw_input = raw_input_obj if isinstance(raw_input_obj, dict) else {}
                     is_task_tool = (
-                        tool_name == "task"
+                        tool_name_lower == "task"
                         or raw_input.get("subagent_type") is not None
                         or raw_input.get("subagentType") is not None
                     )
 
+                    tool_call_id = (
+                        event_data.get("tool_call_id")
+                        or event_data.get("toolCallId")
+                        or opencode_event.tool_call_id
+                    )
+                    tool_call_id_str = (
+                        tool_call_id if isinstance(tool_call_id, str) else None
+                    )
+                    if is_task_tool and tool_call_id_str:
+                        subagent_session_id = _extract_task_subagent_session_id(
+                            event_data
+                        )
+                        if subagent_session_id:
+                            existing_mapped = task_call_to_subagent_session.get(
+                                tool_call_id_str
+                            )
+                            if (
+                                existing_mapped is not None
+                                and existing_mapped != subagent_session_id
+                            ):
+                                subagent_session_to_task_call.pop(existing_mapped, None)
+
+                            task_call_to_subagent_session[tool_call_id_str] = (
+                                subagent_session_id
+                            )
+                            subagent_session_to_task_call[subagent_session_id] = (
+                                tool_call_id_str
+                            )
+                            yield from _flush_buffered_subagent_packets(
+                                subagent_session_id
+                            )
+
                     # Save to DB:
                     # - For TodoWrite: Save every progress update (todos change frequently)
                     # - For other tools: Only save when status="completed"
-                    if is_todo_write or acp_event.status == "completed":
+                    if is_todo_write or opencode_event.status == "completed":
                         create_message(
                             session_id=session_id,
                             message_type=MessageType.ASSISTANT,
@@ -1346,100 +1579,56 @@ class SessionManager:
                             db_session=self._db_session,
                         )
 
-                    # For completed Task tools, also save the output as an agent_message
-                    # This allows the task output to be rendered as assistant text on reload
-                    if is_task_tool and acp_event.status == "completed":
-                        raw_output = event_data.get("rawOutput") or {}
-                        task_output = raw_output.get("output")
-                        if task_output and isinstance(task_output, str):
-                            # Strip task_metadata from the output
-                            metadata_idx = task_output.find("<task_metadata>")
-                            if metadata_idx >= 0:
-                                task_output = task_output[:metadata_idx].strip()
-
-                            if task_output:
-                                # Create agent_message packet for the task output
-                                task_output_packet = {
-                                    "type": "agent_message",
-                                    "content": {"type": "text", "text": task_output},
-                                    "source": "task_output",
-                                    "timestamp": datetime.now(
-                                        tz=timezone.utc
-                                    ).isoformat(),
-                                }
-                                create_message(
-                                    session_id=session_id,
-                                    message_type=MessageType.ASSISTANT,
-                                    turn_index=state.turn_index,
-                                    message_metadata=task_output_packet,
-                                    db_session=self._db_session,
-                                )
-
-                    # Log full event to packet logger (can handle large payloads)
                     packet_logger.log("tool_call_progress", event_data)
                     packet_logger.log_sse_emit("tool_call_progress", session_id)
-                    yield _serialize_acp_event(acp_event, "tool_call_progress")
+                    yield _serialize_event(opencode_event, "tool_call_progress")
 
-                elif isinstance(acp_event, AgentPlanUpdate):
-                    event_data = acp_event.model_dump(
-                        mode="json", by_alias=True, exclude_none=False
-                    )
-                    event_data["type"] = "agent_plan_update"
-                    event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
-
-                    # Upsert plan immediately
-                    plan_msg = upsert_agent_plan(
-                        session_id=session_id,
-                        turn_index=state.turn_index,
-                        plan_metadata=event_data,
-                        db_session=self._db_session,
-                        existing_plan_id=state.plan_message_id,
-                    )
-                    state.plan_message_id = plan_msg.id
-
-                    packet_logger.log("agent_plan_update", event_data)
-                    packet_logger.log_sse_emit("agent_plan_update", session_id)
-                    yield _serialize_acp_event(acp_event, "agent_plan_update")
-
-                elif isinstance(acp_event, CurrentModeUpdate):
-                    event_data = acp_event.model_dump(
-                        mode="json", by_alias=True, exclude_none=False
-                    )
-                    event_data["type"] = "current_mode_update"
-                    packet_logger.log("current_mode_update", event_data)
-                    packet_logger.log_sse_emit("current_mode_update", session_id)
-                    yield _serialize_acp_event(acp_event, "current_mode_update")
-
-                elif isinstance(acp_event, PromptResponse):
-                    event_data = acp_event.model_dump(
+                elif isinstance(opencode_event, OpenCodePromptResponse):
+                    event_data = opencode_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "prompt_response"
                     packet_logger.log("prompt_response", event_data)
                     packet_logger.log_sse_emit("prompt_response", session_id)
-                    yield _serialize_acp_event(acp_event, "prompt_response")
+                    yield _serialize_event(opencode_event, "prompt_response")
 
-                elif isinstance(acp_event, ACPError):
-                    event_data = acp_event.model_dump(
+                elif isinstance(opencode_event, OpenCodeError):
+                    event_data = opencode_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "error"
                     packet_logger.log("error", event_data)
                     packet_logger.log_sse_emit("error", session_id)
-                    yield _serialize_acp_event(acp_event, "error")
+                    yield _serialize_event(opencode_event, "error")
 
                 else:
-                    # Unrecognized packet type - log it but don't stream to frontend
-                    event_type_name = type(acp_event).__name__
-                    event_data = acp_event.model_dump(
-                        mode="json", by_alias=True, exclude_none=False
-                    )
+                    event_type_name = type(opencode_event).__name__
+                    if hasattr(opencode_event, "model_dump"):
+                        event_data = opencode_event.model_dump(
+                            mode="json", by_alias=True, exclude_none=False
+                        )
+                    else:
+                        event_data = {"raw": str(opencode_event)}
                     event_data["type"] = f"unrecognized_{event_type_name.lower()}"
                     packet_logger.log(
                         f"unrecognized_{event_type_name.lower()}", event_data
                     )
 
             # Save all accumulated state at end of streaming
+            if buffered_subagent_packets_by_session:
+                packet_logger.log_raw(
+                    "DROPPED-UNMAPPED-SUBAGENT-PACKETS",
+                    {
+                        "session_id": str(session_id),
+                        "unmapped_subagent_session_ids": list(
+                            buffered_subagent_packets_by_session.keys()
+                        ),
+                        "packet_counts": {
+                            sid: len(packets)
+                            for sid, packets in buffered_subagent_packets_by_session.items()
+                        },
+                    },
+                )
             _save_build_turn(state)
 
             # Log streaming completion
@@ -1498,24 +1687,22 @@ class SessionManager:
             logger.exception("Unexpected error in build message streaming")
             yield _format_packet_event(error_packet)
 
-    def _get_event_type(self, acp_event: Any) -> str:
-        """Get the event type string for an ACP event."""
-        if isinstance(acp_event, AgentMessageChunk):
+    def _get_event_type(self, event: Any) -> str:
+        """Get the event type string for an OpenCode event."""
+        if isinstance(event, OpenCodeAgentMessageChunk):
             return "agent_message_chunk"
-        elif isinstance(acp_event, AgentThoughtChunk):
+        elif isinstance(event, OpenCodeAgentThoughtChunk):
             return "agent_thought_chunk"
-        elif isinstance(acp_event, ToolCallStart):
+        elif isinstance(event, OpenCodeToolCallStart):
             return "tool_call_start"
-        elif isinstance(acp_event, ToolCallProgress):
+        elif isinstance(event, OpenCodeToolCallProgress):
             return "tool_call_progress"
-        elif isinstance(acp_event, AgentPlanUpdate):
-            return "agent_plan_update"
-        elif isinstance(acp_event, CurrentModeUpdate):
-            return "current_mode_update"
-        elif isinstance(acp_event, PromptResponse):
+        elif isinstance(event, OpenCodePromptResponse):
             return "prompt_response"
-        elif isinstance(acp_event, ACPError):
+        elif isinstance(event, OpenCodeError):
             return "error"
+        elif isinstance(event, OpenCodeSessionEstablished):
+            return "opencode_session_established"
         return "unknown"
 
     # =========================================================================

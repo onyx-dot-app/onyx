@@ -1,7 +1,7 @@
 /**
  * Parse Packet
  *
- * Single entry point for converting raw ACP packets into strongly-typed
+ * Single entry point for converting raw streamed packets into strongly-typed
  * ParsedPacket values. All field resolution, tool detection, and path
  * sanitization happen here. Consumers never touch Record<string, unknown>.
  */
@@ -15,6 +15,7 @@ import {
   type ParsedPacket,
   type ParsedToolCallStart,
   type ParsedToolCallProgress,
+  type ParsedSubagentPacket,
   type ParsedArtifact,
   type ToolName,
   type ToolKind,
@@ -41,6 +42,9 @@ export function parsePacket(raw: unknown): ParsedPacket {
 
     case "tool_call_progress":
       return parseToolCallProgress(p);
+
+    case "subagent_packet":
+      return parseSubagentPacket(p);
 
     case "prompt_response":
       return { type: "prompt_response" };
@@ -131,7 +135,7 @@ function resolveKind(toolName: ToolName, rawKind: string | null): ToolKind {
 
 // ─── Shared Helpers ───────────────────────────────────────────────
 
-/** Extract text from ACP content structure (string, {type,text}, or array) */
+/** Extract text from content structure (string, {type,text}, or array) */
 function extractText(content: unknown): string {
   if (!content) return "";
   if (typeof content === "string") return content;
@@ -398,14 +402,37 @@ function normalizeTodoStatus(status: unknown): TodoStatus {
   return "pending";
 }
 
-// ─── Task Output Extraction ──────────────────────────────────────
-
-function extractTaskOutput(ro: Record<string, unknown> | null): string | null {
-  if (!ro?.output || typeof ro.output !== "string") return null;
-  return (
-    ro.output.replace(/<task_metadata>[\s\S]*?<\/task_metadata>/g, "").trim() ||
-    null
+// ─── Task Subagent Packet Extraction ─────────────────────────────
+function extractSubagentPacketData(
+  ro: Record<string, unknown> | null
+): Record<string, unknown>[] {
+  const raw = ro?.subagent_packets ?? ro?.subagentPackets ?? null;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (item): item is Record<string, unknown> =>
+      !!item && typeof item === "object"
   );
+}
+
+function parseSubagentPacket(p: Record<string, unknown>): ParsedSubagentPacket {
+  const parentToolCallId = (p.parent_tool_call_id ??
+    p.parentToolCallId ??
+    "") as string | undefined;
+  const subagentSessionId = (p.subagent_session_id ??
+    p.subagentSessionId ??
+    null) as string | null;
+  const packetRaw = p.packet;
+  const packetData =
+    packetRaw && typeof packetRaw === "object"
+      ? (packetRaw as Record<string, unknown>)
+      : null;
+
+  return {
+    type: "subagent_packet",
+    parentToolCallId: parentToolCallId || "",
+    subagentSessionId,
+    packetData,
+  };
 }
 
 // ─── Artifact Parsing ─────────────────────────────────────────────
@@ -505,10 +532,16 @@ function parseToolCallProgress(
   const subagentType = (ri?.subagent_type ?? ri?.subagentType ?? null) as
     | string
     | null;
-  const taskOutput =
-    toolName === "task" && status === "completed"
-      ? extractTaskOutput(ro)
-      : null;
+  const rawMetadata = (ro?.metadata ?? null) as Record<string, unknown> | null;
+  const subagentSessionId = (ro?.sessionId ??
+    ro?.sessionID ??
+    ro?.session_id ??
+    rawMetadata?.sessionId ??
+    rawMetadata?.sessionID ??
+    rawMetadata?.session_id ??
+    null) as string | null;
+  const subagentPacketData =
+    toolName === "task" ? extractSubagentPacketData(ro) : [];
 
   return {
     type: "tool_call_progress",
@@ -523,6 +556,8 @@ function parseToolCallProgress(
     rawOutput,
     filePath,
     subagentType,
+    subagentSessionId,
+    subagentPacketData,
     isNewFile:
       diffData.oldText || diffData.newText
         ? diffData.isNewFile
@@ -530,6 +565,5 @@ function parseToolCallProgress(
     oldContent: diffData.oldText,
     newContent: diffData.newText,
     todos,
-    taskOutput,
   };
 }

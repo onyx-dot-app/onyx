@@ -19,7 +19,17 @@ import {
 } from "@opal/icons";
 import RawOutputBlock from "@/app/craft/components/RawOutputBlock";
 import DiffView from "@/app/craft/components/DiffView";
-import { ToolCallState, ToolCallKind } from "@/app/craft/types/displayTypes";
+import TextChunk from "@/app/craft/components/TextChunk";
+import ThinkingCard from "@/app/craft/components/ThinkingCard";
+import TodoListCard from "@/app/craft/components/TodoListCard";
+import WorkingPill from "@/app/craft/components/WorkingPill";
+import {
+  ToolCallState,
+  ToolCallKind,
+  StreamItem,
+  GroupedStreamItem,
+} from "@/app/craft/types/displayTypes";
+import { isWorkingToolCall } from "@/app/craft/utils/streamItemHelpers";
 
 interface ToolCallPillProps {
   toolCall: ToolCallState;
@@ -113,6 +123,35 @@ function getLanguageHint(toolCall: ToolCallState): string | undefined {
   }
 }
 
+function groupSubagentStreamItems(items: StreamItem[]): GroupedStreamItem[] {
+  const grouped: GroupedStreamItem[] = [];
+  let currentWorkingGroup: ToolCallState[] = [];
+
+  const flushWorkingGroup = () => {
+    const firstToolCall = currentWorkingGroup[0];
+    if (firstToolCall) {
+      grouped.push({
+        type: "working_group",
+        id: `subagent-working-${firstToolCall.id}`,
+        toolCalls: [...currentWorkingGroup],
+      });
+      currentWorkingGroup = [];
+    }
+  };
+
+  for (const item of items) {
+    if (item.type === "tool_call" && isWorkingToolCall(item.toolCall)) {
+      currentWorkingGroup.push(item.toolCall);
+    } else {
+      flushWorkingGroup();
+      grouped.push(item as GroupedStreamItem);
+    }
+  }
+
+  flushWorkingGroup();
+  return grouped;
+}
+
 /**
  * ToolCallPill - Expandable pill for tool calls
  *
@@ -131,6 +170,12 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
   const Icon = getToolIcon(toolCall.kind);
   const statusDisplay = getStatusDisplay(toolCall.status);
   const StatusIcon = statusDisplay.icon;
+  const groupedSubagentItems = toolCall.subagentStreamItems
+    ? groupSubagentStreamItems(toolCall.subagentStreamItems)
+    : [];
+  const lastSubagentWorkingGroupIndex = groupedSubagentItems.findLastIndex(
+    (item) => item.type === "working_group"
+  );
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -198,10 +243,75 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
 
         <CollapsibleContent>
           <div className="px-3 pb-3 pt-0">
-            {/* Show diff view for edit operations (not new files) */}
-            {toolCall.title === "Editing file" &&
-            toolCall.oldContent !== undefined &&
-            toolCall.newContent !== undefined ? (
+            {toolCall.kind === "task" && groupedSubagentItems.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                <div className="text-xs font-medium text-text-03 uppercase tracking-wide">
+                  Subagent Activity
+                </div>
+                <div className="flex flex-col gap-2">
+                  {groupedSubagentItems.map((item, index) => {
+                    switch (item.type) {
+                      case "text":
+                        return (
+                          <TextChunk key={item.id} content={item.content} />
+                        );
+                      case "thinking":
+                        return (
+                          <ThinkingCard
+                            key={item.id}
+                            content={item.content}
+                            isStreaming={false}
+                          />
+                        );
+                      case "todo_list":
+                        return (
+                          <TodoListCard
+                            key={item.id}
+                            todoList={item.todoList}
+                            defaultOpen={false}
+                          />
+                        );
+                      case "working_group":
+                        return (
+                          <WorkingPill
+                            key={item.id}
+                            toolCalls={item.toolCalls}
+                            isLatest={index === lastSubagentWorkingGroupIndex}
+                          />
+                        );
+                      case "tool_call":
+                        return (
+                          <div
+                            key={item.id}
+                            className="rounded-md border border-border-01 bg-background-neutral-01 p-2"
+                          >
+                            <div className="text-sm font-medium text-text-04">
+                              {item.toolCall.title}
+                            </div>
+                            {item.toolCall.description && (
+                              <div className="text-sm text-text-03">
+                                {item.toolCall.description}
+                              </div>
+                            )}
+                            {item.toolCall.rawOutput && (
+                              <div className="pt-2">
+                                <RawOutputBlock
+                                  content={item.toolCall.rawOutput}
+                                  maxHeight="220px"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      default:
+                        return null;
+                    }
+                  })}
+                </div>
+              </div>
+            ) : toolCall.title === "Editing file" &&
+              toolCall.oldContent !== undefined &&
+              toolCall.newContent !== undefined ? (
               <DiffView
                 oldContent={toolCall.oldContent}
                 newContent={toolCall.newContent}

@@ -1,7 +1,7 @@
 /**
  * Packet Types
  *
- * Type definitions for raw and parsed ACP packets.
+ * Type definitions for raw and parsed streamed packets.
  * Centralizes all snake_case / camelCase field resolution.
  * Defines the ParsedPacket discriminated union consumed by both
  * useBuildStreaming (live SSE) and useBuildSessionStore (DB reload).
@@ -99,14 +99,21 @@ export interface ParsedToolCallProgress {
   rawOutput: string;
   filePath: string; // Session-relative
   subagentType: string | null;
+  subagentSessionId: string | null;
+  subagentPacketData: Record<string, unknown>[];
   // Edit-specific
   isNewFile: boolean;
   oldContent: string;
   newContent: string;
   // Todo-specific
   todos: TodoItem[];
-  // Task-specific
-  taskOutput: string | null;
+}
+
+export interface ParsedSubagentPacket {
+  type: "subagent_packet";
+  parentToolCallId: string;
+  subagentSessionId: string | null;
+  packetData: Record<string, unknown> | null;
 }
 
 export interface ParsedPromptResponse {
@@ -138,6 +145,7 @@ export type ParsedPacket =
   | ParsedThinkingChunk
   | ParsedToolCallStart
   | ParsedToolCallProgress
+  | ParsedSubagentPacket
   | ParsedPromptResponse
   | ParsedArtifact
   | ParsedError

@@ -11,20 +11,24 @@ import mimetypes
 import re
 import subprocess
 import threading
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Generator
 from pathlib import Path
 from uuid import UUID
 
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import DEMO_DATA_PATH
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
+from onyx.server.features.build.configs import OPENCODE_SERVER_STARTUP_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
+from onyx.server.features.build.sandbox.base import get_opencode_server_port
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
-from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.local.process_manager import ProcessManager
 from onyx.server.features.build.sandbox.manager.directory_manager import (
     DirectoryManager,
@@ -34,6 +38,9 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.opencode import OpenCodeEvent
+from onyx.server.features.build.sandbox.opencode import OpenCodeHttpClient
+from onyx.server.features.build.sandbox.opencode import OpenCodeSessionNotFoundError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,9 +91,10 @@ class LocalSandboxManager(SandboxManager):
         self._process_manager = ProcessManager()
         self._snapshot_manager = SnapshotManager(get_default_file_store())
 
-        # Track ACP clients in memory - keyed by (sandbox_id, session_id) tuple
-        # Each session within a sandbox has its own ACP client
-        self._acp_clients: dict[tuple[UUID, UUID], ACPAgentClient] = {}
+        # Track per-session OpenCode server processes.
+        # Keyed by (sandbox_id, session_id) because each Craft session has its
+        # own OpenCode server working directory and session state.
+        self._opencode_servers: dict[tuple[UUID, UUID], subprocess.Popen[bytes]] = {}
 
         # Track Next.js processes - keyed by (sandbox_id, session_id) tuple
         # Used for clean shutdown when sessions are deleted
@@ -151,6 +159,93 @@ class LocalSandboxManager(SandboxManager):
             Path to the session workspace directory (sessions/$session_id/)
         """
         return self._get_sandbox_path(sandbox_id) / "sessions" / str(session_id)
+
+    def _get_opencode_server_url_for_nextjs_port(self, nextjs_port: int) -> str:
+        """Build local OpenCode server URL from session Next.js port."""
+        return f"http://127.0.0.1:{get_opencode_server_port(nextjs_port)}"
+
+    def _wait_for_opencode_server(
+        self,
+        url: str,
+        process: subprocess.Popen[bytes],
+        timeout: float = OPENCODE_SERVER_STARTUP_TIMEOUT_SECONDS,
+    ) -> bool:
+        """Poll OpenCode server readiness via /config endpoint."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if process.poll() is not None:
+                return False
+            try:
+                with urllib.request.urlopen(f"{url}/config", timeout=2):
+                    return True
+            except (urllib.error.URLError, TimeoutError, Exception):
+                time.sleep(0.25)
+        return False
+
+    def _start_opencode_server(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        session_path: Path,
+        nextjs_port: int,
+    ) -> subprocess.Popen[bytes]:
+        """Start a per-session OpenCode server process."""
+        key = (sandbox_id, session_id)
+        existing = self._opencode_servers.pop(key, None)
+        if existing is not None:
+            self._stop_opencode_server_process(existing, session_id)
+
+        server_url = self._get_opencode_server_url_for_nextjs_port(nextjs_port)
+        server_log = session_path / "opencode_server.log"
+
+        with server_log.open("ab") as log_file:
+            process = subprocess.Popen(
+                [
+                    "opencode",
+                    "serve",
+                    "--hostname",
+                    "127.0.0.1",
+                    "--port",
+                    str(get_opencode_server_port(nextjs_port)),
+                ],
+                cwd=session_path,
+                stdout=log_file,
+                stderr=log_file,
+            )
+
+        if not self._wait_for_opencode_server(server_url, process):
+            self._stop_opencode_server_process(process, session_id)
+            raise RuntimeError(
+                "OpenCode server failed to start "
+                f"for session {session_id} at {server_url}"
+            )
+
+        self._opencode_servers[key] = process
+        logger.info(
+            "Started OpenCode server for session %s on %s", session_id, server_url
+        )
+        return process
+
+    def _stop_opencode_server_process(
+        self,
+        process: subprocess.Popen[bytes],
+        session_id: UUID,
+    ) -> None:
+        """Stop an OpenCode server process."""
+        if process.poll() is not None:
+            return
+
+        try:
+            self._process_manager.terminate_process(process.pid)
+            logger.debug(
+                "Stopped OpenCode server (PID %s) for session %s",
+                process.pid,
+                session_id,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to stop OpenCode server for session {session_id}: {e}"
+            )
 
     def _setup_filtered_files(
         self,
@@ -316,7 +411,7 @@ class LocalSandboxManager(SandboxManager):
         """Terminate a sandbox and clean up all resources.
 
         1. Stop all Next.js processes for this sandbox
-        2. Stop all ACP clients for this sandbox (terminates agent subprocesses)
+        2. Stop all OpenCode servers for this sandbox
         3. Cleanup sandbox directory
 
         Args:
@@ -342,19 +437,19 @@ class LocalSandboxManager(SandboxManager):
                     f"session {session_id}: {e}"
                 )
 
-        # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
-        clients_to_stop = [
-            (key, client)
-            for key, client in self._acp_clients.items()
+        # Stop all OpenCode servers for this sandbox.
+        servers_to_stop = [
+            (key, process)
+            for key, process in self._opencode_servers.items()
             if key[0] == sandbox_id
         ]
-        for key, client in clients_to_stop:
+        for key, process in servers_to_stop:
             try:
-                client.stop()
-                del self._acp_clients[key]
+                self._stop_opencode_server_process(process, key[1])
+                del self._opencode_servers[key]
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop ACP client for sandbox {sandbox_id}, "
+                    f"Failed to stop OpenCode server for sandbox {sandbox_id}, "
                     f"session {key[1]}: {e}"
                 )
 
@@ -538,6 +633,14 @@ class LocalSandboxManager(SandboxManager):
             )
             logger.debug("Agent instructions ready")
 
+            # Start per-session OpenCode server.
+            self._start_opencode_server(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                session_path=session_path,
+                nextjs_port=nextjs_port,
+            )
+
             logger.info(f"Set up session workspace {session_id} at {session_path}")
 
         except Exception as e:
@@ -563,7 +666,7 @@ class LocalSandboxManager(SandboxManager):
         """Clean up a session workspace (on session delete).
 
         1. Stop Next.js dev server if running
-        2. Stop ACP client for this session
+        2. Stop OpenCode server for this session
         3. Remove session directory
 
         Does NOT terminate the sandbox - other sessions may still be using it.
@@ -582,16 +685,16 @@ class LocalSandboxManager(SandboxManager):
             # Fallback: find by port (e.g., if server was restarted)
             self._stop_nextjs_server_on_port(nextjs_port, session_id)
 
-        # Stop ACP client for this session
-        client_key = (sandbox_id, session_id)
-        client = self._acp_clients.pop(client_key, None)
-        if client:
+        # Stop OpenCode server for this session.
+        server_key = (sandbox_id, session_id)
+        server_process = self._opencode_servers.pop(server_key, None)
+        if server_process:
             try:
-                client.stop()
-                logger.debug(f"Stopped ACP client for session {session_id}")
+                self._stop_opencode_server_process(server_process, session_id)
+                logger.debug(f"Stopped OpenCode server for session {session_id}")
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop ACP client for session {session_id}: {e}"
+                    f"Failed to stop OpenCode server for session {session_id}: {e}"
                 )
 
         # Cleanup session directory
@@ -806,77 +909,100 @@ class LocalSandboxManager(SandboxManager):
             return False
         return True
 
+    def get_opencode_server_url(
+        self, sandbox_id: UUID, nextjs_port: int  # noqa: ARG002
+    ) -> str:
+        """Get the OpenCode server URL for a session in local mode."""
+        return self._get_opencode_server_url_for_nextjs_port(nextjs_port)
+
     def send_message(
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int,
         message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent and stream typed ACP events.
-
-        The agent runs in the session-specific workspace:
-        sessions/$session_id/
-
-        Yields ACPEvent objects:
-        - AgentMessageChunk: Text/image content from agent
-        - AgentThoughtChunk: Agent's internal reasoning
-        - ToolCallStart: Tool invocation started
-        - ToolCallProgress: Tool execution progress/result
-        - AgentPlanUpdate: Agent's execution plan
-        - CurrentModeUpdate: Agent mode change
-        - PromptResponse: Agent finished (has stop_reason)
-        - Error: An error occurred
+        opencode_session_id: str | None = None,
+    ) -> Generator[OpenCodeEvent, None, None]:
+        """Send a message to OpenCode and stream normalized events.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID (determines workspace directory)
+            nextjs_port: Allocated Next.js port (used to derive OpenCode port)
             message: The message content to send
-
-        Yields:
-            Typed ACP schema event objects
+            opencode_session_id: Existing OpenCode session ID to resume
         """
-        from onyx.server.features.build.api.packet_logger import get_packet_logger
-
         packet_logger = get_packet_logger()
-
-        # Get or create ACP client for this session
-        client_key = (sandbox_id, session_id)
-        client = self._acp_clients.get(client_key)
-
-        if client is None or not client.is_running:
-            session_path = self._get_session_path(sandbox_id, session_id)
-
-            # Log client creation
-            packet_logger.log_acp_client_start(
-                sandbox_id, session_id, str(session_path), context="local"
-            )
-            logger.info(
-                f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
+        session_path = self._get_session_path(sandbox_id, session_id)
+        if not session_path.exists():
+            raise RuntimeError(
+                f"Session workspace not found for sandbox={sandbox_id} session={session_id}"
             )
 
-            # Create and start ACP client for this session
-            client = ACPAgentClient(cwd=str(session_path))
-            self._acp_clients[client_key] = client
+        server_key = (sandbox_id, session_id)
+        server_process = self._opencode_servers.get(server_key)
+        if server_process is None or server_process.poll() is not None:
+            self._start_opencode_server(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                session_path=session_path,
+                nextjs_port=nextjs_port,
+            )
+
+        server_url = self.get_opencode_server_url(sandbox_id, nextjs_port)
+        packet_logger.log_acp_client_start(
+            sandbox_id,
+            session_id,
+            str(session_path),
+            context="local-opencode",
+        )
 
         # Log the send_message call at sandbox manager level
         packet_logger.log_session_start(session_id, sandbox_id, message)
 
         events_count = 0
+        success = False
         try:
-            for event in client.send_message(message):
-                events_count += 1
-                yield event
-
-            # Log successful completion
-            packet_logger.log_session_end(
-                session_id, success=True, events_count=events_count
+            http_client = OpenCodeHttpClient(
+                server_url=server_url,
+                session_id=opencode_session_id,
+                cwd=str(session_path),
             )
+            try:
+                for event in http_client.send_message(message):
+                    events_count += 1
+                    yield event
+            except OpenCodeSessionNotFoundError:
+                # Server lost this session (e.g. restarted). Retry once without session id.
+                logger.warning(
+                    "OpenCode session %s not found for build session %s. "
+                    "Retrying with a fresh OpenCode session.",
+                    opencode_session_id,
+                    session_id,
+                )
+                http_client = OpenCodeHttpClient(
+                    server_url=server_url,
+                    session_id=None,
+                    cwd=str(session_path),
+                )
+                for event in http_client.send_message(message):
+                    events_count += 1
+                    yield event
+            success = True
         except Exception as e:
             # Log failure
             packet_logger.log_session_end(
                 session_id, success=False, error=str(e), events_count=events_count
             )
             raise
+        finally:
+            if success:
+                packet_logger.log_session_end(
+                    session_id, success=True, events_count=events_count
+                )
+            packet_logger.log_acp_client_stop(
+                sandbox_id, session_id, context="local-opencode"
+            )
 
     def _sanitize_path(self, path: str) -> str:
         """Sanitize a user-provided path to prevent path traversal attacks.

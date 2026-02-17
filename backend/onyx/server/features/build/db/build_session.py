@@ -159,6 +159,32 @@ def update_session_status(
         logger.info(f"Updated build session {session_id} status to {status}")
 
 
+def update_opencode_session_id(
+    session_id: UUID,
+    opencode_session_id: str | None,
+    db_session: Session,
+) -> None:
+    """Persist the OpenCode session ID associated with a build session."""
+    session = (
+        db_session.query(BuildSession)
+        .filter(BuildSession.id == session_id)
+        .one_or_none()
+    )
+    if not session:
+        return
+
+    if session.opencode_session_id == opencode_session_id:
+        return
+
+    session.opencode_session_id = opencode_session_id
+    db_session.commit()
+    logger.info(
+        "Updated build session %s opencode_session_id to %s",
+        session_id,
+        opencode_session_id,
+    )
+
+
 def delete_build_session__no_commit(
     session_id: UUID,
     user_id: UUID,
@@ -284,7 +310,7 @@ def create_message(
         session_id: Session UUID
         message_type: Type of message (USER, ASSISTANT, SYSTEM)
         turn_index: 0-indexed user message number this message belongs to
-        message_metadata: Required structured data (the raw ACP packet JSON)
+        message_metadata: Required structured data (the raw streamed packet JSON)
         db_session: Database session
     """
     message = BuildMessage(

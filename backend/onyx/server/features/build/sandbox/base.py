@@ -18,23 +18,27 @@ import threading
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Generator
-from typing import Any
 from uuid import UUID
 
 from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SANDBOX_OPENCODE_PORT_OFFSET
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.opencode import OpenCodeEvent
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# ACPEvent is a union type defined in both local and kubernetes modules
-# Using Any here to avoid circular imports - the actual type checking
-# happens in the implementation modules
-ACPEvent = Any
+# Backward compatibility for legacy imports/tests.
+ACPEvent = OpenCodeEvent
+
+
+def get_opencode_server_port(nextjs_port: int) -> int:
+    """Derive per-session OpenCode server port from the session Next.js port."""
+    return nextjs_port + SANDBOX_OPENCODE_PORT_OFFSET
 
 
 class SandboxManager(ABC):
@@ -274,13 +278,32 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def get_opencode_server_url(
+        self,
+        sandbox_id: UUID,
+        nextjs_port: int,
+    ) -> str:
+        """Get URL for the session's OpenCode server.
+
+        Args:
+            sandbox_id: The sandbox ID
+            nextjs_port: The session's Next.js port
+
+        Returns:
+            URL for the session-scoped OpenCode server.
+        """
+        ...
+
+    @abstractmethod
     def send_message(
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int,
         message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent and stream typed ACP events.
+        opencode_session_id: str | None = None,
+    ) -> Generator[OpenCodeEvent, None, None]:
+        """Send a message to OpenCode and stream typed events.
 
         The agent runs in the session-specific workspace:
         sessions/$session_id/
@@ -288,10 +311,12 @@ class SandboxManager(ABC):
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID (determines workspace directory)
+            nextjs_port: The session's allocated Next.js port
             message: The message content to send
+            opencode_session_id: Existing OpenCode session ID to resume
 
         Yields:
-            Typed ACP schema event objects
+            Typed OpenCode event objects
 
         Raises:
             RuntimeError: If agent communication fails

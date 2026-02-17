@@ -53,6 +53,12 @@ export interface ToolCallState {
   rawOutput: string; // Full output for expanded view
   /** For task tool calls: the subagent type (e.g., "explore", "plan") */
   subagentType?: string;
+  /** For task tool calls: OpenCode session id used by the subagent */
+  subagentSessionId?: string;
+  /** For task tool calls: raw packet history used to build subagentStreamItems */
+  subagentPacketData?: Record<string, unknown>[];
+  /** For task tool calls: live stream items from the subagent session */
+  subagentStreamItems?: StreamItem[];
   /** For edit operations: whether this is a new file (write) or edit of existing */
   isNewFile?: boolean;
   /** For edit operations: the old content before the edit (empty for new files) */

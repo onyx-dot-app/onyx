@@ -169,7 +169,7 @@ class MessageRequest(BaseModel):
 class MessageResponse(BaseModel):
     """Response containing message details.
 
-    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    All message data is stored in message_metadata as JSON (the raw streamed packet).
     The turn_index groups all assistant responses under the user prompt they respond to.
 
     Packet types in message_metadata:
@@ -177,7 +177,6 @@ class MessageResponse(BaseModel):
     - agent_message: {type: "agent_message", content: {...}}
     - agent_thought: {type: "agent_thought", content: {...}}
     - tool_call_progress: {type: "tool_call_progress", status: "completed", ...}
-    - agent_plan_update: {type: "agent_plan_update", entries: [...]}
     """
 
     id: str

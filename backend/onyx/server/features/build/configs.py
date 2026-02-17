@@ -66,6 +66,11 @@ SANDBOX_SNAPSHOTS_BUCKET = os.environ.get(
 # Next.js preview server port range
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
+# Per-session OpenCode server port is derived from nextjs_port + this offset.
+# Example: nextjs 3010 -> opencode 13010
+SANDBOX_OPENCODE_PORT_OFFSET = int(
+    os.environ.get("SANDBOX_OPENCODE_PORT_OFFSET", "10000")
+)
 
 # File upload configuration
 MAX_UPLOAD_FILE_SIZE_MB = int(os.environ.get("BUILD_MAX_UPLOAD_FILE_SIZE_MB", "50"))
@@ -117,12 +122,25 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
 # ============================================================================
-# ACP (Agent Communication Protocol) Configuration
+# OpenCode Message Streaming Configuration
 # ============================================================================
 
-# Timeout for ACP message processing in seconds
-# This is the maximum time to wait for a complete response from the agent
-ACP_MESSAGE_TIMEOUT = float(os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"))
+# Timeout for OpenCode message processing in seconds.
+# This is the maximum time to wait for a complete response from the agent.
+OPENCODE_MESSAGE_TIMEOUT = float(
+    os.environ.get(
+        "OPENCODE_MESSAGE_TIMEOUT",
+        os.environ.get("ACP_MESSAGE_TIMEOUT", "900.0"),
+    )
+)
+
+# Backwards-compatible alias for older ACP-named env usage.
+ACP_MESSAGE_TIMEOUT = OPENCODE_MESSAGE_TIMEOUT
+
+# Maximum time to wait for an OpenCode server to become healthy.
+OPENCODE_SERVER_STARTUP_TIMEOUT_SECONDS = float(
+    os.environ.get("OPENCODE_SERVER_STARTUP_TIMEOUT_SECONDS", "30.0")
+)
 
 # ============================================================================
 # Rate Limiting Configuration

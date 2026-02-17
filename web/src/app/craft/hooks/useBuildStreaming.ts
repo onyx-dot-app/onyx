@@ -21,6 +21,7 @@ import { StreamItem } from "@/app/craft/types/displayTypes";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
+import { convertSubagentPacketDataToStreamItems } from "@/app/craft/utils/subagentStreamItems";
 
 /**
  * Hook for handling message streaming in build sessions.
@@ -239,6 +240,8 @@ export function useBuildStreaming() {
                   command: "",
                   rawOutput: "",
                   subagentType: undefined,
+                  subagentPacketData: undefined,
+                  subagentStreamItems: undefined,
                   isNewFile: true,
                   oldContent: "",
                   newContent: "",
@@ -266,6 +269,13 @@ export function useBuildStreaming() {
                 command: parsed.command,
                 rawOutput: parsed.rawOutput,
                 subagentType: parsed.subagentType ?? undefined,
+                subagentSessionId: parsed.subagentSessionId ?? undefined,
+                ...(parsed.subagentPacketData.length > 0 && {
+                  subagentPacketData: parsed.subagentPacketData,
+                  subagentStreamItems: convertSubagentPacketDataToStreamItems(
+                    parsed.subagentPacketData
+                  ),
+                }),
                 ...(parsed.kind === "edit" && {
                   isNewFile: parsed.isNewFile,
                   oldContent: parsed.oldContent,
@@ -282,18 +292,37 @@ export function useBuildStreaming() {
                   }
                 }
               }
+              break;
+            }
 
-              // Task completion → emit text StreamItem
-              if (parsed.taskOutput) {
-                appendStreamItem(sessionId, {
-                  type: "text",
-                  id: genId("task-output"),
-                  content: parsed.taskOutput,
-                  isStreaming: false,
-                });
-                lastItemType = "text";
-                accumulatedText = "";
-              }
+            // Subagent packet - append to the parent task card stream
+            case "subagent_packet": {
+              if (!parsed.parentToolCallId || !parsed.packetData) break;
+
+              const liveSession = useBuildSessionStore
+                .getState()
+                .sessions.get(sessionId);
+              if (!liveSession) break;
+
+              const taskToolItem = liveSession.streamItems.find(
+                (item) =>
+                  item.type === "tool_call" &&
+                  item.toolCall.id === parsed.parentToolCallId
+              );
+              if (!taskToolItem || taskToolItem.type !== "tool_call") break;
+
+              const existingPacketData =
+                taskToolItem.toolCall.subagentPacketData ?? [];
+              const nextPacketData = [...existingPacketData, parsed.packetData];
+
+              updateToolCallStreamItem(sessionId, parsed.parentToolCallId, {
+                subagentSessionId:
+                  parsed.subagentSessionId ??
+                  taskToolItem.toolCall.subagentSessionId,
+                subagentPacketData: nextPacketData,
+                subagentStreamItems:
+                  convertSubagentPacketDataToStreamItems(nextPacketData),
+              });
               break;
             }
 

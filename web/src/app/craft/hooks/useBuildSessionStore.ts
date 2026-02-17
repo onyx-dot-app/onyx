@@ -40,6 +40,7 @@ import {
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
+import { convertSubagentPacketDataToStreamItems } from "@/app/craft/utils/subagentStreamItems";
 
 /**
  * Convert loaded messages (with message_metadata) to StreamItem[] format.
@@ -49,12 +50,17 @@ import { parsePacket } from "@/app/craft/utils/parsePacket";
  * - agent_message: {type: "agent_message", content: {type: "text", text: "..."}}
  * - agent_thought: {type: "agent_thought", content: {type: "text", text: "..."}}
  * - tool_call_progress: Full tool call data with status="completed"
+ * - subagent_packet: Incremental packet routed to a parent task tool call
  * - agent_plan_update: Plan entries (not rendered as stream items)
  *
  * This function converts assistant messages to StreamItem[] for rendering.
  */
 function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
   const items: StreamItem[] = [];
+  const pendingSubagentPacketsByToolCall = new Map<
+    string,
+    Record<string, unknown>[]
+  >();
 
   for (const message of messages) {
     if (message.type === "user") continue;
@@ -116,6 +122,16 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
             });
           }
         } else {
+          const pendingSubagentPacketData =
+            pendingSubagentPacketsByToolCall.get(packet.toolCallId) ?? [];
+          const subagentPacketData =
+            packet.subagentPacketData.length > 0
+              ? packet.subagentPacketData
+              : pendingSubagentPacketData;
+          if (subagentPacketData.length > 0) {
+            pendingSubagentPacketsByToolCall.delete(packet.toolCallId);
+          }
+
           items.push({
             type: "tool_call",
             id: packet.toolCallId,
@@ -128,12 +144,59 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
               status: packet.status,
               rawOutput: packet.rawOutput,
               subagentType: packet.subagentType ?? undefined,
+              subagentSessionId: packet.subagentSessionId ?? undefined,
+              subagentPacketData:
+                subagentPacketData.length > 0 ? subagentPacketData : undefined,
+              subagentStreamItems:
+                subagentPacketData.length > 0
+                  ? convertSubagentPacketDataToStreamItems(subagentPacketData)
+                  : undefined,
               isNewFile: packet.isNewFile,
               oldContent: packet.oldContent,
               newContent: packet.newContent,
             },
           });
         }
+        break;
+
+      case "subagent_packet":
+        if (!packet.parentToolCallId || !packet.packetData) break;
+
+        // Update existing task tool card if present.
+        const taskToolIndex = items.findIndex(
+          (item) =>
+            item.type === "tool_call" &&
+            item.toolCall.id === packet.parentToolCallId
+        );
+        if (taskToolIndex >= 0) {
+          const existingItem = items[taskToolIndex];
+          if (existingItem && existingItem.type === "tool_call") {
+            const existingPacketData =
+              existingItem.toolCall.subagentPacketData ?? [];
+            const nextPacketData = [...existingPacketData, packet.packetData];
+            items[taskToolIndex] = {
+              ...existingItem,
+              toolCall: {
+                ...existingItem.toolCall,
+                subagentSessionId:
+                  packet.subagentSessionId ??
+                  existingItem.toolCall.subagentSessionId,
+                subagentPacketData: nextPacketData,
+                subagentStreamItems:
+                  convertSubagentPacketDataToStreamItems(nextPacketData),
+              },
+            };
+          }
+          break;
+        }
+
+        // If the task pill hasn't been created yet, cache until tool_call_progress arrives.
+        const existingPending =
+          pendingSubagentPacketsByToolCall.get(packet.parentToolCallId) ?? [];
+        pendingSubagentPacketsByToolCall.set(packet.parentToolCallId, [
+          ...existingPending,
+          packet.packetData,
+        ]);
         break;
 
       // agent_plan_update and other packet types are not rendered as stream items

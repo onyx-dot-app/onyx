@@ -45,6 +45,8 @@ import shlex
 import tarfile
 import threading
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Generator
 from pathlib import Path
 from uuid import UUID
@@ -65,17 +67,15 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
+from onyx.server.features.build.sandbox.base import get_opencode_server_port
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPEvent,
-)
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPExecClient,
-)
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.opencode import OpenCodeEvent
+from onyx.server.features.build.sandbox.opencode import OpenCodeHttpClient
+from onyx.server.features.build.sandbox.opencode import OpenCodeSessionNotFoundError
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
 )
@@ -145,6 +145,79 @@ nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
+"""
+
+
+def _build_opencode_server_start_script(session_path: str, nextjs_port: int) -> str:
+    """Build shell script to ensure the session's OpenCode server is running."""
+    opencode_port = get_opencode_server_port(nextjs_port)
+    opencode_url = f"http://127.0.0.1:{opencode_port}/config"
+    pid_path = f"{session_path}/opencode_server.pid"
+    log_path = f"{session_path}/opencode_server.log"
+
+    return f"""
+is_opencode_healthy() {{
+python - <<'PY'
+import sys
+import urllib.request
+
+try:
+    urllib.request.urlopen("{opencode_url}", timeout=1)
+except Exception:
+    sys.exit(1)
+sys.exit(0)
+PY
+}}
+
+wait_for_opencode() {{
+python - <<'PY'
+import sys
+import time
+import urllib.request
+
+deadline = time.time() + 30
+while time.time() < deadline:
+    try:
+        urllib.request.urlopen("{opencode_url}", timeout=1)
+        sys.exit(0)
+    except Exception:
+        time.sleep(0.25)
+sys.exit(1)
+PY
+}}
+
+OPENCODE_NEEDS_START=1
+if [ -f {pid_path} ]; then
+    OPENCODE_PID=$(cat {pid_path} 2>/dev/null || true)
+    if [ -n "$OPENCODE_PID" ] && kill -0 "$OPENCODE_PID" 2>/dev/null; then
+        if is_opencode_healthy; then
+            OPENCODE_NEEDS_START=0
+            echo "OpenCode server already running (PID: $OPENCODE_PID)"
+        else
+            echo "Stopping stale OpenCode server (PID: $OPENCODE_PID)"
+            kill "$OPENCODE_PID" 2>/dev/null || true
+        fi
+    fi
+fi
+
+if [ "$OPENCODE_NEEDS_START" -eq 1 ] && is_opencode_healthy; then
+    OPENCODE_NEEDS_START=0
+    echo "OpenCode server already reachable on port {opencode_port}"
+fi
+
+if [ "$OPENCODE_NEEDS_START" -eq 1 ]; then
+    echo "Starting OpenCode server on port {opencode_port}"
+    nohup opencode serve --hostname 127.0.0.1 --port {opencode_port} > {log_path} 2>&1 &
+    NEW_OPENCODE_PID=$!
+    echo "$NEW_OPENCODE_PID" > {pid_path}
+fi
+
+if ! wait_for_opencode; then
+    echo "ERROR: OpenCode server failed to become healthy at {opencode_url}" >&2
+    exit 1
+fi
+
+echo "OpenCode server ready on port {opencode_port}"
 """
 
 
@@ -378,6 +451,59 @@ class KubernetesSandboxManager(SandboxManager):
         """
         service_name = self._get_service_name(sandbox_id)
         return f"http://{service_name}.{self._namespace}.svc.cluster.local:{port}"
+
+    def _get_pod_ip(self, sandbox_id: UUID) -> str | None:
+        """Fetch current sandbox pod IP for direct HTTP access."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+            )
+        except ApiException as e:
+            logger.warning("Failed to fetch pod %s for IP lookup: %s", pod_name, e)
+            return None
+        except Exception as e:
+            logger.warning(
+                "Unexpected error fetching pod %s for IP lookup: %s", pod_name, e
+            )
+            return None
+
+        pod_status = getattr(pod, "status", None)
+        pod_ip = getattr(pod_status, "pod_ip", None) if pod_status else None
+        return pod_ip if isinstance(pod_ip, str) and pod_ip else None
+
+    @staticmethod
+    def _is_opencode_http_reachable(server_url: str) -> bool:
+        """Check if OpenCode server is reachable over HTTP from this process."""
+        try:
+            with urllib.request.urlopen(f"{server_url}/config", timeout=2):
+                return True
+        except (urllib.error.URLError, TimeoutError, Exception):
+            return False
+
+    def _ensure_opencode_server(
+        self,
+        pod_name: str,
+        session_path: str,
+        nextjs_port: int,
+    ) -> None:
+        """Ensure the session's OpenCode server is running and healthy."""
+        script = f"""
+set -e
+{_build_opencode_server_start_script(session_path=session_path, nextjs_port=nextjs_port)}
+"""
+        k8s_stream(
+            self._stream_core_api.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=self._namespace,
+            container="sandbox",
+            command=["/bin/sh", "-c", script],
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
 
     def _load_agent_instructions(
         self,
@@ -1374,6 +1500,13 @@ echo "Session workspace setup complete"
             )
 
             logger.debug(f"Session setup output: {exec_response}")
+
+            # Start and verify per-session OpenCode server.
+            self._ensure_opencode_server(
+                pod_name=pod_name,
+                session_path=session_path,
+                nextjs_port=nextjs_port,
+            )
             logger.info(
                 f"Set up session workspace {session_id} in sandbox {sandbox_id}"
             )
@@ -1414,6 +1547,13 @@ if [ -f {session_path}/nextjs.pid ]; then
     NEXTJS_PID=$(cat {session_path}/nextjs.pid)
     echo "Stopping Next.js server (PID: $NEXTJS_PID)"
     kill $NEXTJS_PID 2>/dev/null || true
+fi
+
+# Kill OpenCode server if running
+if [ -f {session_path}/opencode_server.pid ]; then
+    OPENCODE_PID=$(cat {session_path}/opencode_server.pid)
+    echo "Stopping OpenCode server (PID: $OPENCODE_PID)"
+    kill $OPENCODE_PID 2>/dev/null || true
 fi
 
 echo "Removing session directory: {session_path}"
@@ -1699,6 +1839,13 @@ echo "SNAPSHOT_RESTORED"
                 stdout=True,
                 tty=False,
             )
+
+            # Start and verify per-session OpenCode server after wake/restore.
+            self._ensure_opencode_server(
+                pod_name=pod_name,
+                session_path=session_path,
+                nextjs_port=nextjs_port,
+            )
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
@@ -1800,94 +1947,125 @@ echo "Session config regeneration complete"
             True if sandbox is healthy, False otherwise
         """
         pod_name = self._get_pod_name(str(sandbox_id))
-        exec_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
-        return exec_client.health_check(timeout=timeout)
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                resp = k8s_stream(
+                    self._stream_core_api.connect_get_namespaced_pod_exec,
+                    name=pod_name,
+                    namespace=self._namespace,
+                    container="sandbox",
+                    command=["/bin/sh", "-c", "echo HEALTHY"],
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                )
+                return "HEALTHY" in resp
+            except ApiException as e:
+                if e.status == 404:
+                    return False
+                logger.debug(f"Health check exec failed for pod {pod_name}: {e}")
+                time.sleep(1)
+            except Exception as e:
+                logger.debug(f"Health check error for pod {pod_name}: {e}")
+                time.sleep(1)
+        return False
 
     def send_message(
         self,
         sandbox_id: UUID,
         session_id: UUID,
+        nextjs_port: int,
         message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent and stream ACP events.
+        opencode_session_id: str | None = None,
+    ) -> Generator[OpenCodeEvent, None, None]:
+        """Send a message to OpenCode and stream typed events.
 
-        Runs `opencode acp` via kubectl exec in the sandbox pod.
-        The agent runs in the session-specific workspace.
+        Uses OpenCode HTTP APIs (`/event` + `prompt_async`) over pod networking
+        for true incremental SSE chunks.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID (determines workspace directory)
+            nextjs_port: Allocated Next.js port (used to derive OpenCode port)
             message: The message content to send
+            opencode_session_id: Existing OpenCode session ID to resume
 
         Yields:
-            Typed ACP schema event objects
+            Typed OpenCode event objects
         """
         packet_logger = get_packet_logger()
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
+        http_server_url = self.get_opencode_server_url(sandbox_id, nextjs_port)
 
-        # Log ACP client creation
-        packet_logger.log_acp_client_start(
-            sandbox_id, session_id, session_path, context="k8s"
-        )
-
-        exec_client = ACPExecClient(
+        # Ensure per-session OpenCode server is running before attaching a client.
+        self._ensure_opencode_server(
             pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
+            session_path=session_path,
+            nextjs_port=nextjs_port,
         )
 
-        # Log the send_message call at sandbox manager level
+        # Log OpenCode client creation
+        packet_logger.log_acp_client_start(
+            sandbox_id, session_id, session_path, context="k8s-opencode"
+        )
+
         packet_logger.log_session_start(session_id, sandbox_id, message)
-
         events_count = 0
-        try:
-            exec_client.start(cwd=session_path)
-            for event in exec_client.send_message(message):
-                events_count += 1
-                yield event
+        success = False
 
-            # Log successful completion
-            packet_logger.log_session_end(
-                session_id, success=True, events_count=events_count
+        if not self._is_opencode_http_reachable(http_server_url):
+            raise RuntimeError(
+                "OpenCode HTTP SSE endpoint is not reachable "
+                f"at {http_server_url} for sandbox {sandbox_id}"
             )
-        except GeneratorExit:
-            # Generator was closed by consumer (client disconnect, timeout, broken pipe)
-            # This is the most common failure mode for SSE streaming
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error="GeneratorExit: Client disconnected or stream closed by consumer",
-                events_count=events_count,
+
+        def _stream_via_http(
+            session_id_override: str | None,
+        ) -> Generator[OpenCodeEvent, None, None]:
+            http_client = OpenCodeHttpClient(
+                server_url=http_server_url,
+                session_id=session_id_override,
+                cwd=session_path,
             )
-            raise
+            yield from http_client.send_message(message)
+
+        try:
+            try:
+                for event in _stream_via_http(opencode_session_id):
+                    events_count += 1
+                    yield event
+            except OpenCodeSessionNotFoundError:
+                logger.warning(
+                    "OpenCode session %s not found for build session %s in pod %s. "
+                    "Retrying with a fresh OpenCode session.",
+                    opencode_session_id,
+                    session_id,
+                    pod_name,
+                )
+                for event in _stream_via_http(None):
+                    events_count += 1
+                    yield event
+
+            success = True
         except Exception as e:
-            # Log failure from normal exceptions
             packet_logger.log_session_end(
                 session_id,
                 success=False,
-                error=f"Exception: {str(e)}",
-                events_count=events_count,
-            )
-            raise
-        except BaseException as e:
-            # Log failure from other base exceptions (SystemExit, KeyboardInterrupt, etc.)
-            exception_type = type(e).__name__
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error=f"{exception_type}: {str(e) if str(e) else 'System-level interruption'}",
+                error=str(e),
                 events_count=events_count,
             )
             raise
         finally:
-            exec_client.stop()
-            # Log client stop
-            packet_logger.log_acp_client_stop(sandbox_id, session_id, context="k8s")
+            if success:
+                packet_logger.log_session_end(
+                    session_id, success=True, events_count=events_count
+                )
+            packet_logger.log_acp_client_stop(
+                sandbox_id, session_id, context="k8s-opencode"
+            )
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
@@ -2099,6 +2277,24 @@ echo "Session config regeneration complete"
             Internal cluster URL for the Next.js server on the specified port
         """
         return self._get_nextjs_url(str(sandbox_id), port)
+
+    def get_opencode_server_url(
+        self,
+        sandbox_id: UUID,
+        nextjs_port: int,
+    ) -> str:
+        """Get the OpenCode server URL reachable from the API server process.
+
+        Uses pod IP networking for direct HTTP access to per-session OpenCode
+        servers.
+        """
+        pod_ip = self._get_pod_ip(sandbox_id)
+        opencode_port = get_opencode_server_port(nextjs_port)
+        if not pod_ip:
+            raise RuntimeError(
+                "Sandbox pod IP unavailable; cannot construct OpenCode HTTP URL"
+            )
+        return f"http://{pod_ip}:{opencode_port}"
 
     def generate_pptx_preview(
         self,

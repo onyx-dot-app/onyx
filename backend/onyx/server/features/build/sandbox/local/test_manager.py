@@ -15,8 +15,6 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from acp.schema import PromptResponse
-from acp.schema import ToolCallStart
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -32,10 +30,12 @@ from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.local import LocalSandboxManager
-from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.opencode import OpenCodeEvent
+from onyx.server.features.build.sandbox.opencode import OpenCodePromptResponse
+from onyx.server.features.build.sandbox.opencode import OpenCodeToolCallStart
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
@@ -190,8 +190,8 @@ def session_workspace(
     sandbox_record: Sandbox,
     build_session_record: BuildSession,
     db_session: Session,
-) -> Generator[tuple[Sandbox, UUID], None, None]:
-    """Set up a session workspace within the sandbox and return (sandbox, session_id)."""
+) -> Generator[tuple[Sandbox, UUID, int], None, None]:
+    """Set up a session workspace and return (sandbox, session_id, nextjs_port)."""
     session_id = build_session_record.id
 
     # Use setup_session_workspace to create the session directory structure
@@ -218,7 +218,7 @@ def session_workspace(
         file_system_path=SANDBOX_BASE_PATH,
     )
 
-    yield sandbox_record, session_id
+    yield sandbox_record, session_id, nextjs_port
 
     # Cleanup session workspace
     sandbox_manager.cleanup_session_workspace(
@@ -263,7 +263,7 @@ class TestCreateSnapshot:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
         file_store_initialized: None,  # noqa: ARG002
     ) -> None:
@@ -271,7 +271,7 @@ class TestCreateSnapshot:
 
         Note: Caller is responsible for creating DB record from the SnapshotResult.
         """
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
         sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         outputs_dir = sandbox_path / "sessions" / str(session_id) / "outputs"
         (outputs_dir / "app.py").write_text("print('hello')")
@@ -309,11 +309,11 @@ class TestListDirectory:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that list_directory returns filesystem entries."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
         sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         outputs_dir = sandbox_path / "sessions" / str(session_id)
         (outputs_dir / "file.txt").write_text("content")
@@ -334,11 +334,11 @@ class TestReadFile:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that read_file returns file contents as bytes."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
         sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         outputs_dir = sandbox_path / "sessions" / str(session_id) / "outputs"
         (outputs_dir / "test.txt").write_bytes(b"Hello, World!")
@@ -355,19 +355,19 @@ class TestSendMessage:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """Test that send_message streams ACPEvent objects and ends with PromptResponse.
+        """Test that send_message streams OpenCode events and ends with prompt_response.
 
         Note: Heartbeat update is now handled by the caller (SessionManager),
         not by the SandboxManager itself.
         """
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
 
-        events: list[ACPEvent] = []
+        events: list[OpenCodeEvent] = []
         for event in sandbox_manager.send_message(
-            sandbox.id, session_id, "What is 2 + 2?"
+            sandbox.id, session_id, nextjs_port, "What is 2 + 2?"
         ):
             events.append(event)
 
@@ -376,30 +376,31 @@ class TestSendMessage:
 
         # Last event should be PromptResponse (success) or contain results
         last_event = events[-1]
-        assert isinstance(last_event, PromptResponse)
+        assert isinstance(last_event, OpenCodePromptResponse)
 
     def test_send_message_write_file(
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that send_message can write files and emits edit tool calls."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
         sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         session_path = sandbox_path / "sessions" / str(session_id)
 
-        events: list[ACPEvent] = []
+        events: list[OpenCodeEvent] = []
         for event in sandbox_manager.send_message(
             sandbox.id,
             session_id,
+            nextjs_port,
             "Create a file called hello.txt with the content 'Hello, World!'",
         ):
             events.append(event)
 
         # Should have at least one ToolCallStart with kind='edit'
-        tool_calls = [e for e in events if isinstance(e, ToolCallStart)]
+        tool_calls = [e for e in events if isinstance(e, OpenCodeToolCallStart)]
         edit_tool_calls = [tc for tc in tool_calls if tc.kind == "edit"]
         assert len(edit_tool_calls) >= 1, (
             f"Expected at least one edit tool call, got {len(edit_tool_calls)}. "
@@ -408,7 +409,7 @@ class TestSendMessage:
 
         # Last event should be PromptResponse
         last_event = events[-1]
-        assert isinstance(last_event, PromptResponse)
+        assert isinstance(last_event, OpenCodePromptResponse)
 
         # Verify the file was actually created (agent writes relative to session root)
         created_file = session_path / "hello.txt"
@@ -419,11 +420,11 @@ class TestSendMessage:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that send_message can read files and emits read tool calls."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
         sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
         session_path = sandbox_path / "sessions" / str(session_id)
 
@@ -431,16 +432,17 @@ class TestSendMessage:
         test_file = session_path / "secret.txt"
         test_file.write_text("The secret code is 12345")
 
-        events: list[ACPEvent] = []
+        events: list[OpenCodeEvent] = []
         for event in sandbox_manager.send_message(
             sandbox.id,
             session_id,
+            nextjs_port,
             "Read the file secret.txt and tell me what the secret code is",
         ):
             events.append(event)
 
         # Should have at least one ToolCallStart with kind='read'
-        tool_calls = [e for e in events if isinstance(e, ToolCallStart)]
+        tool_calls = [e for e in events if isinstance(e, OpenCodeToolCallStart)]
         read_tool_calls = [tc for tc in tool_calls if tc.kind == "read"]
         assert len(read_tool_calls) >= 1, (
             f"Expected at least one read tool call, got {len(read_tool_calls)}. "
@@ -449,7 +451,7 @@ class TestSendMessage:
 
         # Last event should be PromptResponse
         last_event = events[-1]
-        assert isinstance(last_event, PromptResponse)
+        assert isinstance(last_event, OpenCodePromptResponse)
 
 
 class TestUploadFile:
@@ -459,11 +461,11 @@ class TestUploadFile:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that upload_file creates a file in the attachments directory."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
         content = b"Hello, World!"
 
         result = sandbox_manager.upload_file(
@@ -484,11 +486,11 @@ class TestUploadFile:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that upload_file renames files on collision."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
 
         # Upload first file
         sandbox_manager.upload_file(sandbox.id, session_id, "test.txt", b"first")
@@ -508,11 +510,11 @@ class TestDeleteFile:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that delete_file removes a file."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
 
         # Upload a file first
         sandbox_manager.upload_file(sandbox.id, session_id, "test.txt", b"content")
@@ -535,11 +537,11 @@ class TestDeleteFile:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that delete_file returns False for non-existent file."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
 
         result = sandbox_manager.delete_file(
             sandbox.id, session_id, "attachments/nonexistent.txt"
@@ -551,11 +553,11 @@ class TestDeleteFile:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test that delete_file rejects path traversal attempts."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
 
         with pytest.raises(ValueError, match="path traversal"):
             sandbox_manager.delete_file(sandbox.id, session_id, "../../../etc/passwd")
@@ -568,11 +570,11 @@ class TestGetUploadStats:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test get_upload_stats returns zeros for empty directory."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
 
         file_count, total_size = sandbox_manager.get_upload_stats(
             sandbox.id, session_id
@@ -585,11 +587,11 @@ class TestGetUploadStats:
         self,
         sandbox_manager: LocalSandboxManager,
         db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
+        session_workspace: tuple[Sandbox, UUID, int],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """Test get_upload_stats returns correct count and size."""
-        sandbox, session_id = session_workspace
+        sandbox, session_id, nextjs_port = session_workspace
 
         # Upload some files
         sandbox_manager.upload_file(

@@ -27,11 +27,14 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.opencode import OpenCodeAgentMessageChunk
+from onyx.server.features.build.sandbox.opencode import OpenCodeError
+from onyx.server.features.build.sandbox.opencode import OpenCodeEvent
+from onyx.server.features.build.sandbox.opencode import OpenCodePromptResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -309,12 +312,9 @@ def test_kubernetes_sandbox_send_message() -> None:
     This test:
     1. Creates a sandbox pod
     2. Sends a simple message via send_message()
-    3. Verifies we receive ACP events back (agent responses)
+    3. Verifies we receive streamed OpenCode events back (agent responses)
     4. Cleans up by terminating the sandbox
     """
-    from acp.schema import AgentMessageChunk
-    from acp.schema import Error
-    from acp.schema import PromptResponse
 
     _is_kubernetes_available()
 
@@ -365,8 +365,13 @@ def test_kubernetes_sandbox_send_message() -> None:
         )
 
         # Send a simple message
-        events: list[ACPEvent] = []
-        for event in manager.send_message(sandbox_id, session_id, "What is 2 + 2?"):
+        events: list[OpenCodeEvent] = []
+        for event in manager.send_message(
+            sandbox_id,
+            session_id,
+            SANDBOX_NEXTJS_PORT_START,
+            "What is 2 + 2?",
+        ):
             events.append(event)
 
         # Verify we received events
@@ -376,16 +381,16 @@ def test_kubernetes_sandbox_send_message() -> None:
             print(f"Recieved event: {event}")
 
         # Check for errors
-        errors = [e for e in events if isinstance(e, Error)]
+        errors = [e for e in events if isinstance(e, OpenCodeError)]
         assert len(errors) == 0, f"Should not receive errors: {errors}"
 
         # Verify we received some agent message content or a final response
-        message_chunks = [e for e in events if isinstance(e, AgentMessageChunk)]
-        prompt_responses = [e for e in events if isinstance(e, PromptResponse)]
+        message_chunks = [e for e in events if isinstance(e, OpenCodeAgentMessageChunk)]
+        prompt_responses = [e for e in events if isinstance(e, OpenCodePromptResponse)]
 
         assert (
             len(message_chunks) > 0 or len(prompt_responses) > 0
-        ), "Should receive either AgentMessageChunk or PromptResponse events"
+        ), "Should receive either agent message chunks or prompt response events"
 
         # If we got a PromptResponse, verify it completed successfully
         if prompt_responses:
