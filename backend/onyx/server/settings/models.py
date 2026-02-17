@@ -56,6 +56,7 @@ class Settings(BaseModel):
     application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
     deep_research_enabled: bool | None = None
+    search_ui_enabled: bool | None = None
 
     # Enterprise features flag - set by license enforcement at runtime
     # When LICENSE_ENFORCEMENT_ENABLED=true, this reflects license status

@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Formik, Form, useFormikContext } from "formik";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as InputLayouts from "@/layouts/input-layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -15,12 +17,19 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { SvgBubbleText, SvgAddLines, SvgActions } from "@opal/icons";
+import {
+  SvgBubbleText,
+  SvgAddLines,
+  SvgActions,
+  SvgExpand,
+  SvgFold,
+} from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
+  SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
@@ -37,6 +46,16 @@ import * as ExpandableCard from "@/layouts/expandable-card-layouts";
 import * as ActionsLayouts from "@/layouts/actions-layouts";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import Disabled from "@/refresh-components/Disabled";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import useFilter from "@/hooks/useFilter";
+import { MCPServer } from "@/lib/tools/interfaces";
+import type { IconProps } from "@opal/types";
+
+interface DefaultAssistantConfiguration {
+  tool_ids: number[];
+  system_prompt: string | null;
+  default_system_prompt: string;
+}
 
 interface ChatPreferencesFormValues {
   // Features
@@ -48,17 +67,104 @@ interface ChatPreferencesFormValues {
   company_name: string;
   company_description: string;
 
-  // Tools (built-in)
-  image_generation: boolean;
-  web_search: boolean;
-  open_url: boolean;
-  code_interpreter: boolean;
-  file_reader: boolean;
-
   // Advanced
   maximum_chat_retention_days: string;
   anonymous_user_enabled: boolean;
   disable_default_assistant: boolean;
+}
+
+interface MCPServerCardTool {
+  id: number;
+  icon: React.FunctionComponent<IconProps>;
+  name: string;
+  description: string;
+}
+
+interface MCPServerCardProps {
+  server: MCPServer;
+  tools: MCPServerCardTool[];
+  isToolEnabled: (toolDbId: number) => boolean;
+  onToggleTool: (toolDbId: number, enabled: boolean) => void;
+  onToggleTools: (toolDbIds: number[], enabled: boolean) => void;
+}
+
+function MCPServerCard({
+  server,
+  tools,
+  isToolEnabled,
+  onToggleTool,
+  onToggleTools,
+}: MCPServerCardProps) {
+  const [isFolded, setIsFolded] = useState(true);
+  const {
+    query,
+    setQuery,
+    filtered: filteredTools,
+  } = useFilter(tools, (tool) => `${tool.name} ${tool.description}`);
+
+  const allToolIds = tools.map((t) => t.id);
+  const serverEnabled =
+    tools.length > 0 && tools.some((t) => isToolEnabled(t.id));
+
+  return (
+    <ExpandableCard.Root isFolded={isFolded} onFoldedChange={setIsFolded}>
+      <ActionsLayouts.Header
+        title={server.name}
+        description={server.description}
+        icon={getActionIcon(server.server_url, server.name)}
+        rightChildren={
+          <Switch
+            checked={serverEnabled}
+            onCheckedChange={(checked) => onToggleTools(allToolIds, checked)}
+          />
+        }
+      >
+        {tools.length > 0 && (
+          <Section flexDirection="row" gap={0.5}>
+            <InputTypeIn
+              placeholder="Search tools..."
+              variant="internal"
+              leftSearchIcon
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <Button
+              rightIcon={isFolded ? SvgExpand : SvgFold}
+              onClick={() => setIsFolded((prev) => !prev)}
+              prominence="internal"
+              size="lg"
+            >
+              {isFolded ? "Expand" : "Fold"}
+            </Button>
+          </Section>
+        )}
+      </ActionsLayouts.Header>
+      {tools.length > 0 && filteredTools.length > 0 && (
+        <ActionsLayouts.Content>
+          <Disabled disabled={!serverEnabled}>
+            <div className="flex flex-col gap-2">
+              {filteredTools.map((tool) => (
+                <ActionsLayouts.Tool
+                  key={tool.id}
+                  title={tool.name}
+                  description={tool.description}
+                  icon={tool.icon}
+                  rightChildren={
+                    <Switch
+                      checked={isToolEnabled(tool.id)}
+                      onCheckedChange={(checked) =>
+                        onToggleTool(tool.id, checked)
+                      }
+                    />
+                  }
+                />
+              ))}
+            </div>
+          </Disabled>
+        </ActionsLayouts.Content>
+      )}
+    </ExpandableCard.Root>
+  );
 }
 
 /**
@@ -76,6 +182,10 @@ function ChatPreferencesForm() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
+  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
+  const searchTool = availableTools.find(
+    (t) => t.in_code_tool_id === SEARCH_TOOL_ID
+  );
   const imageGenTool = availableTools.find(
     (t) => t.in_code_tool_id === IMAGE_GENERATION_TOOL_ID
   );
@@ -103,12 +213,67 @@ function ChatPreferencesForm() {
     tools: availableTools
       .filter((tool) => tool.mcp_server_id === server.id)
       .map((tool) => ({
-        id: tool.id.toString(),
+        id: tool.id,
         icon: getActionIcon(server.server_url, server.name),
         name: tool.display_name || tool.name,
         description: tool.description,
       })),
   }));
+
+  // Default assistant configuration (system prompt)
+  const { data: defaultAssistantConfig, mutate: mutateDefaultAssistant } =
+    useSWR<DefaultAssistantConfiguration>(
+      "/api/admin/default-assistant/configuration",
+      errorHandlingFetcher
+    );
+
+  const enabledToolIds = defaultAssistantConfig?.tool_ids ?? [];
+
+  const isToolEnabled = useCallback(
+    (toolDbId: number) => enabledToolIds.includes(toolDbId),
+    [enabledToolIds]
+  );
+
+  const saveToolIds = useCallback(
+    async (newToolIds: number[]) => {
+      try {
+        const response = await fetch("/api/admin/default-assistant", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tool_ids: newToolIds }),
+        });
+        if (!response.ok) {
+          const errorMsg = (await response.json()).detail;
+          throw new Error(errorMsg);
+        }
+        await mutateDefaultAssistant();
+        toast.success("Tools updated");
+      } catch {
+        toast.error("Failed to update tools");
+      }
+    },
+    [mutateDefaultAssistant]
+  );
+
+  const toggleTool = useCallback(
+    (toolDbId: number, enabled: boolean) => {
+      const newToolIds = enabled
+        ? [...enabledToolIds, toolDbId]
+        : enabledToolIds.filter((id) => id !== toolDbId);
+      void saveToolIds(newToolIds);
+    },
+    [enabledToolIds, saveToolIds]
+  );
+
+  const toggleTools = useCallback(
+    (toolDbIds: number[], enabled: boolean) => {
+      const idsSet = new Set(toolDbIds);
+      const withoutIds = enabledToolIds.filter((id) => !idsSet.has(id));
+      const newToolIds = enabled ? [...withoutIds, ...toolDbIds] : withoutIds;
+      void saveToolIds(newToolIds);
+    },
+    [enabledToolIds, saveToolIds]
+  );
 
   // System prompt modal state
   const [systemPromptModalOpen, setSystemPromptModalOpen] = useState(false);
@@ -143,327 +308,391 @@ function ChatPreferencesForm() {
   );
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgBubbleText}
-        title="Chat Preferences"
-        description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
-        separator
-      />
+    <>
+      <SettingsLayouts.Root>
+        <SettingsLayouts.Header
+          icon={SvgBubbleText}
+          title="Chat Preferences"
+          description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
+          separator
+        />
 
-      <SettingsLayouts.Body>
-        {/* Features */}
-        <Section gap={0.75}>
-          <InputLayouts.Title title="Features" />
-          <Card>
-            <InputLayouts.Horizontal
-              title="Search Mode"
-              description="UI mode for quick document search across your organization."
-            >
-              <SwitchField
-                name="search_ui_enabled"
-                onCheckedChange={(checked) => {
-                  void saveSettings({ search_ui_enabled: checked });
-                }}
-              />
-            </InputLayouts.Horizontal>
-
-            <InputLayouts.Horizontal
-              title="Deep Research"
-              description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
-            >
-              <SwitchField
-                name="deep_research_enabled"
-                onCheckedChange={(checked) => {
-                  void saveSettings({ deep_research_enabled: checked });
-                }}
-              />
-            </InputLayouts.Horizontal>
-
-            <InputLayouts.Horizontal
-              title="Chat Auto-Scroll"
-              description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
-            >
-              <SwitchField
-                name="auto_scroll"
-                onCheckedChange={(checked) => {
-                  void saveSettings({ auto_scroll: checked });
-                }}
-              />
-            </InputLayouts.Horizontal>
-          </Card>
-        </Section>
-
-        <Separator noPadding />
-
-        {/* Team Context */}
-        <Section gap={1}>
-          <InputLayouts.Vertical
-            title="Team Name"
-            subDescription="This is added to all chat sessions as additional context to provide a richer/customized experience."
-          >
-            <InputTypeInField
-              name="company_name"
-              placeholder="Enter team name"
-              onBlur={() => {
-                if (values.company_name !== initialCompanyName.current) {
-                  void saveSettings({
-                    company_name: values.company_name || null,
-                  });
-                  initialCompanyName.current = values.company_name;
-                }
-              }}
-            />
-          </InputLayouts.Vertical>
-
-          <InputLayouts.Vertical
-            title="Team Context"
-            subDescription="Users can also provide additional individual context in their personal settings."
-          >
-            <InputTextAreaField
-              name="company_description"
-              placeholder="Describe your team and how Onyx should behave."
-              rows={4}
-              maxRows={10}
-              autoResize
-              onBlur={() => {
-                if (
-                  values.company_description !==
-                  initialCompanyDescription.current
-                ) {
-                  void saveSettings({
-                    company_description: values.company_description || null,
-                  });
-                  initialCompanyDescription.current =
-                    values.company_description;
-                }
-              }}
-            />
-          </InputLayouts.Vertical>
-        </Section>
-
-        <InputLayouts.Horizontal
-          title="System Prompt"
-          description="Base prompt for all chats, agents, and projects. Modify with caution: Significant changes may degrade response quality."
-        >
-          <Button
-            prominence="tertiary"
-            icon={SvgAddLines}
-            onClick={() => setSystemPromptModalOpen(true)}
-          >
-            Modify Prompt
-          </Button>
-        </InputLayouts.Horizontal>
-
-        <Separator noPadding />
-
-        <Disabled disabled={values.disable_default_assistant}>
-          <div>
-            <Section gap={1.5}>
-              {/* Connectors */}
-              <Section gap={0.75}>
-                <InputLayouts.Title title="Connectors" />
-                {/* TODO: Add connector selection UI */}
-              </Section>
-
-              {/* Actions & Tools */}
-              <SimpleCollapsible>
-                <SimpleCollapsible.Header
-                  title="Actions & Tools"
-                  description="Tools and capabilities available for chat to use. This does not apply to agents."
+        <SettingsLayouts.Body>
+          {/* Features */}
+          <Section gap={0.75}>
+            <InputLayouts.Title title="Features" />
+            <Card>
+              <InputLayouts.Horizontal
+                title="Search Mode"
+                description="UI mode for quick document search across your organization."
+              >
+                <SwitchField
+                  name="search_ui_enabled"
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ search_ui_enabled: checked });
+                  }}
                 />
-                <SimpleCollapsible.Content>
-                  <Section gap={0.5}>
-                    <SimpleTooltip
-                      tooltip={
-                        imageGenTool
-                          ? undefined
-                          : "Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin."
-                      }
-                      side="top"
-                    >
-                      <Card variant={imageGenTool ? undefined : "disabled"}>
-                        <InputLayouts.Horizontal
-                          title="Image Generation"
-                          description="Generate and manipulate images using AI-powered tools."
-                          disabled={!imageGenTool}
-                        >
-                          <SwitchField
-                            name="image_generation"
+              </InputLayouts.Horizontal>
+
+              <InputLayouts.Horizontal
+                title="Deep Research"
+                description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
+              >
+                <SwitchField
+                  name="deep_research_enabled"
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ deep_research_enabled: checked });
+                  }}
+                />
+              </InputLayouts.Horizontal>
+
+              <InputLayouts.Horizontal
+                title="Chat Auto-Scroll"
+                description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
+              >
+                <SwitchField
+                  name="auto_scroll"
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ auto_scroll: checked });
+                  }}
+                />
+              </InputLayouts.Horizontal>
+            </Card>
+          </Section>
+
+          <Separator noPadding />
+
+          {/* Team Context */}
+          <Section gap={1}>
+            <InputLayouts.Vertical
+              title="Team Name"
+              subDescription="This is added to all chat sessions as additional context to provide a richer/customized experience."
+            >
+              <InputTypeInField
+                name="company_name"
+                placeholder="Enter team name"
+                onBlur={() => {
+                  if (values.company_name !== initialCompanyName.current) {
+                    void saveSettings({
+                      company_name: values.company_name || null,
+                    });
+                    initialCompanyName.current = values.company_name;
+                  }
+                }}
+              />
+            </InputLayouts.Vertical>
+
+            <InputLayouts.Vertical
+              title="Team Context"
+              subDescription="Users can also provide additional individual context in their personal settings."
+            >
+              <InputTextAreaField
+                name="company_description"
+                placeholder="Describe your team and how Onyx should behave."
+                rows={4}
+                maxRows={10}
+                autoResize
+                onBlur={() => {
+                  if (
+                    values.company_description !==
+                    initialCompanyDescription.current
+                  ) {
+                    void saveSettings({
+                      company_description: values.company_description || null,
+                    });
+                    initialCompanyDescription.current =
+                      values.company_description;
+                  }
+                }}
+              />
+            </InputLayouts.Vertical>
+          </Section>
+
+          <InputLayouts.Horizontal
+            title="System Prompt"
+            description="Base prompt for all chats, agents, and projects. Modify with caution: Significant changes may degrade response quality."
+          >
+            <div className="w-fit">
+              <Button
+                prominence="tertiary"
+                icon={SvgAddLines}
+                onClick={() => {
+                  setSystemPromptValue(
+                    defaultAssistantConfig?.system_prompt ??
+                      defaultAssistantConfig?.default_system_prompt ??
+                      ""
+                  );
+                  setSystemPromptModalOpen(true);
+                }}
+              >
+                Modify Prompt
+              </Button>
+            </div>
+          </InputLayouts.Horizontal>
+
+          <Separator noPadding />
+
+          <Disabled disabled={values.disable_default_assistant}>
+            <div>
+              <Section gap={1.5}>
+                {/* Connectors */}
+                <Section gap={0.75}>
+                  <InputLayouts.Title title="Connectors" />
+                  {/* TODO: Add connector selection UI */}
+                </Section>
+
+                {/* Actions & Tools */}
+                <SimpleCollapsible>
+                  <SimpleCollapsible.Header
+                    title="Actions & Tools"
+                    description="Tools and capabilities available for chat to use. This does not apply to agents."
+                  />
+                  <SimpleCollapsible.Content>
+                    <Section gap={0.5}>
+                      {vectorDbEnabled && searchTool && (
+                        <Card>
+                          <InputLayouts.Horizontal
+                            title="Internal Search"
+                            description="Search through your organization's connected knowledge base and documents."
+                          >
+                            <Switch
+                              checked={isToolEnabled(searchTool.id)}
+                              onCheckedChange={(checked) =>
+                                void toggleTool(searchTool.id, checked)
+                              }
+                            />
+                          </InputLayouts.Horizontal>
+                        </Card>
+                      )}
+
+                      <SimpleTooltip
+                        tooltip={
+                          imageGenTool
+                            ? undefined
+                            : "Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin."
+                        }
+                        side="top"
+                      >
+                        <Card variant={imageGenTool ? undefined : "disabled"}>
+                          <InputLayouts.Horizontal
+                            title="Image Generation"
+                            description="Generate and manipulate images using AI-powered tools."
                             disabled={!imageGenTool}
+                          >
+                            <Switch
+                              checked={
+                                imageGenTool
+                                  ? isToolEnabled(imageGenTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                imageGenTool &&
+                                void toggleTool(imageGenTool.id, checked)
+                              }
+                              disabled={!imageGenTool}
+                            />
+                          </InputLayouts.Horizontal>
+                        </Card>
+                      </SimpleTooltip>
+
+                      <Card variant={webSearchTool ? undefined : "disabled"}>
+                        <InputLayouts.Horizontal
+                          title="Web Search"
+                          description="Search the web for real-time information and up-to-date results."
+                          disabled={!webSearchTool}
+                        >
+                          <Switch
+                            checked={
+                              webSearchTool
+                                ? isToolEnabled(webSearchTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              webSearchTool &&
+                              void toggleTool(webSearchTool.id, checked)
+                            }
+                            disabled={!webSearchTool}
                           />
                         </InputLayouts.Horizontal>
                       </Card>
-                    </SimpleTooltip>
 
-                    <Card variant={webSearchTool ? undefined : "disabled"}>
-                      <InputLayouts.Horizontal
-                        title="Web Search"
-                        description="Search the web for real-time information and up-to-date results."
-                        disabled={!webSearchTool}
-                      >
-                        <SwitchField
-                          name="web_search"
-                          disabled={!webSearchTool}
-                        />
-                      </InputLayouts.Horizontal>
-                    </Card>
+                      <Card variant={openURLTool ? undefined : "disabled"}>
+                        <InputLayouts.Horizontal
+                          title="Open URL"
+                          description="Fetch and read content from web URLs."
+                          disabled={!openURLTool}
+                        >
+                          <Switch
+                            checked={
+                              openURLTool
+                                ? isToolEnabled(openURLTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              openURLTool &&
+                              void toggleTool(openURLTool.id, checked)
+                            }
+                            disabled={!openURLTool}
+                          />
+                        </InputLayouts.Horizontal>
+                      </Card>
 
-                    <Card variant={openURLTool ? undefined : "disabled"}>
-                      <InputLayouts.Horizontal
-                        title="Open URL"
-                        description="Fetch and read content from web URLs."
-                        disabled={!openURLTool}
+                      <Card
+                        variant={codeInterpreterTool ? undefined : "disabled"}
                       >
-                        <SwitchField name="open_url" disabled={!openURLTool} />
-                      </InputLayouts.Horizontal>
-                    </Card>
-
-                    <Card
-                      variant={codeInterpreterTool ? undefined : "disabled"}
-                    >
-                      <InputLayouts.Horizontal
-                        title="Code Interpreter"
-                        description="Generate and run code."
-                        disabled={!codeInterpreterTool}
-                      >
-                        <SwitchField
-                          name="code_interpreter"
+                        <InputLayouts.Horizontal
+                          title="Code Interpreter"
+                          description="Generate and run code."
                           disabled={!codeInterpreterTool}
-                        />
-                      </InputLayouts.Horizontal>
-                    </Card>
+                        >
+                          <Switch
+                            checked={
+                              codeInterpreterTool
+                                ? isToolEnabled(codeInterpreterTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              codeInterpreterTool &&
+                              void toggleTool(codeInterpreterTool.id, checked)
+                            }
+                            disabled={!codeInterpreterTool}
+                          />
+                        </InputLayouts.Horizontal>
+                      </Card>
 
-                    <Card variant={fileReaderTool ? undefined : "disabled"}>
-                      <InputLayouts.Horizontal
-                        title="File Reader"
-                        description="Read sections of uploaded files. Required for files that exceed the context window."
-                        disabled={!fileReaderTool}
-                      >
-                        <SwitchField
-                          name="file_reader"
+                      <Card variant={fileReaderTool ? undefined : "disabled"}>
+                        <InputLayouts.Horizontal
+                          title="File Reader"
+                          description="Read sections of uploaded files. Required for files that exceed the context window."
                           disabled={!fileReaderTool}
-                        />
-                      </InputLayouts.Horizontal>
-                    </Card>
-                  </Section>
+                        >
+                          <Switch
+                            checked={
+                              fileReaderTool
+                                ? isToolEnabled(fileReaderTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              fileReaderTool &&
+                              void toggleTool(fileReaderTool.id, checked)
+                            }
+                            disabled={!fileReaderTool}
+                          />
+                        </InputLayouts.Horizontal>
+                      </Card>
+                    </Section>
 
-                  {/* MCP Servers */}
-                  {mcpServersWithTools.length > 0 && (
+                    {/* Separator between built-in tools and MCP/OpenAPI tools */}
+                    {(mcpServersWithTools.length > 0 ||
+                      openApiTools.length > 0) && (
+                      <Separator noPadding className="py-3" />
+                    )}
+
+                    {/* MCP Servers & OpenAPI Tools */}
                     <Section gap={0.5}>
                       {mcpServersWithTools.map(({ server, tools }) => (
-                        <ExpandableCard.Root key={server.id} defaultFolded>
-                          <ActionsLayouts.Header
-                            title={server.name}
-                            description={server.description}
-                            icon={getActionIcon(server.server_url, server.name)}
-                            rightChildren={<Switch defaultChecked={false} />}
-                          />
-                          {tools.length > 0 && (
-                            <ActionsLayouts.Content>
-                              {tools.map((tool) => (
-                                <ActionsLayouts.Tool
-                                  key={tool.id}
-                                  title={tool.name}
-                                  description={tool.description}
-                                  icon={tool.icon}
-                                  rightChildren={
-                                    <Switch defaultChecked={false} />
-                                  }
-                                />
-                              ))}
-                            </ActionsLayouts.Content>
-                          )}
-                        </ExpandableCard.Root>
+                        <MCPServerCard
+                          key={server.id}
+                          server={server}
+                          tools={tools}
+                          isToolEnabled={isToolEnabled}
+                          onToggleTool={toggleTool}
+                          onToggleTools={toggleTools}
+                        />
                       ))}
-                    </Section>
-                  )}
-
-                  {/* OpenAPI Tools */}
-                  {openApiTools.length > 0 && (
-                    <Section gap={0.5}>
                       {openApiTools.map((tool) => (
                         <ExpandableCard.Root key={tool.id} defaultFolded>
                           <ActionsLayouts.Header
                             title={tool.display_name || tool.name}
                             description={tool.description}
                             icon={SvgActions}
-                            rightChildren={<Switch defaultChecked={false} />}
+                            rightChildren={
+                              <Switch
+                                checked={isToolEnabled(tool.id)}
+                                onCheckedChange={(checked) =>
+                                  toggleTool(tool.id, checked)
+                                }
+                              />
+                            }
                           />
                         </ExpandableCard.Root>
                       ))}
                     </Section>
-                  )}
-                </SimpleCollapsible.Content>
-              </SimpleCollapsible>
-            </Section>
-          </div>
-        </Disabled>
+                  </SimpleCollapsible.Content>
+                </SimpleCollapsible>
+              </Section>
+            </div>
+          </Disabled>
 
-        <Separator noPadding />
+          <Separator noPadding />
 
-        {/* Advanced Options */}
-        <SimpleCollapsible>
-          <SimpleCollapsible.Header title="Advanced Options" />
-          <SimpleCollapsible.Content>
-            <Section gap={1}>
-              <Card>
-                <InputLayouts.Horizontal
-                  title="Keep Chat History"
-                  description="Specify how long Onyx should retain chats in your organization."
-                >
-                  <InputSelectField
-                    name="maximum_chat_retention_days"
-                    onValueChange={(value) => {
-                      void saveSettings({
-                        maximum_chat_retention_days:
-                          value === "forever" ? null : parseInt(value, 10),
-                      });
-                    }}
+          {/* Advanced Options */}
+          <SimpleCollapsible>
+            <SimpleCollapsible.Header title="Advanced Options" />
+            <SimpleCollapsible.Content>
+              <Section gap={1}>
+                <Card>
+                  <InputLayouts.Horizontal
+                    title="Keep Chat History"
+                    description="Specify how long Onyx should retain chats in your organization."
                   >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item value="forever">
-                        Forever
-                      </InputSelect.Item>
-                      <InputSelect.Item value="7">7 days</InputSelect.Item>
-                      <InputSelect.Item value="30">30 days</InputSelect.Item>
-                      <InputSelect.Item value="90">90 days</InputSelect.Item>
-                      <InputSelect.Item value="365">365 days</InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelectField>
-                </InputLayouts.Horizontal>
-              </Card>
+                    <InputSelectField
+                      name="maximum_chat_retention_days"
+                      onValueChange={(value) => {
+                        void saveSettings({
+                          maximum_chat_retention_days:
+                            value === "forever" ? null : parseInt(value, 10),
+                        });
+                      }}
+                    >
+                      <InputSelect.Trigger />
+                      <InputSelect.Content>
+                        <InputSelect.Item value="forever">
+                          Forever
+                        </InputSelect.Item>
+                        <InputSelect.Item value="7">7 days</InputSelect.Item>
+                        <InputSelect.Item value="30">30 days</InputSelect.Item>
+                        <InputSelect.Item value="90">90 days</InputSelect.Item>
+                        <InputSelect.Item value="365">
+                          365 days
+                        </InputSelect.Item>
+                      </InputSelect.Content>
+                    </InputSelectField>
+                  </InputLayouts.Horizontal>
+                </Card>
 
-              <Card>
-                <InputLayouts.Horizontal
-                  title="Allow Anonymous Users"
-                  description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
-                >
-                  <SwitchField
-                    name="anonymous_user_enabled"
-                    onCheckedChange={(checked) => {
-                      void saveSettings({ anonymous_user_enabled: checked });
-                    }}
-                  />
-                </InputLayouts.Horizontal>
+                <Card>
+                  <InputLayouts.Horizontal
+                    title="Allow Anonymous Users"
+                    description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
+                  >
+                    <SwitchField
+                      name="anonymous_user_enabled"
+                      onCheckedChange={(checked) => {
+                        void saveSettings({ anonymous_user_enabled: checked });
+                      }}
+                    />
+                  </InputLayouts.Horizontal>
 
-                <InputLayouts.Horizontal
-                  title="Always Start with an Agent"
-                  description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
-                >
-                  <SwitchField
-                    name="disable_default_assistant"
-                    onCheckedChange={(checked) => {
-                      void saveSettings({ disable_default_assistant: checked });
-                    }}
-                  />
-                </InputLayouts.Horizontal>
-              </Card>
-            </Section>
-          </SimpleCollapsible.Content>
-        </SimpleCollapsible>
-      </SettingsLayouts.Body>
+                  <InputLayouts.Horizontal
+                    title="Always Start with an Agent"
+                    description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
+                  >
+                    <SwitchField
+                      name="disable_default_assistant"
+                      onCheckedChange={(checked) => {
+                        void saveSettings({
+                          disable_default_assistant: checked,
+                        });
+                      }}
+                    />
+                  </InputLayouts.Horizontal>
+                </Card>
+              </Section>
+            </SimpleCollapsible.Content>
+          </SimpleCollapsible>
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
 
       <Modal
         open={systemPromptModalOpen}
@@ -495,10 +724,25 @@ function ChatPreferencesForm() {
             </Button>
             <Button
               prominence="primary"
-              onClick={() => {
-                // TODO: Wire to backend when system_prompt is added to Settings
-                setSystemPromptModalOpen(false);
-                toast.success("System prompt updated");
+              onClick={async () => {
+                try {
+                  const response = await fetch("/api/admin/default-assistant", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      system_prompt: systemPromptValue,
+                    }),
+                  });
+                  if (!response.ok) {
+                    const errorMsg = (await response.json()).detail;
+                    throw new Error(errorMsg);
+                  }
+                  await mutateDefaultAssistant();
+                  setSystemPromptModalOpen(false);
+                  toast.success("System prompt updated");
+                } catch {
+                  toast.error("Failed to update system prompt");
+                }
               }}
             >
               Save
@@ -506,7 +750,7 @@ function ChatPreferencesForm() {
           </Modal.Footer>
         </Modal.Content>
       </Modal>
-    </SettingsLayouts.Root>
+    </>
   );
 }
 
@@ -522,13 +766,6 @@ export default function ChatPreferencesPage() {
     // Team context
     company_name: settings.settings.company_name ?? "",
     company_description: settings.settings.company_description ?? "",
-
-    // Tools — default to false; actual state depends on per-agent config
-    image_generation: false,
-    web_search: false,
-    open_url: false,
-    code_interpreter: false,
-    file_reader: false,
 
     // Advanced
     maximum_chat_retention_days:
