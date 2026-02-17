@@ -42,39 +42,88 @@ All tests use `admin_auth.json` storage state by default (pre-authenticated admi
 
 ## Authentication
 
-**Always use API-based login** — never drive the login UI.
+Global setup (`global-setup.ts`) runs automatically before all tests and handles:
+
+- Server readiness check (polls health endpoint, 60s timeout)
+- Provisioning test users: admin, user, admin2 (idempotent)
+- API login + saving storage states: `admin_auth.json`, `user_auth.json`, `admin2_auth.json`
+- Promoting admin2 to admin role
+- Ensuring a public LLM provider exists
+
+Both test projects set `storageState: "admin_auth.json"`, so **every test starts pre-authenticated as admin with no login code needed**.
+
+When a test needs a different user, use API-based login — never drive the login UI:
 
 ```typescript
 import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
 
-// Login as a known test user (provisioned in global-setup)
-await loginAs(page, "admin");   // admin_user@example.com
+// Switch to a different pre-provisioned user
+await page.context().clearCookies();
 await loginAs(page, "user");    // user1@example.com
 await loginAs(page, "admin2");  // admin2_user@example.com
 
-// Create and login as a disposable user
+// Or create and login as a disposable user
+await page.context().clearCookies();
 const { email, password } = await loginAsRandomUser(page);
 ```
 
-Pre-saved storage states: `admin_auth.json`, `user_auth.json`, `admin2_auth.json`.
-
 ## Test Structure
+
+**Default case** — admin tests (most common, no auth boilerplate):
 
 ```typescript
 import { test, expect } from "@playwright/test";
-import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
+
+test.describe("Feature Name", () => {
+  test("should describe expected behavior clearly", async ({ page }) => {
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    // Already authenticated as admin — go straight to testing
+  });
+});
+```
+
+**With setup/teardown** — when tests need backend resources:
+
+```typescript
+import { test, expect } from "@playwright/test";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 test.describe("Feature Name", () => {
+  let resourceId: string | null = null;
+
   test.beforeAll(async ({ browser }) => {
-    // One-time setup with admin privileges (e.g., create resources via API)
     const ctx = await browser.newContext({ storageState: "admin_auth.json" });
     const page = await ctx.newPage();
     const client = new OnyxApiClient(page.request);
-    // ... setup ...
+    resourceId = await client.createImageGenerationConfig(`test-${Date.now()}`);
     await ctx.close();
   });
 
+  test.afterAll(async ({ browser }) => {
+    if (!resourceId) return;
+    const ctx = await browser.newContext({ storageState: "admin_auth.json" });
+    const page = await ctx.newPage();
+    const client = new OnyxApiClient(page.request);
+    await client.deleteImageGenerationConfig(resourceId);
+    await ctx.close();
+  });
+
+  test("should do something with the resource", async ({ page }) => {
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    // ...
+  });
+});
+```
+
+**Non-admin user tests** — clear cookies and re-login in `beforeEach`:
+
+```typescript
+import { test, expect } from "@playwright/test";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+
+test.describe("Regular User Feature", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
@@ -82,12 +131,8 @@ test.describe("Feature Name", () => {
     await page.waitForLoadState("networkidle");
   });
 
-  test.afterAll(async ({ browser }) => {
-    // Cleanup resources created in beforeAll
-  });
-
-  test("should describe expected behavior clearly", async ({ page }) => {
-    // Arrange → Act → Assert
+  test("should work for non-admin users", async ({ page }) => {
+    // ...
   });
 });
 ```
@@ -199,7 +244,7 @@ await page.waitForResponse(resp => resp.url().includes("/api/chat") && resp.stat
 
 1. **Descriptive test names** — clearly state expected behavior: `"should display greeting message when opening new chat"`
 2. **API-first setup** — use `OnyxApiClient` for backend state; reserve UI interactions for the behavior under test
-3. **Clean state** — clear cookies + login fresh in `beforeEach`; cleanup resources in `afterAll`
+3. **Clean state** — most tests rely on the pre-authenticated admin session; only clear cookies + re-login when testing as a different user. Always cleanup API-created resources in `afterAll`
 4. **DRY helpers** — extract reusable logic into `utils/` with JSDoc comments
 5. **No hardcoded waits** — use `waitFor`, `waitForLoadState`, or web-first assertions
 6. **Parallel-safe** — no shared mutable state between tests; use unique names with timestamps (`\`test-${Date.now()}\``)
