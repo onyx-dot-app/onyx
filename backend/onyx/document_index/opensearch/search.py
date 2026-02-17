@@ -6,13 +6,16 @@ from typing import Any
 from uuid import UUID
 
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S
+from onyx.configs.app_configs import OPENSEARCH_EXPLAIN_ENABLED
 from onyx.configs.app_configs import OPENSEARCH_PROFILING_DISABLED
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import DEFAULT_K_NUM_CANDIDATES
+from onyx.document_index.opensearch.constants import (
+    DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+)
 from onyx.document_index.opensearch.constants import HYBRID_SEARCH_NORMALIZATION_WEIGHTS
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
@@ -247,7 +250,7 @@ class DocumentQuery:
             )
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector, num_candidates=DEFAULT_K_NUM_CANDIDATES
+            query_text, query_vector
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
@@ -275,16 +278,20 @@ class DocumentQuery:
         hybrid_search_query: dict[str, Any] = {
             "hybrid": {
                 "queries": hybrid_search_subqueries,
-                # Applied to all the sub-queries. Source:
+                # Max results per subquery per shard before aggregation. Ensures keyword and vector
+                # subqueries contribute equally to the candidate pool for hybrid fusion.
+                # Sources:
+                # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
+                # https://opensearch.org/blog/navigating-pagination-in-hybrid-queries-with-the-pagination_depth-parameter/
+                "pagination_depth": DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
+                # Applied to all the sub-queries independently (this avoids having subqueries having a lot of results thrown out).
+                # Sources:
                 # https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
+                # https://opensearch.org/blog/introducing-common-filter-support-for-hybrid-search-queries
                 # Does AND for each filter in the list.
                 "filter": {"bool": {"filter": hybrid_search_filters}},
             }
         }
-
-        # NOTE: By default, hybrid search retrieves "size"-many results from
-        # each OpenSearch shard before aggregation. Source:
-        # https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/pagination/
 
         final_hybrid_search_body: dict[str, Any] = {
             "query": hybrid_search_query,
@@ -294,6 +301,8 @@ class DocumentQuery:
         }
         # WARNING: Profiling does not work with hybrid search; do not add it at
         # this level. See https://github.com/opensearch-project/neural-search/issues/1255
+        if OPENSEARCH_EXPLAIN_ENABLED:
+            final_hybrid_search_body["explain"] = True
 
         return final_hybrid_search_body
 
@@ -355,7 +364,12 @@ class DocumentQuery:
 
     @staticmethod
     def _get_hybrid_search_subqueries(
-        query_text: str, query_vector: list[float], num_candidates: int
+        query_text: str,
+        query_vector: list[float],
+        # The default number of neighbors to consider for knn vector similarity search.
+        # This is higher than the number of results because the scoring is hybrid.
+        # for a detailed breakdown, see where the default value is set.
+        vector_candidates: int = DEFAULT_NUM_HYBRID_SEARCH_CANDIDATES,
     ) -> list[dict[str, Any]]:
         """Returns subqueries for hybrid search.
 
@@ -409,7 +423,7 @@ class DocumentQuery:
                 "knn": {
                     TITLE_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
-                        "k": num_candidates,
+                        "k": vector_candidates,
                     }
                 }
             },
@@ -445,7 +459,7 @@ class DocumentQuery:
                 "knn": {
                     CONTENT_VECTOR_FIELD_NAME: {
                         "vector": query_vector,
-                        "k": num_candidates,
+                        "k": vector_candidates,
                     }
                 }
             },
