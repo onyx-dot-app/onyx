@@ -246,6 +246,10 @@ export async function expectElementScreenshot(
 
   const page = locator.page();
 
+  // Wait for any in-flight CSS animations / transitions to settle so that
+  // element screenshots are deterministic (same reasoning as expectScreenshot).
+  await waitForAnimations(page);
+
   // Merge default hide selectors with per-call selectors
   const allHideSelectors = [...DEFAULT_HIDE_SELECTORS, ...hide];
 

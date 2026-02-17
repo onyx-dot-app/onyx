@@ -256,7 +256,7 @@ for (const theme of THEMES) {
       // Onboarding should disappear
       await expect(
         page.getByText("Let's take a moment to get you set up.").first()
-      ).not.toBeVisible({ timeout: 10000 });
+      ).not.toBeVisible({ timeout: 5000 });
 
       // Chat input should now be the primary visible element
       const chatInput = page.locator("#onyx-chat-input-textarea");
@@ -453,11 +453,9 @@ test.describe("Onboarding persistence", () => {
     await page.waitForLoadState("networkidle");
 
     // Onboarding should NOT reappear
-    // Give it a moment to potentially render, then assert it's not visible
-    await page.waitForTimeout(2000);
     await expect(
       page.getByText("Let's take a moment to get you set up.").first()
-    ).not.toBeVisible();
+    ).not.toBeVisible({ timeout: 5000 });
 
     await expectScreenshot(page, {
       name: "onboarding-light-persistence-check",
