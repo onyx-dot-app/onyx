@@ -188,6 +188,7 @@ test.describe("LLM Runtime Selection", () => {
   test("model selection persists across refresh and subsequent messages in the same chat", async ({
     page,
   }) => {
+    await page.context().clearCookies();
     await loginAs(page, "admin");
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
@@ -350,6 +351,7 @@ test.describe("LLM Runtime Selection", () => {
   test("same model name across providers resolves to provider-specific runtime payloads", async ({
     page,
   }) => {
+    await page.context().clearCookies();
     await loginAs(page, "admin");
 
     const sharedModelName = `shared-runtime-model-${Date.now()}`;
@@ -468,6 +470,7 @@ test.describe("LLM Runtime Selection", () => {
   test("restricted provider model is unavailable to unauthorized runtime user selection", async ({
     page,
   }) => {
+    await page.context().clearCookies();
     await loginAs(page, "admin");
 
     const client = new OnyxApiClient(page.request);
