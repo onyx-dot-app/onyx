@@ -353,12 +353,10 @@ class KubernetesSandboxManager(SandboxManager):
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 
-        # One long-lived ACP client per sandbox (Zed-style architecture).
-        # Multiple craft sessions share one `opencode acp` process per sandbox.
-        self._acp_clients: dict[UUID, ACPExecClient] = {}
-
         # Maps (sandbox_id, craft_session_id) → ACP session ID.
-        # Each craft session has its own ACP session on the shared client.
+        # Cached across messages so we can resume the same opencode session.
+        # The actual opencode session is persisted on disk in the sandbox pod,
+        # so this cache is just an optimization to skip session/list + resume.
         self._acp_session_ids: dict[tuple[UUID, UUID], str] = {}
 
         # Load AGENTS.md template path
@@ -1169,23 +1167,13 @@ done
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
 
-        Stops the shared ACP client and removes all session mappings for this
-        sandbox, then deletes the Service and Pod.
+        Removes session mappings for this sandbox, then deletes the
+        Service and Pod. ACP clients are ephemeral (created per message),
+        so there's nothing to stop here.
 
         Args:
             sandbox_id: The sandbox ID to terminate
         """
-        # Stop the shared ACP client for this sandbox
-        acp_client = self._acp_clients.pop(sandbox_id, None)
-        if acp_client:
-            try:
-                acp_client.stop()
-            except Exception as e:
-                logger.warning(
-                    f"[SANDBOX-ACP] Failed to stop ACP client for "
-                    f"sandbox {sandbox_id}: {e}"
-                )
-
         # Remove all session mappings for this sandbox
         keys_to_remove = [key for key in self._acp_session_ids if key[0] == sandbox_id]
         for key in keys_to_remove:
@@ -1847,56 +1835,35 @@ echo "Session config regeneration complete"
         )
         return exec_client.health_check(timeout=timeout)
 
-    def _get_or_create_acp_client(self, sandbox_id: UUID) -> ACPExecClient:
-        """Get the shared ACP client for a sandbox, creating one if needed.
+    def _create_ephemeral_acp_client(self, sandbox_id: UUID) -> ACPExecClient:
+        """Create a new ephemeral ACP client for a single message exchange.
 
-        One long-lived `opencode acp` process per sandbox (Zed-style).
-        If the existing client's WebSocket has died, replaces it with a new one.
+        Each call starts a fresh `opencode acp` process in the sandbox pod.
+        The process is short-lived — stopped after the message completes.
+        This prevents the bug where multiple long-lived processes (one per
+        API replica) operate on the same session's flat file storage
+        concurrently, causing the JSON-RPC response to be silently lost.
 
         Args:
             sandbox_id: The sandbox ID
 
         Returns:
-            A running ACPExecClient for this sandbox
+            A running ACPExecClient (caller must stop it when done)
         """
-        acp_client = self._acp_clients.get(sandbox_id)
-
-        if acp_client is not None and acp_client.is_running:
-            return acp_client
-
-        # Client is dead or doesn't exist — clean up stale one
-        if acp_client is not None:
-            logger.warning(
-                f"[SANDBOX-ACP] Stale ACP client for sandbox {sandbox_id}, "
-                f"replacing"
-            )
-            try:
-                acp_client.stop()
-            except Exception:
-                pass
-
-            # Clear session mappings — they're invalid on a new process
-            keys_to_remove = [
-                key for key in self._acp_session_ids if key[0] == sandbox_id
-            ]
-            for key in keys_to_remove:
-                del self._acp_session_ids[key]
-
         pod_name = self._get_pod_name(str(sandbox_id))
-        new_client = ACPExecClient(
+        acp_client = ACPExecClient(
             pod_name=pod_name,
             namespace=self._namespace,
             container="sandbox",
         )
-        new_client.start(cwd="/workspace")
-        self._acp_clients[sandbox_id] = new_client
+        acp_client.start(cwd="/workspace")
 
         logger.info(
-            f"[SANDBOX-ACP] Created shared ACP client: "
+            f"[SANDBOX-ACP] Created ephemeral ACP client: "
             f"sandbox={sandbox_id} pod={pod_name} "
             f"api_pod={_API_SERVER_HOSTNAME}"
         )
-        return new_client
+        return acp_client
 
     def _get_or_create_acp_session(
         self,
@@ -1908,12 +1875,12 @@ echo "Session config regeneration complete"
 
         Uses the session mapping cache first, then falls back to
         `get_or_create_session()` which handles resume from opencode's
-        persisted storage (multi-replica support).
+        persisted storage on disk.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The craft session ID
-            acp_client: The shared ACP client for this sandbox
+            acp_client: The ACP client for this message
 
         Returns:
             The ACP session ID
@@ -1924,7 +1891,7 @@ echo "Session config regeneration complete"
         if acp_session_id and acp_session_id in acp_client.session_ids:
             return acp_session_id
 
-        # Session not tracked or was lost — get or create it
+        # Session not tracked or new process — get or create from disk
         session_path = f"/workspace/sessions/{session_id}"
         acp_session_id = acp_client.get_or_create_session(cwd=session_path)
         self._acp_session_ids[session_key] = acp_session_id
@@ -1943,9 +1910,12 @@ echo "Session config regeneration complete"
     ) -> Generator[ACPEvent, None, None]:
         """Send a message to the CLI agent and stream ACP events.
 
-        Uses a shared ACP client per sandbox (one `opencode acp` process).
-        Each craft session has its own ACP session ID on that shared process.
-        Switching between sessions is client-side — just use the right sessionId.
+        Creates an ephemeral `opencode acp` process for each message.
+        The process resumes the session from opencode's on-disk storage,
+        handles the prompt, then is stopped. This ensures only one process
+        operates on a session's flat files at a time, preventing the bug
+        where multiple long-lived processes (one per API replica) corrupt
+        each other's in-memory state.
 
         Args:
             sandbox_id: The sandbox ID
@@ -1957,89 +1927,103 @@ echo "Session config regeneration complete"
         """
         packet_logger = get_packet_logger()
 
-        # Get or create the shared ACP client for this sandbox
-        acp_client = self._get_or_create_acp_client(sandbox_id)
+        # Create an ephemeral ACP client for this message
+        acp_client = self._create_ephemeral_acp_client(sandbox_id)
 
-        # Get or create the ACP session for this craft session
-        acp_session_id = self._get_or_create_acp_session(
-            sandbox_id, session_id, acp_client
-        )
-
-        logger.info(
-            f"[SANDBOX-ACP] Sending message: "
-            f"session={session_id} acp_session={acp_session_id} "
-            f"api_pod={_API_SERVER_HOSTNAME}"
-        )
-
-        # Log the send_message call at sandbox manager level
-        packet_logger.log_session_start(session_id, sandbox_id, message)
-
-        events_count = 0
-        got_prompt_response = False
         try:
-            for event in acp_client.send_message(message, session_id=acp_session_id):
-                events_count += 1
-                if isinstance(event, PromptResponse):
-                    got_prompt_response = True
-                yield event
+            # Get or create the ACP session for this craft session
+            acp_session_id = self._get_or_create_acp_session(
+                sandbox_id, session_id, acp_client
+            )
 
             logger.info(
-                f"[SANDBOX-ACP] send_message completed: "
-                f"session={session_id} events={events_count} "
-                f"got_prompt_response={got_prompt_response}"
+                f"[SANDBOX-ACP] Sending message: "
+                f"session={session_id} acp_session={acp_session_id} "
+                f"api_pod={_API_SERVER_HOSTNAME}"
             )
-            packet_logger.log_session_end(
-                session_id, success=True, events_count=events_count
-            )
-        except GeneratorExit:
-            logger.warning(
-                f"[SANDBOX-ACP] GeneratorExit: session={session_id} "
-                f"events={events_count}, sending session/cancel"
-            )
+
+            # Log the send_message call at sandbox manager level
+            packet_logger.log_session_start(session_id, sandbox_id, message)
+
+            events_count = 0
+            got_prompt_response = False
             try:
-                acp_client.cancel(session_id=acp_session_id)
-            except Exception as cancel_err:
-                logger.warning(
-                    f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: "
-                    f"{cancel_err}"
+                for event in acp_client.send_message(
+                    message, session_id=acp_session_id
+                ):
+                    events_count += 1
+                    if isinstance(event, PromptResponse):
+                        got_prompt_response = True
+                    yield event
+
+                logger.info(
+                    f"[SANDBOX-ACP] send_message completed: "
+                    f"session={session_id} events={events_count} "
+                    f"got_prompt_response={got_prompt_response}"
                 )
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error="GeneratorExit: Client disconnected or stream closed by consumer",
-                events_count=events_count,
-            )
-            raise
-        except Exception as e:
-            logger.error(
-                f"[SANDBOX-ACP] Exception: session={session_id} "
-                f"events={events_count} error={e}, sending session/cancel"
-            )
+                packet_logger.log_session_end(
+                    session_id, success=True, events_count=events_count
+                )
+            except GeneratorExit:
+                logger.warning(
+                    f"[SANDBOX-ACP] GeneratorExit: session={session_id} "
+                    f"events={events_count}, sending session/cancel"
+                )
+                try:
+                    acp_client.cancel(session_id=acp_session_id)
+                except Exception as cancel_err:
+                    logger.warning(
+                        f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: "
+                        f"{cancel_err}"
+                    )
+                packet_logger.log_session_end(
+                    session_id,
+                    success=False,
+                    error="GeneratorExit: Client disconnected or stream closed by consumer",
+                    events_count=events_count,
+                )
+                raise
+            except Exception as e:
+                logger.error(
+                    f"[SANDBOX-ACP] Exception: session={session_id} "
+                    f"events={events_count} error={e}, sending session/cancel"
+                )
+                try:
+                    acp_client.cancel(session_id=acp_session_id)
+                except Exception as cancel_err:
+                    logger.warning(
+                        f"[SANDBOX-ACP] session/cancel failed on Exception: "
+                        f"{cancel_err}"
+                    )
+                packet_logger.log_session_end(
+                    session_id,
+                    success=False,
+                    error=f"Exception: {str(e)}",
+                    events_count=events_count,
+                )
+                raise
+            except BaseException as e:
+                logger.error(
+                    f"[SANDBOX-ACP] {type(e).__name__}: session={session_id} "
+                    f"error={e}"
+                )
+                packet_logger.log_session_end(
+                    session_id,
+                    success=False,
+                    error=f"{type(e).__name__}: {str(e) if str(e) else 'System-level interruption'}",
+                    events_count=events_count,
+                )
+                raise
+        finally:
+            # Always stop the ephemeral ACP client to kill the opencode process.
+            # This ensures no stale processes linger in the sandbox container.
             try:
-                acp_client.cancel(session_id=acp_session_id)
-            except Exception as cancel_err:
+                acp_client.stop()
+            except Exception as e:
                 logger.warning(
-                    f"[SANDBOX-ACP] session/cancel failed on Exception: "
-                    f"{cancel_err}"
+                    f"[SANDBOX-ACP] Failed to stop ephemeral ACP client: "
+                    f"session={session_id} error={e}"
                 )
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error=f"Exception: {str(e)}",
-                events_count=events_count,
-            )
-            raise
-        except BaseException as e:
-            logger.error(
-                f"[SANDBOX-ACP] {type(e).__name__}: session={session_id} " f"error={e}"
-            )
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error=f"{type(e).__name__}: {str(e) if str(e) else 'System-level interruption'}",
-                events_count=events_count,
-            )
-            raise
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
