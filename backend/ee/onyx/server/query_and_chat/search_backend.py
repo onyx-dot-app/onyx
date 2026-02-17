@@ -24,6 +24,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm
+from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.server.utils_vector_db import require_vector_db
@@ -33,6 +34,10 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/search")
+
+# Temporary hardcode for latency testing of search-flow classification.
+CLASSIFICATION_LLM_PROVIDER_NAME = "OpenAI"
+CLASSIFICATION_LLM_MODEL_NAME = "gpt-5-nano"
 
 
 @router.post("/search-flow-classification")
@@ -47,7 +52,18 @@ def search_flow_classification(
     if len(query) > 200:
         return SearchFlowClassificationResponse(is_search_flow=False)
 
-    llm = get_default_llm()
+    try:
+        llm = get_llm_for_contextual_rag(
+            model_name=CLASSIFICATION_LLM_MODEL_NAME,
+            model_provider=CLASSIFICATION_LLM_PROVIDER_NAME,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to initialize hardcoded classification LLM (%s/%s); falling back to default LLM",
+            CLASSIFICATION_LLM_PROVIDER_NAME,
+            CLASSIFICATION_LLM_MODEL_NAME,
+        )
+        llm = get_default_llm()
 
     check_llm_cost_limit_for_provider(
         db_session=db_session,
