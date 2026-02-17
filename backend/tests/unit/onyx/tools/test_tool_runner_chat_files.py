@@ -115,7 +115,7 @@ class TestChatFileConversion:
             ),
             ChatLoadedFile(
                 file_id="file-2",
-                content=None,  # type: ignore  # Testing None content handling
+                content=b"",
                 file_type=ChatFileType.DOC,
                 filename="invalid.pdf",
                 content_text=None,
