@@ -4,9 +4,9 @@ This client runs `opencode acp` directly in the sandbox pod via kubernetes exec,
 using stdin/stdout for JSON-RPC communication. This bypasses the HTTP server
 and uses the native ACP subprocess protocol.
 
-When multiple API server replicas share the same sandbox pod, this client
-uses ACP session resumption (session/list + session/resume) to maintain
-conversation context across replicas.
+Each message creates an ephemeral client (start → resume_or_create_session →
+send_message → stop) to prevent concurrent processes from corrupting
+opencode's flat file session storage.
 
 Usage:
     client = ACPExecClient(
@@ -14,7 +14,8 @@ Usage:
         namespace="onyx-sandboxes",
     )
     client.start(cwd="/workspace")
-    for event in client.send_message("What files are here?"):
+    session_id = client.resume_or_create_session(cwd="/workspace/sessions/abc")
+    for event in client.send_message("What files are here?", session_id=session_id):
         print(event)
     client.stop()
 """
@@ -160,7 +161,7 @@ class ACPExecClient:
         """Start the agent process via exec and initialize the ACP connection.
 
         Only performs the ACP `initialize` handshake. Sessions are created
-        separately via `create_session()` or `resume_session()`.
+        separately via `resume_or_create_session()`.
 
         Args:
             cwd: Working directory for the `opencode acp` process
@@ -502,42 +503,11 @@ class ACPExecClient:
             )
             return None
 
-    def create_session(self, cwd: str, timeout: float = 30.0) -> str:
-        """Create a new ACP session on this connection.
+    def resume_or_create_session(self, cwd: str, timeout: float = 30.0) -> str:
+        """Resume a session from opencode's on-disk storage, or create a new one.
 
-        Args:
-            cwd: Working directory for the session
-            timeout: Timeout for the request
-
-        Returns:
-            The ACP session ID
-        """
-        if not self._state.initialized:
-            raise RuntimeError("Client not initialized. Call start() first.")
-        return self._create_session(cwd=cwd, timeout=timeout)
-
-    def resume_session(self, session_id: str, cwd: str, timeout: float = 30.0) -> str:
-        """Resume an existing ACP session on this connection.
-
-        Args:
-            session_id: The ACP session ID to resume
-            cwd: Working directory for the session
-            timeout: Timeout for the request
-
-        Returns:
-            The ACP session ID
-        """
-        if not self._state.initialized:
-            raise RuntimeError("Client not initialized. Call start() first.")
-        return self._resume_session(session_id=session_id, cwd=cwd, timeout=timeout)
-
-    def get_or_create_session(self, cwd: str, timeout: float = 30.0) -> str:
-        """Get an existing session for this cwd, or create/resume one.
-
-        Tries in order:
-        1. Return an already-tracked session for this cwd
-        2. Resume an existing session from opencode's storage (multi-replica)
-        3. Create a new session
+        With ephemeral clients (one process per message), this always hits disk.
+        Tries resume first to preserve conversation context, falls back to new.
 
         Args:
             cwd: Working directory for the session
@@ -548,14 +518,6 @@ class ACPExecClient:
         """
         if not self._state.initialized:
             raise RuntimeError("Client not initialized. Call start() first.")
-
-        # Check if we already have a session for this cwd
-        for sid, session in self._state.sessions.items():
-            if session.cwd == cwd:
-                logger.info(
-                    f"[ACP] Reusing existing session: " f"acp_session={sid} cwd={cwd}"
-                )
-                return sid
 
         # Try to resume from opencode's persisted storage
         resumed_id = self._try_resume_existing_session(cwd, timeout)
@@ -843,11 +805,6 @@ class ACPExecClient:
     def is_running(self) -> bool:
         """Check if the exec session is running."""
         return self._ws_client is not None and self._ws_client.is_open()
-
-    @property
-    def session_ids(self) -> list[str]:
-        """Get all tracked session IDs."""
-        return list(self._state.sessions.keys())
 
     def __enter__(self) -> "ACPExecClient":
         """Context manager entry."""

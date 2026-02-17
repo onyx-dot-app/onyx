@@ -353,12 +353,6 @@ class KubernetesSandboxManager(SandboxManager):
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 
-        # Maps (sandbox_id, craft_session_id) → ACP session ID.
-        # Cached across messages so we can resume the same opencode session.
-        # The actual opencode session is persisted on disk in the sandbox pod,
-        # so this cache is just an optimization to skip session/list + resume.
-        self._acp_session_ids: dict[tuple[UUID, UUID], str] = {}
-
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
@@ -1174,11 +1168,6 @@ done
         Args:
             sandbox_id: The sandbox ID to terminate
         """
-        # Remove all session mappings for this sandbox
-        keys_to_remove = [key for key in self._acp_session_ids if key[0] == sandbox_id]
-        for key in keys_to_remove:
-            del self._acp_session_ids[key]
-
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
 
@@ -1422,15 +1411,6 @@ echo "Session workspace setup complete"
             nextjs_port: Optional port where Next.js server is running (unused in K8s,
                         we use PID file instead)
         """
-        # Remove the ACP session mapping (shared client persists)
-        session_key = (sandbox_id, session_id)
-        acp_session_id = self._acp_session_ids.pop(session_key, None)
-        if acp_session_id:
-            logger.info(
-                f"[SANDBOX-ACP] Removed ACP session mapping: "
-                f"session={session_id} acp_session={acp_session_id}"
-            )
-
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
@@ -1865,43 +1845,6 @@ echo "Session config regeneration complete"
         )
         return acp_client
 
-    def _get_or_create_acp_session(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        acp_client: ACPExecClient,
-    ) -> str:
-        """Get the ACP session ID for a craft session, creating one if needed.
-
-        Uses the session mapping cache first, then falls back to
-        `get_or_create_session()` which handles resume from opencode's
-        persisted storage on disk.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The craft session ID
-            acp_client: The ACP client for this message
-
-        Returns:
-            The ACP session ID
-        """
-        session_key = (sandbox_id, session_id)
-        acp_session_id = self._acp_session_ids.get(session_key)
-
-        if acp_session_id and acp_session_id in acp_client.session_ids:
-            return acp_session_id
-
-        # Session not tracked or new process — get or create from disk
-        session_path = f"/workspace/sessions/{session_id}"
-        acp_session_id = acp_client.get_or_create_session(cwd=session_path)
-        self._acp_session_ids[session_key] = acp_session_id
-
-        logger.info(
-            f"[SANDBOX-ACP] Session mapped: "
-            f"craft_session={session_id} acp_session={acp_session_id}"
-        )
-        return acp_session_id
-
     def send_message(
         self,
         sandbox_id: UUID,
@@ -1931,10 +1874,9 @@ echo "Session config regeneration complete"
         acp_client = self._create_ephemeral_acp_client(sandbox_id)
 
         try:
-            # Get or create the ACP session for this craft session
-            acp_session_id = self._get_or_create_acp_session(
-                sandbox_id, session_id, acp_client
-            )
+            # Resume (or create) the ACP session from opencode's on-disk storage
+            session_path = f"/workspace/sessions/{session_id}"
+            acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
 
             logger.info(
                 f"[SANDBOX-ACP] Sending message: "
