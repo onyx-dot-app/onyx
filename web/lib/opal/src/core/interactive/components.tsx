@@ -149,9 +149,9 @@ interface InteractiveBasePropsBase
   /**
    * URL to navigate to when clicked.
    *
-   * When provided, renders an `<a>` wrapper element instead of using Radix Slot.
-   * The `<a>` receives all interactive styling (hover/active/transient states)
-   * and children are rendered inside it.
+   * Passed through Slot to the child element (typically `Interactive.Container`),
+   * which renders an `<a>` tag when `href` is present. This keeps all styling
+   * (backgrounds, rounding, overflow) on a single element.
    *
    * @example
    * ```tsx
@@ -261,34 +261,32 @@ function InteractiveBase({
     "aria-disabled": disabled || undefined,
   };
 
-  if (href) {
-    const { children, onClick, ...rest } = props;
-    return (
-      <a
-        ref={ref as React.Ref<HTMLAnchorElement>}
-        href={disabled ? undefined : href}
-        target={target}
-        rel={target === "_blank" ? "noopener noreferrer" : undefined}
-        className={classes}
-        {...dataAttrs}
-        {...rest}
-        onClick={
-          disabled ? (e: React.MouseEvent) => e.preventDefault() : onClick
-        }
-      >
-        {children}
-      </a>
-    );
-  }
-
   const { onClick, ...slotProps } = props;
+
+  // href, target, and rel are passed through Slot to the child element
+  // (typically Interactive.Container), which renders an <a> when href is present.
+  const linkAttrs = href
+    ? {
+        href: disabled ? undefined : href,
+        target,
+        rel: target === "_blank" ? "noopener noreferrer" : undefined,
+      }
+    : {};
+
   return (
     <Slot
       ref={ref}
       className={classes}
       {...dataAttrs}
+      {...linkAttrs}
       {...slotProps}
-      onClick={disabled ? undefined : onClick}
+      onClick={
+        disabled && href
+          ? (e: React.MouseEvent) => e.preventDefault()
+          : disabled
+            ? undefined
+            : onClick
+      }
     />
   );
 }
@@ -315,6 +313,8 @@ interface InteractiveContainerProps
    * When provided, renders a `<button>` element instead of a `<div>`.
    * This keeps all styling (background, rounding, height) on a single
    * element — unlike a wrapper approach which would split them.
+   *
+   * Mutually exclusive with `href`.
    *
    * @example
    * ```tsx
@@ -399,15 +399,22 @@ function InteractiveContainer({
   heightVariant = "lg",
   ...props
 }: InteractiveContainerProps) {
-  // Radix Slot injects className and style at runtime (bypassing WithoutStyles),
-  // so we extract and merge them to preserve the Slot-injected values.
+  // Radix Slot injects className, style, href, target, rel, and other
+  // attributes at runtime (bypassing WithoutStyles), so we extract and
+  // merge them to preserve the Slot-injected values.
   const {
     className: slotClassName,
     style: slotStyle,
+    href,
+    target,
+    rel,
     ...rest
   } = props as typeof props & {
     className?: string;
     style?: React.CSSProperties;
+    href?: string;
+    target?: string;
+    rel?: string;
   };
   const sharedProps = {
     ...rest,
@@ -422,6 +429,20 @@ function InteractiveContainer({
     "data-border": border ? ("true" as const) : undefined,
     style: slotStyle,
   };
+
+  // When href is provided (via Slot from Interactive.Base), render an <a>
+  // so all styling (backgrounds, rounding, overflow) lives on one element.
+  if (href) {
+    return (
+      <a
+        ref={ref as React.Ref<HTMLAnchorElement>}
+        href={href}
+        target={target}
+        rel={rel}
+        {...(sharedProps as React.HTMLAttributes<HTMLAnchorElement>)}
+      />
+    );
+  }
 
   if (type) {
     // When Interactive.Base is disabled it injects aria-disabled via Slot.

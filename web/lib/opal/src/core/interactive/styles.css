@@ -8,7 +8,7 @@
 
 /* Interactive — container */
 .interactive-container {
-  @apply flex self-stretch items-center justify-center overflow-clip;
+  @apply flex items-center justify-center overflow-clip;
 }
 .interactive-container[data-border="true"] {
   @apply border;
