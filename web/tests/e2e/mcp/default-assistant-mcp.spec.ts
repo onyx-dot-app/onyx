@@ -624,12 +624,21 @@ test.describe("Default Assistant MCP Integration", () => {
 
     const toolToggle = popover.getByLabel(`Toggle ${MCP_ASSERTED_TOOL_NAME}`);
     await expect(toolToggle).toBeVisible({ timeout: 10000 });
-    if ((await toolToggle.getAttribute("data-state")) !== "unchecked") {
+    const isToolToggleUnchecked = async () => {
+      const dataState = await toolToggle.getAttribute("data-state");
+      if (typeof dataState === "string") {
+        return dataState === "unchecked";
+      }
+      return (await toolToggle.getAttribute("aria-checked")) === "false";
+    };
+    if (!(await isToolToggleUnchecked())) {
       await toolToggle.click();
     }
-    await expect(toolToggle).toHaveAttribute("data-state", "unchecked", {
-      timeout: 5000,
-    });
+    await expect
+      .poll(isToolToggleUnchecked, {
+        timeout: 5000,
+      })
+      .toBe(true);
 
     await page.keyboard.press("Escape").catch(() => {});
 

@@ -56,6 +56,7 @@ type FlowArtifacts = {
   assistantId: number;
   assistantName: string;
   toolName: string;
+  toolId: number;
 };
 
 const DEFAULT_USERNAME_SELECTORS = [
@@ -147,7 +148,8 @@ const getToolName = (packetObject: Record<string, unknown>): string | null => {
 async function verifyToolInvocationFromChat(
   page: Page,
   toolName: string,
-  contextLabel: string
+  contextLabel: string,
+  forcedToolId?: number
 ) {
   const prompt = [
     `Call the MCP tool "${toolName}" now.`,
@@ -160,6 +162,13 @@ async function verifyToolInvocationFromChat(
       name: toolName,
       arguments: { name: `playwright-${Date.now()}` },
     }),
+    payloadOverrides:
+      forcedToolId !== undefined
+        ? {
+            forced_tool_id: forcedToolId,
+            forced_tool_ids: [forcedToolId],
+          }
+        : undefined,
     waitForAiMessage: false,
   });
   const startPackets = getPacketObjectsByType(
@@ -182,6 +191,23 @@ async function verifyToolInvocationFromChat(
   console.log(
     `[mcp-oauth-test] ${contextLabel}: tool invocation packets received for ${toolName}`
   );
+}
+
+async function fetchMcpToolIdByName(
+  page: Page,
+  serverId: number,
+  toolName: string
+): Promise<number> {
+  const response = await page.request.get(
+    `/api/admin/mcp/server/${serverId}/db-tools`
+  );
+  expect(response.ok()).toBeTruthy();
+  const data = (await response.json()) as {
+    tools?: Array<{ id: number; name: string }>;
+  };
+  const matchedTool = data.tools?.find((tool) => tool.name === toolName);
+  expect(matchedTool?.id).toBeTruthy();
+  return matchedTool!.id;
 }
 
 async function logoutSession(page: Page, contextLabel: string) {
@@ -949,6 +975,37 @@ async function verifyMcpToolRowVisible(
   await closeActionsPopover(page);
 }
 
+async function ensureMcpToolEnabledInActions(
+  page: Page,
+  serverName: string,
+  toolName: string
+) {
+  await page.locator('[data-testid="action-management-toggle"]').click();
+  await ensureActionPopoverInPrimaryView(page);
+  const toolButton = await ensureToolOptionVisible(page, toolName, serverName);
+  await expect(toolButton).toBeVisible({ timeout: 5000 });
+
+  let toolToggle = toolButton.getByRole("switch").first();
+  if ((await toolToggle.count()) === 0) {
+    toolToggle = page.getByLabel(`Toggle ${toolName}`).first();
+  }
+  await expect(toolToggle).toBeVisible({ timeout: 5000 });
+
+  const isToggleChecked = async () => {
+    const dataState = await toolToggle.getAttribute("data-state");
+    if (typeof dataState === "string") {
+      return dataState === "checked";
+    }
+    return (await toolToggle.getAttribute("aria-checked")) === "true";
+  };
+
+  if (!(await isToggleChecked())) {
+    await toolToggle.click();
+  }
+  await expect.poll(isToggleChecked, { timeout: 5000 }).toBe(true);
+  await closeActionsPopover(page);
+}
+
 async function reauthenticateFromChat(
   page: Page,
   serverName: string,
@@ -1317,6 +1374,11 @@ test.describe("MCP OAuth flows", () => {
         throw new Error(`Invalid server_id parsed from URL: ${serverIdParam}`);
       }
     }
+    const adminToolId = await fetchMcpToolIdByName(
+      page,
+      serverId,
+      TOOL_NAMES.admin
+    );
 
     // Verify server card is visible with tools and wait for tool toggle
     await expect(
@@ -1434,11 +1496,13 @@ test.describe("MCP OAuth flows", () => {
 
     await ensureServerVisibleInActions(page, serverName);
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
+    await ensureMcpToolEnabledInActions(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible before reauth");
     await verifyToolInvocationFromChat(
       page,
       TOOL_NAMES.admin,
-      "AdminFlow pre-reauth"
+      "AdminFlow pre-reauth",
+      adminToolId
     );
     logStep("Verified admin MCP tool invocation before reauth");
 
@@ -1449,11 +1513,13 @@ test.describe("MCP OAuth flows", () => {
     );
     await ensureServerVisibleInActions(page, serverName);
     await verifyMcpToolRowVisible(page, serverName, TOOL_NAMES.admin);
+    await ensureMcpToolEnabledInActions(page, serverName, TOOL_NAMES.admin);
     logStep("Verified admin MCP tool row visible after reauth");
     await verifyToolInvocationFromChat(
       page,
       TOOL_NAMES.admin,
-      "AdminFlow post-reauth"
+      "AdminFlow post-reauth",
+      adminToolId
     );
     logStep("Verified admin MCP tool invocation after reauth");
 
@@ -1471,6 +1537,7 @@ test.describe("MCP OAuth flows", () => {
       assistantId,
       assistantName,
       toolName: TOOL_NAMES.admin,
+      toolId: adminToolId,
     };
   });
 
@@ -1711,6 +1778,7 @@ test.describe("MCP OAuth flows", () => {
         assistantId,
         assistantName,
         toolName: TOOL_NAMES.curator,
+        toolId: -1,
       };
 
       // Verify isolation: second curator must not be able to edit first curator's server
@@ -1807,8 +1875,14 @@ test.describe("MCP OAuth flows", () => {
     logStep("Completed user OAuth reauthentication");
 
     await verifyMcpToolRowVisible(page, serverName, toolName);
+    await ensureMcpToolEnabledInActions(page, serverName, toolName);
     logStep("Verified user MCP tool row visible after reauth");
-    await verifyToolInvocationFromChat(page, toolName, "UserFlow post-reauth");
+    await verifyToolInvocationFromChat(
+      page,
+      toolName,
+      "UserFlow post-reauth",
+      adminArtifacts!.toolId
+    );
     logStep("Verified user MCP tool invocation after reauth");
   });
 });

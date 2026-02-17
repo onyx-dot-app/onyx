@@ -87,11 +87,26 @@ export async function sendMessageAndCaptureStreamPackets(
 
   await page.route(requestUrlPattern, routeHandler);
 
-  const responsePromise = page.waitForResponse(
-    (response) =>
-      response.request().method() === "POST" &&
-      response.url().includes("/api/chat/send-chat-message")
-  );
+  const responsePromise = page.waitForResponse((response) => {
+    if (
+      response.request().method() !== "POST" ||
+      !response.url().includes("/api/chat/send-chat-message")
+    ) {
+      return false;
+    }
+
+    const requestBody = response.request().postData();
+    if (!requestBody) {
+      return true;
+    }
+
+    try {
+      const payload = JSON.parse(requestBody) as Record<string, unknown>;
+      return payload.message === message;
+    } catch {
+      return true;
+    }
+  });
 
   try {
     if (waitForAiMessage) {
