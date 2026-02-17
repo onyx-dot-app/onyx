@@ -209,7 +209,6 @@ class ACPExecClient:
             self._initialize(timeout=timeout)
 
             logger.info(f"[ACP] Client started: pod={self._pod_name}")
-
         except Exception as e:
             logger.error(f"[ACP] Client start failed: pod={self._pod_name} error={e}")
             self.stop()
@@ -220,54 +219,51 @@ class ACPExecClient:
         buffer = ""
         packet_logger = get_packet_logger()
 
-        try:
-            while not self._stop_reader.is_set():
-                if self._ws_client is None:
+        while not self._stop_reader.is_set():
+            if self._ws_client is None:
+                break
+
+            try:
+                if self._ws_client.is_open():
+                    self._ws_client.update(timeout=0.1)
+
+                    # Read stderr - log any agent errors
+                    stderr_data = self._ws_client.read_stderr(timeout=0.01)
+                    if stderr_data:
+                        logger.warning(
+                            f"[ACP] stderr pod={self._pod_name}: "
+                            f"{stderr_data.strip()[:500]}"
+                        )
+
+                    # Read stdout
+                    data = self._ws_client.read_stdout(timeout=0.1)
+                    if data:
+                        buffer += data
+
+                        while "\n" in buffer:
+                            line, buffer = buffer.split("\n", 1)
+                            line = line.strip()
+                            if line:
+                                try:
+                                    message = json.loads(line)
+                                    packet_logger.log_jsonrpc_raw_message(
+                                        "IN", message, context="k8s"
+                                    )
+                                    self._response_queue.put(message)
+                                except json.JSONDecodeError:
+                                    logger.warning(
+                                        f"[ACP] Invalid JSON from agent: "
+                                        f"{line[:100]}"
+                                    )
+
+                else:
+                    logger.warning(f"[ACP] WebSocket closed: pod={self._pod_name}")
                     break
 
-                try:
-                    if self._ws_client.is_open():
-                        self._ws_client.update(timeout=0.1)
-
-                        # Read stderr - log any agent errors
-                        stderr_data = self._ws_client.read_stderr(timeout=0.01)
-                        if stderr_data:
-                            logger.warning(
-                                f"[ACP] stderr pod={self._pod_name}: "
-                                f"{stderr_data.strip()[:500]}"
-                            )
-
-                        # Read stdout
-                        data = self._ws_client.read_stdout(timeout=0.1)
-                        if data:
-                            buffer += data
-
-                            while "\n" in buffer:
-                                line, buffer = buffer.split("\n", 1)
-                                line = line.strip()
-                                if line:
-                                    try:
-                                        message = json.loads(line)
-                                        packet_logger.log_jsonrpc_raw_message(
-                                            "IN", message, context="k8s"
-                                        )
-                                        self._response_queue.put(message)
-                                    except json.JSONDecodeError:
-                                        logger.warning(
-                                            f"[ACP] Invalid JSON from agent: "
-                                            f"{line[:100]}"
-                                        )
-
-                    else:
-                        logger.warning(f"[ACP] WebSocket closed: pod={self._pod_name}")
-                        break
-
-                except Exception as e:
-                    if not self._stop_reader.is_set():
-                        logger.warning(f"[ACP] Reader error: {e}, pod={self._pod_name}")
-                    break
-        finally:
-            pass
+            except Exception as e:
+                if not self._stop_reader.is_set():
+                    logger.warning(f"[ACP] Reader error: {e}, pod={self._pod_name}")
+                break
 
     def stop(self) -> None:
         """Stop the exec session and clean up."""
@@ -591,41 +587,6 @@ class ACPExecClient:
                 message_data = self._response_queue.get(timeout=min(remaining, 1.0))
                 last_event_time = time.time()
             except Empty:
-                # Check if reader thread is still alive
-                if (
-                    self._reader_thread is not None
-                    and not self._reader_thread.is_alive()
-                ):
-                    completion_reason = "reader_thread_dead"
-                    # Drain any final messages the reader flushed before dying
-                    while not self._response_queue.empty():
-                        try:
-                            final_msg = self._response_queue.get_nowait()
-                            if final_msg.get("id") == request_id:
-                                if "error" in final_msg:
-                                    error_data = final_msg["error"]
-                                    yield Error(
-                                        code=error_data.get("code", -1),
-                                        message=error_data.get(
-                                            "message", "Unknown error"
-                                        ),
-                                    )
-                                else:
-                                    result = final_msg.get("result", {})
-                                    try:
-                                        yield PromptResponse.model_validate(result)
-                                    except ValidationError:
-                                        pass
-                                break
-                        except Empty:
-                            break
-
-                    logger.warning(
-                        f"[ACP] Reader thread dead: "
-                        f"acp_session={session_id} events={events_yielded}"
-                    )
-                    break
-
                 # Send SSE keepalive if idle
                 idle_time = time.time() - last_event_time
                 if idle_time >= SSE_KEEPALIVE_INTERVAL:
