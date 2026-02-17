@@ -282,15 +282,24 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   );
 
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
-  const handleChatInputSubmit = useCallback(
     async (submittedMessage: string) => {
       if (!submittedMessage.trim()) return;
+      // If we already have messages (chat session started), always use chat mode
+      // (matches AppPage behavior where existing sessions bypass classification)
+      if (hasMessages) {
+        resetInputBar();
+        onSubmit({
+          message: submittedMessage,
+          currentMessageFiles: currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+        });
+        return;
+      }
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets classification to "search" and shows SearchUI)
       // - Route to chat (calls onChat callback)
       await submitQuery(submittedMessage, onChat);
     },
-    [submitQuery, onChat]
   );
 
   // Handle resubmit last message on error
