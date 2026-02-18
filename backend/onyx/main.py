@@ -21,7 +21,6 @@ from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.clients.openid import OpenID
-from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from starlette.types import Lifespan
@@ -121,6 +120,7 @@ from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.server.middleware.rate_limiting import setup_auth_limiter
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.pat.api import router as pat_router
+from onyx.server.prometheus_instrumentation import setup_prometheus_metrics
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
@@ -563,8 +563,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_router_auth(application)
 
-    # Initialize and instrument the app
-    Instrumentator().instrument(application).expose(application)
+    # Initialize and instrument the app with production Prometheus config
+    setup_prometheus_metrics(application)
 
     use_route_function_names_as_operation_ids(application)
 
