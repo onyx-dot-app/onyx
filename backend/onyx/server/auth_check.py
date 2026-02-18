@@ -62,7 +62,6 @@ PUBLIC_ENDPOINT_SPECS = [
     # craft webapp proxy — public when session.is_public=True (access enforced in handler)
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),
-    ("/_next/{path:path}", {"GET"}),
 ]
 
 

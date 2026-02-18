@@ -420,7 +420,6 @@ def _offline_html_response() -> Response:
       padding: 2rem;
     }
 
-    /* Terminal window */
     .terminal {
       width: 100%;
       max-width: 580px;
@@ -428,7 +427,6 @@ def _offline_html_response() -> Response:
       border-radius: 2px;
     }
 
-    /* Title bar */
     .titlebar {
       background: #1f2937;
       padding: 0.5rem 0.75rem;
@@ -438,7 +436,6 @@ def _offline_html_response() -> Response:
       border-bottom: 1px solid #374151;
     }
 
-    /* Square traffic-light buttons (not circles) */
     .btn { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
     .btn-red    { background: #ef4444; }
     .btn-yellow { background: #eab308; }
@@ -449,47 +446,22 @@ def _offline_html_response() -> Response:
       text-align: center;
       font-size: 0.75rem;
       color: #6b7280;
-      margin-right: 36px; /* offset for buttons width so label is visually centred */
+      margin-right: 36px;
     }
 
-    /* Terminal body */
     .body {
       background: #111827;
       padding: 1.5rem;
       min-height: 200px;
       font-size: 0.875rem;
       color: #d1d5db;
-    }
-
-    /* History lines (completed) */
-    .history { margin-bottom: 0.25rem; }
-    .history .prompt { color: #10b981; }
-    .history .text   { color: #6b7280; }
-
-    /* Active typing line */
-    .active {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 0.375rem;
     }
+
     .prompt { color: #10b981; user-select: none; }
-    #typed  { color: #d1d5db; }
 
-    /* Block cursor */
-    .cursor {
-      display: inline-block;
-      width: 8px;
-      height: 1.1em;
-      background: #10b981;
-      vertical-align: text-bottom;
-      animation: blink 1s step-start infinite;
-    }
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0; }
-    }
-
-    /* Tagline */
     .tagline {
       font-size: 0.8125rem;
       color: #4b5563;
@@ -506,61 +478,11 @@ def _offline_html_response() -> Response:
       <span class="title-label">crafting_table</span>
     </div>
     <div class="body">
-      <div id="history"></div>
-      <div class="active">
-        <span class="prompt">/&gt;</span>
-        <span id="typed"></span><span class="cursor"></span>
-      </div>
+      <span class="prompt">/&gt;</span>
+      <span>Sandbox is asleep...</span>
     </div>
   </div>
   <p class="tagline">Ask the owner to open their Craft session to wake it up.</p>
-
-  <script>
-    var messages = [
-      "Sandbox is asleep...",
-      "Waiting for owner to wake it up...",
-      "Ask the owner to open their Craft session.",
-      "This page will refresh automatically.",
-      "/status: idle"
-    ];
-
-    var msgIndex = 0;
-    var charIndex = 0;
-    var typedEl = document.getElementById("typed");
-    var historyEl = document.getElementById("history");
-    var HISTORY_MAX = 3;
-    var history = [];
-
-    function addHistory(text) {
-      history.push(text);
-      if (history.length > HISTORY_MAX) history.shift();
-      historyEl.innerHTML = history.map(function(t) {
-        return '<div class="history"><span class="prompt">/&gt; </span><span class="text">' +
-          t.replace(/&/g,"&amp;").replace(/</g,"&lt;") + "</span></div>";
-      }).join("");
-    }
-
-    function typeChar() {
-      var msg = messages[msgIndex];
-      if (charIndex < msg.length) {
-        typedEl.textContent += msg[charIndex];
-        charIndex++;
-        setTimeout(typeChar, 55 + Math.random() * 40);
-      } else {
-        setTimeout(nextMessage, 1600);
-      }
-    }
-
-    function nextMessage() {
-      addHistory(messages[msgIndex]);
-      msgIndex = (msgIndex + 1) % messages.length;
-      charIndex = 0;
-      typedEl.textContent = "";
-      setTimeout(typeChar, 300);
-    }
-
-    typeChar();
-  </script>
 </body>
 </html>"""
     return Response(content=html, status_code=503, media_type="text/html")
@@ -614,49 +536,6 @@ def get_webapp_path(
         if e.status_code in (502, 503, 504):
             return _offline_html_response()
         raise
-
-
-# Separate router for Next.js static assets at /_next/*
-# This is needed because Next.js apps may reference assets with root-relative paths
-# that don't get rewritten. The session_id is extracted from the Referer header.
-nextjs_assets_router = APIRouter()
-
-
-def _extract_session_from_referer(request: Request) -> UUID | None:
-    """Extract session_id from the Referer header.
-
-    Expects Referer to contain /api/build/sessions/{session_id}/webapp
-    """
-    import re
-
-    referer = request.headers.get("referer", "")
-    match = re.search(r"/api/build/sessions/([a-f0-9-]+)/webapp", referer)
-    if match:
-        try:
-            return UUID(match.group(1))
-        except ValueError:
-            return None
-    return None
-
-
-@nextjs_assets_router.get("/_next/{path:path}", response_model=None)
-def get_nextjs_assets(
-    path: str,
-    request: Request,
-    user: User | None = Depends(optional_user),
-    db_session: Session = Depends(get_session),
-) -> StreamingResponse | Response:
-    """Proxy Next.js static assets at root /_next/ path.
-    Session is determined from the Referer header.
-    """
-    session_id = _extract_session_from_referer(request)
-    if not session_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Could not determine session from request context",
-        )
-    _check_webapp_access(session_id, user, db_session)
-    return _proxy_request(f"_next/{path}", request, session_id, db_session)
 
 
 # =============================================================================
