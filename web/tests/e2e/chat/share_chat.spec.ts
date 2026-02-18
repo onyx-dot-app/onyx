@@ -173,6 +173,13 @@ test.describe("Share Chat Session Modal", () => {
     });
 
     await page.unrouteAll({ behavior: "ignoreErrors" });
+
+    // Wait for the toast to confirm SWR data has been refreshed
+    // before closing, so the next test sees up-to-date shared_status
+    await expect(
+      page.getByText("Share link copied to clipboard!").first()
+    ).toBeVisible({ timeout: 5000 });
+
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden({ timeout: 5000 });
   });
