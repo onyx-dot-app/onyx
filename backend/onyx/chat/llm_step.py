@@ -956,6 +956,29 @@ def run_llm_step_pkt_generator(
         stream_start_time = time.monotonic()
         first_action_recorded = False
 
+        def _emit_citation_results(
+            results: Generator[str | CitationInfo, None, None],
+        ) -> Generator[Packet, None, None]:
+            """Yield packets for citation processor results (str or CitationInfo)."""
+            nonlocal accumulated_answer
+
+            for result in results:
+                if isinstance(result, str):
+                    accumulated_answer += result
+                    if state_container:
+                        state_container.set_answer_tokens(accumulated_answer)
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=AgentResponseDelta(content=result),
+                    )
+                elif isinstance(result, CitationInfo):
+                    yield Packet(
+                        placement=_current_placement(),
+                        obj=result,
+                    )
+                    if state_container:
+                        state_container.add_emitted_citation(result.citation_number)
+
         def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
             nonlocal accumulated_answer
             nonlocal accumulated_reasoning
@@ -1013,24 +1036,9 @@ def run_llm_step_pkt_generator(
                 answer_start = True
 
             if citation_processor:
-                for result in citation_processor.process_token(content_chunk):
-                    if isinstance(result, str):
-                        accumulated_answer += result
-                        # Save answer incrementally to state container
-                        if state_container:
-                            state_container.set_answer_tokens(accumulated_answer)
-                        yield Packet(
-                            placement=_current_placement(),
-                            obj=AgentResponseDelta(content=result),
-                        )
-                    elif isinstance(result, CitationInfo):
-                        yield Packet(
-                            placement=_current_placement(),
-                            obj=result,
-                        )
-                        # Track emitted citation for saving
-                        if state_container:
-                            state_container.add_emitted_citation(result.citation_number)
+                yield from _emit_citation_results(
+                    citation_processor.process_token(content_chunk)
+                )
             else:
                 accumulated_answer += content_chunk
                 # Save answer incrementally to state container
@@ -1205,24 +1213,7 @@ def run_llm_step_pkt_generator(
     # Note that this doesn't need to handle any sub-turns as those docs will not have citations
     # as clickable items and will be stripped out instead.
     if citation_processor:
-        for result in citation_processor.process_token(None):
-            if isinstance(result, str):
-                accumulated_answer += result
-                # Save answer incrementally to state container
-                if state_container:
-                    state_container.set_answer_tokens(accumulated_answer)
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=AgentResponseDelta(content=result),
-                )
-            elif isinstance(result, CitationInfo):
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=result,
-                )
-                # Track emitted citation for saving
-                if state_container:
-                    state_container.add_emitted_citation(result.citation_number)
+        yield from _emit_citation_results(citation_processor.process_token(None))
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
