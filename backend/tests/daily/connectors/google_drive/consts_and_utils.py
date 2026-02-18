@@ -146,7 +146,7 @@ EXPECTED_SHARED_DRIVE_1_HIERARCHY = ExpectedHierarchyNode(
             children=[
                 ExpectedHierarchyNode(
                     raw_node_id=FOLDER_1_1_ID,
-                    display_name="folder_1_1",
+                    display_name="folder 1-1",
                     node_type=HierarchyNodeType.FOLDER,
                     raw_parent_id=FOLDER_1_ID,
                 ),
@@ -330,7 +330,7 @@ PERM_SYNC_DRIVE_ACCESS_MAPPING: dict[str, set[str]] = {
 # ============================================================================
 
 EXPECTED_FOLDER_3 = _node(
-    FOLDER_3_ID, "folder_3", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
+    FOLDER_3_ID, "Folder 3", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
 )
 
 EXPECTED_ADMIN_MY_DRIVE = _node(ADMIN_MY_DRIVE_ID, "My Drive", HierarchyNodeType.FOLDER)
