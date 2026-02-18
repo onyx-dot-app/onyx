@@ -200,12 +200,25 @@ async function globalSetup(config: FullConfig) {
 
   for (let i = 0; i < workerCount; i++) {
     const { email, password } = workerUserCredentials(i);
-    await apiLoginAndSaveState(
+    const storageStatePath = `worker${i}_auth.json`;
+    await apiLoginAndSaveState(baseURL, email, password, storageStatePath);
+
+    const workerCtx = await request.newContext({
       baseURL,
-      email,
-      password,
-      `worker${i}_auth.json`
-    );
+      storageState: storageStatePath,
+    });
+    try {
+      const res = await workerCtx.patch("/api/user/personalization", {
+        data: { name: "worker" },
+      });
+      if (!res.ok()) {
+        console.warn(
+          `[global-setup] Failed to set display name for ${email}: ${res.status()}`
+        );
+      }
+    } finally {
+      await workerCtx.dispose();
+    }
   }
 
   // ── Ensure a public LLM provider exists ───────────────────────────
