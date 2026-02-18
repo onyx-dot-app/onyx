@@ -2,6 +2,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
+from dataclasses import replace
 from urllib.parse import urlparse
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -352,7 +353,7 @@ EXPECTED_TEST_USER_3_MY_DRIVE = _node(
 
 EXPECTED_PERM_SYNC_DRIVE_ADMIN_ONLY = _node(
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
-    "perm_sync_admin_only",
+    "perm_sync_drive_0dc9d8b5-e243-4c2f-8678-2235958f7d7c",
     HierarchyNodeType.SHARED_DRIVE,
 )
 EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A = _node(
@@ -675,6 +676,19 @@ def _pick(
     return {nid: ALL_EXPECTED_HIERARCHY_NODES[nid] for nid in node_ids}
 
 
+def _clear_parents(
+    nodes: dict[str, ExpectedHierarchyNode],
+    *node_ids: str,
+) -> dict[str, ExpectedHierarchyNode]:
+    """Return a shallow copy of nodes with the specified nodes' parents set to None.
+    Useful for OAuth tests where the user can't resolve certain parents
+    (e.g. a folder in another user's My Drive)."""
+    result = dict(nodes)
+    for nid in node_ids:
+        result[nid] = replace(result[nid], raw_parent_id=None)
+    return result
+
+
 def get_expected_hierarchy_for_shared_drives(
     include_drive_1: bool = True,
     include_drive_2: bool = True,
@@ -706,13 +720,17 @@ def get_expected_hierarchy_for_folder_2() -> dict[str, ExpectedHierarchyNode]:
 
 def get_expected_hierarchy_for_test_user_1() -> dict[str, ExpectedHierarchyNode]:
     """
-    Get expected hierarchy for test_user_1's full access.
+    Get expected hierarchy for test_user_1's full access (OAuth).
 
     test_user_1 has access to:
     - shared_drive_1 and its contents (folder_1, folder_1_1, folder_1_2)
     - folder_3 (shared from admin's My Drive)
     - PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A and PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B
     - Additional drives/folders the user has access to
+
+    NOTE: Folder 3 lives in the admin's My Drive. When running as an OAuth
+    connector for test_user_1, the Google Drive API won't return the parent
+    for Folder 3 because the user can't access the admin's My Drive root.
     """
     result = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -733,7 +751,7 @@ def get_expected_hierarchy_for_test_user_1() -> dict[str, ExpectedHierarchyNode]
             TEST_USER_1_EXTRA_FOLDER_ID,
         )
     )
-    return result
+    return _clear_parents(result, FOLDER_3_ID)
 
 
 def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> (
@@ -755,7 +773,10 @@ def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> (
     dict[str, ExpectedHierarchyNode]
 ):
     """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only."""
-    return _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID)
+    return _clear_parents(
+        _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID),
+        FOLDER_3_ID,
+    )
 
 
 def get_expected_hierarchy_for_test_user_1_my_drive_only() -> (

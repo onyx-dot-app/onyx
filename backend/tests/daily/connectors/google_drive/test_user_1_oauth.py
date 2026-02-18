@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document
+from tests.daily.connectors.google_drive.consts_and_utils import _clear_parents
 from tests.daily.connectors.google_drive.consts_and_utils import _pick
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
@@ -235,7 +236,7 @@ def test_shared_my_drive_folder(
 
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
-        expected_nodes=_pick(FOLDER_3_ID),
+        expected_nodes=_clear_parents(_pick(FOLDER_3_ID), FOLDER_3_ID),
     )
 
 
