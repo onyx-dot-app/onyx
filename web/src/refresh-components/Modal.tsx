@@ -9,6 +9,7 @@ import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { WithoutStyles } from "@/types";
 import { Section, SectionProps } from "@/layouts/general-layouts";
+import useContainerCenter from "@/hooks/useContainerCenter";
 
 /**
  * Modal Root Component
@@ -264,11 +265,29 @@ const ModalContent = React.forwardRef<
       contentRef(node);
     };
 
+    const { centerX, centerY, hasContainerCenter } = useContainerCenter();
+
     const animationClasses = cn(
       "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
       "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
       "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
       "duration-200"
+    );
+
+    const containerStyle: React.CSSProperties | undefined = hasContainerCenter
+      ? ({
+          left: centerX,
+          top: centerY,
+          "--tw-enter-translate-x": "-50%",
+          "--tw-exit-translate-x": "-50%",
+          "--tw-enter-translate-y": "-50%",
+          "--tw-exit-translate-y": "-50%",
+        } as React.CSSProperties)
+      : undefined;
+
+    const positionClasses = cn(
+      "fixed -translate-x-1/2 -translate-y-1/2",
+      !hasContainerCenter && "left-1/2 top-1/2"
     );
 
     const dialogEventHandlers = {
@@ -315,8 +334,9 @@ const ModalContent = React.forwardRef<
               {...dialogEventHandlers}
             >
               <div
+                style={containerStyle}
                 className={cn(
-                  "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+                  positionClasses,
                   "z-modal",
                   "flex flex-col gap-4 items-center",
                   "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
@@ -334,8 +354,10 @@ const ModalContent = React.forwardRef<
             // Without bottomSlot: original single-element rendering
             <DialogPrimitive.Content
               ref={handleRef}
+              style={containerStyle}
               className={cn(
-                "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden",
+                positionClasses,
+                "overflow-hidden",
                 "z-modal",
                 background === "gray"
                   ? "bg-background-tint-01"

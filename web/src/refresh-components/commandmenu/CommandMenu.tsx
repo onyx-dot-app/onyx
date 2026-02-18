@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
+import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -366,36 +367,7 @@ const CommandMenuContent = React.forwardRef<
   CommandMenuContentProps
 >(({ children }, ref) => {
   const { handleKeyDown } = useCommandMenuContext();
-
-  // Track the horizontal center of the main content container ([data-main-container])
-  // so the dialog is centered within it rather than the full viewport (which includes
-  // the sidebar). A ResizeObserver keeps it reactive to sidebar fold/unfold.
-  const [centerX, setCenterX] = React.useState<number | null>(() => {
-    if (typeof document === "undefined") return null;
-    const el = document.querySelector<HTMLElement>("[data-main-container]");
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    return rect.left + rect.width / 2;
-  });
-
-  useEffect(() => {
-    const container = document.querySelector<HTMLElement>(
-      "[data-main-container]"
-    );
-    if (!container) return;
-
-    const update = () => {
-      const rect = container.getBoundingClientRect();
-      setCenterX(rect.left + rect.width / 2);
-    };
-
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  const hasContainerCenter = centerX !== null;
+  const { centerX, hasContainerCenter } = useContainerCenter();
 
   return (
     <DialogPrimitive.Portal>
@@ -417,8 +389,6 @@ const CommandMenuContent = React.forwardRef<
           hasContainerCenter
             ? ({
                 left: centerX,
-                // Anchor the enter/exit animations at -50% so the vertical
-                // slide doesn't also produce an unintended horizontal slide.
                 "--tw-enter-translate-x": "-50%",
                 "--tw-exit-translate-x": "-50%",
               } as React.CSSProperties)
