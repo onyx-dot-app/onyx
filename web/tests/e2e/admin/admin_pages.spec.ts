@@ -162,16 +162,12 @@ async function verifyAdminPageNavigation(
   }
 }
 
-const THEMES = ["light", "dark"] as const;
+import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 
 for (const theme of THEMES) {
   test.describe(`Admin pages (${theme} mode)`, () => {
-    // Inject the theme into localStorage before every navigation so
-    // next-themes picks it up on first render.
     test.beforeEach(async ({ page }) => {
-      await page.addInitScript((t: string) => {
-        localStorage.setItem("theme", t);
-      }, theme);
+      await setThemeBeforeNavigation(page, theme);
     });
 
     for (const snapshot of ADMIN_PAGES) {

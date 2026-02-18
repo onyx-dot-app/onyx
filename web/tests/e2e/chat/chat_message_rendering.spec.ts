@@ -1,6 +1,7 @@
 import { expect, Page, test } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const SHORT_USER_MESSAGE = "What is Onyx?";
@@ -266,194 +267,214 @@ async function screenshotChatContainer(
   await expectElementScreenshot(container, { name });
 }
 
-test.describe("Chat Message Rendering", () => {
-  test.beforeEach(async ({ page }) => {
-    turnCounter = 0;
-    await page.context().clearCookies();
-    await loginAs(page, "user");
-  });
-
-  test.describe("Short Messages", () => {
-    test("short user message with short AI response renders correctly", async ({
-      page,
-    }) => {
-      await openChat(page);
-      await mockChatEndpoint(page, SHORT_AI_RESPONSE);
-
-      await sendMessage(page, SHORT_USER_MESSAGE);
-
-      const userMessage = page.locator("#onyx-human-message").first();
-      await expect(userMessage).toContainText(SHORT_USER_MESSAGE);
-
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-      await expect(aiMessage).toContainText("open-source AI-powered");
-
-      await screenshotChatContainer(page, "chat-short-message-short-response");
+for (const theme of THEMES) {
+  test.describe(`Chat Message Rendering (${theme} mode)`, () => {
+    test.beforeEach(async ({ page }) => {
+      turnCounter = 0;
+      await page.context().clearCookies();
+      await setThemeBeforeNavigation(page, theme);
+      await loginAs(page, "user");
     });
-  });
 
-  test.describe("Long Messages", () => {
-    test("long user message renders without truncation", async ({ page }) => {
-      await openChat(page);
-      await mockChatEndpoint(page, SHORT_AI_RESPONSE);
-
-      await sendMessage(page, LONG_USER_MESSAGE);
-
-      const userMessage = page.locator("#onyx-human-message").first();
-      await expect(userMessage).toContainText("document indexing");
-      await expect(userMessage).toContainText("security model");
-      await expect(userMessage).toContainText("real-time or near-real-time");
-      await expect(userMessage).toContainText("architecture of the AI chat");
-
-      await screenshotChatContainer(
+    test.describe("Short Messages", () => {
+      test("short user message with short AI response renders correctly", async ({
         page,
-        "chat-long-user-message-short-response"
-      );
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+
+        await sendMessage(page, SHORT_USER_MESSAGE);
+
+        const userMessage = page.locator("#onyx-human-message").first();
+        await expect(userMessage).toContainText(SHORT_USER_MESSAGE);
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        await expect(aiMessage).toContainText("open-source AI-powered");
+
+        await screenshotChatContainer(
+          page,
+          `chat-short-message-short-response-${theme}`
+        );
+      });
     });
 
-    test("long AI response with markdown renders correctly", async ({
-      page,
-    }) => {
-      await openChat(page);
-      await mockChatEndpoint(page, LONG_AI_RESPONSE);
+    test.describe("Long Messages", () => {
+      test("long user message renders without truncation", async ({ page }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
 
-      await sendMessage(page, SHORT_USER_MESSAGE);
+        await sendMessage(page, LONG_USER_MESSAGE);
 
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-      await expect(aiMessage).toContainText("Document Indexing");
-      await expect(aiMessage).toContainText("Security Model");
-      await expect(aiMessage).toContainText("Indexing Latency");
-      await expect(aiMessage).toContainText("AI Chat Architecture");
+        const userMessage = page.locator("#onyx-human-message").first();
+        await expect(userMessage).toContainText("document indexing");
+        await expect(userMessage).toContainText("security model");
+        await expect(userMessage).toContainText("real-time or near-real-time");
+        await expect(userMessage).toContainText("architecture of the AI chat");
 
-      await screenshotChatContainer(page, "chat-short-message-long-response");
+        await screenshotChatContainer(
+          page,
+          `chat-long-user-message-short-response-${theme}`
+        );
+      });
+
+      test("long AI response with markdown renders correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, LONG_AI_RESPONSE);
+
+        await sendMessage(page, SHORT_USER_MESSAGE);
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        await expect(aiMessage).toContainText("Document Indexing");
+        await expect(aiMessage).toContainText("Security Model");
+        await expect(aiMessage).toContainText("Indexing Latency");
+        await expect(aiMessage).toContainText("AI Chat Architecture");
+
+        await screenshotChatContainer(
+          page,
+          `chat-short-message-long-response-${theme}`
+        );
+      });
+
+      test("long user message with long AI response renders correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, LONG_AI_RESPONSE);
+
+        await sendMessage(page, LONG_USER_MESSAGE);
+
+        const userMessage = page.locator("#onyx-human-message").first();
+        await expect(userMessage).toContainText("document indexing");
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        await expect(aiMessage).toContainText("Retrieval-Augmented Generation");
+
+        await screenshotChatContainer(
+          page,
+          `chat-long-message-long-response-${theme}`
+        );
+      });
     });
 
-    test("long user message with long AI response renders correctly", async ({
-      page,
-    }) => {
-      await openChat(page);
-      await mockChatEndpoint(page, LONG_AI_RESPONSE);
+    test.describe("Markdown and Code Rendering", () => {
+      test("AI response with tables and code blocks renders correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, MARKDOWN_AI_RESPONSE);
 
-      await sendMessage(page, LONG_USER_MESSAGE);
+        await sendMessage(page, "Give me an overview of Onyx features");
 
-      const userMessage = page.locator("#onyx-human-message").first();
-      await expect(userMessage).toContainText("document indexing");
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        await expect(aiMessage).toContainText("Key Features");
+        await expect(aiMessage).toContainText("OnyxClient");
+        await expect(aiMessage).toContainText("Privacy");
 
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-      await expect(aiMessage).toContainText("Retrieval-Augmented Generation");
-
-      await screenshotChatContainer(page, "chat-long-message-long-response");
+        await screenshotChatContainer(
+          page,
+          `chat-markdown-code-response-${theme}`
+        );
+      });
     });
-  });
 
-  test.describe("Markdown and Code Rendering", () => {
-    test("AI response with tables and code blocks renders correctly", async ({
-      page,
-    }) => {
-      await openChat(page);
-      await mockChatEndpoint(page, MARKDOWN_AI_RESPONSE);
+    test.describe("Multi-Turn Conversation", () => {
+      test("multi-turn conversation renders all messages correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
 
-      await sendMessage(page, "Give me an overview of Onyx features");
+        const responses = [
+          SHORT_AI_RESPONSE,
+          "Yes, Onyx supports over 30 data source connectors including Confluence, Google Drive, Slack, GitHub, Jira, Notion, and many more.",
+          "To get started, you can deploy Onyx using Docker Compose with a single command. The setup takes about 5 minutes.",
+        ];
 
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-      await expect(aiMessage).toContainText("Key Features");
-      await expect(aiMessage).toContainText("OnyxClient");
-      await expect(aiMessage).toContainText("Privacy");
+        await mockChatEndpointSequence(page, responses);
 
-      await screenshotChatContainer(page, "chat-markdown-code-response");
+        await sendMessage(page, SHORT_USER_MESSAGE);
+        await expect(page.getByTestId("onyx-ai-message").first()).toContainText(
+          "open-source AI-powered"
+        );
+
+        await sendMessage(page, "What connectors does it support?");
+        await expect(page.getByTestId("onyx-ai-message")).toHaveCount(2, {
+          timeout: 30000,
+        });
+
+        await sendMessage(page, "How do I get started?");
+        await expect(page.getByTestId("onyx-ai-message")).toHaveCount(3, {
+          timeout: 30000,
+        });
+
+        const userMessages = page.locator("#onyx-human-message");
+        await expect(userMessages).toHaveCount(3);
+
+        await screenshotChatContainer(
+          page,
+          `chat-multi-turn-conversation-${theme}`
+        );
+      });
+
+      test("multi-turn with mixed message lengths renders correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
+
+        const responses = [LONG_AI_RESPONSE, SHORT_AI_RESPONSE];
+
+        await mockChatEndpointSequence(page, responses);
+
+        await sendMessage(page, LONG_USER_MESSAGE);
+        await expect(page.getByTestId("onyx-ai-message").first()).toContainText(
+          "Document Indexing"
+        );
+
+        await sendMessage(page, SHORT_USER_MESSAGE);
+        await expect(page.getByTestId("onyx-ai-message")).toHaveCount(2, {
+          timeout: 30000,
+        });
+
+        await screenshotChatContainer(
+          page,
+          `chat-multi-turn-mixed-lengths-${theme}`
+        );
+      });
     });
-  });
 
-  test.describe("Multi-Turn Conversation", () => {
-    test("multi-turn conversation renders all messages correctly", async ({
-      page,
-    }) => {
-      await openChat(page);
-
-      const responses = [
-        SHORT_AI_RESPONSE,
-        "Yes, Onyx supports over 30 data source connectors including Confluence, Google Drive, Slack, GitHub, Jira, Notion, and many more.",
-        "To get started, you can deploy Onyx using Docker Compose with a single command. The setup takes about 5 minutes.",
+    test.describe("Web Search with Citations", () => {
+      const WEB_SEARCH_DOCUMENTS: MockDocument[] = [
+        {
+          document_id: "web-doc-1",
+          semantic_identifier: "Onyx Documentation - Getting Started",
+          link: "https://docs.onyx.app/getting-started",
+          source_type: "web",
+          blurb:
+            "Onyx is an open-source enterprise search and AI platform. Deploy in minutes with Docker Compose.",
+          is_internet: true,
+        },
+        {
+          document_id: "web-doc-2",
+          semantic_identifier: "Onyx GitHub Repository",
+          link: "https://github.com/onyx-dot-app/onyx",
+          source_type: "web",
+          blurb:
+            "Open-source Gen-AI platform with 30+ connectors. MIT licensed community edition.",
+          is_internet: true,
+        },
+        {
+          document_id: "web-doc-3",
+          semantic_identifier: "Enterprise Search Comparison 2025",
+          link: "https://example.com/enterprise-search-comparison",
+          source_type: "web",
+          blurb:
+            "Comparing top enterprise search platforms including Onyx, Glean, and Coveo.",
+          is_internet: true,
+        },
       ];
 
-      await mockChatEndpointSequence(page, responses);
-
-      await sendMessage(page, SHORT_USER_MESSAGE);
-      await expect(page.getByTestId("onyx-ai-message").first()).toContainText(
-        "open-source AI-powered"
-      );
-
-      await sendMessage(page, "What connectors does it support?");
-      await expect(page.getByTestId("onyx-ai-message")).toHaveCount(2, {
-        timeout: 30000,
-      });
-
-      await sendMessage(page, "How do I get started?");
-      await expect(page.getByTestId("onyx-ai-message")).toHaveCount(3, {
-        timeout: 30000,
-      });
-
-      const userMessages = page.locator("#onyx-human-message");
-      await expect(userMessages).toHaveCount(3);
-
-      await screenshotChatContainer(page, "chat-multi-turn-conversation");
-    });
-
-    test("multi-turn with mixed message lengths renders correctly", async ({
-      page,
-    }) => {
-      await openChat(page);
-
-      const responses = [LONG_AI_RESPONSE, SHORT_AI_RESPONSE];
-
-      await mockChatEndpointSequence(page, responses);
-
-      await sendMessage(page, LONG_USER_MESSAGE);
-      await expect(page.getByTestId("onyx-ai-message").first()).toContainText(
-        "Document Indexing"
-      );
-
-      await sendMessage(page, SHORT_USER_MESSAGE);
-      await expect(page.getByTestId("onyx-ai-message")).toHaveCount(2, {
-        timeout: 30000,
-      });
-
-      await screenshotChatContainer(page, "chat-multi-turn-mixed-lengths");
-    });
-  });
-
-  test.describe("Web Search with Citations", () => {
-    const WEB_SEARCH_DOCUMENTS: MockDocument[] = [
-      {
-        document_id: "web-doc-1",
-        semantic_identifier: "Onyx Documentation - Getting Started",
-        link: "https://docs.onyx.app/getting-started",
-        source_type: "web",
-        blurb:
-          "Onyx is an open-source enterprise search and AI platform. Deploy in minutes with Docker Compose.",
-        is_internet: true,
-      },
-      {
-        document_id: "web-doc-2",
-        semantic_identifier: "Onyx GitHub Repository",
-        link: "https://github.com/onyx-dot-app/onyx",
-        source_type: "web",
-        blurb:
-          "Open-source Gen-AI platform with 30+ connectors. MIT licensed community edition.",
-        is_internet: true,
-      },
-      {
-        document_id: "web-doc-3",
-        semantic_identifier: "Enterprise Search Comparison 2025",
-        link: "https://example.com/enterprise-search-comparison",
-        source_type: "web",
-        blurb:
-          "Comparing top enterprise search platforms including Onyx, Glean, and Coveo.",
-        is_internet: true,
-      },
-    ];
-
-    const WEB_SEARCH_RESPONSE = `Based on my web search, here's what I found about Onyx:
+      const WEB_SEARCH_RESPONSE = `Based on my web search, here's what I found about Onyx:
 
 Onyx is an open-source enterprise search and AI platform that can be deployed in minutes using Docker Compose [D1]. The project is hosted on GitHub and is MIT licensed for the community edition, with over 30 connectors available [D2].
 
@@ -466,64 +487,67 @@ Key advantages include:
 - **Quick setup**: Get running in under 5 minutes [D1]
 - **Extensible**: 30+ pre-built connectors with custom connector support`;
 
-    test("web search response with citations renders correctly", async ({
-      page,
-    }) => {
-      await openChat(page);
+      test("web search response with citations renders correctly", async ({
+        page,
+      }) => {
+        await openChat(page);
 
-      await page.route("**/api/chat/send-chat-message", async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "text/plain",
-          body: buildMockSearchStream({
-            content: WEB_SEARCH_RESPONSE,
-            queries: ["Onyx enterprise search platform overview"],
-            documents: WEB_SEARCH_DOCUMENTS,
-            citations: {
-              1: "web-doc-1",
-              2: "web-doc-2",
-              3: "web-doc-3",
-            },
-            isInternetSearch: true,
-          }),
+        await page.route("**/api/chat/send-chat-message", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/plain",
+            body: buildMockSearchStream({
+              content: WEB_SEARCH_RESPONSE,
+              queries: ["Onyx enterprise search platform overview"],
+              documents: WEB_SEARCH_DOCUMENTS,
+              citations: {
+                1: "web-doc-1",
+                2: "web-doc-2",
+                3: "web-doc-3",
+              },
+              isInternetSearch: true,
+            }),
+          });
         });
+
+        await sendMessage(page, "Search the web for information about Onyx");
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        await expect(aiMessage).toContainText("open-source enterprise search");
+        await expect(aiMessage).toContainText("Docker Compose");
+        await expect(aiMessage).toContainText("MIT licensed");
+
+        await screenshotChatContainer(
+          page,
+          `chat-web-search-with-citations-${theme}`
+        );
       });
 
-      await sendMessage(page, "Search the web for information about Onyx");
+      test("internal document search response renders correctly", async ({
+        page,
+      }) => {
+        const internalDocs: MockDocument[] = [
+          {
+            document_id: "confluence-doc-1",
+            semantic_identifier: "Q3 2025 Engineering Roadmap",
+            link: "https://company.atlassian.net/wiki/spaces/ENG/pages/123",
+            source_type: "confluence",
+            blurb:
+              "Engineering priorities for Q3 include platform stability, new connector integrations, and performance improvements.",
+            is_internet: false,
+          },
+          {
+            document_id: "gdrive-doc-1",
+            semantic_identifier: "Platform Architecture Overview.pdf",
+            link: "https://drive.google.com/file/d/abc123",
+            source_type: "google_drive",
+            blurb:
+              "Onyx platform architecture document covering microservices, data flow, and deployment topology.",
+            is_internet: false,
+          },
+        ];
 
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-      await expect(aiMessage).toContainText("open-source enterprise search");
-      await expect(aiMessage).toContainText("Docker Compose");
-      await expect(aiMessage).toContainText("MIT licensed");
-
-      await screenshotChatContainer(page, "chat-web-search-with-citations");
-    });
-
-    test("internal document search response renders correctly", async ({
-      page,
-    }) => {
-      const internalDocs: MockDocument[] = [
-        {
-          document_id: "confluence-doc-1",
-          semantic_identifier: "Q3 2025 Engineering Roadmap",
-          link: "https://company.atlassian.net/wiki/spaces/ENG/pages/123",
-          source_type: "confluence",
-          blurb:
-            "Engineering priorities for Q3 include platform stability, new connector integrations, and performance improvements.",
-          is_internet: false,
-        },
-        {
-          document_id: "gdrive-doc-1",
-          semantic_identifier: "Platform Architecture Overview.pdf",
-          link: "https://drive.google.com/file/d/abc123",
-          source_type: "google_drive",
-          blurb:
-            "Onyx platform architecture document covering microservices, data flow, and deployment topology.",
-          is_internet: false,
-        },
-      ];
-
-      const internalResponse = `Based on your company's internal documents, here is the engineering roadmap:
+        const internalResponse = `Based on your company's internal documents, here is the engineering roadmap:
 
 The Q3 2025 priorities focus on three main areas [D1]:
 
@@ -533,78 +557,85 @@ The Q3 2025 priorities focus on three main areas [D1]:
 
 The platform architecture document provides additional context on how these improvements fit into the overall system design [D2]. The microservices architecture allows each component to be scaled independently.`;
 
-      await openChat(page);
+        await openChat(page);
 
-      await page.route("**/api/chat/send-chat-message", async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "text/plain",
-          body: buildMockSearchStream({
-            content: internalResponse,
-            queries: ["Q3 engineering roadmap priorities"],
-            documents: internalDocs,
-            citations: {
-              1: "confluence-doc-1",
-              2: "gdrive-doc-1",
-            },
-            isInternetSearch: false,
-          }),
+        await page.route("**/api/chat/send-chat-message", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/plain",
+            body: buildMockSearchStream({
+              content: internalResponse,
+              queries: ["Q3 engineering roadmap priorities"],
+              documents: internalDocs,
+              citations: {
+                1: "confluence-doc-1",
+                2: "gdrive-doc-1",
+              },
+              isInternetSearch: false,
+            }),
+          });
         });
+
+        await sendMessage(page, "What are our engineering priorities for Q3?");
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        await expect(aiMessage).toContainText("Platform stability");
+        await expect(aiMessage).toContainText("New integrations");
+        await expect(aiMessage).toContainText("Performance");
+
+        await screenshotChatContainer(
+          page,
+          `chat-internal-search-with-citations-${theme}`
+        );
+      });
+    });
+
+    test.describe("Message Interaction States", () => {
+      test("hovering over user message shows action buttons", async ({
+        page,
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+
+        await sendMessage(page, SHORT_USER_MESSAGE);
+
+        const userMessage = page.locator("#onyx-human-message").first();
+        await userMessage.hover();
+
+        const editButton = userMessage.getByTestId("HumanMessage/edit-button");
+        await expect(editButton).toBeVisible({ timeout: 5000 });
+
+        await screenshotChatContainer(
+          page,
+          `chat-user-message-hover-state-${theme}`
+        );
       });
 
-      await sendMessage(page, "What are our engineering priorities for Q3?");
-
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-      await expect(aiMessage).toContainText("Platform stability");
-      await expect(aiMessage).toContainText("New integrations");
-      await expect(aiMessage).toContainText("Performance");
-
-      await screenshotChatContainer(
+      test("AI message toolbar is visible after response completes", async ({
         page,
-        "chat-internal-search-with-citations"
-      );
+      }) => {
+        await openChat(page);
+        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+
+        await sendMessage(page, SHORT_USER_MESSAGE);
+
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+
+        const copyButton = aiMessage.getByTestId("AgentMessage/copy-button");
+        const likeButton = aiMessage.getByTestId("AgentMessage/like-button");
+        const dislikeButton = aiMessage.getByTestId(
+          "AgentMessage/dislike-button"
+        );
+
+        await expect(copyButton).toBeVisible({ timeout: 10000 });
+        await expect(likeButton).toBeVisible();
+        await expect(dislikeButton).toBeVisible();
+
+        await screenshotChatContainer(
+          page,
+          `chat-ai-message-with-toolbar-${theme}`
+        );
+      });
     });
   });
-
-  test.describe("Message Interaction States", () => {
-    test("hovering over user message shows action buttons", async ({
-      page,
-    }) => {
-      await openChat(page);
-      await mockChatEndpoint(page, SHORT_AI_RESPONSE);
-
-      await sendMessage(page, SHORT_USER_MESSAGE);
-
-      const userMessage = page.locator("#onyx-human-message").first();
-      await userMessage.hover();
-
-      const editButton = userMessage.getByTestId("HumanMessage/edit-button");
-      await expect(editButton).toBeVisible({ timeout: 5000 });
-
-      await screenshotChatContainer(page, "chat-user-message-hover-state");
-    });
-
-    test("AI message toolbar is visible after response completes", async ({
-      page,
-    }) => {
-      await openChat(page);
-      await mockChatEndpoint(page, SHORT_AI_RESPONSE);
-
-      await sendMessage(page, SHORT_USER_MESSAGE);
-
-      const aiMessage = page.getByTestId("onyx-ai-message").first();
-
-      const copyButton = aiMessage.getByTestId("AgentMessage/copy-button");
-      const likeButton = aiMessage.getByTestId("AgentMessage/like-button");
-      const dislikeButton = aiMessage.getByTestId(
-        "AgentMessage/dislike-button"
-      );
-
-      await expect(copyButton).toBeVisible({ timeout: 10000 });
-      await expect(likeButton).toBeVisible();
-      await expect(dislikeButton).toBeVisible();
-
-      await screenshotChatContainer(page, "chat-ai-message-with-toolbar");
-    });
-  });
-});
+}
