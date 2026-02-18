@@ -4,6 +4,7 @@ This module provides functions to track the progress of migrating documents
 from Vespa to OpenSearch.
 """
 
+import json
 from datetime import datetime
 from datetime import timezone
 
@@ -14,6 +15,9 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.opensearch_migration.constants import (
     TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
+)
+from onyx.background.celery.tasks.opensearch_migration.tasks import (
+    GET_VESPA_CHUNKS_SLICE_COUNT,
 )
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
@@ -243,27 +247,31 @@ def should_document_migration_be_permanently_failed(
 
 def get_vespa_visit_state(
     db_session: Session,
-) -> tuple[str | None, int]:
+) -> tuple[dict[int, str | None], int]:
     """Gets the current Vespa migration state from the tenant migration record.
 
     Requires the OpenSearchTenantMigrationRecord to exist.
 
     Returns:
-        Tuple of (continuation_token, total_chunks_migrated). continuation_token
-            is None if not started or completed.
+        Tuple of (continuation_token_map, total_chunks_migrated).
     """
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
         raise RuntimeError("OpenSearchTenantMigrationRecord not found.")
-    return (
-        record.vespa_visit_continuation_token,
-        record.total_chunks_migrated,
-    )
+    if record.vespa_visit_continuation_token is None:
+        continuation_token_map: dict[int, str | None] = {
+            slice_id: None for slice_id in range(GET_VESPA_CHUNKS_SLICE_COUNT)
+        }
+    else:
+        continuation_token_map: dict[int, str | None] = json.loads(
+            record.vespa_visit_continuation_token
+        )
+    return continuation_token_map, record.total_chunks_migrated
 
 
 def update_vespa_visit_progress_with_commit(
     db_session: Session,
-    continuation_token: str | None,
+    continuation_token_map: dict[int, str | None],
     chunks_processed: int,
     chunks_errored: int,
 ) -> None:
@@ -273,8 +281,8 @@ def update_vespa_visit_progress_with_commit(
 
     Args:
         db_session: SQLAlchemy session.
-        continuation_token: The new continuation token. None means the visit
-            is complete.
+        continuation_token_map: The new continuation token map. None entry means
+            the visit is complete for that slice.
         chunks_processed: Number of chunks processed in this batch (added to
             the running total).
         chunks_errored: Number of chunks errored in this batch (added to the
@@ -283,7 +291,7 @@ def update_vespa_visit_progress_with_commit(
     record = db_session.query(OpenSearchTenantMigrationRecord).first()
     if record is None:
         raise RuntimeError("OpenSearchTenantMigrationRecord not found.")
-    record.vespa_visit_continuation_token = continuation_token
+    record.vespa_visit_continuation_token = json.dumps(continuation_token_map)
     record.total_chunks_migrated += chunks_processed
     record.total_chunks_errored += chunks_errored
     db_session.commit()
