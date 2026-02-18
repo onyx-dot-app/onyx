@@ -5,6 +5,7 @@ from typing import Any
 from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
+from onyx.chat.llm_step import _resolve_tool_arguments
 from onyx.chat.llm_step import _sanitize_llm_output
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
@@ -383,3 +384,37 @@ class TestIncrementTurns:
         turn, sub = _increment_turns(5, 2)
         assert turn == 5
         assert sub == 3
+
+
+class TestResolveToolArguments:
+    """Tests for the _resolve_tool_arguments helper."""
+
+    def test_dict_arguments(self) -> None:
+        obj = {"arguments": {"queries": ["test"]}}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_dict_parameters(self) -> None:
+        """Falls back to 'parameters' key when 'arguments' is missing."""
+        obj = {"parameters": {"queries": ["test"]}}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_arguments_takes_precedence_over_parameters(self) -> None:
+        obj = {"arguments": {"a": 1}, "parameters": {"b": 2}}
+        assert _resolve_tool_arguments(obj) == {"a": 1}
+
+    def test_json_string_arguments(self) -> None:
+        obj = {"arguments": '{"queries": ["test"]}'}
+        assert _resolve_tool_arguments(obj) == {"queries": ["test"]}
+
+    def test_invalid_json_string_returns_empty_dict(self) -> None:
+        obj = {"arguments": "not valid json"}
+        assert _resolve_tool_arguments(obj) == {}
+
+    def test_no_arguments_or_parameters_returns_empty_dict(self) -> None:
+        obj = {"name": "some_tool"}
+        assert _resolve_tool_arguments(obj) == {}
+
+    def test_non_dict_non_string_arguments_returns_none(self) -> None:
+        """When arguments resolves to a list or int, returns None."""
+        assert _resolve_tool_arguments({"arguments": [1, 2, 3]}) is None
+        assert _resolve_tool_arguments({"arguments": 42}) is None

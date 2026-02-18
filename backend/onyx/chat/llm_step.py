@@ -560,6 +560,23 @@ def _parse_xml_parameter_value(raw_value: str, string_attr: str | None) -> Any:
         return value
 
 
+def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract and parse an arguments/parameters value from a tool-call-like object.
+
+    Looks for "arguments" or "parameters" keys, handles JSON-string values,
+    and returns a dict if successful, or None otherwise.
+    """
+    arguments = obj.get("arguments", obj.get("parameters", {}))
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except json.JSONDecodeError:
+            arguments = {}
+    if isinstance(arguments, dict):
+        return arguments
+    return None
+
+
 def _try_match_json_to_tool(
     json_obj: dict[str, Any],
     tool_name_to_def: dict[str, dict],
@@ -582,13 +599,8 @@ def _try_match_json_to_tool(
     # Format 1: Direct tool call format {"name": "...", "arguments": {...}}
     if "name" in json_obj and json_obj["name"] in tool_name_to_def:
         tool_name = json_obj["name"]
-        arguments = json_obj.get("arguments", json_obj.get("parameters", {}))
-        if isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments)
-            except json.JSONDecodeError:
-                arguments = {}
-        if isinstance(arguments, dict):
+        arguments = _resolve_tool_arguments(json_obj)
+        if arguments is not None:
             return (tool_name, arguments)
 
     # Format 2: Function call format {"function": {"name": "...", "arguments": {...}}}
@@ -596,13 +608,8 @@ def _try_match_json_to_tool(
         func_obj = json_obj["function"]
         if "name" in func_obj and func_obj["name"] in tool_name_to_def:
             tool_name = func_obj["name"]
-            arguments = func_obj.get("arguments", func_obj.get("parameters", {}))
-            if isinstance(arguments, str):
-                try:
-                    arguments = json.loads(arguments)
-                except json.JSONDecodeError:
-                    arguments = {}
-            if isinstance(arguments, dict):
+            arguments = _resolve_tool_arguments(func_obj)
+            if arguments is not None:
                 return (tool_name, arguments)
 
     # Format 3: Tool name as key {"tool_name": {...arguments...}}
