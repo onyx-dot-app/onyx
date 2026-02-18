@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { expectScreenshot } from "../utils/visualRegression";
+import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 test.use({ storageState: "admin_auth.json" });
 test.describe.configure({ mode: "parallel" });

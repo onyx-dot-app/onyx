@@ -1,12 +1,15 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAs, apiLogin } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
-import { startMcpApiKeyServer, McpServerProcess } from "../utils/mcpServer";
+import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import {
+  startMcpApiKeyServer,
+  McpServerProcess,
+} from "@tests/e2e/utils/mcpServer";
 import {
   getPacketObjectsByType,
   sendMessageAndCaptureStreamPackets,
-} from "../utils/chatStream";
+} from "@tests/e2e/utils/chatStream";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");

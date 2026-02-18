@@ -1,5 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
-import { loginAsRandomUser } from "../utils/auth";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 
 /**
  * E2E test to verify user files are properly attached to assistants.

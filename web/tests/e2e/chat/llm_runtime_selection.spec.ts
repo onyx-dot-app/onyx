@@ -1,12 +1,12 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs } from "../utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 import {
   selectModelFromInputPopover,
   sendMessage,
   startNewChat,
   verifyCurrentModel,
-} from "../utils/chatActions";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+} from "@tests/e2e/utils/chatActions";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 type SendChatMessagePayload = {
   llm_override?: {

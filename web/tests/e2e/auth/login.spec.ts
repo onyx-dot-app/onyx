@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { TEST_ADMIN_CREDENTIALS, TEST_USER_CREDENTIALS } from "../constants";
-import { expectScreenshot } from "../utils/visualRegression";
+import {
+  TEST_ADMIN_CREDENTIALS,
+  TEST_USER_CREDENTIALS,
+} from "@tests/e2e/constants";
+import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // These tests exercise the browser login UI.
 // They clear cookies to start unauthenticated, then drive the login form.
