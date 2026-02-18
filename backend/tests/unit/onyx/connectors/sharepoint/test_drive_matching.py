@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Generator
 from collections.abc import Sequence
 from datetime import datetime
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from onyx.connectors.sharepoint.connector import DriveItemData
 from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
@@ -22,24 +24,10 @@ class _FakeQuery:
         return self._payload
 
 
-class _FakeFolder:
-    def __init__(self, items: Sequence[Any]) -> None:
-        self._items = items
-        self.name = "root"
-
-    def get_by_path(self, _path: str) -> _FakeFolder:
-        return self
-
-    def get_files(
-        self, *, recursive: bool, page_size: int  # noqa: ARG002
-    ) -> _FakeQuery:
-        return _FakeQuery(self._items)
-
-
 class _FakeDrive:
-    def __init__(self, name: str, items: Sequence[Any]) -> None:
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.root = _FakeFolder(items)
+        self.id = f"fake-drive-id-{name}"
         self.web_url = f"https://example.sharepoint.com/sites/sample/{name}"
 
 
@@ -69,10 +57,30 @@ class _FakeGraphClient:
         self.sites = _FakeSites(drives)
 
 
+_SAMPLE_ITEM = DriveItemData(
+    id="item-1",
+    name="sample.pdf",
+    web_url="https://example.sharepoint.com/sites/sample/sample.pdf",
+    parent_reference_path=None,
+    drive_id="fake-drive-id",
+)
+
+
 def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
     connector = SharepointConnector()
     connector._graph_client = _FakeGraphClient(drives)
     return connector
+
+
+def _fake_iter_drive_items_paged(
+    self: SharepointConnector,  # noqa: ARG001
+    drive_id: str,  # noqa: ARG001
+    folder_path: str | None = None,  # noqa: ARG001
+    start: datetime | None = None,  # noqa: ARG001
+    end: datetime | None = None,  # noqa: ARG001
+    page_size: int = 200,  # noqa: ARG001
+) -> Generator[DriveItemData, None, None]:
+    yield _SAMPLE_ITEM
 
 
 @pytest.mark.parametrize(
@@ -84,21 +92,28 @@ def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
     ],
 )
 def test_fetch_driveitems_matches_international_drive_names(
-    requested_drive_name: str, graph_drive_name: str
+    requested_drive_name: str,
+    graph_drive_name: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    item = SimpleNamespace(parent_reference=SimpleNamespace(path=None))
-    connector = _build_connector([_FakeDrive(graph_drive_name, [item])])
+    connector = _build_connector([_FakeDrive(graph_drive_name)])
     site_descriptor = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
         drive_name=requested_drive_name,
         folder_path=None,
     )
 
-    results = connector._fetch_driveitems(site_descriptor=site_descriptor)
+    monkeypatch.setattr(
+        SharepointConnector,
+        "_iter_drive_items_paged",
+        _fake_iter_drive_items_paged,
+    )
+
+    results = list(connector._fetch_driveitems(site_descriptor=site_descriptor))
 
     assert len(results) == 1
     drive_item, returned_drive_name, drive_web_url = results[0]
-    assert drive_item is item
+    assert drive_item.id == _SAMPLE_ITEM.id
     assert returned_drive_name == requested_drive_name
     assert drive_web_url is not None
 
@@ -112,23 +127,31 @@ def test_fetch_driveitems_matches_international_drive_names(
     ],
 )
 def test_get_drive_items_for_drive_name_matches_map(
-    requested_drive_name: str, graph_drive_name: str
+    requested_drive_name: str,
+    graph_drive_name: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    item = SimpleNamespace()
-    connector = _build_connector([_FakeDrive(graph_drive_name, [item])])
+    connector = _build_connector([_FakeDrive(graph_drive_name)])
     site_descriptor = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
         drive_name=requested_drive_name,
         folder_path=None,
     )
 
-    results, drive_web_url = connector._get_drive_items_for_drive_name(
+    monkeypatch.setattr(
+        SharepointConnector,
+        "_iter_drive_items_paged",
+        _fake_iter_drive_items_paged,
+    )
+
+    items_iter, drive_web_url = connector._get_drive_items_for_drive_name(
         site_descriptor=site_descriptor,
         drive_name=requested_drive_name,
     )
 
+    results = list(items_iter)
     assert len(results) == 1
-    assert results[0] is item
+    assert results[0].id == _SAMPLE_ITEM.id
     assert drive_web_url is not None
 
 
@@ -138,6 +161,13 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     connector.include_site_pages = False
 
     captured_drive_names: list[str] = []
+    sample_item = DriveItemData(
+        id="doc-1",
+        name="sample.pdf",
+        web_url="https://example.sharepoint.com/sites/sample/sample.pdf",
+        parent_reference_path=None,
+        drive_id="fake-drive-id",
+    )
 
     def fake_get_drive_items(
         self: SharepointConnector,  # noqa: ARG001
@@ -145,29 +175,27 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         drive_name: str,
         start: datetime | None,  # noqa: ARG001
         end: datetime | None,  # noqa: ARG001
-    ) -> tuple[list[SimpleNamespace], str | None]:
+    ) -> tuple[list[DriveItemData], str | None]:
         assert drive_name == "Documents"
         return (
-            [
-                SimpleNamespace(
-                    name="sample.pdf",
-                    web_url="https://example.sharepoint.com/sites/sample/sample.pdf",
-                    parent_reference=SimpleNamespace(path=None),
-                )
-            ],
+            [sample_item],
             "https://example.sharepoint.com/sites/sample/Documents",
         )
 
     def fake_convert(
-        driveitem: SimpleNamespace,  # noqa: ARG001
+        driveitem: DriveItemData,  # noqa: ARG001
         drive_name: str,
         ctx: Any,  # noqa: ARG001
         graph_client: Any,  # noqa: ARG001
         include_permissions: bool,  # noqa: ARG001
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
+        access_token: str | None = None,  # noqa: ARG001
     ) -> SimpleNamespace:
         captured_drive_names.append(drive_name)
         return SimpleNamespace(sections=["content"])
+
+    def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
+        return "fake-access-token"
 
     monkeypatch.setattr(
         SharepointConnector,
@@ -177,6 +205,11 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         "onyx.connectors.sharepoint.connector._convert_driveitem_to_document_with_permissions",
         fake_convert,
+    )
+    monkeypatch.setattr(
+        SharepointConnector,
+        "_get_graph_access_token",
+        fake_get_access_token,
     )
 
     checkpoint = SharepointConnectorCheckpoint(has_more=True)
@@ -204,7 +237,6 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     except StopIteration:
         pass
 
-    # Filter out hierarchy nodes (which are also yielded now)
     from onyx.connectors.models import HierarchyNode
 
     documents = [item for item in all_yielded if not isinstance(item, HierarchyNode)]
@@ -212,5 +244,4 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
 
     assert len(documents) == 1
     assert captured_drive_names == [SHARED_DOCUMENTS_MAP["Documents"]]
-    # Verify a drive hierarchy node was yielded
     assert len(hierarchy_nodes) >= 1
