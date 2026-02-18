@@ -9,6 +9,15 @@ from onyx.chat.llm_step import _resolve_tool_arguments
 from onyx.chat.llm_step import _sanitize_llm_output
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
+from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ToolCallSimple
+from onyx.configs.constants import MessageType
+from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import AssistantMessage
+from onyx.llm.models import ToolMessage
+from onyx.llm.models import UserMessage
 from onyx.server.query_and_chat.placement import Placement
 
 
@@ -418,3 +427,64 @@ class TestResolveToolArguments:
         """When arguments resolves to a list or int, returns None."""
         assert _resolve_tool_arguments({"arguments": [1, 2, 3]}) is None
         assert _resolve_tool_arguments({"arguments": 42}) is None
+
+
+class TestTranslateHistoryToLlmFormat:
+    @staticmethod
+    def _llm_config(provider: str) -> LLMConfig:
+        return LLMConfig(
+            model_provider=provider,
+            model_name="test-model",
+            temperature=0,
+            max_input_tokens=8192,
+        )
+
+    @staticmethod
+    def _tool_history() -> list[ChatMessageSimple]:
+        return [
+            ChatMessageSimple(
+                message="",
+                token_count=5,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="51381e0b0",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["alpha"]},
+                    )
+                ],
+            ),
+            ChatMessageSimple(
+                message="tool result body",
+                token_count=5,
+                message_type=MessageType.TOOL_CALL_RESPONSE,
+                tool_call_id="51381e0b0",
+            ),
+        ]
+
+    def test_preserves_structured_tool_history_for_non_ollama(self) -> None:
+        translated = translate_history_to_llm_format(
+            history=self._tool_history(),
+            llm_config=self._llm_config(LlmProviderNames.OPENAI),
+        )
+
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is not None
+        assert translated[0].tool_calls[0].id == "51381e0b0"
+        assert isinstance(translated[1], ToolMessage)
+        assert translated[1].tool_call_id == "51381e0b0"
+
+    def test_flattens_tool_history_for_ollama(self) -> None:
+        translated = translate_history_to_llm_format(
+            history=self._tool_history(),
+            llm_config=self._llm_config(LlmProviderNames.OLLAMA_CHAT),
+        )
+
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is None
+        assert translated[0].content is not None
+        assert "51381e0b0" in translated[0].content
+
+        assert isinstance(translated[1], UserMessage)
+        assert "51381e0b0" in translated[1].content
+        assert "tool result body" in translated[1].content

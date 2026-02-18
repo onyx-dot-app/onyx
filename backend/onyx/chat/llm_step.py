@@ -20,6 +20,7 @@ from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
@@ -686,6 +687,7 @@ def translate_history_to_llm_format(
     handling different message types and image files for multimodal support.
     """
     messages: list[ChatCompletionMessage] = []
+    is_ollama = llm_config.model_provider == LlmProviderNames.OLLAMA_CHAT
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
 
@@ -767,6 +769,28 @@ def translate_history_to_llm_format(
             messages.append(reminder_msg)
 
         elif msg.message_type == MessageType.ASSISTANT:
+            if is_ollama and msg.tool_calls:
+                tool_call_lines = [
+                    (
+                        f"[Tool Call] name={tc.tool_name} "
+                        f"id={tc.tool_call_id} args={json.dumps(tc.tool_arguments)}"
+                    )
+                    for tc in msg.tool_calls
+                ]
+                assistant_content = (
+                    "\n".join([msg.message, *tool_call_lines])
+                    if msg.message
+                    else "\n".join(tool_call_lines)
+                )
+                messages.append(
+                    AssistantMessage(
+                        role="assistant",
+                        content=assistant_content,
+                        tool_calls=None,
+                    )
+                )
+                continue
+
             tool_calls_list: list[ToolCall] | None = None
             if msg.tool_calls:
                 tool_calls_list = [
@@ -794,12 +818,20 @@ def translate_history_to_llm_format(
                     f"Tool call response message encountered but tool_call_id is not available. Message: {msg}"
                 )
 
-            tool_msg = ToolMessage(
-                role="tool",
-                content=msg.message,
-                tool_call_id=msg.tool_call_id,
-            )
-            messages.append(tool_msg)
+            if is_ollama:
+                messages.append(
+                    UserMessage(
+                        role="user",
+                        content=f"[Tool Result] id={msg.tool_call_id}\n{msg.message}",
+                    )
+                )
+            else:
+                tool_msg = ToolMessage(
+                    role="tool",
+                    content=msg.message,
+                    tool_call_id=msg.tool_call_id,
+                )
+                messages.append(tool_msg)
 
         else:
             logger.warning(
