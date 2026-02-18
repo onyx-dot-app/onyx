@@ -3,6 +3,7 @@ import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_ADMIN_CREDENTIALS,
   TEST_USER_CREDENTIALS,
+  workerUserCredentials,
 } from "@tests/e2e/constants";
 
 /**
@@ -36,6 +37,19 @@ export async function loginAs(
         ? TEST_ADMIN2_CREDENTIALS
         : TEST_USER_CREDENTIALS;
 
+  await apiLogin(page, email, password);
+}
+
+/**
+ * Log in as the worker-specific user for test isolation.
+ * Each Playwright worker gets its own user (worker0@example.com, worker1@example.com, ...),
+ * provisioned during global setup.
+ */
+export async function loginAsWorkerUser(
+  page: Page,
+  workerIndex: number
+): Promise<void> {
+  const { email, password } = workerUserCredentials(workerIndex);
   await apiLogin(page, email, password);
 }
 

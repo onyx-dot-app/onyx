@@ -3,6 +3,7 @@ import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
   TEST_USER_CREDENTIALS,
+  workerUserCredentials,
 } from "@tests/e2e/constants";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
@@ -158,7 +159,7 @@ async function globalSetup(config: FullConfig) {
 
   // ── Provision test users via API ─────────────────────────────────────
   // The first user registered becomes the admin automatically.
-  // Order matters: admin first, then user, then admin2.
+  // Order matters: admin first, then named users, then worker users.
   await ensureUserExists(
     baseURL,
     TEST_ADMIN_CREDENTIALS.email,
@@ -174,6 +175,12 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.email,
     TEST_ADMIN2_CREDENTIALS.password
   );
+
+  const workerCount = config.workers;
+  for (let i = 0; i < workerCount; i++) {
+    const { email, password } = workerUserCredentials(i);
+    await ensureUserExists(baseURL, email, password);
+  }
 
   // ── Login via API and save storage state ───────────────────────────
   await apiLoginAndSaveState(
@@ -203,6 +210,16 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.password,
     "admin2_auth.json"
   );
+
+  for (let i = 0; i < workerCount; i++) {
+    const { email, password } = workerUserCredentials(i);
+    await apiLoginAndSaveState(
+      baseURL,
+      email,
+      password,
+      `worker${i}_auth.json`
+    );
+  }
 
   // ── Ensure a public LLM provider exists ───────────────────────────
   // Many tests depend on a default LLM being configured (file uploads,

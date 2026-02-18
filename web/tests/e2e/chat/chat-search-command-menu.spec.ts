@@ -1,6 +1,6 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // Test data storage
@@ -28,10 +28,10 @@ async function openCommandMenu(page: Page): Promise<Locator> {
 }
 
 test.describe("Chat Search Command Menu", () => {
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, workerInfo) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await loginAs(page, "user");
+    await loginAsWorkerUser(page, workerInfo.workerIndex);
     const client = new OnyxApiClient(page.request);
 
     await page.goto("/app");
@@ -50,10 +50,10 @@ test.describe("Chat Search Command Menu", () => {
     await context.close();
   });
 
-  test.afterAll(async ({ browser }) => {
+  test.afterAll(async ({ browser }, workerInfo) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await loginAs(page, "user");
+    await loginAsWorkerUser(page, workerInfo.workerIndex);
     const client = new OnyxApiClient(page.request);
 
     await page.goto("/app");
@@ -69,9 +69,9 @@ test.describe("Chat Search Command Menu", () => {
     await context.close();
   });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     await page.context().clearCookies();
-    await loginAs(page, "user");
+    await loginAsWorkerUser(page, testInfo.workerIndex);
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
   });
