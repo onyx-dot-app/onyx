@@ -136,7 +136,9 @@ def _try_fallback_tool_extraction(
     )
     xml_tool_call_text_detected = no_tool_calls and (
         _looks_like_xml_tool_call_payload(llm_step_result.answer)
+        or _looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
         or _looks_like_xml_tool_call_payload(llm_step_result.reasoning)
+        or _looks_like_xml_tool_call_payload(llm_step_result.raw_reasoning)
     )
     should_try_fallback = (
         (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)
@@ -149,15 +151,36 @@ def _try_fallback_tool_extraction(
 
     # Try to extract from answer first, then fall back to reasoning
     extracted_tool_calls: list[ToolCallKickoff] = []
+
     if llm_step_result.answer:
         extracted_tool_calls = extract_tool_calls_from_response_text(
             response_text=llm_step_result.answer,
             tool_definitions=tool_defs,
             placement=Placement(turn_index=turn_index),
         )
+    if (
+        not extracted_tool_calls
+        and llm_step_result.raw_answer
+        and llm_step_result.raw_answer != llm_step_result.answer
+    ):
+        extracted_tool_calls = extract_tool_calls_from_response_text(
+            response_text=llm_step_result.raw_answer,
+            tool_definitions=tool_defs,
+            placement=Placement(turn_index=turn_index),
+        )
     if not extracted_tool_calls and llm_step_result.reasoning:
         extracted_tool_calls = extract_tool_calls_from_response_text(
             response_text=llm_step_result.reasoning,
+            tool_definitions=tool_defs,
+            placement=Placement(turn_index=turn_index),
+        )
+    if (
+        not extracted_tool_calls
+        and llm_step_result.raw_reasoning
+        and llm_step_result.raw_reasoning != llm_step_result.reasoning
+    ):
+        extracted_tool_calls = extract_tool_calls_from_response_text(
+            response_text=llm_step_result.raw_reasoning,
             tool_definitions=tool_defs,
             placement=Placement(turn_index=turn_index),
         )
@@ -172,6 +195,8 @@ def _try_fallback_tool_extraction(
                 reasoning=llm_step_result.reasoning,
                 answer=llm_step_result.answer,
                 tool_calls=extracted_tool_calls,
+                raw_reasoning=llm_step_result.raw_reasoning,
+                raw_answer=llm_step_result.raw_answer,
             ),
             True,
         )

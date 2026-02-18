@@ -100,7 +100,7 @@ class _XmlToolCallContentFilter:
                 self._inside_function_calls_block = False
                 continue
 
-            start_idx = pending_lower.find(_FUNCTION_CALLS_OPEN_MARKER)
+            start_idx = _find_function_calls_open_marker(pending_lower)
             if start_idx == -1:
                 # Keep only a possible prefix of "<function_calls" in the buffer so
                 # marker splits across chunks are handled correctly.
@@ -143,6 +143,26 @@ def _matching_open_marker_prefix_len(text: str) -> int:
             return candidate_len
 
     return 0
+
+
+def _is_valid_function_calls_open_follower(char: str | None) -> bool:
+    return char is None or char in {">", " ", "\t", "\n", "\r"}
+
+
+def _find_function_calls_open_marker(text_lower: str) -> int:
+    """Find '<function_calls' with a valid tag boundary follower."""
+    search_from = 0
+    while True:
+        idx = text_lower.find(_FUNCTION_CALLS_OPEN_MARKER, search_from)
+        if idx == -1:
+            return -1
+
+        follower_pos = idx + len(_FUNCTION_CALLS_OPEN_MARKER)
+        follower = text_lower[follower_pos] if follower_pos < len(text_lower) else None
+        if _is_valid_function_calls_open_follower(follower):
+            return idx
+
+        search_from = idx + 1
 
 
 def _sanitize_llm_output(value: str) -> str:
@@ -910,6 +930,8 @@ def run_llm_step_pkt_generator(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
+    accumulated_raw_reasoning = ""
+    accumulated_raw_answer = ""
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
 
     processor_state: Any = None
@@ -1092,6 +1114,7 @@ def run_llm_step_pkt_generator(
             # Should only happen once, frontend does not expect multiple
             # ReasoningStart or ReasoningDone packets.
             if delta.reasoning_content:
+                accumulated_raw_reasoning += delta.reasoning_content
                 accumulated_reasoning += delta.reasoning_content
                 # Save reasoning incrementally to state container
                 if state_container:
@@ -1114,6 +1137,9 @@ def run_llm_step_pkt_generator(
                     obj=ReasoningDelta(reasoning=delta.reasoning_content),
                 )
                 reasoning_start = True
+
+            if delta.content:
+                accumulated_raw_answer += delta.content
 
             filtered_content = (
                 xml_tool_call_content_filter.process(delta.content)
@@ -1267,6 +1293,10 @@ def run_llm_step_pkt_generator(
             reasoning=accumulated_reasoning if accumulated_reasoning else None,
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
+            raw_reasoning=(
+                accumulated_raw_reasoning if accumulated_raw_reasoning else None
+            ),
+            raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
         ),
         bool(has_reasoned),
     )

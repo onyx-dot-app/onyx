@@ -278,3 +278,13 @@ class TestXmlToolCallContentFilter:
         output = f.process("A <tag>value</tag> B")
         output += f.flush()
         assert output == "A <tag>value</tag> B"
+
+    def test_does_not_strip_similar_tag_names(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process(
+            "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
+        )
+        output += f.flush()
+        assert (
+            output == "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
+        )
