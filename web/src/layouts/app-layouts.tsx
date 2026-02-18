@@ -112,6 +112,11 @@ function Header() {
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
+  const pageWithHeader = !(
+    appFocus.isSharedChat() ||
+    appFocus.isUserSettings() ||
+    appFocus.isMoreAgents()
+  );
 
   const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
 
@@ -358,7 +363,7 @@ function Header() {
         */}
         <div className="flex-1 flex flex-col items-center overflow-hidden">
           <Text text03 className="text-center w-full">
-            {customHeaderContent}
+            {pageWithHeader && customHeaderContent}
           </Text>
         </div>
 
@@ -569,7 +574,7 @@ function Root({ children, enableBackground }: AppRootProps) {
       )}
 
       <div className="z-app-layout">
-        {!appFocus.isSharedChat() && <Header />}
+        <Header />
       </div>
       <div className="z-app-layout flex-1 overflow-auto h-full w-full">
         {children}
