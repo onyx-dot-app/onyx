@@ -380,14 +380,7 @@ def _extract_tool_call_kickoffs(
     tab_index_calculated = 0
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
-            try:
-                tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
-            except json.JSONDecodeError:
-                # If parsing fails, try empty dict, most tools would fail though
-                logger.error(
-                    f"Failed to parse tool call arguments: {tool_call_data['arguments']}"
-                )
-                tool_args = {}
+            tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
 
             tool_calls.append(
                 ToolCallKickoff(

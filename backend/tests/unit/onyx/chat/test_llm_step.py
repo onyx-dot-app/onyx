@@ -1,5 +1,8 @@
 """Tests for llm_step.py, specifically sanitization and argument parsing."""
 
+from typing import Any
+
+from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _sanitize_llm_output
 from onyx.chat.llm_step import _XmlToolCallContentFilter
@@ -246,6 +249,78 @@ class TestExtractToolCallsFromResponseText:
             placement=self._placement(),
         )
         assert len(tool_calls) == 0
+
+
+class TestExtractToolCallKickoffs:
+    """Tests for the _extract_tool_call_kickoffs function."""
+
+    def test_valid_tool_call(self) -> None:
+        tool_call_map = {
+            0: {
+                "id": "call_123",
+                "name": "internal_search",
+                "arguments": '{"queries": ["test"]}',
+            }
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_name == "internal_search"
+        assert result[0].tool_args == {"queries": ["test"]}
+
+    def test_invalid_json_arguments_returns_empty_dict(self) -> None:
+        """Verify that malformed JSON arguments produce an empty dict
+        rather than raising an exception. This confirms the dead try/except
+        around _parse_tool_args_to_dict was safe to remove."""
+        tool_call_map = {
+            0: {
+                "id": "call_bad",
+                "name": "internal_search",
+                "arguments": "not valid json {{{",
+            }
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_args == {}
+
+    def test_none_arguments_returns_empty_dict(self) -> None:
+        tool_call_map = {
+            0: {
+                "id": "call_none",
+                "name": "internal_search",
+                "arguments": None,
+            }
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_args == {}
+
+    def test_skips_entries_missing_id_or_name(self) -> None:
+        tool_call_map: dict[int, dict[str, Any]] = {
+            0: {"id": None, "name": "internal_search", "arguments": "{}"},
+            1: {"id": "call_1", "name": None, "arguments": "{}"},
+            2: {"id": "call_2", "name": "internal_search", "arguments": "{}"},
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert len(result) == 1
+        assert result[0].tool_call_id == "call_2"
+
+    def test_tab_index_auto_increments(self) -> None:
+        tool_call_map = {
+            0: {"id": "c1", "name": "tool_a", "arguments": "{}"},
+            1: {"id": "c2", "name": "tool_b", "arguments": "{}"},
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0)
+        assert result[0].placement.tab_index == 0
+        assert result[1].placement.tab_index == 1
+
+    def test_tab_index_override(self) -> None:
+        tool_call_map = {
+            0: {"id": "c1", "name": "tool_a", "arguments": "{}"},
+            1: {"id": "c2", "name": "tool_b", "arguments": "{}"},
+        }
+        result = _extract_tool_call_kickoffs(tool_call_map, turn_index=0, tab_index=5)
+        assert result[0].placement.tab_index == 5
+        assert result[1].placement.tab_index == 5
 
 
 class TestXmlToolCallContentFilter:
