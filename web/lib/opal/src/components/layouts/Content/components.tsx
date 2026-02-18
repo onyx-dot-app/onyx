@@ -59,6 +59,8 @@ type HeadingContentProps = ContentBaseProps & {
 type LabelContentProps = ContentBaseProps & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
+  /** When `true`, renders "(Optional)" beside the title in the muted font variant. */
+  optional?: boolean;
 };
 
 /** BodyLayout does not support descriptions or inline editing. */

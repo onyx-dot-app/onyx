@@ -21,6 +21,7 @@ interface LabelPresetConfig {
   gap: string;
   editButtonSize: InteractiveContainerHeightVariant;
   editButtonPadding: string;
+  optionalFont: string;
 }
 
 interface LabelLayoutProps {
@@ -38,6 +39,9 @@ interface LabelLayoutProps {
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
+
+  /** When `true`, renders "(Optional)" beside the title. */
+  optional?: boolean;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: LabelSizePreset;
@@ -57,6 +61,7 @@ const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
     gap: "0.125rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
+    optionalFont: "font-main-content-muted",
   },
   "main-ui": {
     iconSize: "1rem",
@@ -67,6 +72,7 @@ const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
     gap: "0.25rem",
     editButtonSize: "xs",
     editButtonPadding: "p-0",
+    optionalFont: "font-main-ui-muted",
   },
   secondary: {
     iconSize: "0.75rem",
@@ -77,6 +83,7 @@ const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
     gap: "0.125rem",
     editButtonSize: "2xs",
     editButtonPadding: "p-0",
+    optionalFont: "font-secondary-action",
   },
 };
 
@@ -90,6 +97,7 @@ function LabelLayout({
   description,
   editable,
   onTitleChange,
+  optional,
   sizePreset = "main-ui",
 }: LabelLayoutProps) {
   const [editing, setEditing] = useState(false);
@@ -159,6 +167,15 @@ function LabelLayout({
                 onClick={() => setEditing(true)}
               />
             </div>
+          )}
+
+          {optional && (
+            <span
+              className={`${config.optionalFont} text-text-03 shrink-0`}
+              style={{ height: config.lineHeight }}
+            >
+              (Optional)
+            </span>
           )}
         </div>
 
