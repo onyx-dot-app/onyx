@@ -919,7 +919,7 @@ def run_llm_step_pkt_generator(
     sub_turn_index = placement.sub_turn_index
 
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
-    has_reasoned = 0
+    has_reasoned = False
 
     if LOG_ONYX_MODEL_INTERACTIONS:
         logger.debug(
@@ -995,7 +995,7 @@ def run_llm_step_pkt_generator(
                     ),
                     obj=ReasoningDone(),
                 )
-                has_reasoned = 1
+                has_reasoned = True
                 turn_index, sub_turn_index = _increment_turns(
                     turn_index, sub_turn_index
                 )
@@ -1155,7 +1155,7 @@ def run_llm_step_pkt_generator(
                         ),
                         obj=ReasoningDone(),
                     )
-                    has_reasoned = 1
+                    has_reasoned = True
                     turn_index, sub_turn_index = _increment_turns(
                         turn_index, sub_turn_index
                     )
@@ -1233,7 +1233,7 @@ def run_llm_step_pkt_generator(
             ),
             obj=ReasoningDone(),
         )
-        has_reasoned = 1
+        has_reasoned = True
         turn_index, sub_turn_index = _increment_turns(turn_index, sub_turn_index)
         reasoning_start = False
 
@@ -1291,7 +1291,7 @@ def run_llm_step_pkt_generator(
             tool_calls=tool_calls if tool_calls else None,
             raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
         ),
-        bool(has_reasoned),
+        has_reasoned,
     )
 
 
@@ -1346,4 +1346,4 @@ def run_llm_step(
             emitter.emit(packet)
         except StopIteration as e:
             llm_step_result, has_reasoned = e.value
-            return llm_step_result, bool(has_reasoned)
+            return llm_step_result, has_reasoned
