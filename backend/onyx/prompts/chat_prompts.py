@@ -70,7 +70,7 @@ Very briefly describe the image(s) generated. Do not include any links or attach
 
 
 FILE_REMINDER = """
-Your code execution generated file(s) with download links. \
+Your code execution generated file(s) with download links.
 If you reference or share these files, use the exact markdown format [filename](file_link) with the file_link from the execution result.
 """.strip()
 
