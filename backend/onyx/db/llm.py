@@ -430,7 +430,7 @@ def fetch_existing_models(
 
 def fetch_existing_llm_providers(
     db_session: Session,
-    flow_types: list[LLMModelFlowType],
+    flow_type_filter: list[LLMModelFlowType] | None,
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
 ) -> list[LLMProviderModel]:
@@ -438,17 +438,20 @@ def fetch_existing_llm_providers(
 
     Args:
         db_session: Database session
-        flow_types: List of flow types to filter by
+        flow_types: List of flow types to filter by, None if no filter
         only_public: If True, only return public providers
         exclude_image_generation_providers: If True, exclude providers that are
             used for image generation configs
     """
-    providers_with_flows = (
-        select(ModelConfiguration.llm_provider_id)
-        .join(LLMModelFlow)
-        .where(LLMModelFlow.llm_model_flow_type.in_(flow_types))
-        .distinct()
-    )
+    if flow_type_filter:
+        providers_with_flows = (
+            select(ModelConfiguration.llm_provider_id)
+            .join(LLMModelFlow)
+            .where(LLMModelFlow.llm_model_flow_type.in_(flow_type_filter))
+            .distinct()
+        )
+    else:
+        providers_with_flows = select(LLMProviderModel.id)
 
     if exclude_image_generation_providers:
         stmt = select(LLMProviderModel).where(
