@@ -47,8 +47,12 @@ def mock_dal() -> Generator[MagicMock, None, None]:
         dal.get_user_mapping_by_external_id.return_value = None
         dal.list_users.return_value = ([], 0)
         # Group defaults
+        dal.get_group.return_value = None
+        dal.get_group_by_name.return_value = None
         dal.get_group_mapping_by_group_id.return_value = None
         dal.get_group_mapping_by_external_id.return_value = None
+        dal.get_group_members.return_value = []
+        dal.list_groups.return_value = ([], 0)
         yield dal
 
 
