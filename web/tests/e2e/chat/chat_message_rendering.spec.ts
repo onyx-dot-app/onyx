@@ -476,15 +476,15 @@ for (const theme of THEMES) {
 
       const WEB_SEARCH_RESPONSE = `Based on my web search, here's what I found about Onyx:
 
-Onyx is an open-source enterprise search and AI platform that can be deployed in minutes using Docker Compose [D1]. The project is hosted on GitHub and is MIT licensed for the community edition, with over 30 connectors available [D2].
+Onyx is an open-source enterprise search and AI platform that can be deployed in minutes using Docker Compose [[D1]](https://docs.onyx.app/getting-started). The project is hosted on GitHub and is MIT licensed for the community edition, with over 30 connectors available [[D2]](https://github.com/onyx-dot-app/onyx).
 
-In comparisons with other enterprise search platforms, Onyx stands out for its open-source nature and self-hosted deployment option [D3]. Unlike proprietary alternatives, you maintain full control over your data and infrastructure.
+In comparisons with other enterprise search platforms, Onyx stands out for its open-source nature and self-hosted deployment option [[D3]](https://example.com/enterprise-search-comparison). Unlike proprietary alternatives, you maintain full control over your data and infrastructure.
 
 Key advantages include:
 
 - **Self-hosted**: Deploy on your own infrastructure
-- **Open source**: Full visibility into the codebase [D2]
-- **Quick setup**: Get running in under 5 minutes [D1]
+- **Open source**: Full visibility into the codebase [[D2]](https://github.com/onyx-dot-app/onyx)
+- **Quick setup**: Get running in under 5 minutes [[D1]](https://docs.onyx.app/getting-started)
 - **Extensible**: 30+ pre-built connectors with custom connector support`;
 
       test("web search response with citations renders correctly", async ({
@@ -549,13 +549,13 @@ Key advantages include:
 
         const internalResponse = `Based on your company's internal documents, here is the engineering roadmap:
 
-The Q3 2025 priorities focus on three main areas [D1]:
+The Q3 2025 priorities focus on three main areas [[D1]](https://company.atlassian.net/wiki/spaces/ENG/pages/123):
 
 1. **Platform stability** — Improving error handling and retry mechanisms across all connectors
 2. **New integrations** — Adding support for ServiceNow and Zendesk connectors
 3. **Performance** — Optimizing vector search latency and reducing indexing time
 
-The platform architecture document provides additional context on how these improvements fit into the overall system design [D2]. The microservices architecture allows each component to be scaled independently.`;
+The platform architecture document provides additional context on how these improvements fit into the overall system design [[D2]](https://drive.google.com/file/d/abc123). The microservices architecture allows each component to be scaled independently.`;
 
         await openChat(page);
 
