@@ -54,7 +54,10 @@ SECONDARY_OWNERS_FIELD_NAME = "secondary_owners"
 # Hierarchy filtering - list of ancestor hierarchy node IDs
 ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME = "ancestor_hierarchy_node_ids"
 
-OPENSEARCH_ENGINE = "lucene"
+
+# Faiss was also tried but it didn't have any benefits
+# NMSLIB is deprecated, not recommended
+OPENSEARCH_KNN_ENGINE = "lucene"
 
 
 def get_opensearch_doc_chunk_id(
@@ -372,7 +375,7 @@ class DocumentSchema:
                     "method": {
                         "name": "hnsw",
                         "space_type": "cosinesimil",
-                        "engine": OPENSEARCH_ENGINE,
+                        "engine": OPENSEARCH_KNN_ENGINE,
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
@@ -384,7 +387,7 @@ class DocumentSchema:
                     "method": {
                         "name": "hnsw",
                         "space_type": "cosinesimil",
-                        "engine": OPENSEARCH_ENGINE,
+                        "engine": OPENSEARCH_KNN_ENGINE,
                         "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
                     },
                 },
