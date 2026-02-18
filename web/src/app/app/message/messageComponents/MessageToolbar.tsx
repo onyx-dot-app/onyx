@@ -75,6 +75,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
 
   return (
     <SourceTag
+      data-testid="AgentMessage/sources-tag"
       displayName="Sources"
       sources={sources}
       onSourceClick={handleSourceClick}

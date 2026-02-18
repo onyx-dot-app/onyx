@@ -469,6 +469,7 @@ for (const theme of THEMES) {
         "AgentMessage/copy-button",
         "AgentMessage/like-button",
         "AgentMessage/dislike-button",
+        "AgentMessage/sources-tag",
       ] as const;
 
       async function screenshotToolbarButtonHoverStates(
@@ -485,6 +486,16 @@ for (const theme of THEMES) {
           const buttonSlug = buttonTestId.split("/")[1];
           await expectElementScreenshot(toolbar, {
             name: `${namePrefix}-toolbar-${buttonSlug}-hover-${theme}`,
+          });
+        }
+
+        // LLMPopover trigger is only rendered when the regenerate action is
+        // available (requires onRegenerate + parentMessage + llmManager props).
+        const llmTrigger = aiMessage.getByTestId("llm-popover-trigger");
+        if (await llmTrigger.isVisible()) {
+          await llmTrigger.hover();
+          await expectElementScreenshot(toolbar, {
+            name: `${namePrefix}-toolbar-llm-popover-hover-${theme}`,
           });
         }
       }
