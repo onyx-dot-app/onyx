@@ -2,7 +2,10 @@
 
 import { Button } from "@opal/components/buttons/Button/components";
 import type { InteractiveContainerHeightVariant } from "@opal/core";
+import SvgAlertCircle from "@opal/icons/alert-circle";
+import SvgAlertTriangle from "@opal/icons/alert-triangle";
 import SvgEdit from "@opal/icons/edit";
+import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent } from "@opal/types";
 import { useRef, useState } from "react";
 
@@ -11,6 +14,8 @@ import { useRef, useState } from "react";
 // ---------------------------------------------------------------------------
 
 type LabelSizePreset = "main-content" | "main-ui" | "secondary";
+
+type LabelAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 
 interface LabelPresetConfig {
   iconSize: string;
@@ -22,6 +27,8 @@ interface LabelPresetConfig {
   editButtonSize: InteractiveContainerHeightVariant;
   editButtonPadding: string;
   optionalFont: string;
+  /** Aux icon size = lineHeight − 2 × p-0.5. */
+  auxIconSize: string;
 }
 
 interface LabelLayoutProps {
@@ -43,6 +50,9 @@ interface LabelLayoutProps {
   /** When `true`, renders "(Optional)" beside the title. */
   optional?: boolean;
 
+  /** Auxiliary status icon rendered beside the title. */
+  auxIcon?: LabelAuxIcon;
+
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: LabelSizePreset;
 }
@@ -62,6 +72,7 @@ const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
     editButtonSize: "sm",
     editButtonPadding: "p-0",
     optionalFont: "font-main-content-muted",
+    auxIconSize: "1.25rem",
   },
   "main-ui": {
     iconSize: "1rem",
@@ -73,6 +84,7 @@ const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
     editButtonSize: "xs",
     editButtonPadding: "p-0",
     optionalFont: "font-main-ui-muted",
+    auxIconSize: "1rem",
   },
   secondary: {
     iconSize: "0.75rem",
@@ -84,12 +96,23 @@ const LABEL_PRESETS: Record<LabelSizePreset, LabelPresetConfig> = {
     editButtonSize: "2xs",
     editButtonPadding: "p-0",
     optionalFont: "font-secondary-action",
+    auxIconSize: "0.75rem",
   },
 };
 
 // ---------------------------------------------------------------------------
 // LabelLayout
 // ---------------------------------------------------------------------------
+
+const AUX_ICON_CONFIG: Record<
+  LabelAuxIcon,
+  { icon: IconFunctionComponent; colorClass: string }
+> = {
+  "info-gray": { icon: SvgAlertCircle, colorClass: "text-text-02" },
+  "info-blue": { icon: SvgAlertCircle, colorClass: "text-status-info-05" },
+  warning: { icon: SvgAlertTriangle, colorClass: "text-status-warning-05" },
+  error: { icon: SvgXOctagon, colorClass: "text-status-error-05" },
+};
 
 function LabelLayout({
   icon: Icon,
@@ -98,6 +121,7 @@ function LabelLayout({
   editable,
   onTitleChange,
   optional,
+  auxIcon,
   sizePreset = "main-ui",
 }: LabelLayoutProps) {
   const [editing, setEditing] = useState(false);
@@ -154,6 +178,34 @@ function LabelLayout({
             </span>
           )}
 
+          {optional && (
+            <span
+              className={`${config.optionalFont} text-text-03 shrink-0`}
+              style={{ height: config.lineHeight }}
+            >
+              (Optional)
+            </span>
+          )}
+
+          {auxIcon &&
+            (() => {
+              const { icon: AuxIcon, colorClass } = AUX_ICON_CONFIG[auxIcon];
+              return (
+                <div
+                  className="opal-content-label-aux-icon shrink-0 p-0.5"
+                  style={{ height: config.lineHeight }}
+                >
+                  <AuxIcon
+                    className={colorClass}
+                    style={{
+                      width: config.auxIconSize,
+                      height: config.auxIconSize,
+                    }}
+                  />
+                </div>
+              );
+            })()}
+
           {editable && !editing && (
             <div
               className={`opal-content-label-edit-button ${config.editButtonPadding}`}
@@ -168,15 +220,6 @@ function LabelLayout({
               />
             </div>
           )}
-
-          {optional && (
-            <span
-              className={`${config.optionalFont} text-text-03 shrink-0`}
-              style={{ height: config.lineHeight }}
-            >
-              (Optional)
-            </span>
-          )}
         </div>
 
         {description && (
@@ -189,4 +232,9 @@ function LabelLayout({
   );
 }
 
-export { LabelLayout, type LabelLayoutProps, type LabelSizePreset };
+export {
+  LabelLayout,
+  type LabelLayoutProps,
+  type LabelSizePreset,
+  type LabelAuxIcon,
+};

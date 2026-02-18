@@ -61,6 +61,8 @@ type LabelContentProps = ContentBaseProps & {
   variant?: "section";
   /** When `true`, renders "(Optional)" beside the title in the muted font variant. */
   optional?: boolean;
+  /** Auxiliary status icon rendered beside the title. */
+  auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
 };
 
 /** BodyLayout does not support descriptions or inline editing. */

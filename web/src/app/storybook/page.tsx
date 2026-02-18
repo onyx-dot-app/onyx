@@ -197,6 +197,61 @@ export default function StorybookPage() {
           />
         </Section>
 
+        {/* ── aux icon ── */}
+        <Section label="aux icon">
+          <Content
+            icon={SvgSearch}
+            sizePreset="main-ui"
+            title="Info gray"
+            description="Neutral informational icon"
+            auxIcon="info-gray"
+          />
+          <Content
+            icon={SvgSearch}
+            sizePreset="main-ui"
+            title="Info blue"
+            description="Highlighted informational icon"
+            auxIcon="info-blue"
+          />
+          <Content
+            icon={SvgSearch}
+            sizePreset="main-ui"
+            title="Warning"
+            description="Warning status icon"
+            auxIcon="warning"
+          />
+          <Content
+            icon={SvgSearch}
+            sizePreset="main-ui"
+            title="Error"
+            description="Error status icon"
+            auxIcon="error"
+          />
+        </Section>
+
+        <Section label="aux icon + optional + editable">
+          <Content
+            icon={SvgSearch}
+            sizePreset="main-content"
+            title="All accessories"
+            description="Optional + aux icon + editable"
+            optional
+            auxIcon="warning"
+            editable
+            onTitleChange={(v) => console.log("title changed:", v)}
+          />
+          <Content
+            icon={SvgSearch}
+            sizePreset="secondary"
+            title="All accessories"
+            description="Optional + aux icon + editable at secondary"
+            optional
+            auxIcon="error"
+            editable
+            onTitleChange={(v) => console.log("title changed:", v)}
+          />
+        </Section>
+
         {/* ── optional props ── */}
         <Section label="optional props">
           <Content
