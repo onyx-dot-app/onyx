@@ -1,28 +1,19 @@
 import copy
-import json
-import os
-from collections.abc import Callable, Generator, Iterable, Iterator
-from datetime import datetime, timedelta, timezone
+from collections.abc import Generator, Iterable
+from datetime import datetime, timezone
 from typing import Any
 
 from jira import JIRA
-from jira.exceptions import JIRAError
 from jira.resources import Issue
-from more_itertools import chunked
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
 from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError, CredentialExpiredError, InsufficientPermissionsError
+from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync, CheckpointOutput, SecondsSinceUnixEpoch, SlimConnectorWithPermSync
-from onyx.connectors.jira_service_management.access import get_project_permissions
-from onyx.connectors.jira_service_management.utils import best_effort_basic_expert_info, best_effort_get_field_from_issue, build_jira_client, build_jira_url, extract_text_from_adf, get_comment_strs
-from onyx.connectors.models import ConnectorCheckpoint, ConnectorFailure, ConnectorMissingCredentialError, Document, DocumentFailure, HierarchyNode, SlimDocument, TextSection
-from onyx.db.enums import HierarchyNodeType
+from onyx.connectors.jira_service_management.utils import build_jira_client, build_jira_url, extract_text_from_adf, get_comment_strs
+from onyx.connectors.models import ConnectorCheckpoint, ConnectorMissingCredentialError, Document, HierarchyNode, SlimDocument, TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -44,7 +35,7 @@ def _perform_jql_search(
         )
     except Exception as e:
         if hasattr(e, "status_code") and e.status_code == 401:
-            raise CredentialExpiredError("Token inválido")
+            raise CredentialExpiredError("Invalid Token")
         raise e
 
 def process_jira_issue(jira_base_url: str, issue: Issue) -> Document | None:
@@ -91,16 +82,18 @@ class JiraServiceManagementConnector(
     @override
     def load_from_checkpoint(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch, checkpoint: JiraServiceManagementConnectorCheckpoint
-    ) -> Generator[Document | list[HierarchyNode] | JiraServiceManagementConnectorCheckpoint, None, None]:
-        """Llama internamente a la versión con permisos."""
-        yield from self.load_from_checkpoint_with_perm_sync(start, end, checkpoint)
+    ) -> CheckpointOutput[JiraServiceManagementConnectorCheckpoint]:
+        return self.load_from_checkpoint_with_perm_sync(start, end, checkpoint)
 
     @override
     def load_from_checkpoint_with_perm_sync(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch, checkpoint: JiraServiceManagementConnectorCheckpoint
-    ) -> Generator[Document | list[HierarchyNode] | JiraServiceManagementConnectorCheckpoint, None, None]:
+    ) -> CheckpointOutput[JiraServiceManagementConnectorCheckpoint]:
+        # Fix: JQL query now includes both start and end time bounds
         start_date = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-        jql = f"updated >= '{start_date}'"
+        end_date = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+        
+        jql = f"updated >= '{start_date}' AND updated <= '{end_date}'"
         
         current_offset = checkpoint.offset
         issues = _perform_jql_search(self.jira_client, jql, current_offset, _JIRA_FULL_PAGE_SIZE)
@@ -113,19 +106,24 @@ class JiraServiceManagementConnector(
                 yield doc
             current_offset += 1
 
-        checkpoint.offset = current_offset
-        checkpoint.has_more = found_any and len(issues) >= _JIRA_FULL_PAGE_SIZE
-        yield checkpoint
+        # Fix: Using deepcopy to avoid mutating the input checkpoint in place
+        new_checkpoint = copy.deepcopy(checkpoint)
+        new_checkpoint.offset = current_offset
+        new_checkpoint.has_more = found_any and len(issues) >= _JIRA_FULL_PAGE_SIZE
+        
+        # Fix: Returning the checkpoint as required by the CheckpointOutput contract (not yielding)
+        return new_checkpoint
 
     @override
     def retrieve_all_slim_docs_perm_sync(self) -> Generator[list[SlimDocument], None, None]:
-        # Implementación mínima para cumplir el contrato
         yield []
 
     def build_dummy_checkpoint(self) -> JiraServiceManagementConnectorCheckpoint:
         return JiraServiceManagementConnectorCheckpoint(has_more=True)
     
     def validate_connector_settings(self) -> None:
+        if not self._jira_client:
+             raise ConnectorMissingCredentialError("Jira Service Management")
         self.jira_client.projects()
 
     def validate_checkpoint_json(self, json_str: str) -> JiraServiceManagementConnectorCheckpoint:

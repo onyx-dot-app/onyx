@@ -1,7 +1,5 @@
-import re
 from typing import Any
 from jira import JIRA
-from onyx.connectors.jira_service_management.access import get_project_permissions
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -12,15 +10,17 @@ def build_jira_client(credentials: dict[str, Any], jira_base: str, scoped_token:
     user_email = credentials.get("jira_user_email")
     api_token = credentials.get("jira_api_token")
     
+    # Fix: Validate credentials before attempting connection
+    if not user_email or not api_token:
+        raise ValueError("Missing Jira user email or API token.")
+    
     options = {"server": jira_base, "rest_api_version": JIRA_CLOUD_API_VERSION}
-    # En Service Management la autenticación básica con email + token es el estándar
     return JIRA(options=options, basic_auth=(user_email, api_token))
 
 def build_jira_url(base_url: str, issue_key: str) -> str:
     return f"{base_url}/browse/{issue_key}"
 
 def extract_text_from_adf(adf_content: Any) -> str:
-    """Extrae texto plano de Atlassian Document Format (JSON)."""
     if not adf_content:
         return ""
     text_parts = []
@@ -55,7 +55,6 @@ def best_effort_get_field_from_issue(issue: Any, field_name: str) -> Any:
         return None
 
 def best_effort_basic_expert_info(user_obj: Any) -> Any:
-    # Retorna un diccionario simple con nombre y email
     if not user_obj:
         return None
     return {
