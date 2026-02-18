@@ -134,13 +134,13 @@ EXPECTED_SHARED_DRIVE_1_HIERARCHY = ExpectedHierarchyNode(
     children=[
         ExpectedHierarchyNode(
             raw_node_id=RESTRICTED_ACCESS_FOLDER_ID,
-            display_name="restricted_access_folder",
+            display_name="restricted_access",
             node_type=HierarchyNodeType.FOLDER,
             raw_parent_id=SHARED_DRIVE_1_ID,
         ),
         ExpectedHierarchyNode(
             raw_node_id=FOLDER_1_ID,
-            display_name="folder_1",
+            display_name="folder 1",
             node_type=HierarchyNodeType.FOLDER,
             raw_parent_id=SHARED_DRIVE_1_ID,
             children=[
@@ -152,7 +152,7 @@ EXPECTED_SHARED_DRIVE_1_HIERARCHY = ExpectedHierarchyNode(
                 ),
                 ExpectedHierarchyNode(
                     raw_node_id=FOLDER_1_2_ID,
-                    display_name="folder_1_2",
+                    display_name="folder 1-2",
                     node_type=HierarchyNodeType.FOLDER,
                     raw_parent_id=FOLDER_1_ID,
                 ),
@@ -170,25 +170,25 @@ EXPECTED_SHARED_DRIVE_2_HIERARCHY = ExpectedHierarchyNode(
     children=[
         ExpectedHierarchyNode(
             raw_node_id=SECTIONS_FOLDER_ID,
-            display_name="sections_folder",
+            display_name="sections",
             node_type=HierarchyNodeType.FOLDER,
             raw_parent_id=SHARED_DRIVE_2_ID,
         ),
         ExpectedHierarchyNode(
             raw_node_id=FOLDER_2_ID,
-            display_name="folder_2",
+            display_name="folder 2",
             node_type=HierarchyNodeType.FOLDER,
             raw_parent_id=SHARED_DRIVE_2_ID,
             children=[
                 ExpectedHierarchyNode(
                     raw_node_id=FOLDER_2_1_ID,
-                    display_name="folder_2_1",
+                    display_name="folder 2-1",
                     node_type=HierarchyNodeType.FOLDER,
                     raw_parent_id=FOLDER_2_ID,
                 ),
                 ExpectedHierarchyNode(
                     raw_node_id=FOLDER_2_2_ID,
-                    display_name="folder_2_2",
+                    display_name="folder 2-2",
                     node_type=HierarchyNodeType.FOLDER,
                     raw_parent_id=FOLDER_2_ID,
                 ),
@@ -395,7 +395,7 @@ EXPECTED_PILL_FOLDER = _node(
     PILL_FOLDER_ID, "pill_folder", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
 )
 EXPECTED_EXTERNAL_SHARED_FOLDER = _node(
-    EXTERNAL_SHARED_FOLDER_ID, "external_shared_folder", HierarchyNodeType.FOLDER
+    EXTERNAL_SHARED_FOLDER_ID, "Onyx-test", HierarchyNodeType.FOLDER
 )
 
 # Comprehensive mapping of ALL known hierarchy nodes.
