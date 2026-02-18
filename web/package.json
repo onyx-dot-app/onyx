@@ -68,6 +68,7 @@
     "highlight.js": "^11.11.1",
     "js-cookie": "^3.0.5",
     "katex": "^0.16.17",
+    "linguist-languages": "^9.3.1",
     "lodash": "^4.17.23",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.454.0",

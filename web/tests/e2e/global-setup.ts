@@ -3,8 +3,8 @@ import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
   TEST_USER_CREDENTIALS,
-} from "./constants";
-import { OnyxApiClient } from "./utils/onyxApiClient";
+} from "@tests/e2e/constants";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;

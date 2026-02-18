@@ -3,7 +3,7 @@ import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_ADMIN_CREDENTIALS,
   TEST_USER_CREDENTIALS,
-} from "../constants";
+} from "@tests/e2e/constants";
 
 /**
  * Log in via the API and set cookies on the page's browser context.

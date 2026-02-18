@@ -1,11 +1,11 @@
 import { test } from "@playwright/test";
-import { loginAsRandomUser } from "../utils/auth";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   sendMessage,
   startNewChat,
   verifyAssistantIsChosen,
   verifyDefaultAssistantIsChosen,
-} from "../utils/chatActions";
+} from "@tests/e2e/utils/chatActions";
 
 test("Chat workflow", async ({ page }) => {
   // Clear cookies and log in as a random user

@@ -1,10 +1,12 @@
 import json
+import re
 import time
 import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Mapping
 from collections.abc import Sequence
+from html import unescape
 from typing import Any
 from typing import cast
 
@@ -55,6 +57,112 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
+
+_XML_INVOKE_BLOCK_RE = re.compile(
+    r"<invoke\b(?P<attrs>[^>]*)>(?P<body>.*?)</invoke>",
+    re.IGNORECASE | re.DOTALL,
+)
+_XML_PARAMETER_RE = re.compile(
+    r"<parameter\b(?P<attrs>[^>]*)>(?P<value>.*?)</parameter>",
+    re.IGNORECASE | re.DOTALL,
+)
+_FUNCTION_CALLS_OPEN_MARKER = "<function_calls"
+_FUNCTION_CALLS_CLOSE_MARKER = "</function_calls>"
+
+
+class _XmlToolCallContentFilter:
+    """Streaming filter that strips XML-style tool call payload blocks from text."""
+
+    def __init__(self) -> None:
+        self._pending = ""
+        self._inside_function_calls_block = False
+
+    def process(self, content: str) -> str:
+        if not content:
+            return ""
+
+        self._pending += content
+        output_parts: list[str] = []
+
+        while self._pending:
+            pending_lower = self._pending.lower()
+
+            if self._inside_function_calls_block:
+                end_idx = pending_lower.find(_FUNCTION_CALLS_CLOSE_MARKER)
+                if end_idx == -1:
+                    # Keep buffering until we see the close marker.
+                    return "".join(output_parts)
+
+                # Drop the whole function_calls block.
+                self._pending = self._pending[
+                    end_idx + len(_FUNCTION_CALLS_CLOSE_MARKER) :
+                ]
+                self._inside_function_calls_block = False
+                continue
+
+            start_idx = _find_function_calls_open_marker(pending_lower)
+            if start_idx == -1:
+                # Keep only a possible prefix of "<function_calls" in the buffer so
+                # marker splits across chunks are handled correctly.
+                tail_len = _matching_open_marker_prefix_len(self._pending)
+                emit_upto = len(self._pending) - tail_len
+                if emit_upto > 0:
+                    output_parts.append(self._pending[:emit_upto])
+                    self._pending = self._pending[emit_upto:]
+                return "".join(output_parts)
+
+            if start_idx > 0:
+                output_parts.append(self._pending[:start_idx])
+
+            # Enter block-stripping mode and keep scanning for close marker.
+            self._pending = self._pending[start_idx:]
+            self._inside_function_calls_block = True
+
+        return "".join(output_parts)
+
+    def flush(self) -> str:
+        if self._inside_function_calls_block:
+            # Drop any incomplete block at stream end.
+            self._pending = ""
+            self._inside_function_calls_block = False
+            return ""
+
+        remaining = self._pending
+        self._pending = ""
+        return remaining
+
+
+def _matching_open_marker_prefix_len(text: str) -> int:
+    """Return longest suffix of text that matches prefix of "<function_calls"."""
+    max_len = min(len(text), len(_FUNCTION_CALLS_OPEN_MARKER) - 1)
+    text_lower = text.lower()
+    marker_lower = _FUNCTION_CALLS_OPEN_MARKER
+
+    for candidate_len in range(max_len, 0, -1):
+        if text_lower.endswith(marker_lower[:candidate_len]):
+            return candidate_len
+
+    return 0
+
+
+def _is_valid_function_calls_open_follower(char: str | None) -> bool:
+    return char is None or char in {">", " ", "\t", "\n", "\r"}
+
+
+def _find_function_calls_open_marker(text_lower: str) -> int:
+    """Find '<function_calls' with a valid tag boundary follower."""
+    search_from = 0
+    while True:
+        idx = text_lower.find(_FUNCTION_CALLS_OPEN_MARKER, search_from)
+        if idx == -1:
+            return -1
+
+        follower_pos = idx + len(_FUNCTION_CALLS_OPEN_MARKER)
+        follower = text_lower[follower_pos] if follower_pos < len(text_lower) else None
+        if _is_valid_function_calls_open_follower(follower):
+            return idx
+
+        search_from = idx + 1
 
 
 def _sanitize_llm_output(value: str) -> str:
@@ -307,8 +415,9 @@ def extract_tool_calls_from_response_text(
     """Extract tool calls from LLM response text by matching JSON against tool definitions.
 
     This is a fallback mechanism for when the LLM was expected to return tool calls
-    but didn't use the proper tool call format. It searches for JSON objects in the
-    response text that match the structure of available tools.
+    but didn't use the proper tool call format. It searches for tool calls embedded
+    in response text (JSON first, then XML-like invoke blocks) that match available
+    tool definitions.
 
     Args:
         response_text: The LLM's text response to search for tool calls
@@ -333,10 +442,9 @@ def extract_tool_calls_from_response_text(
     if not tool_name_to_def:
         return []
 
+    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
     # Find all JSON objects in the response text
     json_objects = find_all_json_objects(response_text)
-
-    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
     prev_json_obj: dict[str, Any] | None = None
     prev_tool_call: tuple[str, dict[str, Any]] | None = None
 
@@ -364,6 +472,14 @@ def extract_tool_calls_from_response_text(
         prev_json_obj = json_obj
         prev_tool_call = matched_tool_call
 
+    # Some providers/models emit XML-style function calls instead of JSON objects.
+    # Keep this as a fallback behind JSON extraction to preserve current behavior.
+    if not matched_tool_calls:
+        matched_tool_calls = _extract_xml_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_name_to_def=tool_name_to_def,
+        )
+
     tool_calls: list[ToolCallKickoff] = []
     for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
         tool_calls.append(
@@ -384,6 +500,71 @@ def extract_tool_calls_from_response_text(
     )
 
     return tool_calls
+
+
+def _extract_xml_tool_calls_from_response_text(
+    response_text: str,
+    tool_name_to_def: dict[str, dict],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Extract XML-style tool calls from response text.
+
+    Supports formats such as:
+    <function_calls>
+      <invoke name="internal_search">
+        <parameter name="queries" string="false">["foo"]</parameter>
+      </invoke>
+    </function_calls>
+    """
+    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
+
+    for invoke_match in _XML_INVOKE_BLOCK_RE.finditer(response_text):
+        invoke_attrs = invoke_match.group("attrs")
+        tool_name = _extract_xml_attribute(invoke_attrs, "name")
+        if not tool_name or tool_name not in tool_name_to_def:
+            continue
+
+        tool_args: dict[str, Any] = {}
+        invoke_body = invoke_match.group("body")
+        for parameter_match in _XML_PARAMETER_RE.finditer(invoke_body):
+            parameter_attrs = parameter_match.group("attrs")
+            parameter_name = _extract_xml_attribute(parameter_attrs, "name")
+            if not parameter_name:
+                continue
+
+            string_attr = _extract_xml_attribute(parameter_attrs, "string")
+            tool_args[parameter_name] = _parse_xml_parameter_value(
+                raw_value=parameter_match.group("value"),
+                string_attr=string_attr,
+            )
+
+        matched_tool_calls.append((tool_name, tool_args))
+
+    return matched_tool_calls
+
+
+def _extract_xml_attribute(attrs: str, attr_name: str) -> str | None:
+    """Extract a single XML-style attribute value from a tag attribute string."""
+    attr_match = re.search(
+        rf"""\b{re.escape(attr_name)}\s*=\s*(['"])(.*?)\1""",
+        attrs,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not attr_match:
+        return None
+    return _sanitize_llm_output(unescape(attr_match.group(2).strip()))
+
+
+def _parse_xml_parameter_value(raw_value: str, string_attr: str | None) -> Any:
+    """Parse a parameter value from XML-style tool call payloads."""
+    value = _sanitize_llm_output(unescape(raw_value).strip())
+
+    if string_attr and string_attr.lower() == "true":
+        return value
+
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
 
 
 def _try_match_json_to_tool(
@@ -749,6 +930,8 @@ def run_llm_step_pkt_generator(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
+    accumulated_raw_answer = ""
+    xml_tool_call_content_filter = _XmlToolCallContentFilter()
 
     processor_state: Any = None
 
@@ -764,6 +947,120 @@ def run_llm_step_pkt_generator(
         )
         stream_start_time = time.monotonic()
         first_action_recorded = False
+
+        def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
+            nonlocal accumulated_answer
+            nonlocal accumulated_reasoning
+            nonlocal answer_start
+            nonlocal reasoning_start
+            nonlocal has_reasoned
+            nonlocal turn_index
+            nonlocal sub_turn_index
+
+            # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
+            # about which tool to call, not an actual answer to the user.
+            # Treat this content as reasoning instead of answer.
+            if is_deep_research and tool_choice == ToolChoiceOptions.REQUIRED:
+                accumulated_reasoning += content_chunk
+                if state_container:
+                    state_container.set_reasoning_tokens(accumulated_reasoning)
+                if not reasoning_start:
+                    yield Packet(
+                        placement=Placement(
+                            turn_index=turn_index,
+                            tab_index=tab_index,
+                            sub_turn_index=sub_turn_index,
+                        ),
+                        obj=ReasoningStart(),
+                    )
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=ReasoningDelta(reasoning=content_chunk),
+                )
+                reasoning_start = True
+                return
+
+            # Normal flow for AUTO or NONE tool choice
+            if reasoning_start:
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=ReasoningDone(),
+                )
+                has_reasoned = 1
+                turn_index, sub_turn_index = _increment_turns(
+                    turn_index, sub_turn_index
+                )
+                reasoning_start = False
+
+            if not answer_start:
+                # Store pre-answer processing time in state container for save_chat
+                if state_container and pre_answer_processing_time is not None:
+                    state_container.set_pre_answer_processing_time(
+                        pre_answer_processing_time
+                    )
+
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=AgentResponseStart(
+                        final_documents=final_documents,
+                        pre_answer_processing_seconds=pre_answer_processing_time,
+                    ),
+                )
+                answer_start = True
+
+            if citation_processor:
+                for result in citation_processor.process_token(content_chunk):
+                    if isinstance(result, str):
+                        accumulated_answer += result
+                        # Save answer incrementally to state container
+                        if state_container:
+                            state_container.set_answer_tokens(accumulated_answer)
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=AgentResponseDelta(content=result),
+                        )
+                    elif isinstance(result, CitationInfo):
+                        yield Packet(
+                            placement=Placement(
+                                turn_index=turn_index,
+                                tab_index=tab_index,
+                                sub_turn_index=sub_turn_index,
+                            ),
+                            obj=result,
+                        )
+                        # Track emitted citation for saving
+                        if state_container:
+                            state_container.add_emitted_citation(result.citation_number)
+            else:
+                accumulated_answer += content_chunk
+                # Save answer incrementally to state container
+                if state_container:
+                    state_container.set_answer_tokens(accumulated_answer)
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=AgentResponseDelta(content=content_chunk),
+                )
+
         for packet in llm.stream(
             prompt=llm_msg_history,
             tools=tool_definitions,
@@ -840,114 +1137,12 @@ def run_llm_step_pkt_generator(
                 reasoning_start = True
 
             if delta.content:
-                # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
-                # about which tool to call, not an actual answer to the user.
-                # Treat this content as reasoning instead of answer.
-                if is_deep_research and tool_choice == ToolChoiceOptions.REQUIRED:
-                    # Treat content as reasoning when we know tool calls are coming
-                    accumulated_reasoning += delta.content
-                    if state_container:
-                        state_container.set_reasoning_tokens(accumulated_reasoning)
-                    if not reasoning_start:
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=ReasoningStart(),
-                        )
-                    yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
-                        obj=ReasoningDelta(reasoning=delta.content),
-                    )
-                    reasoning_start = True
-                else:
-                    # Normal flow for AUTO or NONE tool choice
-                    if reasoning_start:
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=ReasoningDone(),
-                        )
-                        has_reasoned = 1
-                        turn_index, sub_turn_index = _increment_turns(
-                            turn_index, sub_turn_index
-                        )
-                        reasoning_start = False
-
-                    if not answer_start:
-                        # Store pre-answer processing time in state container for save_chat
-                        if state_container and pre_answer_processing_time is not None:
-                            state_container.set_pre_answer_processing_time(
-                                pre_answer_processing_time
-                            )
-
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=AgentResponseStart(
-                                final_documents=final_documents,
-                                pre_answer_processing_seconds=pre_answer_processing_time,
-                            ),
-                        )
-                        answer_start = True
-
-                    if citation_processor:
-                        for result in citation_processor.process_token(delta.content):
-                            if isinstance(result, str):
-                                accumulated_answer += result
-                                # Save answer incrementally to state container
-                                if state_container:
-                                    state_container.set_answer_tokens(
-                                        accumulated_answer
-                                    )
-                                yield Packet(
-                                    placement=Placement(
-                                        turn_index=turn_index,
-                                        tab_index=tab_index,
-                                        sub_turn_index=sub_turn_index,
-                                    ),
-                                    obj=AgentResponseDelta(content=result),
-                                )
-                            elif isinstance(result, CitationInfo):
-                                yield Packet(
-                                    placement=Placement(
-                                        turn_index=turn_index,
-                                        tab_index=tab_index,
-                                        sub_turn_index=sub_turn_index,
-                                    ),
-                                    obj=result,
-                                )
-                                # Track emitted citation for saving
-                                if state_container:
-                                    state_container.add_emitted_citation(
-                                        result.citation_number
-                                    )
-                    else:
-                        # When citation_processor is None, use delta.content directly without modification
-                        accumulated_answer += delta.content
-                        # Save answer incrementally to state container
-                        if state_container:
-                            state_container.set_answer_tokens(accumulated_answer)
-                        yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
-                            obj=AgentResponseDelta(content=delta.content),
-                        )
+                # Keep raw content for fallback extraction. Display content can be
+                # filtered and, in deep-research REQUIRED mode, routed as reasoning.
+                accumulated_raw_answer += delta.content
+                filtered_content = xml_tool_call_content_filter.process(delta.content)
+                if filtered_content:
+                    yield from _emit_content_chunk(filtered_content)
 
             if delta.tool_calls:
                 if reasoning_start:
@@ -967,6 +1162,11 @@ def run_llm_step_pkt_generator(
 
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+
+        # Flush any tail text buffered while checking for split "<function_calls" markers.
+        filtered_content_tail = xml_tool_call_content_filter.flush()
+        if filtered_content_tail:
+            yield from _emit_content_chunk(filtered_content_tail)
 
         # Flush custom token processor to get any final tool calls
         if custom_token_processor:
@@ -1088,6 +1288,7 @@ def run_llm_step_pkt_generator(
             reasoning=accumulated_reasoning if accumulated_reasoning else None,
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
+            raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
         ),
         bool(has_reasoned),
     )

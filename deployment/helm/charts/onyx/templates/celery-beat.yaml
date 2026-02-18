@@ -63,7 +63,7 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.beat",
               "beat",
-              "--loglevel=INFO",
+              {{ printf "--loglevel=%s" .Values.celery_beat.logLevel | quote }},
             ]
           resources:
             {{- toYaml .Values.celery_beat.resources | nindent 12 }}
