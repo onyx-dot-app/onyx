@@ -357,12 +357,12 @@ EXPECTED_PERM_SYNC_DRIVE_ADMIN_ONLY = _node(
 )
 EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A = _node(
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
-    "perm_sync_admin_and_user_1_a",
+    "perm_sync_drive_785db121-0823-4ebe-8689-ad7f52405e32",
     HierarchyNodeType.SHARED_DRIVE,
 )
 EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B = _node(
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
-    "perm_sync_admin_and_user_1_b",
+    "perm_sync_drive_785db121-0823-4ebe-8689-ad7f52405e32",
     HierarchyNodeType.SHARED_DRIVE,
 )
 
