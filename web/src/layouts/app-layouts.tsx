@@ -112,6 +112,10 @@ function Header() {
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
+  // Some pages don't want the custom header content, namely every page except Chat, Search, and
+  // NewSession. The header provides features such as the open sidebar button on mobile which pages
+  // without this content still use.
+  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
 
   const effectiveMode: AppMode = appFocus.isNewSession() ? appMode : "chat";
 
@@ -358,7 +362,7 @@ function Header() {
         */}
         <div className="flex-1 flex flex-col items-center overflow-hidden">
           <Text text03 className="text-center w-full">
-            {customHeaderContent}
+            {pageWithHeaderContent && customHeaderContent}
           </Text>
         </div>
 
