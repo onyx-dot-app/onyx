@@ -23,6 +23,7 @@ export interface DocumentViewModalProps {
   onClose: () => void;
   headerExtras?: (data: DocumentData) => React.ReactNode;
   renderContent: (data: DocumentData) => React.ReactNode;
+  width?: "sm" | "md" | "lg";
 }
 
 function isTextBasedMimeType(mimeType: string): boolean {
@@ -34,6 +35,7 @@ export default function DocumentViewModal({
   onClose,
   headerExtras,
   renderContent,
+  width = "lg",
 }: DocumentViewModalProps) {
   const [fileContent, setFileContent] = useState("");
   const [fileUrl, setFileUrl] = useState("");
@@ -160,7 +162,7 @@ export default function DocumentViewModal({
       }}
     >
       <Modal.Content
-        width="lg"
+        width={width}
         height="full"
         preventAccidentalClose={false}
         onOpenAutoFocus={(e) => e.preventDefault()}

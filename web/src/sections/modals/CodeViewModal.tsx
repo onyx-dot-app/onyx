@@ -36,6 +36,7 @@ export default function CodeViewModal({
       presentingDocument={presentingDocument}
       onClose={onClose}
       renderContent={renderContent}
+      width="md"
     />
   );
 }

@@ -7,7 +7,7 @@ interface LinguistLanguage {
   filenames?: string[];
 }
 
-const CODE_TYPES = new Set(["programming", "data", "markup"]);
+const CODE_TYPES = new Set(["programming"]);
 
 // Build extension → language name and filename → language name maps at module load
 const extensionMap = new Map<string, string>();
