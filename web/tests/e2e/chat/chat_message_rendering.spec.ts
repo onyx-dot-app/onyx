@@ -92,6 +92,24 @@ Key benefits include:
 - **Flexibility**: Connect any data source via custom connectors
 - **Extensibility**: Open-source codebase with active community`;
 
+interface MockDocument {
+  document_id: string;
+  semantic_identifier: string;
+  link: string;
+  source_type: string;
+  blurb: string;
+  is_internet: boolean;
+}
+
+interface SearchMockOptions {
+  content: string;
+  queries: string[];
+  documents: MockDocument[];
+  /** Maps citation number -> document_id */
+  citations: Record<number, string>;
+  isInternetSearch?: boolean;
+}
+
 let turnCounter = 0;
 
 function buildMockStream(content: string): string {
@@ -120,6 +138,81 @@ function buildMockStream(content: string): string {
     {
       message_id: assistantMessageId,
       citations: {},
+      files: [],
+    },
+  ];
+
+  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
+}
+
+function buildMockSearchStream(options: SearchMockOptions): string {
+  turnCounter += 1;
+  const userMessageId = turnCounter * 100 + 1;
+  const assistantMessageId = turnCounter * 100 + 2;
+
+  const fullDocs = options.documents.map((doc) => ({
+    ...doc,
+    boost: 0,
+    hidden: false,
+    score: 0.95,
+    chunk_ind: 0,
+    match_highlights: [],
+    metadata: {},
+    updated_at: null,
+  }));
+
+  // Turn 0: search tool
+  // Turn 1: answer + citations
+  const packets: Record<string, unknown>[] = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: assistantMessageId,
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: "search_tool_start",
+        ...(options.isInternetSearch !== undefined && {
+          is_internet_search: options.isInternetSearch,
+        }),
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "search_tool_queries_delta", queries: options.queries },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "search_tool_documents_delta", documents: fullDocs },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "section_end" },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "message_start",
+        id: `mock-${assistantMessageId}`,
+        content: options.content,
+        final_documents: fullDocs,
+      },
+    },
+    ...Object.entries(options.citations).map(([num, docId]) => ({
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "citation_info",
+        citation_number: Number(num),
+        document_id: docId,
+      },
+    })),
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "stop", stop_reason: "finished" },
+    },
+    {
+      message_id: assistantMessageId,
+      citations: options.citations,
       files: [],
     },
   ];
@@ -326,6 +419,150 @@ test.describe("Chat Message Rendering", () => {
       });
 
       await screenshotChatContainer(page, "chat-multi-turn-mixed-lengths");
+    });
+  });
+
+  test.describe("Web Search with Citations", () => {
+    const WEB_SEARCH_DOCUMENTS: MockDocument[] = [
+      {
+        document_id: "web-doc-1",
+        semantic_identifier: "Onyx Documentation - Getting Started",
+        link: "https://docs.onyx.app/getting-started",
+        source_type: "web",
+        blurb:
+          "Onyx is an open-source enterprise search and AI platform. Deploy in minutes with Docker Compose.",
+        is_internet: true,
+      },
+      {
+        document_id: "web-doc-2",
+        semantic_identifier: "Onyx GitHub Repository",
+        link: "https://github.com/onyx-dot-app/onyx",
+        source_type: "web",
+        blurb:
+          "Open-source Gen-AI platform with 30+ connectors. MIT licensed community edition.",
+        is_internet: true,
+      },
+      {
+        document_id: "web-doc-3",
+        semantic_identifier: "Enterprise Search Comparison 2025",
+        link: "https://example.com/enterprise-search-comparison",
+        source_type: "web",
+        blurb:
+          "Comparing top enterprise search platforms including Onyx, Glean, and Coveo.",
+        is_internet: true,
+      },
+    ];
+
+    const WEB_SEARCH_RESPONSE = `Based on my web search, here's what I found about Onyx:
+
+Onyx is an open-source enterprise search and AI platform that can be deployed in minutes using Docker Compose [D1]. The project is hosted on GitHub and is MIT licensed for the community edition, with over 30 connectors available [D2].
+
+In comparisons with other enterprise search platforms, Onyx stands out for its open-source nature and self-hosted deployment option [D3]. Unlike proprietary alternatives, you maintain full control over your data and infrastructure.
+
+Key advantages include:
+
+- **Self-hosted**: Deploy on your own infrastructure
+- **Open source**: Full visibility into the codebase [D2]
+- **Quick setup**: Get running in under 5 minutes [D1]
+- **Extensible**: 30+ pre-built connectors with custom connector support`;
+
+    test("web search response with citations renders correctly", async ({
+      page,
+    }) => {
+      await openChat(page);
+
+      await page.route("**/api/chat/send-chat-message", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/plain",
+          body: buildMockSearchStream({
+            content: WEB_SEARCH_RESPONSE,
+            queries: ["Onyx enterprise search platform overview"],
+            documents: WEB_SEARCH_DOCUMENTS,
+            citations: {
+              1: "web-doc-1",
+              2: "web-doc-2",
+              3: "web-doc-3",
+            },
+            isInternetSearch: true,
+          }),
+        });
+      });
+
+      await sendMessage(page, "Search the web for information about Onyx");
+
+      const aiMessage = page.getByTestId("onyx-ai-message").first();
+      await expect(aiMessage).toContainText("open-source enterprise search");
+      await expect(aiMessage).toContainText("Docker Compose");
+      await expect(aiMessage).toContainText("MIT licensed");
+
+      await screenshotChatContainer(page, "chat-web-search-with-citations");
+    });
+
+    test("internal document search response renders correctly", async ({
+      page,
+    }) => {
+      const internalDocs: MockDocument[] = [
+        {
+          document_id: "confluence-doc-1",
+          semantic_identifier: "Q3 2025 Engineering Roadmap",
+          link: "https://company.atlassian.net/wiki/spaces/ENG/pages/123",
+          source_type: "confluence",
+          blurb:
+            "Engineering priorities for Q3 include platform stability, new connector integrations, and performance improvements.",
+          is_internet: false,
+        },
+        {
+          document_id: "gdrive-doc-1",
+          semantic_identifier: "Platform Architecture Overview.pdf",
+          link: "https://drive.google.com/file/d/abc123",
+          source_type: "google_drive",
+          blurb:
+            "Onyx platform architecture document covering microservices, data flow, and deployment topology.",
+          is_internet: false,
+        },
+      ];
+
+      const internalResponse = `Based on your company's internal documents, here is the engineering roadmap:
+
+The Q3 2025 priorities focus on three main areas [D1]:
+
+1. **Platform stability** — Improving error handling and retry mechanisms across all connectors
+2. **New integrations** — Adding support for ServiceNow and Zendesk connectors
+3. **Performance** — Optimizing vector search latency and reducing indexing time
+
+The platform architecture document provides additional context on how these improvements fit into the overall system design [D2]. The microservices architecture allows each component to be scaled independently.`;
+
+      await openChat(page);
+
+      await page.route("**/api/chat/send-chat-message", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/plain",
+          body: buildMockSearchStream({
+            content: internalResponse,
+            queries: ["Q3 engineering roadmap priorities"],
+            documents: internalDocs,
+            citations: {
+              1: "confluence-doc-1",
+              2: "gdrive-doc-1",
+            },
+            isInternetSearch: false,
+          }),
+        });
+      });
+
+      await sendMessage(page, "What are our engineering priorities for Q3?");
+
+      const aiMessage = page.getByTestId("onyx-ai-message").first();
+      await expect(aiMessage).toContainText("Platform stability");
+      await expect(aiMessage).toContainText("New integrations");
+      await expect(aiMessage).toContainText("Performance");
+
+      await screenshotChatContainer(
+        page,
+        "chat-internal-search-with-citations"
+      );
     });
   });
 
