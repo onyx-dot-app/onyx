@@ -303,9 +303,6 @@ export interface SourceTagProps {
 
   /** Tooltip text shown when query is truncated (defaults to displayName) */
   tooltipText?: string;
-
-  /** Test ID forwarded to the root button element */
-  "data-testid"?: string;
 }
 
 /**
@@ -369,7 +366,6 @@ const SourceTagInner = ({
   isMore,
   toggleSource,
   tooltipText,
-  "data-testid": dataTestId,
 }: SourceTagProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -446,7 +442,6 @@ const SourceTagInner = ({
   const buttonContent = (
     <button
       type="button"
-      data-testid={dataTestId}
       className={cn(
         "group inline-flex items-center transition-all duration-150",
         "appearance-none border-none",

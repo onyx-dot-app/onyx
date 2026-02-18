@@ -469,7 +469,6 @@ for (const theme of THEMES) {
         "AgentMessage/copy-button",
         "AgentMessage/like-button",
         "AgentMessage/dislike-button",
-        "AgentMessage/sources-tag",
       ] as const;
 
       async function screenshotToolbarButtonHoverStates(
@@ -486,6 +485,15 @@ for (const theme of THEMES) {
           const buttonSlug = buttonTestId.split("/")[1];
           await expectElementScreenshot(toolbar, {
             name: `${namePrefix}-toolbar-${buttonSlug}-hover-${theme}`,
+          });
+        }
+
+        // Sources tag is located by role+name since SourceTag has no testid.
+        const sourcesButton = toolbar.getByRole("button", { name: "Sources" });
+        if (await sourcesButton.isVisible()) {
+          await sourcesButton.hover();
+          await expectElementScreenshot(toolbar, {
+            name: `${namePrefix}-toolbar-sources-hover-${theme}`,
           });
         }
 
