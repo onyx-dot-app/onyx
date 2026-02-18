@@ -4,9 +4,11 @@ import { useMemo } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Button from "@/refresh-components/buttons/Button";
 import {
+  SvgKey,
   SvgLink,
   SvgOrganization,
   SvgShare,
+  SvgUser,
   SvgUsers,
   SvgX,
 } from "@opal/icons";
@@ -16,7 +18,6 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboB
 import * as InputLayouts from "@/layouts/input-layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { SvgUser } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import useShareableUsers from "@/hooks/useShareableUsers";
@@ -29,6 +30,7 @@ import { Button as OpalButton } from "@opal/components";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
 const USERS_AND_GROUPS_TAB = "Users & Groups";
+const SERVICE_ACCOUNTS_TAB = "Service Accounts";
 
 // ============================================================================
 // Types
@@ -52,12 +54,23 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   const { values, setFieldValue, handleSubmit, dirty } =
     useFormikContext<ShareAgentFormValues>();
   const { data: usersData } = useShareableUsers({ includeApiKeys: false });
+  const { data: usersAndApiKeysData } = useShareableUsers({
+    includeApiKeys: true,
+  });
   const { data: groupsData } = useShareableGroups();
   const { user: currentUser } = useUser();
   const { agent: fullAgent } = useAgent(agentId ?? null);
   const shareAgentModal = useModal();
 
   const acceptedUsers = usersData ?? [];
+  const apiKeyUsers = useMemo(() => {
+    if (!usersData || !usersAndApiKeysData) {
+      return [];
+    }
+
+    const acceptedUserIds = new Set(usersData.map((user) => user.id));
+    return usersAndApiKeysData.filter((user) => !acceptedUserIds.has(user.id));
+  }, [usersAndApiKeysData, usersData]);
   const groups = groupsData ?? [];
 
   // Create options for InputComboBox from all accepted users and groups
@@ -77,6 +90,15 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     return [...userOptions, ...groupOptions];
   }, [acceptedUsers, groups, currentUser?.id]);
 
+  const apiKeyComboBoxOptions = useMemo(
+    () =>
+      apiKeyUsers.map((user) => ({
+        value: `user-${user.id}`,
+        label: user.display_name || user.email,
+      })),
+    [apiKeyUsers]
+  );
+
   // Compute owner and displayed users
   const ownerId = fullAgent?.owner?.id;
   const owner = ownerId
@@ -93,6 +115,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
   // Compute displayed groups based on current form values
   const displayedGroups = groups.filter((group) =>
     values.selectedGroupIds.includes(group.id)
+  );
+  const displayedApiKeyUsers = apiKeyUsers.filter((user) =>
+    values.selectedUserIds.includes(user.id)
   );
 
   // Handlers
@@ -157,6 +182,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                 value={YOUR_ORGANIZATION_TAB}
               >
                 {YOUR_ORGANIZATION_TAB}
+              </Tabs.Trigger>
+              <Tabs.Trigger icon={SvgKey} value={SERVICE_ACCOUNTS_TAB}>
+                {SERVICE_ACCOUNTS_TAB}
               </Tabs.Trigger>
             </Tabs.List>
 
@@ -232,6 +260,39 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               </Section>
             </Tabs.Content>
 
+            <Tabs.Content value={SERVICE_ACCOUNTS_TAB}>
+              <Section gap={0.5} alignItems="start">
+                <InputComboBox
+                  placeholder="Add service accounts"
+                  value=""
+                  onChange={() => {}}
+                  onValueChange={handleComboBoxSelect}
+                  options={apiKeyComboBoxOptions}
+                  strict
+                />
+                {displayedApiKeyUsers.length > 0 && (
+                  <Section gap={0} alignItems="stretch">
+                    {displayedApiKeyUsers.map((apiKeyUser) => (
+                      <LineItem
+                        key={`api-key-user-${apiKeyUser.id}`}
+                        icon={SvgKey}
+                        rightChildren={
+                          <OpalButton
+                            prominence="tertiary"
+                            size="sm"
+                            icon={SvgX}
+                            onClick={() => handleRemoveUser(apiKeyUser.id)}
+                          />
+                        }
+                      >
+                        {apiKeyUser.display_name || apiKeyUser.email}
+                      </LineItem>
+                    ))}
+                  </Section>
+                )}
+              </Section>
+            </Tabs.Content>
+
             <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
               <InputLayouts.Horizontal
                 title="Publish This Agent"
@@ -255,7 +316,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
           }
           cancel={
             <Button secondary onClick={handleClose}>
-              Done
+              Cancel
             </Button>
           }
           submit={

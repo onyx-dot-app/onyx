@@ -134,6 +134,7 @@ export interface InvitedUserSnapshot {
 export interface MinimalUserSnapshot {
   id: string;
   email: string;
+  display_name?: string | null; // For API key users, this is the API key name
 }
 
 export type ValidInputTypes =

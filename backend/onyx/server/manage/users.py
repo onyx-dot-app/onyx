@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import cast
+from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError
@@ -18,6 +19,7 @@ from fastapi import Query
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
@@ -44,10 +46,12 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import UserFileStatus
+from onyx.db.models import ApiKey
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.user_preferences import activate_user
@@ -605,8 +609,33 @@ def list_all_users_basic_info(
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     users = get_all_users(db_session)
+    api_key_name_by_user_id: dict[UUID, str] = {}
+
+    if include_api_keys:
+        api_key_user_ids = [
+            user.id for user in users if is_api_key_email_address(user.email)
+        ]
+        if api_key_user_ids:
+            api_key_rows = db_session.execute(
+                select(ApiKey.user_id, ApiKey.name).where(
+                    ApiKey.user_id.in_(api_key_user_ids)
+                )
+            ).all()
+            api_key_name_by_user_id = {
+                user_id: api_key_name or UNNAMED_KEY_PLACEHOLDER
+                for user_id, api_key_name in api_key_rows
+            }
+
     return [
-        MinimalUserSnapshot(id=user.id, email=user.email)
+        MinimalUserSnapshot(
+            id=user.id,
+            email=user.email,
+            display_name=(
+                api_key_name_by_user_id.get(user.id)
+                if is_api_key_email_address(user.email)
+                else None
+            ),
+        )
         for user in users
         if include_api_keys or not is_api_key_email_address(user.email)
     ]

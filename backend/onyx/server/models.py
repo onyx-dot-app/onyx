@@ -29,6 +29,7 @@ class IdReturn(BaseModel):
 class MinimalUserSnapshot(BaseModel):
     id: UUID
     email: str
+    display_name: str | None = None  # For API key users, this is the API key name
 
 
 class FullUserSnapshot(BaseModel):
