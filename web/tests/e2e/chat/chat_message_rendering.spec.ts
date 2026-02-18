@@ -1,10 +1,7 @@
 import { expect, Page, test } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
-import {
-  expectScreenshot,
-  expectElementScreenshot,
-} from "@tests/e2e/utils/visualRegression";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const SHORT_USER_MESSAGE = "What is Onyx?";
 
@@ -167,6 +164,15 @@ async function mockChatEndpointSequence(
   });
 }
 
+async function screenshotChatContainer(
+  page: Page,
+  name: string
+): Promise<void> {
+  const container = page.locator("[data-main-container]");
+  await expect(container).toBeVisible();
+  await expectElementScreenshot(container, { name });
+}
+
 test.describe("Chat Message Rendering", () => {
   test.beforeEach(async ({ page }) => {
     turnCounter = 0;
@@ -189,18 +195,7 @@ test.describe("Chat Message Rendering", () => {
       const aiMessage = page.getByTestId("onyx-ai-message").first();
       await expect(aiMessage).toContainText("open-source AI-powered");
 
-      await expectScreenshot(page, {
-        name: "chat-short-message-short-response",
-        mask: ['[data-testid="AppSidebar/new-session"]'],
-      });
-
-      await expectElementScreenshot(userMessage, {
-        name: "chat-short-user-message",
-      });
-
-      await expectElementScreenshot(aiMessage, {
-        name: "chat-short-ai-response",
-      });
+      await screenshotChatContainer(page, "chat-short-message-short-response");
     });
   });
 
@@ -217,9 +212,10 @@ test.describe("Chat Message Rendering", () => {
       await expect(userMessage).toContainText("real-time or near-real-time");
       await expect(userMessage).toContainText("architecture of the AI chat");
 
-      await expectElementScreenshot(userMessage, {
-        name: "chat-long-user-message",
-      });
+      await screenshotChatContainer(
+        page,
+        "chat-long-user-message-short-response"
+      );
     });
 
     test("long AI response with markdown renders correctly", async ({
@@ -236,14 +232,7 @@ test.describe("Chat Message Rendering", () => {
       await expect(aiMessage).toContainText("Indexing Latency");
       await expect(aiMessage).toContainText("AI Chat Architecture");
 
-      await expectScreenshot(page, {
-        name: "chat-short-message-long-response",
-        fullPage: true,
-      });
-
-      await expectElementScreenshot(aiMessage, {
-        name: "chat-long-ai-response",
-      });
+      await screenshotChatContainer(page, "chat-short-message-long-response");
     });
 
     test("long user message with long AI response renders correctly", async ({
@@ -260,10 +249,7 @@ test.describe("Chat Message Rendering", () => {
       const aiMessage = page.getByTestId("onyx-ai-message").first();
       await expect(aiMessage).toContainText("Retrieval-Augmented Generation");
 
-      await expectScreenshot(page, {
-        name: "chat-long-message-long-response",
-        fullPage: true,
-      });
+      await screenshotChatContainer(page, "chat-long-message-long-response");
     });
   });
 
@@ -281,9 +267,7 @@ test.describe("Chat Message Rendering", () => {
       await expect(aiMessage).toContainText("OnyxClient");
       await expect(aiMessage).toContainText("Privacy");
 
-      await expectElementScreenshot(aiMessage, {
-        name: "chat-markdown-code-response",
-      });
+      await screenshotChatContainer(page, "chat-markdown-code-response");
     });
   });
 
@@ -319,10 +303,7 @@ test.describe("Chat Message Rendering", () => {
       const userMessages = page.locator("#onyx-human-message");
       await expect(userMessages).toHaveCount(3);
 
-      await expectScreenshot(page, {
-        name: "chat-multi-turn-conversation",
-        fullPage: true,
-      });
+      await screenshotChatContainer(page, "chat-multi-turn-conversation");
     });
 
     test("multi-turn with mixed message lengths renders correctly", async ({
@@ -344,10 +325,7 @@ test.describe("Chat Message Rendering", () => {
         timeout: 30000,
       });
 
-      await expectScreenshot(page, {
-        name: "chat-multi-turn-mixed-lengths",
-        fullPage: true,
-      });
+      await screenshotChatContainer(page, "chat-multi-turn-mixed-lengths");
     });
   });
 
@@ -366,9 +344,7 @@ test.describe("Chat Message Rendering", () => {
       const editButton = userMessage.getByTestId("HumanMessage/edit-button");
       await expect(editButton).toBeVisible({ timeout: 5000 });
 
-      await expectElementScreenshot(userMessage, {
-        name: "chat-user-message-hover-state",
-      });
+      await screenshotChatContainer(page, "chat-user-message-hover-state");
     });
 
     test("AI message toolbar is visible after response completes", async ({
@@ -391,9 +367,7 @@ test.describe("Chat Message Rendering", () => {
       await expect(likeButton).toBeVisible();
       await expect(dislikeButton).toBeVisible();
 
-      await expectElementScreenshot(aiMessage, {
-        name: "chat-ai-message-with-toolbar",
-      });
+      await screenshotChatContainer(page, "chat-ai-message-with-toolbar");
     });
   });
 });
