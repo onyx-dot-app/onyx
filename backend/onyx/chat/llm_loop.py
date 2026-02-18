@@ -587,7 +587,6 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
-
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
