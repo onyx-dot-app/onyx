@@ -2,6 +2,7 @@
 
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _sanitize_llm_output
+from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.server.query_and_chat.placement import Placement
 
@@ -211,3 +212,79 @@ class TestExtractToolCallsFromResponseText:
             {"queries": ["alpha"]},
             {"queries": ["alpha"]},
         ]
+
+    def test_extracts_xml_style_invoke_tool_call(self) -> None:
+        response_text = """
+<function_calls>
+<invoke name="internal_search">
+<parameter name="queries" string="false">["Onyx documentation", "Onyx docs", "Onyx platform"]</parameter>
+</invoke>
+</function_calls>
+"""
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 1
+        assert tool_calls[0].tool_name == "internal_search"
+        assert tool_calls[0].tool_args == {
+            "queries": ["Onyx documentation", "Onyx docs", "Onyx platform"]
+        }
+
+    def test_ignores_unknown_tool_in_xml_style_invoke(self) -> None:
+        response_text = """
+<function_calls>
+<invoke name="unknown_tool">
+<parameter name="queries" string="false">["Onyx docs"]</parameter>
+</invoke>
+</function_calls>
+"""
+        tool_calls = extract_tool_calls_from_response_text(
+            response_text=response_text,
+            tool_definitions=self._tool_defs(),
+            placement=self._placement(),
+        )
+        assert len(tool_calls) == 0
+
+
+class TestXmlToolCallContentFilter:
+    def test_strips_function_calls_block_single_chunk(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process(
+            "prefix "
+            '<function_calls><invoke name="internal_search">'
+            '<parameter name="queries" string="false">["Onyx docs"]</parameter>'
+            "</invoke></function_calls> suffix"
+        )
+        output += f.flush()
+        assert output == "prefix  suffix"
+
+    def test_strips_function_calls_block_split_across_chunks(self) -> None:
+        f = _XmlToolCallContentFilter()
+        chunks = [
+            "Start ",
+            "<function_",
+            'calls><invoke name="internal_search">',
+            '<parameter name="queries" string="false">["Onyx docs"]',
+            "</parameter></invoke></function_calls>",
+            " End",
+        ]
+        output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
+        assert output == "Start  End"
+
+    def test_preserves_non_tool_call_xml(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process("A <tag>value</tag> B")
+        output += f.flush()
+        assert output == "A <tag>value</tag> B"
+
+    def test_does_not_strip_similar_tag_names(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process(
+            "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
+        )
+        output += f.flush()
+        assert (
+            output == "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
+        )
