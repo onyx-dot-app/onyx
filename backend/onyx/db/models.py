@@ -77,6 +77,7 @@ from onyx.db.enums import (
     ThemePreference,
     DefaultAppMode,
     SwitchoverType,
+    SharingScope,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -4712,8 +4713,11 @@ class BuildSession(Base):
     demo_data_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true")
     )
-    is_public: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
+    sharing_scope: Mapped[SharingScope] = mapped_column(
+        Enum(SharingScope, native_enum=False, name="sharingscopetype"),
+        nullable=False,
+        default=SharingScope.PRIVATE,
+        server_default="private",
     )
 
     # Relationships

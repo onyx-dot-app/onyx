@@ -625,8 +625,8 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
               key={session.id}
               sessionId={session.id}
               webappUrl={displayUrl}
-              isPublic={webappInfo?.is_public ?? false}
-              onPublicChange={mutate}
+              sharingScope={webappInfo?.sharing_scope ?? "private"}
+              onScopeChange={mutate}
             />
           ) : undefined
         }

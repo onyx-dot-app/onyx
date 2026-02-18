@@ -1765,7 +1765,7 @@ class SessionManager:
                 "webapp_url": None,
                 "status": "no_sandbox",
                 "ready": False,
-                "is_public": session.is_public,
+                "sharing_scope": session.sharing_scope,
             }
 
         # Return the proxy URL - the proxy handles routing to the correct sandbox
@@ -1792,7 +1792,7 @@ class SessionManager:
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
             "ready": ready,
-            "is_public": session.is_public,
+            "sharing_scope": session.sharing_scope,
         }
 
     def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:

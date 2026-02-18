@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SharingScope
 from onyx.db.models import Artifact
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
@@ -159,13 +160,13 @@ def update_session_status(
         logger.info(f"Updated build session {session_id} status to {status}")
 
 
-def set_build_session_public_status(
+def set_build_session_sharing_scope(
     session_id: UUID,
     user_id: UUID,
-    is_public: bool,
+    sharing_scope: SharingScope,
     db_session: Session,
 ) -> BuildSession | None:
-    """Set the public/private status of a build session.
+    """Set the sharing scope of a build session.
 
     Only the session owner can change this setting.
     Returns the updated session, or None if not found/unauthorized.
@@ -173,9 +174,9 @@ def set_build_session_public_status(
     session = get_build_session(session_id, user_id, db_session)
     if not session:
         return None
-    session.is_public = is_public
+    session.sharing_scope = sharing_scope
     db_session.commit()
-    logger.info(f"Set build session {session_id} is_public={is_public}")
+    logger.info(f"Set build session {session_id} sharing_scope={sharing_scope}")
     return session
 
 

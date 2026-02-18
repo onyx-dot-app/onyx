@@ -11,6 +11,7 @@ import {
   StreamPacket,
   UsageLimits,
   DirectoryListing,
+  SharingScope,
 } from "@/app/craft/types/streamingTypes";
 
 // =============================================================================
@@ -198,18 +199,18 @@ export async function updateSessionName(
   }
 }
 
-export async function setSessionPublic(
+export async function setSessionSharing(
   sessionId: string,
-  isPublic: boolean
-): Promise<{ session_id: string; is_public: boolean }> {
+  sharingScope: SharingScope
+): Promise<{ session_id: string; sharing_scope: SharingScope }> {
   const res = await fetch(`${API_BASE}/sessions/${sessionId}/public`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ is_public: isPublic }),
+    body: JSON.stringify({ sharing_scope: sharingScope }),
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to update session visibility: ${res.status}`);
+    throw new Error(`Failed to update session sharing: ${res.status}`);
   }
 
   return res.json();

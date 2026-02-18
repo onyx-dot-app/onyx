@@ -18,6 +18,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.enums import SharingScope
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import BuildSession
 from onyx.db.models import User
@@ -374,17 +375,20 @@ def _check_webapp_access(
 ) -> BuildSession:
     """Check if user can access a session's webapp.
 
-    - Public sessions: accessible by anyone (no auth required)
-    - Private sessions: only accessible by the session owner
-
-    Returns the session if access is granted, raises HTTPException otherwise.
+    - public_global: accessible by anyone (no auth required)
+    - public_org: accessible by any authenticated user
+    - private: only accessible by the session owner
     """
     session = db_session.get(BuildSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.is_public:
+    if session.sharing_scope == SharingScope.PUBLIC_GLOBAL:
         return session
-    # Private session: require authenticated owner
+    if session.sharing_scope == SharingScope.PUBLIC_ORG:
+        if user is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return session
+    # PRIVATE: require owner
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     if session.user_id != user.id:
@@ -489,7 +493,7 @@ def _offline_html_response() -> Response:
 
 
 # Public router for webapp proxy — no authentication required
-# (access controlled per-session via is_public flag)
+# (access controlled per-session via sharing_scope)
 public_build_router = APIRouter(prefix="/build")
 
 
@@ -502,7 +506,7 @@ def get_webapp_root(
 ) -> StreamingResponse | Response:
     """Proxy the root path of the webapp for a specific session.
 
-    Accessible without authentication when session.is_public=True.
+    Accessible without authentication when sharing_scope is public_global.
     Returns a friendly offline page when the sandbox is not running.
     """
     _check_webapp_access(session_id, user, db_session)
@@ -526,7 +530,7 @@ def get_webapp_path(
 ) -> StreamingResponse | Response:
     """Proxy any subpath of the webapp for a specific session.
 
-    Accessible without authentication when session.is_public=True.
+    Accessible without authentication when sharing_scope is public_global.
     Returns a friendly offline page when the sandbox is not running.
     """
     _check_webapp_access(session_id, user, db_session)

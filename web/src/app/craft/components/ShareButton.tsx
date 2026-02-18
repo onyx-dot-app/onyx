@@ -3,37 +3,60 @@
 import { useState, useRef, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
-import Switch from "@/refresh-components/inputs/Switch";
 import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
-import { setSessionPublic } from "@/app/craft/services/apiServices";
+import { setSessionSharing } from "@/app/craft/services/apiServices";
+import type { SharingScope } from "@/app/craft/types/streamingTypes";
+import { cn } from "@/lib/utils";
 
 interface ShareButtonProps {
   sessionId: string;
   webappUrl: string;
-  isPublic: boolean;
-  onPublicChange?: () => void;
+  sharingScope: SharingScope;
+  onScopeChange?: () => void;
 }
+
+const SCOPE_OPTIONS: {
+  value: SharingScope;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "private",
+    label: "Private",
+    description: "Only you can view this app.",
+  },
+  {
+    value: "public_org",
+    label: "Org",
+    description: "Anyone logged into your Onyx can view this app.",
+  },
+  {
+    value: "public_global",
+    label: "Public",
+    description: "Anyone with the link can view this app.",
+  },
+];
 
 export default function ShareButton({
   sessionId,
   webappUrl,
-  isPublic: initialIsPublic,
-  onPublicChange,
+  sharingScope: initialScope,
+  onScopeChange,
 }: ShareButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isPublic, setIsPublic] = useState(initialIsPublic);
+  const [sharingScope, setSharingScope] = useState<SharingScope>(initialScope);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
     "idle"
   );
   const [isLoading, setIsLoading] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Build the full share URL from the webapp URL path
+  const isShared = sharingScope !== "private";
+
   const shareUrl = webappUrl.startsWith("http")
     ? webappUrl
     : `${window.location.origin}${webappUrl}`;
 
-  // Close popover on outside click
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: MouseEvent) => {
@@ -48,12 +71,13 @@ export default function ShareButton({
     return () => document.removeEventListener("mousedown", handler);
   }, [isOpen]);
 
-  const handleToggle = async (newValue: boolean) => {
+  const handleSelect = async (scope: SharingScope) => {
+    if (scope === sharingScope || isLoading) return;
     setIsLoading(true);
     try {
-      await setSessionPublic(sessionId, newValue);
-      setIsPublic(newValue);
-      onPublicChange?.();
+      await setSessionSharing(sessionId, scope);
+      setSharingScope(scope);
+      onScopeChange?.();
     } catch (err) {
       console.error("Failed to update sharing:", err);
     } finally {
@@ -67,7 +91,6 @@ export default function ShareButton({
       await navigator.clipboard.writeText(shareUrl);
       success = true;
     } catch {
-      // Clipboard API unavailable (HTTP context or permission denied) — try execCommand
       try {
         const el = document.createElement("textarea");
         el.value = shareUrl;
@@ -77,9 +100,7 @@ export default function ShareButton({
         el.select();
         success = document.execCommand("copy");
         document.body.removeChild(el);
-      } catch {
-        // Both methods failed
-      }
+      } catch {}
     }
     setCopyState(success ? "copied" : "error");
     setTimeout(() => setCopyState("idle"), 2000);
@@ -89,38 +110,50 @@ export default function ShareButton({
     <div className="relative flex-shrink-0" ref={popoverRef}>
       <Button
         action
-        primary={isPublic}
-        tertiary={!isPublic}
+        primary={isShared}
+        tertiary={!isShared}
         leftIcon={SvgLink}
         onClick={() => setIsOpen((v) => !v)}
         aria-label="Share webapp"
       >
-        {isPublic ? "Shared" : "Share"}
+        {isShared ? "Shared" : "Share"}
       </Button>
 
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 z-50 w-80 rounded-12 border border-border-01 bg-background-neutral-00 shadow-lg p-4 flex flex-col gap-3">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <Text mainUiAction text04>
-              Share app
-            </Text>
-            <Switch
-              checked={isPublic}
-              disabled={isLoading}
-              onCheckedChange={handleToggle}
-            />
-          </div>
-
-          {/* Description */}
-          <Text secondaryBody text03>
-            {isPublic
-              ? "Anyone with the link can view this app."
-              : "Enable sharing to let anyone view this app with a link."}
+          <Text mainUiAction text04>
+            Share app
           </Text>
 
-          {/* URL row - only shown when public */}
-          {isPublic && (
+          {/* Scope selector */}
+          <div className="flex flex-col gap-1">
+            {SCOPE_OPTIONS.map((opt) => (
+              <div
+                key={opt.value}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleSelect(opt.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSelect(opt.value)}
+                aria-disabled={isLoading}
+                className={cn(
+                  "flex flex-col items-start gap-0.5 px-3 py-2 rounded-08 text-left transition-colors cursor-pointer",
+                  sharingScope === opt.value
+                    ? "bg-background-tint-03"
+                    : "hover:bg-background-tint-02"
+                )}
+              >
+                <Text mainUiAction text04>
+                  {opt.label}
+                </Text>
+                <Text secondaryBody text03>
+                  {opt.description}
+                </Text>
+              </div>
+            ))}
+          </div>
+
+          {/* Copy link row — shown when not private */}
+          {isShared && (
             <div className="flex items-center gap-2 p-2 rounded-08 bg-background-tint-02">
               <Text secondaryBody text03 className="flex-1 truncate">
                 {shareUrl}
