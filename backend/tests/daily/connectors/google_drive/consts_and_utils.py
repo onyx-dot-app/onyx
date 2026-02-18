@@ -363,7 +363,7 @@ EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A = _node(
 )
 EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B = _node(
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
-    "perm_sync_drive_785db121-0823-4ebe-8689-ad7f52405e32",
+    "perm_sync_drive_d8dc3649-3f65-4392-b87f-4b20e0389673",
     HierarchyNodeType.SHARED_DRIVE,
 )
 
@@ -380,7 +380,7 @@ EXPECTED_TEST_USER_1_DRIVE_B_FOLDER = _node(
 )
 EXPECTED_TEST_USER_1_EXTRA_DRIVE_1 = _node(
     TEST_USER_1_EXTRA_DRIVE_1_ID,
-    "Okay_fine_admin_I_will_share",
+    "Okay_Admin_fine_I_will_share",
     HierarchyNodeType.SHARED_DRIVE,
 )
 EXPECTED_TEST_USER_1_EXTRA_DRIVE_2 = _node(

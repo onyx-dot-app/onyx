@@ -615,8 +615,12 @@ class GoogleDriveConnector(
                 # Check shared drive root first (simple ID comparison)
                 if _is_shared_drive_root(folder):
                     # files().get() returns 'Drive' for shared drive roots;
-                    # fetch the real name via drives().get()
-                    drive_name = get_shared_drive_name(service, current_id)
+                    # fetch the real name via drives().get().
+                    # Try both the retriever and admin since the admin may
+                    # not have access to private shared drives.
+                    drive_name = self._get_shared_drive_name(
+                        current_id, file.user_email
+                    )
                     if drive_name:
                         node.display_name = drive_name
                     node.node_type = HierarchyNodeType.SHARED_DRIVE
@@ -693,6 +697,15 @@ class GoogleDriveConnector(
             f"All attempts failed to fetch folder {folder_id} "
             f"(tried {retriever_email} and {self.primary_admin_email})"
         )
+        return None
+
+    def _get_shared_drive_name(self, drive_id: str, retriever_email: str) -> str | None:
+        """Fetch the name of a shared drive, trying both the retriever and admin."""
+        for email in {retriever_email, self.primary_admin_email}:
+            svc = get_drive_service(self.creds, email)
+            name = get_shared_drive_name(svc, drive_id)
+            if name:
+                return name
         return None
 
     def get_all_drive_ids(self) -> set[str]:
