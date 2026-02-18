@@ -4714,7 +4714,7 @@ class BuildSession(Base):
         Boolean, nullable=False, server_default=text("true")
     )
     sharing_scope: Mapped[SharingScope] = mapped_column(
-        Enum(SharingScope, native_enum=False, name="sharingscopetype"),
+        String,
         nullable=False,
         default=SharingScope.PRIVATE,
         server_default="private",
