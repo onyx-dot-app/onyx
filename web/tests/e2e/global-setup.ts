@@ -2,7 +2,6 @@ import { FullConfig, request } from "@playwright/test";
 import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
-  TEST_USER_CREDENTIALS,
   workerUserCredentials,
 } from "@tests/e2e/constants";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
@@ -159,16 +158,11 @@ async function globalSetup(config: FullConfig) {
 
   // ── Provision test users via API ─────────────────────────────────────
   // The first user registered becomes the admin automatically.
-  // Order matters: admin first, then named users, then worker users.
+  // Order matters: admin first, then admin2, then worker users.
   await ensureUserExists(
     baseURL,
     TEST_ADMIN_CREDENTIALS.email,
     TEST_ADMIN_CREDENTIALS.password
-  );
-  await ensureUserExists(
-    baseURL,
-    TEST_USER_CREDENTIALS.email,
-    TEST_USER_CREDENTIALS.password
   );
   await ensureUserExists(
     baseURL,
@@ -195,13 +189,6 @@ async function globalSetup(config: FullConfig) {
     baseURL,
     "admin_auth.json",
     TEST_ADMIN2_CREDENTIALS.email
-  );
-
-  await apiLoginAndSaveState(
-    baseURL,
-    TEST_USER_CREDENTIALS.email,
-    TEST_USER_CREDENTIALS.password,
-    "user_auth.json"
   );
 
   await apiLoginAndSaveState(

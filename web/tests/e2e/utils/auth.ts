@@ -2,7 +2,6 @@ import type { Page } from "@playwright/test";
 import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_ADMIN_CREDENTIALS,
-  TEST_USER_CREDENTIALS,
   workerUserCredentials,
 } from "@tests/e2e/constants";
 
@@ -24,18 +23,14 @@ export async function apiLogin(
   }
 }
 
-// Logs in a known test user (admin, user, or admin2) via the API.
+// Logs in a known test user (admin or admin2) via the API.
 // Users must already be provisioned (see global-setup.ts).
 export async function loginAs(
   page: Page,
-  userType: "admin" | "user" | "admin2"
+  userType: "admin" | "admin2"
 ): Promise<void> {
   const { email, password } =
-    userType === "admin"
-      ? TEST_ADMIN_CREDENTIALS
-      : userType === "admin2"
-        ? TEST_ADMIN2_CREDENTIALS
-        : TEST_USER_CREDENTIALS;
+    userType === "admin" ? TEST_ADMIN_CREDENTIALS : TEST_ADMIN2_CREDENTIALS;
 
   await apiLogin(page, email, password);
 }
