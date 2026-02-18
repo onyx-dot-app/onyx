@@ -188,7 +188,7 @@ class ImapConnector(
         for email_id in current_todos:
             email_msg = _fetch_email(mail_client=mail_client, email_id=email_id)
             if not email_msg:
-                logger.warn(f"Failed to fetch message {email_id=}; skipping")
+                logger.warning(f"Failed to fetch message {email_id=}; skipping")
                 continue
 
             email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
@@ -398,7 +398,7 @@ def _parse_email_body(
         try:
             raw_payload = part.get_payload(decode=True)
             if not isinstance(raw_payload, bytes):
-                logger.warn(
+                logger.warning(
                     "Payload section from email was expected to be an array of bytes, instead got "
                     f"{type(raw_payload)=}, {raw_payload=}"
                 )
@@ -410,7 +410,7 @@ def _parse_email_body(
             continue
 
     if not body:
-        logger.warn(
+        logger.warning(
             f"Email with {email_headers.id=} has an empty body; returning an empty string"
         )
         return ""
