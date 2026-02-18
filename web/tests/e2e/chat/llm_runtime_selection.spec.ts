@@ -1,5 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   selectModelFromInputPopover,
   sendMessage,
@@ -7,6 +7,10 @@ import {
   verifyCurrentModel,
 } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import {
+  expectScreenshot,
+  expectElementScreenshot,
+} from "@tests/e2e/utils/visualRegression";
 
 type SendChatMessagePayload = {
   llm_override?: {
@@ -26,12 +30,14 @@ async function openChat(page: Page): Promise<void> {
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
 }
 
-async function loginWithCleanCookies(
-  page: Page,
-  user: "admin" | "user"
-): Promise<void> {
+async function loginWithCleanCookies(page: Page): Promise<void> {
   await page.context().clearCookies();
-  await loginAs(page, user);
+  await loginAs(page, "admin");
+}
+
+async function loginAsRandomUserWithCleanCookies(page: Page): Promise<void> {
+  await page.context().clearCookies();
+  await loginAsRandomUser(page);
 }
 
 async function createLlmProvider(
@@ -160,11 +166,11 @@ test.describe("LLM Runtime Selection", () => {
   test.beforeEach(async ({ page }) => {
     providersToCleanup = [];
     groupsToCleanup = [];
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
   });
 
   test.afterEach(async ({ page }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const client = new OnyxApiClient(page.request);
     const providerIds = Array.from(new Set(providersToCleanup));
@@ -192,7 +198,7 @@ test.describe("LLM Runtime Selection", () => {
   test("model selection persists across refresh and subsequent messages in the same chat", async ({
     page,
   }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
     const persistenceModelName = `persist-runtime-model-${Date.now()}`;
@@ -207,7 +213,7 @@ test.describe("LLM Runtime Selection", () => {
       persistenceProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
     await openChat(page);
 
     let turn = 0;
@@ -224,6 +230,12 @@ test.describe("LLM Runtime Selection", () => {
       persistenceModelName,
     ]);
     await verifyCurrentModel(page, selectedModelDisplay);
+
+    const inputBar = page.locator("#onyx-chat-input");
+    await inputBar.waitFor({ state: "visible", timeout: 10000 });
+    await expectElementScreenshot(inputBar, {
+      name: "llm-runtime-selection-model-selected-in-input-bar",
+    });
 
     const firstPayload = await sendMessageAndCapturePayload(
       page,
@@ -242,6 +254,10 @@ test.describe("LLM Runtime Selection", () => {
     await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
 
     await verifyCurrentModel(page, selectedModelDisplay);
+
+    await expectElementScreenshot(page.locator("#onyx-chat-input"), {
+      name: "llm-runtime-selection-model-persists-after-reload",
+    });
 
     const secondPayload = await sendMessageAndCapturePayload(
       page,
@@ -303,6 +319,10 @@ test.describe("LLM Runtime Selection", () => {
       "Regenerate model picker requires at least two runtime model options"
     );
 
+    await expectElementScreenshot(regenerateDialog, {
+      name: "llm-runtime-selection-regenerate-model-picker",
+    });
+
     const regenerateRequestPromise = page.waitForRequest(
       (request) =>
         request.url().includes("/api/chat/send-chat-message") &&
@@ -326,6 +346,10 @@ test.describe("LLM Runtime Selection", () => {
       .first();
     await expect(messageSwitcher).toBeVisible({ timeout: 10000 });
     await expect(messageSwitcher).toContainText("2/2");
+
+    await expectScreenshot(page, {
+      name: "llm-runtime-selection-after-regenerate-with-alternate-model",
+    });
 
     await messageSwitcher
       .locator("..")
@@ -353,7 +377,7 @@ test.describe("LLM Runtime Selection", () => {
   test("same model name across providers resolves to provider-specific runtime payloads", async ({
     page,
   }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const sharedModelName = `shared-runtime-model-${Date.now()}`;
     const openAiProviderName = uniqueName("PW Runtime OpenAI");
@@ -379,7 +403,7 @@ test.describe("LLM Runtime Selection", () => {
       anthropicProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
 
     const capturedPayloads: SendChatMessagePayload[] = [];
     let turn = 0;
@@ -405,6 +429,11 @@ test.describe("LLM Runtime Selection", () => {
 
     const sharedModelOptions = dialog.locator("button[data-selected]");
     await expect(sharedModelOptions).toHaveCount(2);
+
+    await expectElementScreenshot(dialog, {
+      name: "llm-runtime-selection-same-model-name-two-providers",
+    });
+
     const openAiModelOption = dialog
       .getByRole("region", { name: /openai/i })
       .locator("button[data-selected]")
@@ -470,7 +499,7 @@ test.describe("LLM Runtime Selection", () => {
   test("restricted provider model is unavailable to unauthorized runtime user selection", async ({
     page,
   }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const client = new OnyxApiClient(page.request);
     const restrictedGroupName = uniqueName("PW Runtime Restricted Group");
@@ -502,7 +531,7 @@ test.describe("LLM Runtime Selection", () => {
     });
     providersToCleanup.push(restrictedProviderId);
 
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
     await openChat(page);
 
     await page.getByTestId("AppInputBar/llm-popover-trigger").click();
@@ -517,5 +546,9 @@ test.describe("LLM Runtime Selection", () => {
 
     await expect(restrictedModelOption).toHaveCount(0);
     await expect(dialog.getByText("No models found")).toBeVisible();
+
+    await expectElementScreenshot(dialog, {
+      name: "llm-runtime-selection-restricted-model-not-visible",
+    });
   });
 });
