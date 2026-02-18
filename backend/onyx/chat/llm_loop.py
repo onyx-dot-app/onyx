@@ -38,6 +38,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.prompts.chat_prompts import FILE_REMINDER
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
@@ -57,6 +58,7 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
 )
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -585,7 +587,9 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+
         has_called_search_tool: bool = False
+        code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
@@ -698,6 +702,13 @@ def run_llm_loop(
                     or always_cite_documents,
                     is_last_cycle=out_of_cycles,
                 )
+
+            # If code interpreter generated files, remind the LLM to link them on the last cycle
+            if code_interpreter_file_generated:
+                if reminder_message_text:
+                    reminder_message_text += "\n\n" + FILE_REMINDER.strip()
+                else:
+                    reminder_message_text = FILE_REMINDER.strip()
 
             reminder_msg = (
                 ChatMessageSimple(
@@ -834,6 +845,18 @@ def run_llm_loop(
                 # Track if search tool was called (for skipping query expansion on subsequent calls)
                 if tool_call.tool_name == SearchTool.NAME:
                     has_called_search_tool = True
+
+                # Track if code interpreter generated files with download links
+                if (
+                    tool_call.tool_name == PythonTool.NAME
+                    and not code_interpreter_file_generated
+                ):
+                    try:
+                        parsed = json.loads(tool_response.llm_facing_response)
+                        if parsed.get("generated_files"):
+                            code_interpreter_file_generated = True
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
 
                 # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
