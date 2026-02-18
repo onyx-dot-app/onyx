@@ -264,7 +264,7 @@ const SearchableTables = () => {
   );
 };
 
-const AddUserButton = () => {
+function AddUserButton() {
   const [bulkAddUsersModal, setBulkAddUsersModal] = useState(false);
 
   const onSuccess = () => {
@@ -313,7 +313,7 @@ const AddUserButton = () => {
       )}
     </>
   );
-};
+}
 
 const Page = () => {
   return (

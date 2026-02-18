@@ -432,12 +432,10 @@ class TestSeatLimitEnforcement:
             enforce_seat_limit(MagicMock())  # should not raise
 
     @patch("onyx.auth.users.MULTI_TENANT", False)
-    @patch("onyx.auth.users.get_all_users")
     @patch("onyx.auth.users.get_invited_users")
     def test_non_invited_signup_blocked_when_invites_reserve_all_seats(
         self,
         mock_get_invited_users: MagicMock,
-        mock_get_all_users: MagicMock,
     ) -> None:
         from onyx.auth.users import enforce_invite_reservation_seat_limit
 
@@ -445,7 +443,10 @@ class TestSeatLimitEnforcement:
             "invited1@example.com",
             "invited2@example.com",
         ]
-        mock_get_all_users.return_value = []
+        mock_db_session = MagicMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_db_session.scalars.return_value = mock_scalars
         seat_result = MagicMock(available=False, error_message="Seat limit reached")
 
         with patch(
@@ -454,24 +455,22 @@ class TestSeatLimitEnforcement:
         ):
             with pytest.raises(HTTPException) as exc:
                 enforce_invite_reservation_seat_limit(
-                    MagicMock(), "newuser@example.com"
+                    mock_db_session, "newuser@example.com"
                 )
 
         assert exc.value.status_code == 402
+        assert isinstance(exc.value.detail, dict)
         assert exc.value.detail["code"] == "REGISTER_SEAT_EXPECTATION_EXCEEDED"
 
     @patch("onyx.auth.users.MULTI_TENANT", False)
-    @patch("onyx.auth.users.get_all_users")
     @patch("onyx.auth.users.get_invited_users")
     def test_invited_signup_skips_reserved_seat_block(
         self,
         mock_get_invited_users: MagicMock,
-        mock_get_all_users: MagicMock,
     ) -> None:
         from onyx.auth.users import enforce_invite_reservation_seat_limit
 
         mock_get_invited_users.return_value = ["invited1@example.com"]
-        mock_get_all_users.return_value = []
 
         fetch_fn = MagicMock()
         with patch(

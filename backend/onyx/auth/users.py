@@ -317,16 +317,18 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
         raise HTTPException(status_code=402, detail=result.error_message)
 
 
-def _count_reserved_invite_seats(db_session: Session) -> int:
-    invited_users = get_invited_users()
+def _count_reserved_invite_seats(
+    db_session: Session, invited_users: set[str] | None = None
+) -> int:
+    if invited_users is None:
+        invited_users = {email.lower() for email in get_invited_users()}
+
     if not invited_users:
         return 0
 
     existing_users = {user.email.lower() for user in get_all_users(db_session)}
     return sum(
-        1
-        for invited_email in invited_users
-        if invited_email.lower() not in existing_users
+        1 for invited_email in invited_users if invited_email not in existing_users
     )
 
 
@@ -344,7 +346,7 @@ def enforce_invite_reservation_seat_limit(
     if signup_email.lower() in invited_users:
         return
 
-    reserved_invite_seats = _count_reserved_invite_seats(db_session)
+    reserved_invite_seats = _count_reserved_invite_seats(db_session, invited_users)
     if reserved_invite_seats == 0:
         return
 
