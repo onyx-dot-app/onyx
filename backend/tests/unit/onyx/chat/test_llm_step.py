@@ -467,6 +467,7 @@ class TestTranslateHistoryToLlmFormat:
             history=self._tool_history(),
             llm_config=self._llm_config(LlmProviderNames.OPENAI),
         )
+        assert isinstance(translated, list)
 
         assert isinstance(translated[0], AssistantMessage)
         assert translated[0].tool_calls is not None
@@ -479,6 +480,7 @@ class TestTranslateHistoryToLlmFormat:
             history=self._tool_history(),
             llm_config=self._llm_config(LlmProviderNames.OLLAMA_CHAT),
         )
+        assert isinstance(translated, list)
 
         assert isinstance(translated[0], AssistantMessage)
         assert translated[0].tool_calls is None

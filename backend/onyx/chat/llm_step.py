@@ -688,6 +688,9 @@ def translate_history_to_llm_format(
     """
     messages: list[ChatCompletionMessage] = []
     is_ollama = llm_config.model_provider == LlmProviderNames.OLLAMA_CHAT
+    # Note: cacheability is computed from pre-translation ChatMessageSimple types.
+    # For Ollama we flatten tool history into plain assistant/user text, so this split
+    # may be less semantically meaningful, but it remains safe and order-preserving.
     last_cacheable_msg_idx = -1
     all_previous_msgs_cacheable = True
 
