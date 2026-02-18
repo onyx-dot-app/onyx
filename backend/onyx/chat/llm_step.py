@@ -930,7 +930,6 @@ def run_llm_step_pkt_generator(
     answer_start = False
     accumulated_reasoning = ""
     accumulated_answer = ""
-    accumulated_raw_reasoning = ""
     accumulated_raw_answer = ""
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
 
@@ -1114,7 +1113,6 @@ def run_llm_step_pkt_generator(
             # Should only happen once, frontend does not expect multiple
             # ReasoningStart or ReasoningDone packets.
             if delta.reasoning_content:
-                accumulated_raw_reasoning += delta.reasoning_content
                 accumulated_reasoning += delta.reasoning_content
                 # Save reasoning incrementally to state container
                 if state_container:
@@ -1139,15 +1137,12 @@ def run_llm_step_pkt_generator(
                 reasoning_start = True
 
             if delta.content:
+                # Keep raw content for fallback extraction. Display content can be
+                # filtered and, in deep-research REQUIRED mode, routed as reasoning.
                 accumulated_raw_answer += delta.content
-
-            filtered_content = (
-                xml_tool_call_content_filter.process(delta.content)
-                if delta.content
-                else ""
-            )
-            if filtered_content:
-                yield from _emit_content_chunk(filtered_content)
+                filtered_content = xml_tool_call_content_filter.process(delta.content)
+                if filtered_content:
+                    yield from _emit_content_chunk(filtered_content)
 
             if delta.tool_calls:
                 if reasoning_start:
@@ -1293,9 +1288,6 @@ def run_llm_step_pkt_generator(
             reasoning=accumulated_reasoning if accumulated_reasoning else None,
             answer=accumulated_answer if accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
-            raw_reasoning=(
-                accumulated_raw_reasoning if accumulated_raw_reasoning else None
-            ),
             raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
         ),
         bool(has_reasoned),
