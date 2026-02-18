@@ -143,7 +143,6 @@ class DriveItemData(BaseModel):
         return DriveItem(graph_client, path)
 
 
-# The office365 library's ClientContext caches the access token from
 # The office365 library's ClientContext caches the access token from its
 # first request and never re-invokes the token callback.  Microsoft access
 # tokens live ~60-75 minutes, so we recreate the cached ClientContext every
@@ -993,18 +992,13 @@ class SharepointConnector(
 
             drive_id, drive_web_url = result
 
-            try:
-                items = self._iter_drive_items_paged(
-                    drive_id=drive_id,
-                    folder_path=site_descriptor.folder_path,
-                    start=start,
-                    end=end,
-                )
-                return items, drive_web_url
-
-            except Exception as e:
-                logger.warning(f"Failed to process drive: {str(e)}")
-                return iter(()), None
+            items = self._iter_drive_items_paged(
+                drive_id=drive_id,
+                folder_path=site_descriptor.folder_path,
+                start=start,
+                end=end,
+            )
+            return items, drive_web_url
 
         except Exception as e:
             err_str = str(e)
@@ -1290,6 +1284,8 @@ class SharepointConnector(
                     # but still yield them — the downstream conversion handles filtering
                     # by extension / mime type.
 
+                    # NOTE: We are now including items without a lastModifiedDateTime,
+                    # and respecting when only one of start or end is set.
                     if start is not None or end is not None:
                         raw_ts = item.get("lastModifiedDateTime")
                         if raw_ts:
@@ -1838,7 +1834,6 @@ class SharepointConnector(
                     checkpoint,
                 )
 
-            access_token = self._get_graph_access_token()
             item_count = 0
             for driveitem in driveitems:
                 item_count += 1
@@ -1880,6 +1875,9 @@ class SharepointConnector(
                     if include_permissions:
                         ctx = self._create_rest_client_context(site_descriptor.url)
 
+                    # Re-acquire token in case it expired during a long traversal
+                    # MSAL has a cache that returns the same token while still valid.
+                    access_token = self._get_graph_access_token()
                     doc = _convert_driveitem_to_document_with_permissions(
                         driveitem,
                         current_drive_name,
