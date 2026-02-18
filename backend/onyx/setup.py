@@ -245,7 +245,11 @@ def setup_postgres(db_session: Session) -> None:
     create_initial_default_connector(db_session)
     associate_default_cc_pair(db_session)
 
-    if GEN_AI_API_KEY and fetch_default_llm_model(db_session) is None:
+    if (
+        GEN_AI_API_KEY
+        and fetch_default_llm_model(db_session) is None
+        and not INTEGRATION_TESTS_MODE
+    ):
         # Only for dev flows
         logger.notice("Setting up default OpenAI LLM for dev.")
 
@@ -257,7 +261,6 @@ def setup_postgres(db_session: Session) -> None:
             api_base=None,
             api_version=None,
             custom_config=None,
-            default_model_name=llm_model,
             is_public=True,
             groups=[],
             model_configurations=[
@@ -269,7 +272,9 @@ def setup_postgres(db_session: Session) -> None:
         new_llm_provider = upsert_llm_provider(
             llm_provider_upsert_request=model_req, db_session=db_session
         )
-        update_default_provider(provider_id=new_llm_provider.id, db_session=db_session)
+        update_default_provider(
+            provider_id=new_llm_provider.id, model_name=llm_model, db_session=db_session
+        )
 
 
 def update_default_multipass_indexing(db_session: Session) -> None:

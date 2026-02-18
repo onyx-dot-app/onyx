@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.models import UserRole
@@ -132,7 +133,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=expected_default_model,
                         model_configurations=[],  # No model configs provided
                     ),
                     is_creation=True,
@@ -160,13 +160,8 @@ class TestAutoModeSyncFeature:
                 if mc.name in all_expected_models:
                     assert mc.is_visible is True, f"Model '{mc.name}' should be visible"
 
-            # Verify the default model was set correctly
-            assert (
-                provider.default_model_name == expected_default_model
-            ), f"Default model should be '{expected_default_model}'"
-
             # Step 4: Set the provider as default
-            update_default_provider(provider.id, db_session)
+            update_default_provider(provider.id, expected_default_model, db_session)
 
             # Step 5: Fetch the default provider and verify
             default_model = fetch_default_llm_model(db_session)
@@ -235,7 +230,6 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -307,14 +301,13 @@ class TestAutoModeSyncFeature:
 
         try:
             # Step 1: Upload provider WITHOUT auto mode, with initial models
-            put_llm_provider(
+            provider = put_llm_provider(
                 llm_provider_upsert_request=LLMProviderUpsertRequest(
                     name=provider_name,
                     provider=LlmProviderNames.OPENAI,
                     api_key="sk-test-key-00000000000000000000000000000000000",
                     api_key_changed=True,
                     is_auto_mode=False,  # Not in auto mode initially
-                    default_model_name="gpt-4",
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
@@ -341,12 +334,12 @@ class TestAutoModeSyncFeature:
             ):
                 put_llm_provider(
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        id=provider.id,
                         name=provider_name,
                         provider=LlmProviderNames.OPENAI,
                         api_key=None,  # Not changing API key
                         api_key_changed=False,
                         is_auto_mode=True,  # Now enabling auto mode
-                        default_model_name=auto_mode_default,
                         model_configurations=[],  # Auto mode will sync from config
                     ),
                     is_creation=False,  # This is an update
@@ -357,8 +350,8 @@ class TestAutoModeSyncFeature:
             # Step 3: Verify model visibility after auto mode transition
             # Expire session cache to force fresh fetch after sync_auto_mode_models committed
             db_session.expire_all()
-            provider = fetch_existing_llm_provider(
-                name=provider_name, db_session=db_session
+            provider = fetch_llm_provider_view(
+                db_session=db_session, provider_name=provider_name
             )
             assert provider is not None
             assert provider.is_auto_mode is True
@@ -384,9 +377,6 @@ class TestAutoModeSyncFeature:
                     assert (
                         model_visibility[model_name] is False
                     ), f"Model '{model_name}' not in auto config should NOT be visible"
-
-            # Verify the default model was updated
-            assert provider.default_model_name == auto_mode_default
 
         finally:
             db_session.rollback()
@@ -429,8 +419,12 @@ class TestAutoModeSyncFeature:
                         api_key="sk-test-key-00000000000000000000000000000000000",
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name="gpt-4o",
-                        model_configurations=[],
+                        model_configurations=[
+                            ModelConfigurationUpsertRequest(
+                                name="gpt-4o",
+                                is_visible=True,
+                            )
+                        ],
                     ),
                     is_creation=True,
                     _=_create_mock_admin(),
@@ -532,7 +526,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_1_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_1_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -546,7 +539,7 @@ class TestAutoModeSyncFeature:
                 name=provider_1_name, db_session=db_session
             )
             assert provider_1 is not None
-            update_default_provider(provider_1.id, db_session)
+            update_default_provider(provider_1.id, provider_1_default_model, db_session)
 
             with patch(
                 "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
@@ -560,7 +553,6 @@ class TestAutoModeSyncFeature:
                         api_key=provider_2_api_key,
                         api_key_changed=True,
                         is_auto_mode=True,
-                        default_model_name=provider_2_default_model,
                         model_configurations=[],
                     ),
                     is_creation=True,
@@ -581,7 +573,7 @@ class TestAutoModeSyncFeature:
                 name=provider_2_name, db_session=db_session
             )
             assert provider_2 is not None
-            update_default_provider(provider_2.id, db_session)
+            update_default_provider(provider_2.id, provider_2_default_model, db_session)
 
             # Step 5: Verify provider 2 is now the default
             db_session.expire_all()
