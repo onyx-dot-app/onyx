@@ -3,6 +3,7 @@
 from typing import Any
 
 from onyx.chat.llm_step import _extract_tool_call_kickoffs
+from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _sanitize_llm_output
 from onyx.chat.llm_step import _XmlToolCallContentFilter
@@ -363,3 +364,22 @@ class TestXmlToolCallContentFilter:
         assert (
             output == "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
         )
+
+
+class TestIncrementTurns:
+    """Tests for the _increment_turns helper."""
+
+    def test_increments_turn_index_when_no_sub_turn(self) -> None:
+        turn, sub = _increment_turns(0, None)
+        assert turn == 1
+        assert sub is None
+
+    def test_increments_sub_turn_when_present(self) -> None:
+        turn, sub = _increment_turns(3, 0)
+        assert turn == 3
+        assert sub == 1
+
+    def test_increments_sub_turn_from_nonzero(self) -> None:
+        turn, sub = _increment_turns(5, 2)
+        assert turn == 5
+        assert sub == 3
