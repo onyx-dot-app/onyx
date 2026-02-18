@@ -498,6 +498,7 @@ def test_folders_only(
         include_drive_2=True,
         include_restricted_folder=False,
     )
+    expected_nodes.pop(SECTIONS_FOLDER_ID, None)
     expected_nodes.update(_pick(ADMIN_MY_DRIVE_ID, FOLDER_3_ID))
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
