@@ -250,7 +250,6 @@ function Header() {
         <ShareChatSessionModal
           chatSession={currentChatSession}
           onClose={() => setShowShareModal(false)}
-          refreshChatSessions={refreshChatSessions}
         />
       )}
 

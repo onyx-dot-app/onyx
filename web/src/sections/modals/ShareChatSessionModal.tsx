@@ -17,6 +17,7 @@ import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
 
 import type { IconProps } from "@opal/types";
+import useChatSessions from "@/hooks/useChatSessions";
 
 function buildShareLink(chatSessionId: string) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;
@@ -101,13 +102,11 @@ function PrivacyOption({
 interface ShareChatSessionModalProps {
   chatSession: ChatSession;
   onClose: () => void;
-  refreshChatSessions: () => void;
 }
 
 export default function ShareChatSessionModal({
   chatSession,
   onClose,
-  refreshChatSessions,
 }: ShareChatSessionModalProps) {
   const isCurrentlyPublic =
     chatSession.shared_status === ChatSessionSharedStatus.Public;
@@ -122,6 +121,7 @@ export default function ShareChatSessionModal({
   const updateCurrentChatSessionSharedStatus = useChatSessionStore(
     (state) => state.updateCurrentChatSessionSharedStatus
   );
+  const { refreshChatSessions } = useChatSessions();
 
   const wantsPublic = selectedPrivacy === "public";
 

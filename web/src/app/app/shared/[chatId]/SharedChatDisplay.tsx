@@ -15,7 +15,7 @@ import TextViewModal from "@/sections/modals/TextViewModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
-import SharedChatInputBar from "@/app/app/shared/[chatId]/SharedChatInputBar";
+import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 
 export interface SharedChatDisplayProps {
   chatSession: BackendChatSession | null;
@@ -140,7 +140,7 @@ export default function SharedChatDisplay({
         </div>
 
         <div className="w-full max-w-[50rem] mx-auto px-4 pb-4">
-          <SharedChatInputBar />
+          <SharedAppInputBar />
         </div>
       </div>
     </>
