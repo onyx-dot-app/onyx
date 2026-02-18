@@ -167,10 +167,12 @@ Resources:
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
             - Name: AUTH_TYPE
-              Value: disabled
+              Value: basic
           Secrets:
             - Name: POSTGRES_PASSWORD
               ValueFrom: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}/postgres/user/password
+            - Name: USER_AUTH_SECRET
+              ValueFrom: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}/onyx/user-auth-secret
           VolumesFrom: []
           SystemControls: []
 
