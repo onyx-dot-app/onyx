@@ -208,27 +208,23 @@ def flatten_hierarchy(
     return result
 
 
+def _node(
+    raw_node_id: str,
+    display_name: str,
+    node_type: HierarchyNodeType,
+    raw_parent_id: str | None = None,
+) -> ExpectedHierarchyNode:
+    return ExpectedHierarchyNode(
+        raw_node_id=raw_node_id,
+        display_name=display_name,
+        node_type=node_type,
+        raw_parent_id=raw_parent_id,
+    )
+
+
 # Flattened maps for easy lookup
 EXPECTED_SHARED_DRIVE_1_NODES = flatten_hierarchy(EXPECTED_SHARED_DRIVE_1_HIERARCHY)
 EXPECTED_SHARED_DRIVE_2_NODES = flatten_hierarchy(EXPECTED_SHARED_DRIVE_2_HIERARCHY)
-ALL_EXPECTED_SHARED_DRIVE_NODES = {
-    **EXPECTED_SHARED_DRIVE_1_NODES,
-    **EXPECTED_SHARED_DRIVE_2_NODES,
-}
-
-# Map of folder ID to its expected parent ID
-EXPECTED_PARENT_MAPPING: dict[str, str | None] = {
-    SHARED_DRIVE_1_ID: None,
-    RESTRICTED_ACCESS_FOLDER_ID: SHARED_DRIVE_1_ID,
-    FOLDER_1_ID: SHARED_DRIVE_1_ID,
-    FOLDER_1_1_ID: FOLDER_1_ID,
-    FOLDER_1_2_ID: FOLDER_1_ID,
-    SHARED_DRIVE_2_ID: None,
-    SECTIONS_FOLDER_ID: SHARED_DRIVE_2_ID,
-    FOLDER_2_ID: SHARED_DRIVE_2_ID,
-    FOLDER_2_1_ID: FOLDER_2_ID,
-    FOLDER_2_2_ID: FOLDER_2_ID,
-}
 
 EXTERNAL_SHARED_FOLDER_URL = (
     "https://drive.google.com/drive/folders/1sWC7Oi0aQGgifLiMnhTjvkhRWVeDa-XS"
@@ -323,6 +319,106 @@ PERM_SYNC_DRIVE_ACCESS_MAPPING: dict[str, set[str]] = {
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID: {ADMIN_EMAIL},
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID: {ADMIN_EMAIL, TEST_USER_1_EMAIL},
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID: {ADMIN_EMAIL, TEST_USER_1_EMAIL},
+}
+
+# ============================================================================
+# NON-SHARED-DRIVE HIERARCHY NODES
+# ============================================================================
+# These cover My Drive roots, perm sync drives, extra shared drives,
+# and standalone folders that appear in various tests.
+# Display names must match what the Google Drive API actually returns.
+# ============================================================================
+
+EXPECTED_FOLDER_3 = _node(
+    FOLDER_3_ID, "folder_3", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
+)
+
+EXPECTED_ADMIN_MY_DRIVE = _node(ADMIN_MY_DRIVE_ID, "My Drive", HierarchyNodeType.FOLDER)
+EXPECTED_TEST_USER_1_MY_DRIVE = _node(
+    TEST_USER_1_MY_DRIVE_ID, "My Drive", HierarchyNodeType.FOLDER
+)
+EXPECTED_TEST_USER_1_MY_DRIVE_FOLDER = _node(
+    TEST_USER_1_MY_DRIVE_FOLDER_ID,
+    "partial_sharing",
+    HierarchyNodeType.FOLDER,
+    TEST_USER_1_MY_DRIVE_ID,
+)
+EXPECTED_TEST_USER_2_MY_DRIVE = _node(
+    TEST_USER_2_MY_DRIVE, "My Drive", HierarchyNodeType.FOLDER
+)
+EXPECTED_TEST_USER_3_MY_DRIVE = _node(
+    TEST_USER_3_MY_DRIVE_ID, "My Drive", HierarchyNodeType.FOLDER
+)
+
+EXPECTED_PERM_SYNC_DRIVE_ADMIN_ONLY = _node(
+    PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
+    "perm_sync_admin_only",
+    HierarchyNodeType.SHARED_DRIVE,
+)
+EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A = _node(
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+    "perm_sync_admin_and_user_1_a",
+    HierarchyNodeType.SHARED_DRIVE,
+)
+EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B = _node(
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+    "perm_sync_admin_and_user_1_b",
+    HierarchyNodeType.SHARED_DRIVE,
+)
+
+EXPECTED_TEST_USER_1_DRIVE_B = _node(
+    TEST_USER_1_DRIVE_B_ID,
+    "My_super_special_shared_drive_suuuuuuper_private",
+    HierarchyNodeType.SHARED_DRIVE,
+)
+EXPECTED_TEST_USER_1_DRIVE_B_FOLDER = _node(
+    TEST_USER_1_DRIVE_B_FOLDER_ID,
+    "silliness",
+    HierarchyNodeType.FOLDER,
+    TEST_USER_1_DRIVE_B_ID,
+)
+EXPECTED_TEST_USER_1_EXTRA_DRIVE_1 = _node(
+    TEST_USER_1_EXTRA_DRIVE_1_ID,
+    "Okay_fine_admin_I_will_share",
+    HierarchyNodeType.SHARED_DRIVE,
+)
+EXPECTED_TEST_USER_1_EXTRA_DRIVE_2 = _node(
+    TEST_USER_1_EXTRA_DRIVE_2_ID, "reee test", HierarchyNodeType.SHARED_DRIVE
+)
+EXPECTED_TEST_USER_1_EXTRA_FOLDER = _node(
+    TEST_USER_1_EXTRA_FOLDER_ID,
+    "read only no download test",
+    HierarchyNodeType.FOLDER,
+)
+
+EXPECTED_PILL_FOLDER = _node(
+    PILL_FOLDER_ID, "pill_folder", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
+)
+EXPECTED_EXTERNAL_SHARED_FOLDER = _node(
+    EXTERNAL_SHARED_FOLDER_ID, "external_shared_folder", HierarchyNodeType.FOLDER
+)
+
+# Comprehensive mapping of ALL known hierarchy nodes.
+# Every retrieved node is checked against this for display_name and node_type.
+ALL_EXPECTED_HIERARCHY_NODES: dict[str, ExpectedHierarchyNode] = {
+    **EXPECTED_SHARED_DRIVE_1_NODES,
+    **EXPECTED_SHARED_DRIVE_2_NODES,
+    FOLDER_3_ID: EXPECTED_FOLDER_3,
+    ADMIN_MY_DRIVE_ID: EXPECTED_ADMIN_MY_DRIVE,
+    TEST_USER_1_MY_DRIVE_ID: EXPECTED_TEST_USER_1_MY_DRIVE,
+    TEST_USER_1_MY_DRIVE_FOLDER_ID: EXPECTED_TEST_USER_1_MY_DRIVE_FOLDER,
+    TEST_USER_2_MY_DRIVE: EXPECTED_TEST_USER_2_MY_DRIVE,
+    TEST_USER_3_MY_DRIVE_ID: EXPECTED_TEST_USER_3_MY_DRIVE,
+    PERM_SYNC_DRIVE_ADMIN_ONLY_ID: EXPECTED_PERM_SYNC_DRIVE_ADMIN_ONLY,
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID: EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A,
+    PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID: EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B,
+    TEST_USER_1_DRIVE_B_ID: EXPECTED_TEST_USER_1_DRIVE_B,
+    TEST_USER_1_DRIVE_B_FOLDER_ID: EXPECTED_TEST_USER_1_DRIVE_B_FOLDER,
+    TEST_USER_1_EXTRA_DRIVE_1_ID: EXPECTED_TEST_USER_1_EXTRA_DRIVE_1,
+    TEST_USER_1_EXTRA_DRIVE_2_ID: EXPECTED_TEST_USER_1_EXTRA_DRIVE_2,
+    TEST_USER_1_EXTRA_FOLDER_ID: EXPECTED_TEST_USER_1_EXTRA_FOLDER,
+    PILL_FOLDER_ID: EXPECTED_PILL_FOLDER,
+    EXTERNAL_SHARED_FOLDER_ID: EXPECTED_EXTERNAL_SHARED_FOLDER,
 }
 
 # Dictionary for access permissions
@@ -508,32 +604,29 @@ def load_connector_outputs(
 
 def assert_hierarchy_nodes_match_expected(
     retrieved_nodes: list[HierarchyNode],
-    expected_node_ids: set[str],
-    expected_parent_mapping: dict[str, str | None] | None = None,
+    expected_nodes: dict[str, ExpectedHierarchyNode],
     ignorable_node_ids: set[str] | None = None,
 ) -> None:
     """
     Assert that retrieved hierarchy nodes match expected structure.
 
-    Checks node IDs, parent relationships, and display names.
-    Display names are verified against SHARED_DRIVE_EXPECTED_DISPLAY_NAMES
-    for any retrieved node whose ID appears in that mapping.
+    Checks node IDs, display names, node types, and parent relationships
+    for EVERY retrieved node (global checks).
 
     Args:
         retrieved_nodes: List of HierarchyNode objects from the connector
-        expected_node_ids: Set of expected raw_node_ids
-        expected_parent_mapping: Optional dict mapping node_id -> parent_id for parent verification
-        ignorable_node_ids: Optional set of node IDs that can be missing or extra without failing.
-            Useful for nodes that are non-deterministically returned by the connector.
+        expected_nodes: Dict mapping raw_node_id -> ExpectedHierarchyNode with
+            expected display_name, node_type, and raw_parent_id
+        ignorable_node_ids: Optional set of node IDs that can be missing or extra
+            without failing. Useful for non-deterministically returned nodes.
     """
+    expected_node_ids = set(expected_nodes.keys())
     retrieved_node_ids = {node.raw_node_id for node in retrieved_nodes}
     ignorable = ignorable_node_ids or set()
 
-    # Calculate differences, excluding ignorable nodes
     missing = expected_node_ids - retrieved_node_ids - ignorable
     extra = retrieved_node_ids - expected_node_ids - ignorable
 
-    # Print discrepancies for debugging
     if missing or extra:
         print("Expected hierarchy node IDs:")
         print(sorted(expected_node_ids))
@@ -547,113 +640,71 @@ def assert_hierarchy_nodes_match_expected(
             print("Ignorable node IDs:")
             print(sorted(ignorable))
 
-    assert not missing and not extra, (
-        f"Hierarchy node mismatch. " f"Missing: {missing}, " f"Extra: {extra}"
-    )
+    assert (
+        not missing and not extra
+    ), f"Hierarchy node mismatch. Missing: {missing}, Extra: {extra}"
 
-    # Verify parent relationships if provided
-    if expected_parent_mapping is not None:
-        for node in retrieved_nodes:
-            if node.raw_node_id not in expected_parent_mapping:
-                continue
-            expected_parent = expected_parent_mapping[node.raw_node_id]
-            assert node.raw_parent_id == expected_parent, (
+    for node in retrieved_nodes:
+        if node.raw_node_id in ignorable and node.raw_node_id not in expected_nodes:
+            continue
+
+        assert (
+            node.raw_node_id in expected_nodes
+        ), f"Node {node.raw_node_id} ({node.display_name}) not found in expected_nodes"
+        expected = expected_nodes[node.raw_node_id]
+
+        assert node.display_name == expected.display_name, (
+            f"Display name mismatch for node {node.raw_node_id}: "
+            f"expected '{expected.display_name}', got '{node.display_name}'"
+        )
+        assert node.node_type == expected.node_type, (
+            f"Node type mismatch for node {node.raw_node_id}: "
+            f"expected '{expected.node_type}', got '{node.node_type}'"
+        )
+        if expected.raw_parent_id is not None:
+            assert node.raw_parent_id == expected.raw_parent_id, (
                 f"Parent mismatch for node {node.raw_node_id} ({node.display_name}): "
-                f"expected parent={expected_parent}, got parent={node.raw_parent_id}"
+                f"expected parent={expected.raw_parent_id}, got parent={node.raw_parent_id}"
             )
 
-    # Verify display names for all nodes that have a known expected name
-    for node in retrieved_nodes:
-        assert (
-            node.raw_node_id in ALL_EXPECTED_SHARED_DRIVE_NODES
-        ), f"Node {node.raw_node_id} not found in ALL_EXPECTED_SHARED_DRIVE_NODES"
-        expected_node = ALL_EXPECTED_SHARED_DRIVE_NODES[node.raw_node_id]
-        expected_name = expected_node.display_name
-        assert node.display_name == expected_name, (
-            f"Display name mismatch for node {node.raw_node_id}: "
-            f"expected '{expected_name}', got '{node.display_name}'"
-        )
-        assert node.node_type == expected_node.node_type, (
-            f"Node type mismatch for node {node.raw_node_id}: "
-            f"expected '{expected_node.node_type}', got '{node.node_type}'"
-        )
+
+def _pick(
+    *node_ids: str,
+) -> dict[str, ExpectedHierarchyNode]:
+    """Pick nodes from ALL_EXPECTED_HIERARCHY_NODES by their IDs."""
+    return {nid: ALL_EXPECTED_HIERARCHY_NODES[nid] for nid in node_ids}
 
 
 def get_expected_hierarchy_for_shared_drives(
     include_drive_1: bool = True,
     include_drive_2: bool = True,
     include_restricted_folder: bool = True,
-) -> tuple[set[str], dict[str, str | None]]:
-    """
-    Get expected hierarchy node IDs and parent mapping for shared drives.
-
-    Returns:
-        Tuple of (expected_node_ids, expected_parent_mapping)
-    """
-    expected_ids: set[str] = set()
-    expected_parents: dict[str, str | None] = {}
+) -> dict[str, ExpectedHierarchyNode]:
+    """Get expected hierarchy nodes for shared drives."""
+    result: dict[str, ExpectedHierarchyNode] = {}
 
     if include_drive_1:
-        expected_ids.add(SHARED_DRIVE_1_ID)
-        expected_parents[SHARED_DRIVE_1_ID] = None
-
-        if include_restricted_folder:
-            expected_ids.add(RESTRICTED_ACCESS_FOLDER_ID)
-            expected_parents[RESTRICTED_ACCESS_FOLDER_ID] = SHARED_DRIVE_1_ID
-
-        expected_ids.add(FOLDER_1_ID)
-        expected_parents[FOLDER_1_ID] = SHARED_DRIVE_1_ID
-
-        expected_ids.add(FOLDER_1_1_ID)
-        expected_parents[FOLDER_1_1_ID] = FOLDER_1_ID
-
-        expected_ids.add(FOLDER_1_2_ID)
-        expected_parents[FOLDER_1_2_ID] = FOLDER_1_ID
+        result.update(EXPECTED_SHARED_DRIVE_1_NODES)
+        if not include_restricted_folder:
+            result.pop(RESTRICTED_ACCESS_FOLDER_ID, None)
 
     if include_drive_2:
-        expected_ids.add(SHARED_DRIVE_2_ID)
-        expected_parents[SHARED_DRIVE_2_ID] = None
+        result.update(EXPECTED_SHARED_DRIVE_2_NODES)
 
-        expected_ids.add(SECTIONS_FOLDER_ID)
-        expected_parents[SECTIONS_FOLDER_ID] = SHARED_DRIVE_2_ID
-
-        expected_ids.add(FOLDER_2_ID)
-        expected_parents[FOLDER_2_ID] = SHARED_DRIVE_2_ID
-
-        expected_ids.add(FOLDER_2_1_ID)
-        expected_parents[FOLDER_2_1_ID] = FOLDER_2_ID
-
-        expected_ids.add(FOLDER_2_2_ID)
-        expected_parents[FOLDER_2_2_ID] = FOLDER_2_ID
-
-    return expected_ids, expected_parents
+    return result
 
 
-def get_expected_hierarchy_for_folder_1() -> tuple[set[str], dict[str, str | None]]:
+def get_expected_hierarchy_for_folder_1() -> dict[str, ExpectedHierarchyNode]:
     """Get expected hierarchy for folder_1 and its children only."""
-    return (
-        {FOLDER_1_ID, FOLDER_1_1_ID, FOLDER_1_2_ID},
-        {
-            FOLDER_1_ID: SHARED_DRIVE_1_ID,
-            FOLDER_1_1_ID: FOLDER_1_ID,
-            FOLDER_1_2_ID: FOLDER_1_ID,
-        },
-    )
+    return _pick(FOLDER_1_ID, FOLDER_1_1_ID, FOLDER_1_2_ID)
 
 
-def get_expected_hierarchy_for_folder_2() -> tuple[set[str], dict[str, str | None]]:
+def get_expected_hierarchy_for_folder_2() -> dict[str, ExpectedHierarchyNode]:
     """Get expected hierarchy for folder_2 and its children only."""
-    return (
-        {FOLDER_2_ID, FOLDER_2_1_ID, FOLDER_2_2_ID},
-        {
-            FOLDER_2_ID: SHARED_DRIVE_2_ID,
-            FOLDER_2_1_ID: FOLDER_2_ID,
-            FOLDER_2_2_ID: FOLDER_2_ID,
-        },
-    )
+    return _pick(FOLDER_2_ID, FOLDER_2_1_ID, FOLDER_2_2_ID)
 
 
-def get_expected_hierarchy_for_test_user_1() -> tuple[set[str], dict[str, str | None]]:
+def get_expected_hierarchy_for_test_user_1() -> dict[str, ExpectedHierarchyNode]:
     """
     Get expected hierarchy for test_user_1's full access.
 
@@ -663,81 +714,52 @@ def get_expected_hierarchy_for_test_user_1() -> tuple[set[str], dict[str, str | 
     - PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A and PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B
     - Additional drives/folders the user has access to
     """
-    # Start with shared_drive_1 hierarchy
-    expected_ids, expected_parents = get_expected_hierarchy_for_shared_drives(
+    result = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
         include_drive_2=False,
         include_restricted_folder=False,
     )
-
-    # folder_3 is shared from admin's My Drive
-    expected_ids.add(FOLDER_3_ID)
-
-    # Perm sync drives that test_user_1 has access to
-    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID)
-    expected_parents[PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID] = None
-
-    expected_ids.add(PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID)
-    expected_parents[PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID] = None
-
-    # Additional drives/folders test_user_1 has access to
-    expected_ids.add(TEST_USER_1_MY_DRIVE_ID)
-    expected_parents[TEST_USER_1_MY_DRIVE_ID] = None
-
-    expected_ids.add(TEST_USER_1_MY_DRIVE_FOLDER_ID)
-    expected_parents[TEST_USER_1_MY_DRIVE_FOLDER_ID] = TEST_USER_1_MY_DRIVE_ID
-
-    expected_ids.add(TEST_USER_1_DRIVE_B_ID)
-    expected_parents[TEST_USER_1_DRIVE_B_ID] = None
-
-    expected_ids.add(TEST_USER_1_DRIVE_B_FOLDER_ID)
-    expected_parents[TEST_USER_1_DRIVE_B_FOLDER_ID] = TEST_USER_1_DRIVE_B_ID
-
-    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_1_ID)
-    expected_parents[TEST_USER_1_EXTRA_DRIVE_1_ID] = None
-
-    expected_ids.add(TEST_USER_1_EXTRA_DRIVE_2_ID)
-    expected_parents[TEST_USER_1_EXTRA_DRIVE_2_ID] = None
-
-    expected_ids.add(TEST_USER_1_EXTRA_FOLDER_ID)
-    # Parent unknown, skip adding to expected_parents
-
-    return expected_ids, expected_parents
+    result.update(
+        _pick(
+            FOLDER_3_ID,
+            PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
+            PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
+            TEST_USER_1_MY_DRIVE_ID,
+            TEST_USER_1_MY_DRIVE_FOLDER_ID,
+            TEST_USER_1_DRIVE_B_ID,
+            TEST_USER_1_DRIVE_B_FOLDER_ID,
+            TEST_USER_1_EXTRA_DRIVE_1_ID,
+            TEST_USER_1_EXTRA_DRIVE_2_ID,
+            TEST_USER_1_EXTRA_FOLDER_ID,
+        )
+    )
+    return result
 
 
 def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> (
-    tuple[set[str], dict[str, str | None]]
+    dict[str, ExpectedHierarchyNode]
 ):
     """Expected hierarchy nodes when test_user_1 runs with include_shared_drives=True only."""
-    expected_ids, expected_parents = get_expected_hierarchy_for_test_user_1()
-
-    # This mode should not include My Drive roots/folders.
-    expected_ids.discard(TEST_USER_1_MY_DRIVE_ID)
-    expected_ids.discard(TEST_USER_1_MY_DRIVE_FOLDER_ID)
-
-    # don't include shared with me
-    expected_ids.discard(FOLDER_3_ID)
-    expected_ids.discard(TEST_USER_1_EXTRA_FOLDER_ID)
-
-    return expected_ids, expected_parents
+    result = get_expected_hierarchy_for_test_user_1()
+    for nid in (
+        TEST_USER_1_MY_DRIVE_ID,
+        TEST_USER_1_MY_DRIVE_FOLDER_ID,
+        FOLDER_3_ID,
+        TEST_USER_1_EXTRA_FOLDER_ID,
+    ):
+        result.pop(nid, None)
+    return result
 
 
 def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> (
-    tuple[set[str], dict[str, str | None]]
+    dict[str, ExpectedHierarchyNode]
 ):
     """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only."""
-    expected_ids: set[str] = {FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID}
-    expected_parents: dict[str, str | None] = {}
-    return expected_ids, expected_parents
+    return _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID)
 
 
 def get_expected_hierarchy_for_test_user_1_my_drive_only() -> (
-    tuple[set[str], dict[str, str | None]]
+    dict[str, ExpectedHierarchyNode]
 ):
     """Expected hierarchy nodes when test_user_1 runs with include_my_drives=True only."""
-    expected_ids: set[str] = {TEST_USER_1_MY_DRIVE_ID, TEST_USER_1_MY_DRIVE_FOLDER_ID}
-    expected_parents: dict[str, str | None] = {
-        TEST_USER_1_MY_DRIVE_ID: None,
-        TEST_USER_1_MY_DRIVE_FOLDER_ID: TEST_USER_1_MY_DRIVE_ID,
-    }
-    return expected_ids, expected_parents
+    return _pick(TEST_USER_1_MY_DRIVE_ID, TEST_USER_1_MY_DRIVE_FOLDER_ID)
