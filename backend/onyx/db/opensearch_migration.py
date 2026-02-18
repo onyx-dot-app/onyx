@@ -14,10 +14,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.opensearch_migration.constants import (
-    TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
-)
-from onyx.background.celery.tasks.opensearch_migration.tasks import (
     GET_VESPA_CHUNKS_SLICE_COUNT,
+)
+from onyx.background.celery.tasks.opensearch_migration.constants import (
+    TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE,
 )
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
 from onyx.db.enums import OpenSearchDocumentMigrationStatus

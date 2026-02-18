@@ -9,6 +9,9 @@ from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.opensearch_migration.constants import (
+    GET_VESPA_CHUNKS_PAGE_SIZE,
+)
+from onyx.background.celery.tasks.opensearch_migration.constants import (
     MIGRATION_TASK_LOCK_BLOCKING_TIMEOUT_S,
 )
 from onyx.background.celery.tasks.opensearch_migration.constants import (
@@ -45,12 +48,6 @@ from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
-
-
-# WARNING: Do not change these values without knowing what changes also need to
-# be made to OpenSearchTenantMigrationRecord.
-GET_VESPA_CHUNKS_PAGE_SIZE = 500
-GET_VESPA_CHUNKS_SLICE_COUNT = 4
 
 
 def is_continuation_token_none_for_all_slices(

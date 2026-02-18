@@ -41,3 +41,8 @@ assert (
 CHECK_FOR_DOCUMENTS_TASK_LOCK_BLOCKING_TIMEOUT_S = 30  # 30 seconds.
 
 TOTAL_ALLOWABLE_DOC_MIGRATION_ATTEMPTS_BEFORE_PERMANENT_FAILURE = 15
+
+# WARNING: Do not change these values without knowing what changes also need to
+# be made to OpenSearchTenantMigrationRecord.
+GET_VESPA_CHUNKS_PAGE_SIZE = 500
+GET_VESPA_CHUNKS_SLICE_COUNT = 4
