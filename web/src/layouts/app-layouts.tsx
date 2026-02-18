@@ -381,7 +381,7 @@ function Header() {
                 onClick={() => setShowShareModal(true)}
                 aria-label="share-chat-button"
               >
-                Share Chat
+                {isMobile ? "" : "Share Chat"}
               </Button>
               <SimplePopover
                 trigger={
