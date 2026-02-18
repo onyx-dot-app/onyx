@@ -515,6 +515,10 @@ def assert_hierarchy_nodes_match_expected(
     """
     Assert that retrieved hierarchy nodes match expected structure.
 
+    Checks node IDs, parent relationships, and display names.
+    Display names are verified against SHARED_DRIVE_EXPECTED_DISPLAY_NAMES
+    for any retrieved node whose ID appears in that mapping.
+
     Args:
         retrieved_nodes: List of HierarchyNode objects from the connector
         expected_node_ids: Set of expected raw_node_ids
@@ -557,6 +561,20 @@ def assert_hierarchy_nodes_match_expected(
                 f"Parent mismatch for node {node.raw_node_id} ({node.display_name}): "
                 f"expected parent={expected_parent}, got parent={node.raw_parent_id}"
             )
+
+    # Verify display names for all nodes that have a known expected name
+    for node in retrieved_nodes:
+        assert node.raw_node_id in ALL_EXPECTED_SHARED_DRIVE_NODES
+        expected_node = ALL_EXPECTED_SHARED_DRIVE_NODES[node.raw_node_id]
+        expected_name = expected_node.display_name
+        assert node.display_name == expected_name, (
+            f"Display name mismatch for node {node.raw_node_id}: "
+            f"expected '{expected_name}', got '{node.display_name}'"
+        )
+        assert node.node_type == expected_node.node_type, (
+            f"Node type mismatch for node {node.raw_node_id}: "
+            f"expected '{expected_node.node_type}', got '{node.node_type}'"
+        )
 
 
 def get_expected_hierarchy_for_shared_drives(
