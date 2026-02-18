@@ -283,7 +283,7 @@ TEST_USER_1_MY_DRIVE_FOLDER_ID = (
 )
 
 TEST_USER_1_DRIVE_B_ID = (
-    "0AFskk4zfZm86Uk9PVA"  # My_super_special_shared_drive_suuuuuuper_private
+    "0AFskk4zfZm86Uk9PVA"  # My_super_special_shared_drive_suuuper_private
 )
 TEST_USER_1_DRIVE_B_FOLDER_ID = (
     "1oIj7nigzvP5xI2F8BmibUA8R_J3AbBA-"  # Child folder (silliness)
@@ -369,7 +369,7 @@ EXPECTED_PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B = _node(
 
 EXPECTED_TEST_USER_1_DRIVE_B = _node(
     TEST_USER_1_DRIVE_B_ID,
-    "My_super_special_shared_drive_suuuuuuper_private",
+    "My_super_special_shared_drive_suuuper_private",
     HierarchyNodeType.SHARED_DRIVE,
 )
 EXPECTED_TEST_USER_1_DRIVE_B_FOLDER = _node(

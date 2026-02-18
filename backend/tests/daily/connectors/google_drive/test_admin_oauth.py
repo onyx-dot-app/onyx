@@ -45,6 +45,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_ID
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
@@ -303,8 +304,7 @@ def test_folder_and_shared_drive(
         include_drive_2=True,
         include_restricted_folder=False,
     )
-    # Remove sections_folder since it's not in our connector scope here
-    # (only folder_2 and its children from drive 2 are requested)
+    expected_nodes.pop(SECTIONS_FOLDER_ID, None)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
