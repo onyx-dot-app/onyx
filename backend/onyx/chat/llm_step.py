@@ -979,12 +979,33 @@ def run_llm_step_pkt_generator(
                     if state_container:
                         state_container.add_emitted_citation(result.citation_number)
 
+        def _close_reasoning_if_active() -> Generator[Packet, None, None]:
+            """Emit ReasoningDone and increment turns if reasoning is in progress."""
+            nonlocal reasoning_start
+            nonlocal has_reasoned
+            nonlocal turn_index
+            nonlocal sub_turn_index
+
+            if reasoning_start:
+                yield Packet(
+                    placement=Placement(
+                        turn_index=turn_index,
+                        tab_index=tab_index,
+                        sub_turn_index=sub_turn_index,
+                    ),
+                    obj=ReasoningDone(),
+                )
+                has_reasoned = True
+                turn_index, sub_turn_index = _increment_turns(
+                    turn_index, sub_turn_index
+                )
+                reasoning_start = False
+
         def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
             nonlocal accumulated_answer
             nonlocal accumulated_reasoning
             nonlocal answer_start
             nonlocal reasoning_start
-            nonlocal has_reasoned
             nonlocal turn_index
             nonlocal sub_turn_index
 
@@ -1008,16 +1029,7 @@ def run_llm_step_pkt_generator(
                 return
 
             # Normal flow for AUTO or NONE tool choice
-            if reasoning_start:
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=ReasoningDone(),
-                )
-                has_reasoned = True
-                turn_index, sub_turn_index = _increment_turns(
-                    turn_index, sub_turn_index
-                )
-                reasoning_start = False
+            yield from _close_reasoning_if_active()
 
             if not answer_start:
                 # Store pre-answer processing time in state container for save_chat
@@ -1125,16 +1137,7 @@ def run_llm_step_pkt_generator(
                     yield from _emit_content_chunk(filtered_content)
 
             if delta.tool_calls:
-                if reasoning_start:
-                    yield Packet(
-                        placement=_current_placement(),
-                        obj=ReasoningDone(),
-                    )
-                    has_reasoned = True
-                    turn_index, sub_turn_index = _increment_turns(
-                        turn_index, sub_turn_index
-                    )
-                    reasoning_start = False
+                yield from _close_reasoning_if_active()
 
                 for tool_call_delta in delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
@@ -1199,14 +1202,7 @@ def run_llm_step_pkt_generator(
 
     # This may happen if the custom token processor is used to modify other packets into reasoning
     # Then there won't necessarily be anything else to come after the reasoning tokens
-    if reasoning_start:
-        yield Packet(
-            placement=_current_placement(),
-            obj=ReasoningDone(),
-        )
-        has_reasoned = True
-        turn_index, sub_turn_index = _increment_turns(turn_index, sub_turn_index)
-        reasoning_start = False
+    yield from _close_reasoning_if_active()
 
     # Flush any remaining content from citation processor
     # Reasoning is always first so this should use the post-incremented value of turn_index
