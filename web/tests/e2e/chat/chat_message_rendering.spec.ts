@@ -1,5 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
@@ -290,11 +290,11 @@ async function screenshotChatContainerTopAndBottom(
 
 for (const theme of THEMES) {
   test.describe(`Chat Message Rendering (${theme} mode)`, () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page }, testInfo) => {
       turnCounter = 0;
       await page.context().clearCookies();
       await setThemeBeforeNavigation(page, theme);
-      await loginAs(page, "user");
+      await loginAsWorkerUser(page, testInfo.workerIndex);
     });
 
     test.describe("Short Messages", () => {

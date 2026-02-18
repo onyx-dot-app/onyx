@@ -1,5 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import {
   selectModelFromInputPopover,
   sendMessage,
@@ -28,10 +28,14 @@ async function openChat(page: Page): Promise<void> {
 
 async function loginWithCleanCookies(
   page: Page,
-  user: "admin" | "user"
+  user: "admin" | number
 ): Promise<void> {
   await page.context().clearCookies();
-  await loginAs(page, user);
+  if (typeof user === "number") {
+    await loginAsWorkerUser(page, user);
+  } else {
+    await loginAs(page, user);
+  }
 }
 
 async function createLlmProvider(
@@ -157,10 +161,10 @@ test.describe("LLM Runtime Selection", () => {
   let providersToCleanup: number[] = [];
   let groupsToCleanup: number[] = [];
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     providersToCleanup = [];
     groupsToCleanup = [];
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
   });
 
   test.afterEach(async ({ page }) => {
@@ -191,7 +195,7 @@ test.describe("LLM Runtime Selection", () => {
 
   test("model selection persists across refresh and subsequent messages in the same chat", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
@@ -207,7 +211,7 @@ test.describe("LLM Runtime Selection", () => {
       persistenceProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
     let turn = 0;
@@ -352,7 +356,7 @@ test.describe("LLM Runtime Selection", () => {
 
   test("same model name across providers resolves to provider-specific runtime payloads", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
     const sharedModelName = `shared-runtime-model-${Date.now()}`;
@@ -379,7 +383,7 @@ test.describe("LLM Runtime Selection", () => {
       anthropicProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
 
     const capturedPayloads: SendChatMessagePayload[] = [];
     let turn = 0;
@@ -469,7 +473,7 @@ test.describe("LLM Runtime Selection", () => {
 
   test("restricted provider model is unavailable to unauthorized runtime user selection", async ({
     page,
-  }) => {
+  }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
     const client = new OnyxApiClient(page.request);
@@ -502,7 +506,7 @@ test.describe("LLM Runtime Selection", () => {
     });
     providersToCleanup.push(restrictedProviderId);
 
-    await loginWithCleanCookies(page, "user");
+    await loginWithCleanCookies(page, testInfo.workerIndex);
     await openChat(page);
 
     await page.getByTestId("AppInputBar/llm-popover-trigger").click();

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page, Browser, Locator } from "@playwright/test";
-import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import { loginAs, loginAsWorkerUser, apiLogin } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   startMcpOauthServer,
@@ -2061,8 +2061,8 @@ test.describe("MCP OAuth flows", () => {
 
     await page.context().clearCookies();
     logStep("Cleared cookies");
-    await loginAs(page, "user");
-    logStep("Logged in as user");
+    await loginAsWorkerUser(page, testInfo.workerIndex);
+    logStep("Logged in as worker user");
 
     const assistantId = adminArtifacts!.assistantId;
     const serverName = adminArtifacts!.serverName;
