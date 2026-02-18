@@ -26,10 +26,6 @@ export interface DocumentViewModalProps {
   width?: "sm" | "md" | "lg";
 }
 
-function isTextBasedMimeType(mimeType: string): boolean {
-  return mimeType.startsWith("text/");
-}
-
 export default function DocumentViewModal({
   presentingDocument,
   onClose,
@@ -81,30 +77,12 @@ export default function DocumentViewModal({
           presentingDocument.semantic_identifier || "document";
         setFileName(originalFileName);
 
-        let contentType =
+        const contentType =
           response.headers.get("Content-Type") || "application/octet-stream";
-
-        // If it's octet-stream but file name suggests a text-based extension, override accordingly
-        if (contentType === "application/octet-stream") {
-          const lowerName = originalFileName.toLowerCase();
-          if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
-            contentType = "text/markdown";
-          } else if (lowerName.endsWith(".txt")) {
-            contentType = "text/plain";
-          } else if (lowerName.endsWith(".csv")) {
-            contentType = "text/csv";
-          }
-        }
         setFileType(contentType);
 
-        // Read text content for text-based MIME types or if the caller will need it
-        if (
-          isTextBasedMimeType(contentType) ||
-          contentType === "application/octet-stream"
-        ) {
-          const text = await blob.text();
-          setFileContent(text);
-        }
+        const text = await blob.text();
+        setFileContent(text);
       } catch (error) {
         if (signal?.aborted) {
           return;

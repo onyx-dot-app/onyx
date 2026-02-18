@@ -26,6 +26,23 @@ export interface TextViewProps {
   onClose: () => void;
 }
 
+/**
+ * Resolves an effective content type by overriding generic octet-stream
+ * when the file name suggests a known text-based extension.
+ */
+function resolveTextContentType(
+  rawContentType: string,
+  fileName: string
+): string {
+  if (rawContentType !== "application/octet-stream") return rawContentType;
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown"))
+    return "text/markdown";
+  if (lowerName.endsWith(".txt")) return "text/plain";
+  if (lowerName.endsWith(".csv")) return "text/csv";
+  return rawContentType;
+}
+
 function isMarkdownFormat(mimeType: string): boolean {
   const markdownFormats = [
     "text/markdown",
@@ -155,7 +172,8 @@ export default function TextViewModal({
   );
 
   const renderContent = (data: DocumentData) => {
-    const { fileType, fileUrl, fileName, fileContent, handleDownload } = data;
+    const { fileUrl, fileName, fileContent, handleDownload } = data;
+    const fileType = resolveTextContentType(data.fileType, fileName);
 
     return (
       <div

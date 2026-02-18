@@ -7,14 +7,12 @@ interface LinguistLanguage {
   filenames?: string[];
 }
 
-const CODE_TYPES = new Set(["programming"]);
-
 // Build extension → language name and filename → language name maps at module load
 const extensionMap = new Map<string, string>();
 const filenameMap = new Map<string, string>();
 
 for (const lang of Object.values(languages) as LinguistLanguage[]) {
-  if (!CODE_TYPES.has(lang.type)) continue;
+  if (lang.type !== "programming") continue;
 
   const name = lang.name.toLowerCase();
   for (const ext of lang.extensions ?? []) {
