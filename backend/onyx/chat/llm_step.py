@@ -957,7 +957,7 @@ def run_llm_step_pkt_generator(
         first_action_recorded = False
 
         def _emit_citation_results(
-            results: Generator,
+            results: Generator[str | CitationInfo, None, None],
         ) -> Generator[Packet, None, None]:
             """Yield packets for citation processor results (str or CitationInfo)."""
             nonlocal accumulated_answer
