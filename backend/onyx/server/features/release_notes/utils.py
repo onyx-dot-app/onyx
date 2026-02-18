@@ -8,6 +8,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from onyx import __version__
+from onyx.configs.app_configs import INSTANCE_TYPE
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.release_notes import create_release_notifications_for_versions
 from onyx.redis.redis_pool import get_shared_redis_client
@@ -56,7 +57,7 @@ def is_version_gte(v1: str, v2: str) -> bool:
 
 
 def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry]:
-    """Parse MDX content into ReleaseNoteEntry objects for versions >= __version__."""
+    """Parse MDX content into ReleaseNoteEntry objects."""
     all_entries = []
 
     update_pattern = (
@@ -81,6 +82,12 @@ def parse_mdx_to_release_note_entries(mdx_content: str) -> list[ReleaseNoteEntry
 
     if not all_entries:
         raise ValueError("Could not parse any release note entries from MDX.")
+
+    if INSTANCE_TYPE == "cloud":
+        # Cloud often runs ahead of docs release tags; always notify on latest release.
+        return sorted(
+            all_entries, key=lambda x: parse_version_tuple(x.version), reverse=True
+        )[:1]
 
     # Filter to valid versions >= __version__
     if __version__ and is_valid_version(__version__):
