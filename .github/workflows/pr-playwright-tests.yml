@@ -22,6 +22,9 @@ env:
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+  FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+  GOOGLE_PSE_API_KEY: ${{ secrets.GOOGLE_PSE_API_KEY }}
+  GOOGLE_PSE_SEARCH_ENGINE_ID: ${{ secrets.GOOGLE_PSE_SEARCH_ENGINE_ID }}
 
   # for federated slack tests
   SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
