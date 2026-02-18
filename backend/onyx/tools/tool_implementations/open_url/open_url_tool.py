@@ -804,9 +804,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
             indexed_section = indexed_by_doc_id.get(doc_id) if doc_id else None
             # WebContent.link is normalized (query/fragment stripped). Match on the
             # same normalized form to avoid dropping successful crawl results.
-            crawled_section = crawled_by_url.get(url) or crawled_by_url.get(
-                normalize_web_content_url(url)
-            )
+            crawled_section = crawled_by_url.get(normalize_web_content_url(url))
 
             if indexed_section and indexed_section.combined_content:
                 # Prefer indexed
