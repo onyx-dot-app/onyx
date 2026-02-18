@@ -188,6 +188,7 @@ export const MemoizedLink = memo(
 
     const url = ensureHrefProtocol(href);
 
+    // Check if the link is to a file on the backend
     const isChatFile = url?.includes("/api/chat/file/") && isSameOriginUrl(url);
     if (isChatFile && updatePresentingDocument) {
       const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
