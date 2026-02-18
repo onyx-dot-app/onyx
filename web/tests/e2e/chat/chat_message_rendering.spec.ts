@@ -465,6 +465,30 @@ for (const theme of THEMES) {
     });
 
     test.describe("Web Search with Citations", () => {
+      const TOOLBAR_BUTTONS = [
+        "AgentMessage/copy-button",
+        "AgentMessage/like-button",
+        "AgentMessage/dislike-button",
+      ] as const;
+
+      async function screenshotToolbarButtonHoverStates(
+        page: Page,
+        namePrefix: string
+      ): Promise<void> {
+        const aiMessage = page.getByTestId("onyx-ai-message").first();
+        const toolbar = aiMessage.getByTestId("AgentMessage/toolbar");
+        await expect(toolbar).toBeVisible({ timeout: 10000 });
+
+        for (const buttonTestId of TOOLBAR_BUTTONS) {
+          const button = aiMessage.getByTestId(buttonTestId);
+          await button.hover();
+          const buttonSlug = buttonTestId.split("/")[1];
+          await expectElementScreenshot(toolbar, {
+            name: `${namePrefix}-toolbar-${buttonSlug}-hover-${theme}`,
+          });
+        }
+      }
+
       const WEB_SEARCH_DOCUMENTS: MockDocument[] = [
         {
           document_id: "web-doc-1",
@@ -542,6 +566,8 @@ Key advantages include:
           page,
           `chat-web-search-with-citations-${theme}`
         );
+
+        await screenshotToolbarButtonHoverStates(page, "chat-web-search");
       });
 
       test("internal document search response renders correctly", async ({
@@ -608,6 +634,8 @@ The platform architecture document provides additional context on how these impr
           page,
           `chat-internal-search-with-citations-${theme}`
         );
+
+        await screenshotToolbarButtonHoverStates(page, "chat-internal-search");
       });
     });
 
