@@ -1,14 +1,10 @@
 "use client";
 
 import { Button } from "@opal/components/buttons/Button/components";
+import type { InteractiveContainerHeightVariant } from "@opal/core";
 import SvgEdit from "@opal/icons/edit";
+import type { IconFunctionComponent } from "@opal/types";
 import { useRef, useState } from "react";
-
-import {
-  SIZE_PRESETS,
-  type ContentBaseProps,
-  type SizePresetConfig,
-} from "@opal/components/layouts/Content/presets";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,13 +13,70 @@ import {
 type HeadingSizePreset = "headline" | "section";
 type HeadingVariant = "heading" | "section";
 
-interface HeadingLayoutProps extends ContentBaseProps {
+interface HeadingPresetConfig {
+  /** Icon width/height (CSS value). */
+  iconSize: string;
+  /** Tailwind padding class for the icon container. */
+  iconContainerPadding: string;
+  /** Gap between icon container and content (CSS value). */
+  gap: string;
+  /** Tailwind font class for the title. */
+  titleFont: string;
+  /** Title line-height — also used as icon container min-height (CSS value). */
+  lineHeight: string;
+  /** Button `size` prop for the edit button. */
+  editButtonSize: InteractiveContainerHeightVariant;
+  /** Tailwind padding class for the edit button container. */
+  editButtonPadding: string;
+}
+
+interface HeadingLayoutProps {
+  /** Optional icon component. */
+  icon?: IconFunctionComponent;
+
+  /** Main title text. */
+  title: string;
+
+  /** Optional description below the title. */
+  description?: string;
+
+  /** Enable inline editing of the title. */
+  editable?: boolean;
+
+  /** Called when the user commits an edit. */
+  onTitleChange?: (newTitle: string) => void;
+
   /** Size preset. Default: `"headline"`. */
   sizePreset?: HeadingSizePreset;
 
   /** Variant controls icon placement. `"heading"` = top, `"section"` = inline. Default: `"heading"`. */
   variant?: HeadingVariant;
 }
+
+// ---------------------------------------------------------------------------
+// Presets
+// ---------------------------------------------------------------------------
+
+const HEADING_PRESETS: Record<HeadingSizePreset, HeadingPresetConfig> = {
+  headline: {
+    iconSize: "2rem",
+    iconContainerPadding: "p-0.5",
+    gap: "0.25rem",
+    titleFont: "font-heading-h2",
+    lineHeight: "2.25rem",
+    editButtonSize: "md",
+    editButtonPadding: "p-1",
+  },
+  section: {
+    iconSize: "1.25rem",
+    iconContainerPadding: "p-1",
+    gap: "0rem",
+    titleFont: "font-heading-h3",
+    lineHeight: "1.75rem",
+    editButtonSize: "sm",
+    editButtonPadding: "p-0.5",
+  },
+};
 
 // ---------------------------------------------------------------------------
 // HeadingLayout
@@ -41,7 +94,7 @@ function HeadingLayout({
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const config: SizePresetConfig = SIZE_PRESETS[sizePreset];
+  const config = HEADING_PRESETS[sizePreset];
   const iconPlacement = variant === "heading" ? "top" : "left";
 
   function commit() {
@@ -77,6 +130,7 @@ function HeadingLayout({
               className={`opal-content-heading-input ${config.titleFont} text-text-04`}
               defaultValue={title}
               autoFocus
+              onFocus={(e) => e.currentTarget.select()}
               onBlur={commit}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commit();

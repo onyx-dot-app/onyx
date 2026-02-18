@@ -30,8 +30,8 @@ interface LabelLayoutProps {
   /** Main title text. */
   title: string;
 
-  /** Description text (required for LabelLayout). */
-  description: string;
+  /** Optional description text below the title. */
+  description?: string;
 
   /** Enable inline editing of the title. */
   editable?: boolean;
@@ -126,6 +126,7 @@ function LabelLayout({
               className={`opal-content-label-input ${config.titleFont} text-text-04`}
               defaultValue={title}
               autoFocus
+              onFocus={(e) => e.currentTarget.select()}
               onBlur={commit}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commit();
@@ -161,9 +162,11 @@ function LabelLayout({
           )}
         </div>
 
-        <div className="opal-content-label-description font-secondary-body text-text-03">
-          {description}
-        </div>
+        {description && (
+          <div className="opal-content-label-description font-secondary-body text-text-03">
+            {description}
+          </div>
+        )}
       </div>
     </div>
   );

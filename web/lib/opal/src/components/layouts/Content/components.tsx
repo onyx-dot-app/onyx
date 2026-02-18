@@ -8,11 +8,37 @@ import {
   LabelLayout,
   type LabelLayoutProps,
 } from "@opal/components/layouts/Content/LabelLayout";
-import type {
-  ContentBaseProps,
-  ContentVariant,
-  SizePreset,
-} from "@opal/components/layouts/Content/presets";
+import type { IconFunctionComponent } from "@opal/types";
+
+// ---------------------------------------------------------------------------
+// Shared types
+// ---------------------------------------------------------------------------
+
+type SizePreset =
+  | "headline"
+  | "section"
+  | "main-content"
+  | "main-ui"
+  | "secondary";
+
+type ContentVariant = "heading" | "section" | "body";
+
+interface ContentBaseProps {
+  /** Optional icon component. */
+  icon?: IconFunctionComponent;
+
+  /** Main title text. */
+  title: string;
+
+  /** Optional description below the title. */
+  description?: string;
+
+  /** Enable inline editing of the title. */
+  editable?: boolean;
+
+  /** Called when the user commits an edit. */
+  onTitleChange?: (newTitle: string) => void;
+}
 
 // ---------------------------------------------------------------------------
 // Discriminated union: valid sizePreset × variant combinations
@@ -25,9 +51,7 @@ type HeadingContentProps = ContentBaseProps & {
   variant?: "heading" | "section";
 };
 
-type LabelContentProps = Omit<ContentBaseProps, "description"> & {
-  /** Description text (required for label layout). */
-  description: string;
+type LabelContentProps = ContentBaseProps & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
 };
