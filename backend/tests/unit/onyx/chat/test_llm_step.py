@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
@@ -490,3 +492,57 @@ class TestTranslateHistoryToLlmFormat:
         assert isinstance(translated[1], UserMessage)
         assert "51381e0b0" in translated[1].content
         assert "tool result body" in translated[1].content
+
+    def test_flattens_multiple_assistant_tool_calls_for_ollama(self) -> None:
+        history = [
+            ChatMessageSimple(
+                message="I will use tools now.",
+                token_count=5,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="call-a",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["alpha"]},
+                    ),
+                    ToolCallSimple(
+                        tool_call_id="call-b",
+                        tool_name="internal_search",
+                        tool_arguments={"queries": ["beta"]},
+                    ),
+                ],
+            )
+        ]
+        translated = translate_history_to_llm_format(
+            history=history,
+            llm_config=self._llm_config(LlmProviderNames.OLLAMA_CHAT),
+        )
+
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is None
+        assert translated[0].content == (
+            "I will use tools now.\n"
+            '[Tool Call] name=internal_search id=call-a args={"queries": ["alpha"]}\n'
+            '[Tool Call] name=internal_search id=call-b args={"queries": ["beta"]}'
+        )
+
+    @pytest.mark.parametrize(
+        "provider",
+        [
+            LlmProviderNames.OPENAI,
+            LlmProviderNames.OLLAMA_CHAT,
+        ],
+    )
+    def test_tool_call_response_requires_tool_call_id(self, provider: str) -> None:
+        with pytest.raises(ValueError, match="tool_call_id is not available"):
+            translate_history_to_llm_format(
+                history=[
+                    ChatMessageSimple(
+                        message="tool result body",
+                        token_count=5,
+                        message_type=MessageType.TOOL_CALL_RESPONSE,
+                        tool_call_id=None,
+                    )
+                ],
+                llm_config=self._llm_config(provider),
+            )
