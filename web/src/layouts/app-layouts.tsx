@@ -27,7 +27,7 @@ import Button from "@/refresh-components/buttons/Button";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
-import ShareChatSessionModal from "@/app/app/components/modal/ShareChatSessionModal";
+import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -375,6 +375,7 @@ function Header() {
                 transient={showShareModal}
                 tertiary
                 onClick={() => setShowShareModal(true)}
+                aria-label="share-chat-button"
               >
                 Share Chat
               </Button>
@@ -568,7 +569,7 @@ function Root({ children, enableBackground }: AppRootProps) {
       )}
 
       <div className="z-app-layout">
-        <Header />
+        {!appFocus.isSharedChat() && <Header />}
       </div>
       <div className="z-app-layout flex-1 overflow-auto h-full w-full">
         {children}

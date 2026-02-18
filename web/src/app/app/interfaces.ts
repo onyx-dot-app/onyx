@@ -186,6 +186,7 @@ export interface BackendChatSession {
   current_temperature_override: number | null;
   current_alternate_model?: string;
 
+  owner_name: string | null;
   packets: Packet[][];
 }
 
