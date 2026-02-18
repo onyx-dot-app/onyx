@@ -13,9 +13,10 @@ export {
   type OpenButtonProps,
 } from "@opal/components/buttons/OpenButton/components";
 
-/* LineItemLayout */
+/* Content */
 export {
-  LineItemLayout,
-  type LineItemLayoutProps,
-  type LineItemLayoutVariant,
-} from "@opal/components/layouts/LineItemLayout/components";
+  Content,
+  type ContentProps,
+  type SizePreset,
+  type ContentVariant,
+} from "@opal/components/layouts/Content/components";

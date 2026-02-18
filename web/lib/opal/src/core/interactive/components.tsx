@@ -377,7 +377,7 @@ interface InteractiveContainerProps
  * // Standard card-like container
  * <Interactive.Base>
  *   <Interactive.Container border>
- *     <LineItemLayout icon={SvgIcon} title="Option" />
+ *     <Content icon={SvgIcon} title="Option" />
  *   </Interactive.Container>
  * </Interactive.Base>
  *

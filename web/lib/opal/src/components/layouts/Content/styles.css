@@ -1,29 +1,27 @@
 /* ---------------------------------------------------------------------------
-   ContentContainer.Heading
+   Content — HeadingLayout
 
-   Two icon placement modes:
-     left : flex-row  — icon beside content
-     top  : flex-col  — icon above content
+   Two icon placement modes (driven by variant):
+     left  (variant="section") : flex-row  — icon beside content
+     top   (variant="heading") : flex-col  — icon above content
 
-   Typography uses existing utility classes:
-     title       → font-heading-h2 (24px / 600 / 36px / -0.24px)
-     description → font-secondary-body (12px / 400 / 16px)
+   Sizing (icon size, gap, padding, font, line-height) is driven by the
+   sizePreset prop via inline styles + Tailwind classes in the component.
    --------------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------------
    Layout — icon placement
    --------------------------------------------------------------------------- */
 
-.opal-cc-heading {
+.opal-content-heading {
   @apply flex items-start;
 }
 
-.opal-cc-heading[data-icon-placement="left"] {
+.opal-content-heading[data-icon-placement="left"] {
   @apply flex-row;
-  gap: 4px;
 }
 
-.opal-cc-heading[data-icon-placement="top"] {
+.opal-content-heading[data-icon-placement="top"] {
   @apply flex-col;
 }
 
@@ -31,60 +29,58 @@
    Icon
    --------------------------------------------------------------------------- */
 
-.opal-cc-heading-icon-container {
+.opal-content-heading-icon-container {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.opal-cc-heading-icon {
+.opal-content-heading-icon {
   color: var(--text-04);
 }
 
 /* ---------------------------------------------------------------------------
-   Content column
+   Body column
    --------------------------------------------------------------------------- */
 
-.opal-cc-heading-content {
+.opal-content-heading-body {
   @apply flex flex-1 flex-col items-start;
-  min-width: 1px;
+  min-width: 0.0625rem;
 }
 
 /* ---------------------------------------------------------------------------
    Title row — title (or input) + edit button
    --------------------------------------------------------------------------- */
 
-.opal-cc-heading-title-row {
+.opal-content-heading-title-row {
   @apply flex items-center w-full;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
-.opal-cc-heading-title {
+.opal-content-heading-title {
   @apply text-left overflow-hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
-  padding: 0 2px;
-  min-width: 1px;
-  min-height: 36px;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
 }
 
-.opal-cc-heading-input {
+.opal-content-heading-input {
   @apply flex-1 bg-transparent outline-none border-none;
-  padding: 0 2px;
-  min-width: 1px;
-  min-height: 36px;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
 }
 
 /* ---------------------------------------------------------------------------
    Edit button — visible only on hover of the outer container
    --------------------------------------------------------------------------- */
 
-.opal-cc-heading-edit-button {
+.opal-content-heading-edit-button {
   @apply opacity-0 transition-opacity shrink-0;
 }
 
-.opal-cc-heading:hover .opal-cc-heading-edit-button {
+.opal-content-heading:hover .opal-content-heading-edit-button {
   @apply opacity-100;
 }
 
@@ -92,7 +88,7 @@
    Description
    --------------------------------------------------------------------------- */
 
-.opal-cc-heading-description {
+.opal-content-heading-description {
   @apply text-left w-full;
-  padding: 0 2px;
+  padding: 0 0.125rem;
 }

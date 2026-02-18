@@ -1,52 +1,102 @@
 "use client";
 
-import { LineItemLayout } from "@opal/components";
+import { Content } from "@opal/components";
 import SvgSearch from "@opal/icons/search";
 
 export default function StorybookPage() {
   return (
     <div style={{ padding: "2rem", maxWidth: 960, margin: "0 auto" }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: "2rem" }}>
-        LineItemLayout — Storybook
+        Content — Storybook
       </h1>
 
-      {/* ── left + not editable ── */}
-      <Section label='iconPlacement="left" (default)'>
-        <LineItemLayout
+      {/* ── headline + heading (icon top) ── */}
+      <Section label='sizePreset="headline" variant="heading" (icon top)'>
+        <Content
           icon={SvgSearch}
-          title="Headline with Icon"
-          description="Icon placed to the left of the content"
+          sizePreset="headline"
+          variant="heading"
+          title="Headline Heading"
+          description="Icon placed above the content"
         />
       </Section>
 
-      {/* ── left + editable ── */}
-      <Section label='iconPlacement="left" + editable'>
-        <LineItemLayout
+      <Section label='sizePreset="headline" variant="heading" + editable'>
+        <Content
           icon={SvgSearch}
+          sizePreset="headline"
+          variant="heading"
           title="Click edit to rename"
-          description="Editable headline with icon on the left"
+          description="Editable headline with icon on top"
           editable
           onTitleChange={(v) => console.log("title changed:", v)}
         />
       </Section>
 
-      {/* ── top + not editable ── */}
-      <Section label='iconPlacement="top"'>
-        <LineItemLayout
+      {/* ── headline + section (icon inline) ── */}
+      <Section label='sizePreset="headline" variant="section" (icon inline)'>
+        <Content
           icon={SvgSearch}
-          iconPlacement="top"
-          title="Headline with Icon"
-          description="Icon stacked above the content"
+          sizePreset="headline"
+          variant="section"
+          title="Headline Section"
+          description="Icon placed inline with the content"
         />
       </Section>
 
-      {/* ── top + editable ── */}
-      <Section label='iconPlacement="top" + editable'>
-        <LineItemLayout
+      <Section label='sizePreset="headline" variant="section" + editable'>
+        <Content
           icon={SvgSearch}
-          iconPlacement="top"
+          sizePreset="headline"
+          variant="section"
           title="Click edit to rename"
-          description="Editable headline with icon on top"
+          description="Editable headline with icon inline"
+          editable
+          onTitleChange={(v) => console.log("title changed:", v)}
+        />
+      </Section>
+
+      {/* ── section + heading (icon top) ── */}
+      <Section label='sizePreset="section" variant="heading" (icon top)'>
+        <Content
+          icon={SvgSearch}
+          sizePreset="section"
+          variant="heading"
+          title="Section Heading"
+          description="Smaller preset, icon placed above the content"
+        />
+      </Section>
+
+      <Section label='sizePreset="section" variant="heading" + editable'>
+        <Content
+          icon={SvgSearch}
+          sizePreset="section"
+          variant="heading"
+          title="Click edit to rename"
+          description="Editable section with icon on top"
+          editable
+          onTitleChange={(v) => console.log("title changed:", v)}
+        />
+      </Section>
+
+      {/* ── section + section (icon inline) ── */}
+      <Section label='sizePreset="section" variant="section" (icon inline)'>
+        <Content
+          icon={SvgSearch}
+          sizePreset="section"
+          variant="section"
+          title="Section Section"
+          description="Smaller preset, icon placed inline"
+        />
+      </Section>
+
+      <Section label='sizePreset="section" variant="section" + editable'>
+        <Content
+          icon={SvgSearch}
+          sizePreset="section"
+          variant="section"
+          title="Click edit to rename"
+          description="Editable section with icon inline"
           editable
           onTitleChange={(v) => console.log("title changed:", v)}
         />
