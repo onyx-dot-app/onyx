@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import {
   TEST_ADMIN2_CREDENTIALS,
   TEST_ADMIN_CREDENTIALS,
+  WORKER_USER_POOL_SIZE,
   workerUserCredentials,
 } from "@tests/e2e/constants";
 
@@ -36,15 +37,18 @@ export async function loginAs(
 }
 
 /**
- * Log in as the worker-specific user for test isolation.
- * Each Playwright worker gets its own user (worker0@example.com, worker1@example.com, ...),
- * provisioned during global setup.
+ * Log in as a worker-specific user for test isolation.
+ * Uses modulo to map any workerIndex (which can exceed the pool size due to
+ * retries spawning new workers) back to a provisioned user. This is safe
+ * because retries never run in parallel with the original attempt.
  */
 export async function loginAsWorkerUser(
   page: Page,
   workerIndex: number
 ): Promise<void> {
-  const { email, password } = workerUserCredentials(workerIndex);
+  const { email, password } = workerUserCredentials(
+    workerIndex % WORKER_USER_POOL_SIZE
+  );
   await apiLogin(page, email, password);
 }
 

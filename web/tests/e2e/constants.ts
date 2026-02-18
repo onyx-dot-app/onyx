@@ -8,6 +8,15 @@ export const TEST_ADMIN2_CREDENTIALS = {
   password: "TestPassword123!",
 };
 
+/**
+ * Number of distinct worker users provisioned during global setup.
+ * Must be >= the max concurrent workers in playwright.config.ts.
+ * Playwright's workerIndex can exceed this (retries spawn new workers
+ * with incrementing indices), so callers should use modulo:
+ *   workerIndex % WORKER_USER_POOL_SIZE
+ */
+export const WORKER_USER_POOL_SIZE = 8;
+
 export function workerUserCredentials(workerIndex: number): {
   email: string;
   password: string;

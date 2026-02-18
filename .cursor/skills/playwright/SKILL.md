@@ -51,8 +51,9 @@ All tests use `admin_auth.json` storage state by default (pre-authenticated admi
 Global setup (`global-setup.ts`) runs automatically before all tests and handles:
 
 - Server readiness check (polls health endpoint, 60s timeout)
-- Provisioning test users: admin, admin2, and **one user per worker** (`worker0@example.com`, `worker1@example.com`, ...) (idempotent)
+- Provisioning test users: admin, admin2, and a **pool of worker users** (`worker0@example.com` through `worker7@example.com`) (idempotent)
 - API login + saving storage states: `admin_auth.json`, `admin2_auth.json`, and `worker{N}_auth.json` for each worker user
+- Setting display name to `"worker"` for each worker user
 - Promoting admin2 to admin role
 - Ensuring a public LLM provider exists
 
@@ -88,7 +89,7 @@ test.describe("Feature Name", () => {
 });
 ```
 
-**User isolation** — tests that modify visible app state (creating assistants, sending chat messages, pinning items) should run as a **worker-specific user** and clean up resources in `afterAll`. Each Playwright worker gets its own dedicated user (`worker0@example.com`, `worker1@example.com`, ...), provisioned during global setup. Use `testInfo.workerIndex` to select the right one. This ensures parallel workers never share user state, keeps usernames deterministic for screenshots, and avoids cross-contamination:
+**User isolation** — tests that modify visible app state (creating assistants, sending chat messages, pinning items) should run as a **worker-specific user** and clean up resources in `afterAll`. Global setup provisions a pool of worker users (`worker0@example.com` through `worker7@example.com`). `loginAsWorkerUser` maps `testInfo.workerIndex` to a pool slot via modulo, so retry workers (which get incrementing indices beyond the pool size) safely reuse existing users. This ensures parallel workers never share user state, keeps usernames deterministic for screenshots, and avoids cross-contamination:
 
 ```typescript
 import { test } from "@playwright/test";

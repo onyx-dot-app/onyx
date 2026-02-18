@@ -2,6 +2,7 @@ import { FullConfig, request } from "@playwright/test";
 import {
   TEST_ADMIN_CREDENTIALS,
   TEST_ADMIN2_CREDENTIALS,
+  WORKER_USER_POOL_SIZE,
   workerUserCredentials,
 } from "@tests/e2e/constants";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
@@ -170,8 +171,7 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.password
   );
 
-  const workerCount = config.workers;
-  for (let i = 0; i < workerCount; i++) {
+  for (let i = 0; i < WORKER_USER_POOL_SIZE; i++) {
     const { email, password } = workerUserCredentials(i);
     await ensureUserExists(baseURL, email, password);
   }
@@ -198,7 +198,7 @@ async function globalSetup(config: FullConfig) {
     "admin2_auth.json"
   );
 
-  for (let i = 0; i < workerCount; i++) {
+  for (let i = 0; i < WORKER_USER_POOL_SIZE; i++) {
     const { email, password } = workerUserCredentials(i);
     const storageStatePath = `worker${i}_auth.json`;
     await apiLoginAndSaveState(baseURL, email, password, storageStatePath);
