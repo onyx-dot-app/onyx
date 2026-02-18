@@ -30,6 +30,7 @@ SCIM_SERVICE_PROVIDER_CONFIG_SCHEMA = (
     "urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"
 )
 SCIM_RESOURCE_TYPE_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:ResourceType"
+SCIM_SCHEMA_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Schema"
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +196,39 @@ class ScimServiceProviderConfig(BaseModel):
     )
 
 
+class ScimSchemaAttribute(BaseModel):
+    """Attribute definition within a SCIM Schema (RFC 7643 §7)."""
+
+    name: str
+    type: str
+    multiValued: bool = False
+    required: bool = False
+    description: str = ""
+    caseExact: bool = False
+    mutability: str = "readWrite"
+    returned: str = "default"
+    uniqueness: str = "none"
+    subAttributes: list["ScimSchemaAttribute"] = Field(default_factory=list)
+
+
+class ScimSchemaDefinition(BaseModel):
+    """SCIM Schema definition (RFC 7643 §7).
+
+    Served at GET /scim/v2/Schemas. Describes the attributes available
+    on each resource type so IdPs know which fields they can provision.
+    """
+
+    schemas: list[str] = Field(default_factory=lambda: [SCIM_SCHEMA_SCHEMA])
+    id: str
+    name: str
+    description: str
+    attributes: list[ScimSchemaAttribute] = Field(default_factory=list)
+
+
 class ScimSchemaExtension(BaseModel):
     """Schema extension reference within ResourceType (RFC 7643 §6)."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
 
     schema_: str = Field(alias="schema")
     required: bool
@@ -211,7 +241,7 @@ class ScimResourceType(BaseModel):
     types are available (Users, Groups) and their respective endpoints.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
 
     schemas: list[str] = Field(default_factory=lambda: [SCIM_RESOURCE_TYPE_SCHEMA])
     id: str
