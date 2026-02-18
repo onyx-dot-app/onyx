@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@/lib/utils";
+import Popover from "@/refresh-components/Popover";
+import Truncated from "@/refresh-components/texts/Truncated";
+import { Section, LineItemLayout } from "@/layouts/general-layouts";
 
 interface ShareButtonProps {
   sessionId: string;
@@ -27,7 +30,7 @@ const SCOPE_OPTIONS: {
   },
   {
     value: "public_org",
-    label: "Org",
+    label: "Organization",
     description: "Anyone logged into your Onyx can view this app.",
   },
   {
@@ -49,27 +52,15 @@ export default function ShareButton({
     "idle"
   );
   const [isLoading, setIsLoading] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
 
   const isShared = sharingScope !== "private";
 
-  const shareUrl = webappUrl.startsWith("http")
-    ? webappUrl
-    : `${window.location.origin}${webappUrl}`;
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [isOpen]);
+  const shareUrl =
+    typeof window !== "undefined"
+      ? webappUrl.startsWith("http")
+        ? webappUrl
+        : `${window.location.origin}${webappUrl}`
+      : webappUrl;
 
   const handleSelect = async (scope: SharingScope) => {
     if (scope === sharingScope || isLoading) return;
@@ -107,75 +98,92 @@ export default function ShareButton({
   };
 
   return (
-    <div className="relative flex-shrink-0" ref={popoverRef}>
-      <Button
-        action
-        primary={isShared}
-        tertiary={!isShared}
-        leftIcon={SvgLink}
-        onClick={() => setIsOpen((v) => !v)}
-        aria-label="Share webapp"
-      >
-        {isShared ? "Shared" : "Share"}
-      </Button>
+    <Section width="fit" height="fit">
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover.Trigger asChild>
+          <Button
+            action
+            primary={isShared}
+            tertiary={!isShared}
+            leftIcon={SvgLink}
+            aria-label="Share webapp"
+          >
+            {isShared ? "Shared" : "Share"}
+          </Button>
+        </Popover.Trigger>
+        <Popover.Content side="bottom" align="end" width="lg" sideOffset={4}>
+          <Section
+            alignItems="stretch"
+            gap={0.25}
+            padding={0.25}
+            width="full"
+            height="fit"
+          >
+            {/* Scope options */}
+            <Section alignItems="stretch" gap={0.25} width="full">
+              {SCOPE_OPTIONS.map((opt) => (
+                <div
+                  key={opt.value}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSelect(opt.value)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && handleSelect(opt.value)
+                  }
+                  aria-disabled={isLoading}
+                  className={cn(
+                    "cursor-pointer rounded-08 transition-colors",
+                    sharingScope === opt.value
+                      ? "bg-background-tint-03"
+                      : "hover:bg-background-tint-02"
+                  )}
+                >
+                  <LineItemLayout
+                    title={opt.label}
+                    description={opt.description}
+                    variant="tertiary"
+                    reducedPadding
+                  />
+                </div>
+              ))}
+            </Section>
 
-      {isOpen && (
-        <div className="absolute top-full right-0 mt-2 z-50 w-80 rounded-12 border border-border-01 bg-background-neutral-00 shadow-lg p-4 flex flex-col gap-3">
-          <Text mainUiAction text04>
-            Share app
-          </Text>
-
-          {/* Scope selector */}
-          <div className="flex flex-col gap-1">
-            {SCOPE_OPTIONS.map((opt) => (
-              <div
-                key={opt.value}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleSelect(opt.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSelect(opt.value)}
-                aria-disabled={isLoading}
-                className={cn(
-                  "flex flex-col items-start gap-0.5 px-3 py-2 rounded-08 text-left transition-colors cursor-pointer",
-                  sharingScope === opt.value
-                    ? "bg-background-tint-03"
-                    : "hover:bg-background-tint-02"
-                )}
-              >
-                <Text mainUiAction text04>
-                  {opt.label}
-                </Text>
-                <Text secondaryBody text03>
-                  {opt.description}
-                </Text>
+            {/* Copy link — shown when not private */}
+            {isShared && (
+              <div className="rounded-08 bg-background-tint-02">
+                <Section
+                  flexDirection="row"
+                  alignItems="center"
+                  gap={0.25}
+                  padding={0.25}
+                  width="full"
+                  height="fit"
+                >
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <Truncated secondaryBody text03>
+                      {shareUrl}
+                    </Truncated>
+                  </div>
+                  <Button
+                    action
+                    tertiary
+                    size="md"
+                    leftIcon={
+                      copyState === "copied"
+                        ? SvgCheck
+                        : copyState === "error"
+                          ? SvgX
+                          : SvgCopy
+                    }
+                    onClick={handleCopy}
+                    aria-label="Copy link"
+                  />
+                </Section>
               </div>
-            ))}
-          </div>
-
-          {/* Copy link row — shown when not private */}
-          {isShared && (
-            <div className="flex items-center gap-2 p-2 rounded-08 bg-background-tint-02">
-              <Text secondaryBody text03 className="flex-1 truncate">
-                {shareUrl}
-              </Text>
-              <Button
-                action
-                tertiary
-                size="md"
-                leftIcon={
-                  copyState === "copied"
-                    ? SvgCheck
-                    : copyState === "error"
-                      ? SvgX
-                      : SvgCopy
-                }
-                onClick={handleCopy}
-                aria-label="Copy link"
-              />
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            )}
+          </Section>
+        </Popover.Content>
+      </Popover>
+    </Section>
   );
 }

@@ -15,6 +15,8 @@ from collections.abc import Generator
 from pathlib import Path
 from uuid import UUID
 
+import httpx
+
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import DEMO_DATA_PATH
@@ -35,6 +37,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 logger = setup_logger()
 
@@ -94,10 +97,10 @@ class LocalSandboxManager(SandboxManager):
         self._nextjs_processes: dict[tuple[UUID, UUID], subprocess.Popen[bytes]] = {}
 
         # Track sessions currently being (re)started - prevents concurrent restarts.
-        # Mutated from background threads; all access must hold _nextjs_lock.
-        self._nextjs_starting: set[tuple[UUID, UUID]] = set()
+        # ThreadSafeSet allows atomic check-and-add without holding _nextjs_lock.
+        self._nextjs_starting: ThreadSafeSet[tuple[UUID, UUID]] = ThreadSafeSet()
 
-        # Lock guarding both _nextjs_processes and _nextjs_starting
+        # Lock guarding _nextjs_processes (shared across sessions; hold briefly only)
         self._nextjs_lock = threading.Lock()
 
         # Validate templates exist (raises RuntimeError if missing)
@@ -790,6 +793,12 @@ class LocalSandboxManager(SandboxManager):
         Returns immediately — the actual startup runs in a background daemon thread.
         A per-session guard prevents concurrent restarts from racing.
 
+        Lock design: _nextjs_lock is shared across ALL sessions. Holding it during
+        httpx (1s) or start_nextjs_server (several seconds) would block every other
+        session's status checks and restarts. We only hold the lock for fast
+        in-memory ops (dict get, check_and_add). The slow I/O runs in the background
+        thread without holding any lock.
+
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
@@ -798,38 +807,31 @@ class LocalSandboxManager(SandboxManager):
         process_key = (sandbox_id, session_id)
 
         with self._nextjs_lock:
-            # Already have a live tracked process
             existing = self._nextjs_processes.get(process_key)
             if existing is not None and existing.poll() is None:
                 return
 
-            # Already being started by another thread
-            if process_key in self._nextjs_starting:
-                return
-
-            # Check if the port is already responding (orphan process that survived restart)
-            try:
-                import httpx
-
-                with httpx.Client(timeout=1.0) as client:
-                    client.get(f"http://localhost:{nextjs_port}")
-                logger.info(
-                    f"Port {nextjs_port} already alive for session {session_id} "
-                    "(orphan process) — skipping restart"
-                )
-                return
-            except Exception:
-                pass  # Port is dead; proceed to restart
-
-            self._nextjs_starting.add(process_key)
-
-        logger.info(
-            f"Scheduling background Next.js restart for session {session_id} "
-            f"on port {nextjs_port}"
-        )
+        # Atomic check-and-add: returns True if already in set (another thread is starting)
+        if self._nextjs_starting.check_and_add(process_key):
+            return
 
         def _start_in_background() -> None:
             try:
+                # Port check in background to avoid blocking the main thread
+                try:
+                    with httpx.Client(timeout=1.0) as client:
+                        client.get(f"http://localhost:{nextjs_port}")
+                    logger.info(
+                        f"Port {nextjs_port} already alive for session {session_id} "
+                        "(orphan process) — skipping restart"
+                    )
+                    return
+                except Exception:
+                    pass  # Port is dead; proceed with restart
+
+                logger.info(
+                    f"Starting Next.js for session {session_id} on port {nextjs_port}"
+                )
                 sandbox_path = self._get_sandbox_path(sandbox_id)
                 web_dir = self._directory_manager.get_web_path(
                     sandbox_path, str(session_id)
@@ -854,8 +856,7 @@ class LocalSandboxManager(SandboxManager):
                     f"Failed to auto-restart Next.js for session {session_id}: {e}"
                 )
             finally:
-                with self._nextjs_lock:
-                    self._nextjs_starting.discard(process_key)
+                self._nextjs_starting.discard(process_key)
 
         threading.Thread(target=_start_in_background, daemon=True).start()
 

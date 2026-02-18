@@ -31,7 +31,6 @@ import {
 } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
-import ShareButton from "@/app/craft/components/ShareButton";
 
 // Output panel sub-components
 import UrlBar from "@/app/craft/components/output-panel/UrlBar";
@@ -616,20 +615,16 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
         onRefresh={handleRefresh}
-        shareButton={
+        sessionId={
           !isFilePreviewActive &&
           activeOutputTab === "preview" &&
           session?.id &&
-          displayUrl?.startsWith("http") ? (
-            <ShareButton
-              key={session.id}
-              sessionId={session.id}
-              webappUrl={displayUrl}
-              sharingScope={webappInfo?.sharing_scope ?? "private"}
-              onScopeChange={mutate}
-            />
-          ) : undefined
+          displayUrl?.startsWith("http")
+            ? session.id
+            : undefined
         }
+        sharingScope={webappInfo?.sharing_scope ?? "private"}
+        onScopeChange={mutate}
       />
 
       {/* Tab Content */}

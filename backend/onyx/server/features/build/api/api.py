@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -384,16 +385,14 @@ def _check_webapp_access(
         raise HTTPException(status_code=404, detail="Session not found")
     if session.sharing_scope == SharingScope.PUBLIC_GLOBAL:
         return session
-    if session.sharing_scope == SharingScope.PUBLIC_ORG:
-        if user is None:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        return session
-    # PRIVATE: require owner
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    if session.user_id != user.id:
+    if session.sharing_scope == SharingScope.PRIVATE and session.user_id != user.id:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
+
+
+_OFFLINE_HTML_PATH = Path(__file__).parent / "templates" / "webapp_offline.html"
 
 
 def _offline_html_response() -> Response:
@@ -402,93 +401,7 @@ def _offline_html_response() -> Response:
     Design mirrors the default Craft web template (outputs/web/app/page.tsx):
     terminal window aesthetic with Minecraft-themed typing animation.
     """
-    html = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="refresh" content="15" />
-  <title>Craft — Starting up</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-      background: linear-gradient(to bottom right, #030712, #111827, #030712);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1.5rem;
-      padding: 2rem;
-    }
-
-    .terminal {
-      width: 100%;
-      max-width: 580px;
-      border: 2px solid #374151;
-      border-radius: 2px;
-    }
-
-    .titlebar {
-      background: #1f2937;
-      padding: 0.5rem 0.75rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      border-bottom: 1px solid #374151;
-    }
-
-    .btn { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
-    .btn-red    { background: #ef4444; }
-    .btn-yellow { background: #eab308; }
-    .btn-green  { background: #22c55e; }
-
-    .title-label {
-      flex: 1;
-      text-align: center;
-      font-size: 0.75rem;
-      color: #6b7280;
-      margin-right: 36px;
-    }
-
-    .body {
-      background: #111827;
-      padding: 1.5rem;
-      min-height: 200px;
-      font-size: 0.875rem;
-      color: #d1d5db;
-      display: flex;
-      align-items: flex-start;
-      gap: 0.375rem;
-    }
-
-    .prompt { color: #10b981; user-select: none; }
-
-    .tagline {
-      font-size: 0.8125rem;
-      color: #4b5563;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-  <div class="terminal">
-    <div class="titlebar">
-      <div class="btn btn-red"></div>
-      <div class="btn btn-yellow"></div>
-      <div class="btn btn-green"></div>
-      <span class="title-label">crafting_table</span>
-    </div>
-    <div class="body">
-      <span class="prompt">/&gt;</span>
-      <span>Sandbox is asleep...</span>
-    </div>
-  </div>
-  <p class="tagline">Ask the owner to open their Craft session to wake it up.</p>
-</body>
-</html>"""
+    html = _OFFLINE_HTML_PATH.read_text()
     return Response(content=html, status_code=503, media_type="text/html")
 
 
@@ -498,37 +411,17 @@ public_build_router = APIRouter(prefix="/build")
 
 
 @public_build_router.get("/sessions/{session_id}/webapp", response_model=None)
-def get_webapp_root(
-    session_id: UUID,
-    request: Request,
-    user: User | None = Depends(optional_user),
-    db_session: Session = Depends(get_session),
-) -> StreamingResponse | Response:
-    """Proxy the root path of the webapp for a specific session.
-
-    Accessible without authentication when sharing_scope is public_global.
-    Returns a friendly offline page when the sandbox is not running.
-    """
-    _check_webapp_access(session_id, user, db_session)
-    try:
-        return _proxy_request("", request, session_id, db_session)
-    except HTTPException as e:
-        if e.status_code in (502, 503, 504):
-            return _offline_html_response()
-        raise
-
-
 @public_build_router.get(
     "/sessions/{session_id}/webapp/{path:path}", response_model=None
 )
-def get_webapp_path(
+def get_webapp(
     session_id: UUID,
-    path: str,
     request: Request,
+    path: str = "",
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse | Response:
-    """Proxy any subpath of the webapp for a specific session.
+    """Proxy the webapp for a specific session (root and subpaths).
 
     Accessible without authentication when sharing_scope is public_global.
     Returns a friendly offline page when the sandbox is not running.
