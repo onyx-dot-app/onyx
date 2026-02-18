@@ -267,6 +267,27 @@ async function screenshotChatContainer(
   await expectElementScreenshot(container, { name });
 }
 
+/**
+ * Captures two screenshots of the chat container for long-content tests:
+ * one scrolled to the top and one scrolled to the bottom. Both are captured
+ * for the current theme, ensuring consistent scroll positions regardless of
+ * whether the page was just navigated to (top) or just finished streaming (bottom).
+ */
+async function screenshotChatContainerTopAndBottom(
+  page: Page,
+  name: string
+): Promise<void> {
+  const container = page.locator("[data-main-container]");
+  await expect(container).toBeVisible();
+  const scrollContainer = page.getByTestId("chat-scroll-container");
+
+  await scrollContainer.evaluate((el) => el.scrollTo({ top: 0 }));
+  await expectElementScreenshot(container, { name: `${name}-top` });
+
+  await scrollContainer.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await expectElementScreenshot(container, { name: `${name}-bottom` });
+}
+
 for (const theme of THEMES) {
   test.describe(`Chat Message Rendering (${theme} mode)`, () => {
     test.beforeEach(async ({ page }) => {
@@ -331,7 +352,7 @@ for (const theme of THEMES) {
         await expect(aiMessage).toContainText("Indexing Latency");
         await expect(aiMessage).toContainText("AI Chat Architecture");
 
-        await screenshotChatContainer(
+        await screenshotChatContainerTopAndBottom(
           page,
           `chat-short-message-long-response-${theme}`
         );
@@ -351,7 +372,7 @@ for (const theme of THEMES) {
         const aiMessage = page.getByTestId("onyx-ai-message").first();
         await expect(aiMessage).toContainText("Retrieval-Augmented Generation");
 
-        await screenshotChatContainer(
+        await screenshotChatContainerTopAndBottom(
           page,
           `chat-long-message-long-response-${theme}`
         );
@@ -411,7 +432,7 @@ for (const theme of THEMES) {
         const userMessages = page.locator("#onyx-human-message");
         await expect(userMessages).toHaveCount(3);
 
-        await screenshotChatContainer(
+        await screenshotChatContainerTopAndBottom(
           page,
           `chat-multi-turn-conversation-${theme}`
         );
@@ -436,7 +457,7 @@ for (const theme of THEMES) {
           timeout: 30000,
         });
 
-        await screenshotChatContainer(
+        await screenshotChatContainerTopAndBottom(
           page,
           `chat-multi-turn-mixed-lengths-${theme}`
         );
