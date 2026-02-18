@@ -879,7 +879,8 @@ def run_llm_step_pkt_generator(
         tool_definitions: List of tool definitions available to the LLM.
         tool_choice: Tool choice configuration (e.g., "auto", "required", "none").
         llm: Language model interface to use for generation.
-        turn_index: Current turn index in the conversation.
+        placement: Placement info (turn_index, tab_index, sub_turn_index) for
+            positioning packets in the conversation UI.
         state_container: Container for storing chat state (reasoning, answers).
         citation_processor: Optional processor for extracting and formatting citations
             from the response. If provided, processes tokens to identify citations.
@@ -891,7 +892,14 @@ def run_llm_step_pkt_generator(
         custom_token_processor: Optional callable that processes each token delta
             before yielding. Receives (delta, processor_state) and returns
             (modified_delta, new_processor_state). Can return None for delta to skip.
-        sub_turn_index: Optional sub-turn index for nested tool/agent calls.
+        max_tokens: Optional maximum number of tokens for the LLM response.
+        use_existing_tab_index: If True, use the tab_index from placement for all
+            tool calls instead of auto-incrementing.
+        is_deep_research: If True, treat content before tool calls as reasoning
+            when tool_choice is REQUIRED.
+        pre_answer_processing_time: Optional time spent processing before the
+            answer started, recorded in state_container for analytics.
+        timeout_override: Optional timeout override for the LLM call.
 
     Yields:
         Packet: Streaming packets containing:
