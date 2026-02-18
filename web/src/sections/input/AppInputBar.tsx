@@ -759,7 +759,7 @@ const AppInputBar = React.memo(
                 >
                   <LLMPopover
                     llmManager={llmManager}
-                    requiresImageGeneration={hasImageFiles}
+                    requiresImageInput={hasImageFiles}
                     disabled={disabled}
                   />
                 </div>

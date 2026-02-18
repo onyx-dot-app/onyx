@@ -33,7 +33,7 @@ import { LLMOption, LLMOptionGroup } from "./interfaces";
 
 export interface LLMPopoverProps {
   llmManager: LlmManager;
-  requiresImageGeneration?: boolean;
+  requiresImageInput?: boolean;
   folded?: boolean;
   onSelect?: (value: string) => void;
   currentModelName?: string;
@@ -140,7 +140,7 @@ export function groupLlmOptions(
 
 export default function LLMPopover({
   llmManager,
-  requiresImageGeneration,
+  requiresImageInput,
   folded,
   onSelect,
   currentModelName,
@@ -190,7 +190,7 @@ export default function LLMPopover({
   // Filter options by vision capability (when images are uploaded) and search query
   const filteredOptions = useMemo(() => {
     let result = llmOptions;
-    if (requiresImageGeneration) {
+    if (requiresImageInput) {
       result = result.filter((opt) => opt.supportsImageInput);
     }
     if (searchQuery.trim()) {
@@ -203,7 +203,7 @@ export default function LLMPopover({
       );
     }
     return result;
-  }, [llmOptions, searchQuery, requiresImageGeneration]);
+  }, [llmOptions, searchQuery, requiresImageInput]);
 
   // Group options by provider using backend-provided display names and ordering
   // For aggregator providers (bedrock, openrouter, vertex_ai), flatten to "Provider/Vendor" format
