@@ -917,6 +917,13 @@ def run_llm_step_pkt_generator(
     tab_index = placement.tab_index
     sub_turn_index = placement.sub_turn_index
 
+    def _current_placement() -> Placement:
+        return Placement(
+            turn_index=turn_index,
+            tab_index=tab_index,
+            sub_turn_index=sub_turn_index,
+        )
+
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = 0
 
@@ -966,19 +973,11 @@ def run_llm_step_pkt_generator(
                     state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
+                        placement=_current_placement(),
                         obj=ReasoningStart(),
                     )
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=ReasoningDelta(reasoning=content_chunk),
                 )
                 reasoning_start = True
@@ -987,11 +986,7 @@ def run_llm_step_pkt_generator(
             # Normal flow for AUTO or NONE tool choice
             if reasoning_start:
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=ReasoningDone(),
                 )
                 has_reasoned = 1
@@ -1008,11 +1003,7 @@ def run_llm_step_pkt_generator(
                     )
 
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=AgentResponseStart(
                         final_documents=final_documents,
                         pre_answer_processing_seconds=pre_answer_processing_time,
@@ -1028,20 +1019,12 @@ def run_llm_step_pkt_generator(
                         if state_container:
                             state_container.set_answer_tokens(accumulated_answer)
                         yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
+                            placement=_current_placement(),
                             obj=AgentResponseDelta(content=result),
                         )
                     elif isinstance(result, CitationInfo):
                         yield Packet(
-                            placement=Placement(
-                                turn_index=turn_index,
-                                tab_index=tab_index,
-                                sub_turn_index=sub_turn_index,
-                            ),
+                            placement=_current_placement(),
                             obj=result,
                         )
                         # Track emitted citation for saving
@@ -1053,11 +1036,7 @@ def run_llm_step_pkt_generator(
                 if state_container:
                     state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=AgentResponseDelta(content=content_chunk),
                 )
 
@@ -1119,19 +1098,11 @@ def run_llm_step_pkt_generator(
                     state_container.set_reasoning_tokens(accumulated_reasoning)
                 if not reasoning_start:
                     yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
+                        placement=_current_placement(),
                         obj=ReasoningStart(),
                     )
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=ReasoningDelta(reasoning=delta.reasoning_content),
                 )
                 reasoning_start = True
@@ -1147,11 +1118,7 @@ def run_llm_step_pkt_generator(
             if delta.tool_calls:
                 if reasoning_start:
                     yield Packet(
-                        placement=Placement(
-                            turn_index=turn_index,
-                            tab_index=tab_index,
-                            sub_turn_index=sub_turn_index,
-                        ),
+                        placement=_current_placement(),
                         obj=ReasoningDone(),
                     )
                     has_reasoned = 1
@@ -1225,11 +1192,7 @@ def run_llm_step_pkt_generator(
     # Then there won't necessarily be anything else to come after the reasoning tokens
     if reasoning_start:
         yield Packet(
-            placement=Placement(
-                turn_index=turn_index,
-                tab_index=tab_index,
-                sub_turn_index=sub_turn_index,
-            ),
+            placement=_current_placement(),
             obj=ReasoningDone(),
         )
         has_reasoned = 1
@@ -1248,20 +1211,12 @@ def run_llm_step_pkt_generator(
                 if state_container:
                     state_container.set_answer_tokens(accumulated_answer)
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=AgentResponseDelta(content=result),
                 )
             elif isinstance(result, CitationInfo):
                 yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
+                    placement=_current_placement(),
                     obj=result,
                 )
                 # Track emitted citation for saving
