@@ -125,13 +125,18 @@ function LabelLayout({
   sizePreset = "main-ui",
 }: LabelLayoutProps) {
   const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const config = LABEL_PRESETS[sizePreset];
 
+  function startEditing() {
+    setEditValue(title);
+    setEditing(true);
+  }
+
   function commit() {
-    if (!inputRef.current) return;
-    const value = inputRef.current.value.trim();
+    const value = editValue.trim();
     if (value && value !== title) onTitleChange?.(value);
     setEditing(false);
   }
@@ -153,25 +158,34 @@ function LabelLayout({
       <div className="opal-content-label-body">
         <div className="opal-content-label-title-row">
           {editing ? (
-            <input
-              ref={inputRef}
-              className={`opal-content-label-input ${config.titleFont} text-text-04`}
-              defaultValue={title}
-              autoFocus
-              onFocus={(e) => e.currentTarget.select()}
-              onBlur={commit}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commit();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              style={{ height: config.lineHeight }}
-            />
+            <div className="opal-content-label-input-sizer">
+              <span
+                className={`opal-content-label-input-mirror ${config.titleFont}`}
+              >
+                {editValue || "\u00A0"}
+              </span>
+              <input
+                ref={inputRef}
+                className={`opal-content-label-input ${config.titleFont} text-text-04`}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                size={1}
+                autoFocus
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commit();
+                  if (e.key === "Escape") setEditing(false);
+                }}
+                style={{ height: config.lineHeight }}
+              />
+            </div>
           ) : (
             <span
               className={`opal-content-label-title ${
                 config.titleFont
               } text-text-04${editable ? " cursor-pointer" : ""}`}
-              onClick={editable ? () => setEditing(true) : undefined}
+              onClick={editable ? startEditing : undefined}
               style={{ height: config.lineHeight }}
             >
               {title}
@@ -216,7 +230,7 @@ function LabelLayout({
                 size={config.editButtonSize}
                 tooltip="Edit"
                 tooltipSide="right"
-                onClick={() => setEditing(true)}
+                onClick={startEditing}
               />
             </div>
           )}

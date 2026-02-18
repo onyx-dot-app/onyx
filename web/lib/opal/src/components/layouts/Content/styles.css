@@ -145,10 +145,24 @@
   min-width: 0.0625rem;
 }
 
-.opal-content-label-input {
-  @apply flex-1 bg-transparent outline-none border-none;
+.opal-content-label-input-sizer {
+  display: inline-grid;
+  align-items: stretch;
+}
+
+.opal-content-label-input-sizer > * {
+  grid-area: 1 / 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
+}
+
+.opal-content-label-input-mirror {
+  visibility: hidden;
+  white-space: pre;
+}
+
+.opal-content-label-input {
+  @apply bg-transparent outline-none border-none;
 }
 
 /* ---------------------------------------------------------------------------
