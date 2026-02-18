@@ -385,6 +385,7 @@ class TestIncrementTurns:
         assert turn == 5
         assert sub == 3
 
+
 class TestResolveToolArguments:
     """Tests for the _resolve_tool_arguments helper."""
 
