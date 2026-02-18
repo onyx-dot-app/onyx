@@ -171,3 +171,58 @@
   @apply text-left w-full;
   padding: 0 0.125rem;
 }
+
+/* ===========================================================================
+   Content — BodyLayout
+
+   Three orientation modes (driven by orientation prop):
+     inline  : flex-row         — icon left, title right
+     vertical: flex-col         — icon top, title below
+     reverse : flex-row-reverse — title left, icon right
+
+   Icon color is always text-03. Title color varies by prominence
+   (text-04 default, text-03 muted) and is applied via Tailwind class.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout — orientation
+   --------------------------------------------------------------------------- */
+
+.opal-content-body {
+  @apply flex items-start;
+}
+
+.opal-content-body[data-orientation="inline"] {
+  @apply flex-row;
+}
+
+.opal-content-body[data-orientation="vertical"] {
+  @apply flex-col;
+}
+
+.opal-content-body[data-orientation="reverse"] {
+  @apply flex-row-reverse;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-body-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Title
+   --------------------------------------------------------------------------- */
+
+.opal-content-body-title {
+  @apply text-left overflow-hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}

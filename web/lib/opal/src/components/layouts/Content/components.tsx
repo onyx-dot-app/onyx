@@ -1,6 +1,11 @@
 import "@opal/components/layouts/Content/styles.css";
 
 import {
+  BodyLayout,
+  type BodyOrientation,
+  type BodyProminence,
+} from "@opal/components/layouts/Content/BodyLayout";
+import {
   HeadingLayout,
   type HeadingLayoutProps,
 } from "@opal/components/layouts/Content/HeadingLayout";
@@ -56,9 +61,17 @@ type LabelContentProps = ContentBaseProps & {
   variant?: "section";
 };
 
-type BodyContentProps = ContentBaseProps & {
+/** BodyLayout does not support descriptions or inline editing. */
+type BodyContentProps = Omit<
+  ContentBaseProps,
+  "description" | "editable" | "onTitleChange"
+> & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant: "body";
+  /** Layout orientation. Default: `"inline"`. */
+  orientation?: BodyOrientation;
+  /** Title prominence. Default: `"default"`. */
+  prominence?: BodyProminence;
 };
 
 type ContentProps = HeadingContentProps | LabelContentProps | BodyContentProps;
@@ -91,10 +104,17 @@ function Content(props: ContentProps) {
     );
   }
 
-  // Body layout: main-content/main-ui/secondary with body variant (future)
+  // Body layout: main-content/main-ui/secondary with body variant
   if (variant === "body") {
-    // TODO (@raunakab): BodyLayout
-    return null;
+    return (
+      <BodyLayout
+        sizePreset={sizePreset}
+        {...(rest as Omit<
+          React.ComponentProps<typeof BodyLayout>,
+          "sizePreset"
+        >)}
+      />
+    );
   }
 
   return null;
