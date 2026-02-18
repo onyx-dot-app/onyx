@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 test.use({ storageState: "admin_auth.json" });
@@ -161,8 +162,6 @@ async function verifyAdminPageNavigation(
     ).toHaveCount(1);
   }
 }
-
-import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 
 for (const theme of THEMES) {
   test.describe(`Admin pages (${theme} mode)`, () => {
