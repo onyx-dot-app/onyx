@@ -1,7 +1,8 @@
 "use client";
 
-import { Content } from "@opal/components";
+import { AuxiliaryTag, Content } from "@opal/components";
 import SvgSearch from "@opal/icons/search";
+import SvgStar from "@opal/icons/star";
 
 export default function StorybookPage() {
   return (
@@ -9,6 +10,39 @@ export default function StorybookPage() {
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: "2rem" }}>
         Content — Storybook
       </h1>
+
+      {/* ================================================================= */}
+      {/*  AuxiliaryTag                                                      */}
+      {/* ================================================================= */}
+
+      <LayoutGroup label="AuxiliaryTag">
+        <Section label="colors">
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <AuxiliaryTag title="Green" color="green" />
+            <AuxiliaryTag title="Blue" color="blue" />
+            <AuxiliaryTag title="Purple" color="purple" />
+            <AuxiliaryTag title="Amber" color="amber" />
+            <AuxiliaryTag title="Gray" color="gray" />
+          </div>
+        </Section>
+
+        <Section label="with icon">
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <AuxiliaryTag icon={SvgStar} title="Green" color="green" />
+            <AuxiliaryTag icon={SvgStar} title="Blue" color="blue" />
+            <AuxiliaryTag icon={SvgStar} title="Purple" color="purple" />
+            <AuxiliaryTag icon={SvgStar} title="Amber" color="amber" />
+            <AuxiliaryTag icon={SvgStar} title="Gray" color="gray" />
+          </div>
+        </Section>
+
+        <Section label="icon only">
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <AuxiliaryTag icon={SvgStar} title="" color="green" />
+            <AuxiliaryTag icon={SvgStar} title="" color="blue" />
+          </div>
+        </Section>
+      </LayoutGroup>
 
       {/* ================================================================= */}
       {/*  HeadingLayout                                                     */}

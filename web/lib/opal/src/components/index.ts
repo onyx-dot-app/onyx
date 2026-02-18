@@ -20,3 +20,10 @@ export {
   type SizePreset,
   type ContentVariant,
 } from "@opal/components/layouts/Content/components";
+
+/* AuxiliaryTag */
+export {
+  AuxiliaryTag,
+  type AuxiliaryTagProps,
+  type AuxiliaryTagColor,
+} from "@opal/components/tags/AuxiliaryTag/components";
