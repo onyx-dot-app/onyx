@@ -310,7 +310,7 @@ def list_llm_providers(
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(
         db_session=db_session,
-        flow_types=None,
+        flow_type_filter=None,
         exclude_image_generation_providers=not include_image_gen,
     ):
         from_model_start = datetime.now(timezone.utc)
