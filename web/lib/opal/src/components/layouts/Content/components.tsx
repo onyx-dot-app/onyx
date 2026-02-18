@@ -4,6 +4,10 @@ import {
   HeadingLayout,
   type HeadingLayoutProps,
 } from "@opal/components/layouts/Content/HeadingLayout";
+import {
+  LabelLayout,
+  type LabelLayoutProps,
+} from "@opal/components/layouts/Content/LabelLayout";
 import type {
   ContentBaseProps,
   ContentVariant,
@@ -21,7 +25,9 @@ type HeadingContentProps = ContentBaseProps & {
   variant?: "heading" | "section";
 };
 
-type LabelContentProps = ContentBaseProps & {
+type LabelContentProps = Omit<ContentBaseProps, "description"> & {
+  /** Description text (required for label layout). */
+  description: string;
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
 };
@@ -51,10 +57,14 @@ function Content(props: ContentProps) {
     );
   }
 
-  // Label layout: main-content/main-ui/secondary with section variant (future)
-  if (variant === "section") {
-    // TODO (@raunakab): LabelLayout
-    return null;
+  // Label layout: main-content/main-ui/secondary with section variant
+  if (variant === "section" || variant === "heading") {
+    return (
+      <LabelLayout
+        sizePreset={sizePreset}
+        {...(rest as Omit<LabelLayoutProps, "sizePreset">)}
+      />
+    );
   }
 
   // Body layout: main-content/main-ui/secondary with body variant (future)

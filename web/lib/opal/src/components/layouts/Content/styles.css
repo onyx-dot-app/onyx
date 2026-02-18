@@ -92,3 +92,82 @@
   @apply text-left w-full;
   padding: 0 0.125rem;
 }
+
+/* ===========================================================================
+   Content — LabelLayout
+
+   Always inline (flex-row). Icon color varies per sizePreset and is applied
+   via Tailwind class from the component.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Layout
+   --------------------------------------------------------------------------- */
+
+.opal-content-label {
+  @apply flex flex-row items-start;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Body column
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-body {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-title-row {
+  @apply flex items-center w-full;
+  gap: 0.25rem;
+}
+
+.opal-content-label-title {
+  @apply text-left overflow-hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+.opal-content-label-input {
+  @apply flex-1 bg-transparent outline-none border-none;
+  padding: 0 0.125rem;
+  min-width: 0.0625rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-content-label:hover .opal-content-label-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-content-label-description {
+  @apply text-left w-full;
+  padding: 0 0.125rem;
+}

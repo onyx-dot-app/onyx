@@ -1,3 +1,4 @@
+import type { InteractiveContainerHeightVariant } from "@opal/core";
 import type { IconFunctionComponent } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ interface SizePresetConfig {
   /** Title line-height — also used as icon container min-height (CSS value). */
   lineHeight: string;
   /** Button `size` prop for the edit button. */
-  editButtonSize: "lg" | "md" | "sm" | "xs";
+  editButtonSize: InteractiveContainerHeightVariant;
   /** Tailwind padding class for the edit button container. */
   editButtonPadding: string;
 }
@@ -74,8 +75,8 @@ const SIZE_PRESETS: Record<SizePreset, SizePresetConfig> = {
     gap: "0.125rem",
     titleFont: "font-secondary-action",
     lineHeight: "1rem",
-    editButtonSize: "xs",
-    editButtonPadding: "p-0.5",
+    editButtonSize: "2xs",
+    editButtonPadding: "p-0",
   },
 };
 

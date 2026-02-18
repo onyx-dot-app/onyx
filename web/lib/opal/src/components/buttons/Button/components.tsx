@@ -15,6 +15,7 @@ const iconPaddingInRemVariants = {
   md: "p-0.5",
   sm: "p-0",
   xs: "p-0.5",
+  "2xs": "p-0",
   fit: "p-0.5",
 } as const;
 const iconSizeInRemVariants = {
@@ -22,6 +23,7 @@ const iconSizeInRemVariants = {
   md: 1,
   sm: 1,
   xs: 0.75,
+  "2xs": 0.75,
   fit: 1,
 } as const;
 
@@ -128,7 +130,9 @@ function Button({
         type={type}
         border={interactiveBaseProps.prominence === "secondary"}
         heightVariant={size}
-        roundingVariant={isLarge ? "default" : "compact"}
+        roundingVariant={
+          isLarge ? "default" : size === "2xs" ? "mini" : "compact"
+        }
       >
         <div
           className={cn(

@@ -45,6 +45,7 @@ type InteractiveBaseVariantProps =
  * - `"md"` — 1.75rem (28px), standard compact size
  * - `"sm"` — 1.5rem (24px), for denser UIs
  * - `"xs"` — 1.25rem (20px), for inline elements
+ * - `"2xs"` — 1rem (16px), for micro elements
  * - `"fit"` — Shrink-wraps to content height (`h-fit`), for variable-height layouts
  */
 type InteractiveContainerHeightVariant =
@@ -54,6 +55,7 @@ const interactiveContainerHeightVariants = {
   md: "h-[1.75rem]",
   sm: "h-[1.5rem]",
   xs: "h-[1.25rem]",
+  "2xs": "h-[1rem]",
   fit: "h-fit",
 } as const;
 const interactiveContainerMinWidthVariants = {
@@ -61,6 +63,7 @@ const interactiveContainerMinWidthVariants = {
   md: "min-w-[1.75rem]",
   sm: "min-w-[1.5rem]",
   xs: "min-w-[1.25rem]",
+  "2xs": "min-w-[1rem]",
   fit: "",
 } as const;
 const interactiveContainerPaddingVariants = {
@@ -68,7 +71,8 @@ const interactiveContainerPaddingVariants = {
   md: "p-1",
   sm: "p-1",
   xs: "p-0.5",
-  fit: "",
+  "2xs": "p-0.5",
+  fit: "p-0",
 } as const;
 
 /**
@@ -82,6 +86,7 @@ type InteractiveContainerRoundingVariant =
 const interactiveContainerRoundingVariants = {
   default: "rounded-12",
   compact: "rounded-08",
+  mini: "rounded-04",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -354,6 +359,7 @@ interface InteractiveContainerProps
    * - `"md"` — 1.75rem (28px), standard compact size
    * - `"sm"` — 1.5rem (24px), for denser UIs
    * - `"xs"` — 1.25rem (20px), for inline elements
+   * - `"2xs"` — 1rem (16px), for micro elements
    * - `"fit"` — Shrink-wraps to content height (`h-fit`)
    *
    * @default "lg"
