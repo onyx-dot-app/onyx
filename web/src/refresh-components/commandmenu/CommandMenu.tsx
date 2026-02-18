@@ -367,9 +367,39 @@ const CommandMenuContent = React.forwardRef<
 >(({ children }, ref) => {
   const { handleKeyDown } = useCommandMenuContext();
 
+  // Track the horizontal center of the main content container ([data-main-container])
+  // so the dialog is centered within it rather than the full viewport (which includes
+  // the sidebar). A ResizeObserver keeps it reactive to sidebar fold/unfold.
+  const [centerX, setCenterX] = React.useState<number | null>(() => {
+    if (typeof document === "undefined") return null;
+    const el = document.querySelector<HTMLElement>("[data-main-container]");
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return rect.left + rect.width / 2;
+  });
+
+  useEffect(() => {
+    const container = document.querySelector<HTMLElement>(
+      "[data-main-container]"
+    );
+    if (!container) return;
+
+    const update = () => {
+      const rect = container.getBoundingClientRect();
+      setCenterX(rect.left + rect.width / 2);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const hasContainerCenter = centerX !== null;
+
   return (
     <DialogPrimitive.Portal>
-      {/* Overlay - hidden from assistive technology */}
+      {/* Overlay - fixed to full viewport, hidden from assistive technology */}
       <DialogPrimitive.Overlay
         aria-hidden="true"
         className={cn(
@@ -378,12 +408,25 @@ const CommandMenuContent = React.forwardRef<
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0"
         )}
       />
-      {/* Content */}
+      {/* Content - centered within the main container when available,
+          otherwise falls back to viewport centering */}
       <DialogPrimitive.Content
         ref={ref}
         onKeyDown={handleKeyDown}
+        style={
+          hasContainerCenter
+            ? ({
+                left: centerX,
+                // Anchor the enter/exit animations at -50% so the vertical
+                // slide doesn't also produce an unintended horizontal slide.
+                "--tw-enter-translate-x": "-50%",
+                "--tw-exit-translate-x": "-50%",
+              } as React.CSSProperties)
+            : undefined
+        }
         className={cn(
-          "fixed inset-x-0 top-[72px] mx-auto",
+          "fixed top-[72px]",
+          hasContainerCenter ? "-translate-x-1/2" : "inset-x-0 mx-auto",
           "z-modal",
           "bg-background-tint-00 border rounded-16 shadow-2xl outline-none",
           "flex flex-col overflow-hidden",
