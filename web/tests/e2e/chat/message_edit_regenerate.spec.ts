@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { loginAsRandomUser } from "../utils/auth";
-import { sendMessage, switchModel } from "../utils/chatActions";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { sendMessage, switchModel } from "@tests/e2e/utils/chatActions";
 
 test.describe("Message Edit and Regenerate Tests", () => {
   test.beforeEach(async ({ page }) => {

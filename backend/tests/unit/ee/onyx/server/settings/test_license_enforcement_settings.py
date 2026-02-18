@@ -86,12 +86,16 @@ class TestApplyLicenseStatusToSettings:
     @patch("ee.onyx.server.settings.api.ENTERPRISE_EDITION_ENABLED", True)
     @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.settings.api.refresh_license_cache", return_value=None)
+    @patch("ee.onyx.server.settings.api.get_session_with_current_tenant")
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
     def test_no_license_with_ee_flag_gates_access(
         self,
         mock_get_metadata: MagicMock,
         mock_get_tenant: MagicMock,
+        _mock_get_session: MagicMock,
+        _mock_refresh: MagicMock,
         base_settings: Settings,
     ) -> None:
         """No license + ENTERPRISE_EDITION_ENABLED=true → GATED_ACCESS."""
@@ -107,12 +111,16 @@ class TestApplyLicenseStatusToSettings:
     @patch("ee.onyx.server.settings.api.ENTERPRISE_EDITION_ENABLED", False)
     @patch("ee.onyx.server.settings.api.LICENSE_ENFORCEMENT_ENABLED", True)
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.settings.api.refresh_license_cache", return_value=None)
+    @patch("ee.onyx.server.settings.api.get_session_with_current_tenant")
     @patch("ee.onyx.server.settings.api.get_current_tenant_id")
     @patch("ee.onyx.server.settings.api.get_cached_license_metadata")
     def test_no_license_without_ee_flag_allows_community(
         self,
         mock_get_metadata: MagicMock,
         mock_get_tenant: MagicMock,
+        _mock_get_session: MagicMock,
+        _mock_refresh: MagicMock,
         base_settings: Settings,
     ) -> None:
         """No license + ENTERPRISE_EDITION_ENABLED=false → community mode (no gating)."""

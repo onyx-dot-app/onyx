@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { loginAsRandomUser, loginAs } from "../utils/auth";
-import { TEST_ADMIN2_CREDENTIALS, TEST_ADMIN_CREDENTIALS } from "../constants";
+import { loginAsRandomUser, loginAs } from "@tests/e2e/utils/auth";
+import {
+  TEST_ADMIN2_CREDENTIALS,
+  TEST_ADMIN_CREDENTIALS,
+} from "@tests/e2e/constants";
 
 // test("User changes password and logs in with new password", async ({
 

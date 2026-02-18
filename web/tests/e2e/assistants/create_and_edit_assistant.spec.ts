@@ -1,6 +1,6 @@
 import { test, expect, Page, Browser } from "@playwright/test";
-import { loginAs, loginAsRandomUser } from "../utils/auth";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');

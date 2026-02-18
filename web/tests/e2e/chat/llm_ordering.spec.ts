@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
-import { loginAs } from "../utils/auth";
-import { verifyCurrentModel } from "../utils/chatActions";
-import { ensureImageGenerationEnabled } from "../utils/assistantUtils";
-import { OnyxApiClient } from "../utils/onyxApiClient";
+import { loginAs } from "@tests/e2e/utils/auth";
+import { verifyCurrentModel } from "@tests/e2e/utils/chatActions";
+import { ensureImageGenerationEnabled } from "@tests/e2e/utils/assistantUtils";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 test.describe("LLM Ordering", () => {
   let imageGenConfigId: string | null = null;

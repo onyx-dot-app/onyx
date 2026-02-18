@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { loginAsRandomUser } from "../utils/auth";
-import { sendMessage, startNewChat } from "../utils/chatActions";
+import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 
 /**
  * Helper to toggle auto-scroll setting via the settings panel

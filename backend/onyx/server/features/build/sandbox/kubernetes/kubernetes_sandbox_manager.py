@@ -50,6 +50,7 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+from acp.schema import PromptResponse
 from kubernetes import client  # type: ignore
 from kubernetes import config
 from kubernetes.client.rest import ApiException  # type: ignore
@@ -96,6 +97,10 @@ from onyx.server.features.build.sandbox.util.persona_mapping import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# API server pod hostname — used to identify which replica is handling a request.
+# In K8s, HOSTNAME is set to the pod name (e.g., "api-server-dpgg7").
+_API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
 # Constants for pod configuration
 # Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
@@ -1156,7 +1161,9 @@ done
     def terminate(self, sandbox_id: UUID) -> None:
         """Terminate a sandbox and clean up Kubernetes resources.
 
-        Deletes the Service and Pod for the sandbox.
+        Removes session mappings for this sandbox, then deletes the
+        Service and Pod. ACP clients are ephemeral (created per message),
+        so there's nothing to stop here.
 
         Args:
             sandbox_id: The sandbox ID to terminate
@@ -1395,7 +1402,8 @@ echo "Session workspace setup complete"
     ) -> None:
         """Clean up a session workspace (on session delete).
 
-        Executes kubectl exec to remove the session directory.
+        Removes the ACP session mapping and executes kubectl exec to remove
+        the session directory. The shared ACP client persists for other sessions.
 
         Args:
             sandbox_id: The sandbox ID
@@ -1464,6 +1472,7 @@ echo "Session cleanup complete"
         the snapshot and upload to S3. Captures:
         - sessions/$session_id/outputs/ (generated artifacts, web apps)
         - sessions/$session_id/attachments/ (user uploaded files)
+        - sessions/$session_id/.opencode-data/ (opencode session data for resumption)
 
         Args:
             sandbox_id: The sandbox ID
@@ -1488,9 +1497,10 @@ echo "Session cleanup complete"
             f"{session_id_str}/{snapshot_id}.tar.gz"
         )
 
-        # Exec into pod to create and upload snapshot (outputs + attachments)
-        # Uses s5cmd pipe to stream tar.gz directly to S3
-        # Only snapshot if outputs/ exists. Include attachments/ only if non-empty.
+        # Create tar and upload to S3 via file-sync container.
+        # .opencode-data/ is already on the shared workspace volume because we set
+        # XDG_DATA_HOME to the session directory when starting opencode (see
+        # ACPExecClient.start()). No cross-container copy needed.
         exec_command = [
             "/bin/sh",
             "-c",
@@ -1503,6 +1513,7 @@ if [ ! -d outputs ]; then
 fi
 dirs="outputs"
 [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
+[ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
 tar -czf - $dirs | /s5cmd pipe {s3_path}
 echo "SNAPSHOT_CREATED"
 """,
@@ -1624,6 +1635,7 @@ echo "SNAPSHOT_CREATED"
         Steps:
         1. Exec s5cmd cat in file-sync container to stream snapshot from S3
         2. Pipe directly to tar for extraction in the shared workspace volume
+           (.opencode-data/ is restored automatically since XDG_DATA_HOME points here)
         3. Regenerate configuration files (AGENTS.md, opencode.json, files symlink)
         4. Start the NextJS dev server
 
@@ -1807,6 +1819,41 @@ echo "Session config regeneration complete"
         )
         return exec_client.health_check(timeout=timeout)
 
+    def _create_ephemeral_acp_client(
+        self, sandbox_id: UUID, session_path: str
+    ) -> ACPExecClient:
+        """Create a new ephemeral ACP client for a single message exchange.
+
+        Each call starts a fresh `opencode acp` process in the sandbox pod.
+        The process is short-lived — stopped after the message completes.
+        This prevents the bug where multiple long-lived processes (one per
+        API replica) operate on the same session's flat file storage
+        concurrently, causing the JSON-RPC response to be silently lost.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_path: Working directory for the session (e.g. /workspace/sessions/{id}).
+                XDG_DATA_HOME is set relative to this so opencode's session data
+                lives inside the snapshot directory.
+
+        Returns:
+            A running ACPExecClient (caller must stop it when done)
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+        acp_client = ACPExecClient(
+            pod_name=pod_name,
+            namespace=self._namespace,
+            container="sandbox",
+        )
+        acp_client.start(cwd=session_path)
+
+        logger.info(
+            f"[SANDBOX-ACP] Created ephemeral ACP client: "
+            f"sandbox={sandbox_id} pod={pod_name} "
+            f"api_pod={_API_SERVER_HOSTNAME}"
+        )
+        return acp_client
+
     def send_message(
         self,
         sandbox_id: UUID,
@@ -1815,8 +1862,12 @@ echo "Session config regeneration complete"
     ) -> Generator[ACPEvent, None, None]:
         """Send a message to the CLI agent and stream ACP events.
 
-        Runs `opencode acp` via kubectl exec in the sandbox pod.
-        The agent runs in the session-specific workspace.
+        Creates an ephemeral `opencode acp` process for each message.
+        The process resumes the session from opencode's on-disk storage,
+        handles the prompt, then is stopped. This ensures only one process
+        operates on a session's flat files at a time, preventing the bug
+        where multiple long-lived processes (one per API replica) corrupt
+        each other's in-memory state.
 
         Args:
             sandbox_id: The sandbox ID
@@ -1827,67 +1878,103 @@ echo "Session config regeneration complete"
             Typed ACP schema event objects
         """
         packet_logger = get_packet_logger()
-        pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
-        # Log ACP client creation
-        packet_logger.log_acp_client_start(
-            sandbox_id, session_id, session_path, context="k8s"
-        )
+        # Create an ephemeral ACP client for this message
+        acp_client = self._create_ephemeral_acp_client(sandbox_id, session_path)
 
-        exec_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
-
-        # Log the send_message call at sandbox manager level
-        packet_logger.log_session_start(session_id, sandbox_id, message)
-
-        events_count = 0
         try:
-            exec_client.start(cwd=session_path)
-            for event in exec_client.send_message(message):
-                events_count += 1
-                yield event
+            # Resume (or create) the ACP session from opencode's on-disk storage
+            acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
 
-            # Log successful completion
-            packet_logger.log_session_end(
-                session_id, success=True, events_count=events_count
+            logger.info(
+                f"[SANDBOX-ACP] Sending message: "
+                f"session={session_id} acp_session={acp_session_id} "
+                f"api_pod={_API_SERVER_HOSTNAME}"
             )
-        except GeneratorExit:
-            # Generator was closed by consumer (client disconnect, timeout, broken pipe)
-            # This is the most common failure mode for SSE streaming
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error="GeneratorExit: Client disconnected or stream closed by consumer",
-                events_count=events_count,
-            )
-            raise
-        except Exception as e:
-            # Log failure from normal exceptions
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error=f"Exception: {str(e)}",
-                events_count=events_count,
-            )
-            raise
-        except BaseException as e:
-            # Log failure from other base exceptions (SystemExit, KeyboardInterrupt, etc.)
-            exception_type = type(e).__name__
-            packet_logger.log_session_end(
-                session_id,
-                success=False,
-                error=f"{exception_type}: {str(e) if str(e) else 'System-level interruption'}",
-                events_count=events_count,
-            )
-            raise
+
+            # Log the send_message call at sandbox manager level
+            packet_logger.log_session_start(session_id, sandbox_id, message)
+
+            events_count = 0
+            got_prompt_response = False
+            try:
+                for event in acp_client.send_message(
+                    message, session_id=acp_session_id
+                ):
+                    events_count += 1
+                    if isinstance(event, PromptResponse):
+                        got_prompt_response = True
+                    yield event
+
+                logger.info(
+                    f"[SANDBOX-ACP] send_message completed: "
+                    f"session={session_id} events={events_count} "
+                    f"got_prompt_response={got_prompt_response}"
+                )
+                packet_logger.log_session_end(
+                    session_id, success=True, events_count=events_count
+                )
+            except GeneratorExit:
+                logger.warning(
+                    f"[SANDBOX-ACP] GeneratorExit: session={session_id} "
+                    f"events={events_count}, sending session/cancel"
+                )
+                try:
+                    acp_client.cancel(session_id=acp_session_id)
+                except Exception as cancel_err:
+                    logger.warning(
+                        f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: "
+                        f"{cancel_err}"
+                    )
+                packet_logger.log_session_end(
+                    session_id,
+                    success=False,
+                    error="GeneratorExit: Client disconnected or stream closed by consumer",
+                    events_count=events_count,
+                )
+                raise
+            except Exception as e:
+                logger.error(
+                    f"[SANDBOX-ACP] Exception: session={session_id} "
+                    f"events={events_count} error={e}, sending session/cancel"
+                )
+                try:
+                    acp_client.cancel(session_id=acp_session_id)
+                except Exception as cancel_err:
+                    logger.warning(
+                        f"[SANDBOX-ACP] session/cancel failed on Exception: "
+                        f"{cancel_err}"
+                    )
+                packet_logger.log_session_end(
+                    session_id,
+                    success=False,
+                    error=f"Exception: {str(e)}",
+                    events_count=events_count,
+                )
+                raise
+            except BaseException as e:
+                logger.error(
+                    f"[SANDBOX-ACP] {type(e).__name__}: session={session_id} "
+                    f"error={e}"
+                )
+                packet_logger.log_session_end(
+                    session_id,
+                    success=False,
+                    error=f"{type(e).__name__}: {str(e) if str(e) else 'System-level interruption'}",
+                    events_count=events_count,
+                )
+                raise
         finally:
-            exec_client.stop()
-            # Log client stop
-            packet_logger.log_acp_client_stop(sandbox_id, session_id, context="k8s")
+            # Always stop the ephemeral ACP client to kill the opencode process.
+            # This ensures no stale processes linger in the sandbox container.
+            try:
+                acp_client.stop()
+            except Exception as e:
+                logger.warning(
+                    f"[SANDBOX-ACP] Failed to stop ephemeral ACP client: "
+                    f"session={session_id} error={e}"
+                )
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str

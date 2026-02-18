@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
@@ -47,6 +47,12 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import TextViewModal from "@/sections/modals/TextViewModal";
+import { personaIncludesRetrieval } from "@/app/app/services/lib";
+import { useQueryController } from "@/providers/QueryControllerProvider";
+import { eeGated } from "@/ce";
+import EESearchUI from "@/ee/sections/SearchUI";
+
+const SearchUI = eeGated(EESearchUI);
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -174,6 +180,20 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
   const isStreaming = currentChatState === "streaming";
 
+  // Query controller for search/chat classification (EE feature)
+  const { submit: submitQuery, classification } = useQueryController();
+
+  // Determine if retrieval (search) is enabled based on the assistant
+  const retrievalEnabled = useMemo(() => {
+    if (liveAssistant) {
+      return personaIncludesRetrieval(liveAssistant);
+    }
+    return false;
+  }, [liveAssistant]);
+
+  // Check if we're in search mode
+  const isSearch = classification === "search";
+
   // Anchor for scroll positioning (matches ChatPage pattern)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
@@ -248,17 +268,48 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     [handleMessageSpecificFileUpload]
   );
 
-  // Handle submit from AppInputBar
-  const handleChatInputSubmit = useCallback(
-    (submittedMessage: string) => {
-      if (!submittedMessage.trim()) return;
+  // Handler for chat submission (used by query controller)
+  const onChat = useCallback(
+    (chatMessage: string) => {
+      resetInputBar();
       onSubmit({
-        message: submittedMessage,
+        message: chatMessage,
         currentMessageFiles: currentMessageFiles,
         deepResearch: deepResearchEnabled,
       });
     },
-    [onSubmit, currentMessageFiles, deepResearchEnabled]
+    [onSubmit, currentMessageFiles, deepResearchEnabled, resetInputBar]
+  );
+
+  // Handle submit from AppInputBar - routes through query controller for search/chat classification
+  const handleChatInputSubmit = useCallback(
+    async (submittedMessage: string) => {
+      if (!submittedMessage.trim()) return;
+      // If we already have messages (chat session started), always use chat mode
+      // (matches AppPage behavior where existing sessions bypass classification)
+      if (hasMessages) {
+        resetInputBar();
+        onSubmit({
+          message: submittedMessage,
+          currentMessageFiles: currentMessageFiles,
+          deepResearch: deepResearchEnabled,
+        });
+        return;
+      }
+      // Use submitQuery which will classify the query and either:
+      // - Route to search (sets classification to "search" and shows SearchUI)
+      // - Route to chat (calls onChat callback)
+      await submitQuery(submittedMessage, onChat);
+    },
+    [
+      hasMessages,
+      onSubmit,
+      currentMessageFiles,
+      deepResearchEnabled,
+      resetInputBar,
+      submitQuery,
+      onChat,
+    ]
   );
 
   // Handle resubmit last message on error
@@ -283,6 +334,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const handleOpenInOnyx = () => {
     window.open(`${window.location.origin}/app`, "_blank");
   };
+
+  // Handle search result document click
+  const handleSearchDocumentClick = useCallback(
+    (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
+    []
+  );
 
   return (
     <div
@@ -365,8 +422,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               </>
             )}
 
-            {/* Welcome message - centered when no messages */}
-            {!hasMessages && (
+            {/* Welcome message - centered when no messages and not in search mode */}
+            {!hasMessages && !isSearch && (
               <div className="relative w-full flex-1 flex flex-col items-center justify-end">
                 <WelcomeMessage isDefaultAgent />
                 <Spacer rem={1.5} />
@@ -386,7 +443,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 filterManager={filterManager}
                 llmManager={llmManager}
                 removeDocs={() => {}}
-                retrievalEnabled={false}
+                retrievalEnabled={retrievalEnabled}
                 selectedDocuments={[]}
                 initialMessage={message}
                 stopGenerating={stopGenerating}
@@ -403,8 +460,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               <Spacer rem={0.5} />
             </div>
 
+            {/* Search results - shown when query is classified as search */}
+            {isSearch && (
+              <div className="flex-1 w-full max-w-[var(--app-page-main-content-width)] px-4 min-h-0 overflow-auto">
+                <Spacer rem={0.75} />
+                <SearchUI onDocumentClick={handleSearchDocumentClick} />
+              </div>
+            )}
+
             {/* Spacer to push content up when showing welcome message */}
-            {!hasMessages && <div className="flex-1 w-full" />}
+            {!hasMessages && !isSearch && <div className="flex-1 w-full" />}
           </div>
         )}
       </Dropzone>
