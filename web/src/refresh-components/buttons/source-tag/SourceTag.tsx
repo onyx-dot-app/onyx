@@ -32,7 +32,7 @@ const sizeClasses = {
     container: "rounded-04 p-0.5 gap-0.5",
   },
   tag: {
-    container: "rounded-08 p-1 gap-1",
+    container: "rounded-08 h-[2.25rem] min-w-[2.25rem] p-2 gap-1",
   },
 } as const;
 
