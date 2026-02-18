@@ -438,7 +438,7 @@ def fetch_existing_llm_providers(
 
     Args:
         db_session: Database session
-        flow_types: List of flow types to filter by, None if no filter
+        flow_type_filter: List of flow types to filter by, None if no filter
         only_public: If True, only return public providers
         exclude_image_generation_providers: If True, exclude providers that are
             used for image generation configs
