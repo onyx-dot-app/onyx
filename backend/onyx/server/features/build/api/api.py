@@ -32,6 +32,7 @@ from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import is_onyx_craft_enabled
@@ -428,7 +429,14 @@ def get_webapp(
     """
     _check_webapp_access(session_id, user, db_session)
     try:
-        return _proxy_request(path, request, session_id, db_session)
+        result = _proxy_request(path, request, session_id, db_session)
+        # Update sandbox heartbeat — webapp access is user activity that keeps sandbox alive
+        session = db_session.get(BuildSession, session_id)
+        if session and session.user_id:
+            sandbox = get_sandbox_by_user_id(db_session, session.user_id)
+            if sandbox:
+                update_sandbox_heartbeat(db_session, sandbox.id)
+        return result
     except HTTPException as e:
         if e.status_code in (502, 503, 504):
             return _offline_html_response()
