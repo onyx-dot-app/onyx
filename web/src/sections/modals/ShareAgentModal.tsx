@@ -263,7 +263,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             <Tabs.Content value={SERVICE_ACCOUNTS_TAB}>
               <Section gap={0.5} alignItems="start">
                 <InputComboBox
-                  placeholder="Add service accounts"
+                  placeholder="Add service accounts (API keys)"
                   value=""
                   onChange={() => {}}
                   onValueChange={handleComboBoxSelect}
