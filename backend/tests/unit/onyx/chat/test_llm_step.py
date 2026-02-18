@@ -1,5 +1,7 @@
 """Tests for llm_step.py, specifically sanitization and argument parsing."""
 
+from typing import Any
+
 from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _parse_tool_args_to_dict
 from onyx.chat.llm_step import _sanitize_llm_output
@@ -293,7 +295,7 @@ class TestExtractToolCallKickoffs:
         assert result[0].tool_args == {}
 
     def test_skips_entries_missing_id_or_name(self) -> None:
-        tool_call_map = {
+        tool_call_map: dict[int, dict[str, Any]] = {
             0: {"id": None, "name": "internal_search", "arguments": "{}"},
             1: {"id": "call_1", "name": None, "arguments": "{}"},
             2: {"id": "call_2", "name": "internal_search", "arguments": "{}"},
