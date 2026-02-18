@@ -296,10 +296,12 @@ class TestSAMLOIDCBehavior:
 
     @pytest.mark.parametrize("auth_type", [AuthType.SAML, AuthType.OIDC])
     @patch("onyx.auth.users.get_invited_users")
+    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.AUTH_TYPE")
     def test_sso_bypasses_whitelist(
         self,
         mock_auth_type: MagicMock,
+        _mock_invite_only: MagicMock,
         mock_get_invited: MagicMock,
         auth_type: AuthType,
     ) -> None:
@@ -315,10 +317,12 @@ class TestSAMLOIDCBehavior:
             verify_email_is_invited("newuser@example.com")  # Should not raise
 
     @patch("onyx.auth.users.get_invited_users")
+    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_basic_auth_enforces_whitelist(
         self,
         mock_get_invited: MagicMock,
+        _mock_invite_only: MagicMock,
     ) -> None:
         """Basic auth should enforce invite whitelist."""
         from onyx.auth.users import verify_email_is_invited
@@ -327,18 +331,21 @@ class TestSAMLOIDCBehavior:
         mock_get_invited.return_value = ["allowed@example.com"]
 
         # Execute & Assert
-        with pytest.raises(PermissionError):
+        with pytest.raises(HTTPException) as exc:
             verify_email_is_invited("newuser@example.com")
+        assert exc.value.status_code == 403
 
 
 class TestWhitelistBehavior:
     """Test invite whitelist scenarios."""
 
+    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=False)
     @patch("onyx.auth.users.get_invited_users")
     @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_empty_whitelist_allows_all(
         self,
         mock_get_invited: MagicMock,
+        _mock_invite_only: MagicMock,
     ) -> None:
         """Empty whitelist should allow all users."""
         from onyx.auth.users import verify_email_is_invited
@@ -349,11 +356,27 @@ class TestWhitelistBehavior:
         # Execute - should not raise
         verify_email_is_invited("anyone@example.com")
 
+    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=False)
+    @patch("onyx.auth.users.get_invited_users")
+    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
+    def test_invite_only_disabled_allows_non_invited_users(
+        self,
+        mock_get_invited: MagicMock,
+        _mock_invite_only: MagicMock,
+    ) -> None:
+        from onyx.auth.users import verify_email_is_invited
+
+        mock_get_invited.return_value = ["allowed@example.com"]
+
+        verify_email_is_invited("notallowed@example.com")
+
+    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.get_invited_users")
     @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_whitelist_blocks_non_invited(
         self,
         mock_get_invited: MagicMock,
+        _mock_invite_only: MagicMock,
     ) -> None:
         """Populated whitelist should block non-invited users."""
         from onyx.auth.users import verify_email_is_invited
@@ -362,16 +385,18 @@ class TestWhitelistBehavior:
         mock_get_invited.return_value = ["allowed@example.com"]
 
         # Execute & Assert
-        with pytest.raises(PermissionError) as exc:
+        with pytest.raises(HTTPException) as exc:
             verify_email_is_invited("notallowed@example.com")
 
-        assert "not on allowed user whitelist" in str(exc.value)
+        assert exc.value.status_code == 403
 
+    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.get_invited_users")
     @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_whitelist_allows_invited_case_insensitive(
         self,
         mock_get_invited: MagicMock,
+        _mock_invite_only: MagicMock,
     ) -> None:
         """Whitelist should match emails case-insensitively."""
         from onyx.auth.users import verify_email_is_invited
@@ -405,6 +430,57 @@ class TestSeatLimitEnforcement:
 
         with patch("onyx.auth.users.MULTI_TENANT", True):
             enforce_seat_limit(MagicMock())  # should not raise
+
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.get_all_users")
+    @patch("onyx.auth.users.get_invited_users")
+    def test_non_invited_signup_blocked_when_invites_reserve_all_seats(
+        self,
+        mock_get_invited_users: MagicMock,
+        mock_get_all_users: MagicMock,
+    ) -> None:
+        from onyx.auth.users import enforce_invite_reservation_seat_limit
+
+        mock_get_invited_users.return_value = [
+            "invited1@example.com",
+            "invited2@example.com",
+        ]
+        mock_get_all_users.return_value = []
+        seat_result = MagicMock(available=False, error_message="Seat limit reached")
+
+        with patch(
+            "onyx.auth.users.fetch_ee_implementation_or_noop",
+            return_value=lambda *_a, **_kw: seat_result,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                enforce_invite_reservation_seat_limit(
+                    MagicMock(), "newuser@example.com"
+                )
+
+        assert exc.value.status_code == 402
+        assert exc.value.detail["code"] == "REGISTER_SEAT_EXPECTATION_EXCEEDED"
+
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.get_all_users")
+    @patch("onyx.auth.users.get_invited_users")
+    def test_invited_signup_skips_reserved_seat_block(
+        self,
+        mock_get_invited_users: MagicMock,
+        mock_get_all_users: MagicMock,
+    ) -> None:
+        from onyx.auth.users import enforce_invite_reservation_seat_limit
+
+        mock_get_invited_users.return_value = ["invited1@example.com"]
+        mock_get_all_users.return_value = []
+
+        fetch_fn = MagicMock()
+        with patch(
+            "onyx.auth.users.fetch_ee_implementation_or_noop",
+            return_value=fetch_fn,
+        ):
+            enforce_invite_reservation_seat_limit(MagicMock(), "invited1@example.com")
+
+        fetch_fn.assert_not_called()
 
 
 class TestCaseInsensitiveEmailMatching:

@@ -272,6 +272,14 @@ export function SettingsForm() {
           handleToggleSettingsField("anonymous_user_enabled", e.target.checked)
         }
       />
+      <Checkbox
+        label="Whitelist / Invite-only"
+        sublabel="If set, only users on the invite list can join this workspace. If unset, users from your normal sign-up domain flow can still join even if invites exist."
+        checked={settings.invite_only_enabled}
+        onChange={(e) =>
+          handleToggleSettingsField("invite_only_enabled", e.target.checked)
+        }
+      />
 
       <Checkbox
         label="Deep Research"

@@ -118,9 +118,11 @@ from onyx.db.models import OAuthAccount
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.pat import fetch_user_for_pat
+from onyx.db.users import get_all_users
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -136,6 +138,9 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
+REGISTER_SEAT_EXPECTATION_EXCEEDED_CODE = "REGISTER_SEAT_EXPECTATION_EXCEEDED"
 
 
 def is_user_admin(user: User) -> bool:
@@ -208,22 +213,38 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     return int(value.decode("utf-8")) == 1
 
 
+def workspace_invite_only_enabled() -> bool:
+    try:
+        settings = load_settings()
+        return settings.invite_only_enabled
+    except Exception:
+        logger.exception("Failed to load workspace settings for invite-only check")
+        return False
+
+
 def verify_email_is_invited(email: str) -> None:
     if AUTH_TYPE in {AuthType.SAML, AuthType.OIDC}:
         # SSO providers manage membership; allow JIT provisioning regardless of invites
         return
 
-    whitelist = get_invited_users()
-    if not whitelist:
+    if not workspace_invite_only_enabled():
         return
 
+    whitelist = get_invited_users()
+
     if not email:
-        raise PermissionError("Email must be specified")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email must be specified"},
+        )
 
     try:
         email_info = validate_email(email, check_deliverability=False)
     except EmailUndeliverableError:
-        raise PermissionError("Email is not valid")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"reason": "Email is not valid"},
+        )
 
     for email_whitelist in whitelist:
         try:
@@ -240,7 +261,13 @@ def verify_email_is_invited(email: str) -> None:
         if email_info.normalized.lower() == email_info_whitelist.normalized.lower():
             return
 
-    raise PermissionError("User not on allowed user whitelist")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": REGISTER_INVITE_ONLY_CODE,
+            "reason": "This workspace is invite-only. Please ask your admin to invite you.",
+        },
+    )
 
 
 def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
@@ -288,6 +315,52 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
 
     if result is not None and not result.available:
         raise HTTPException(status_code=402, detail=result.error_message)
+
+
+def _count_reserved_invite_seats(db_session: Session) -> int:
+    invited_users = get_invited_users()
+    if not invited_users:
+        return 0
+
+    existing_users = {user.email.lower() for user in get_all_users(db_session)}
+    return sum(
+        1
+        for invited_email in invited_users
+        if invited_email.lower() not in existing_users
+    )
+
+
+def enforce_invite_reservation_seat_limit(
+    db_session: Session, signup_email: str
+) -> None:
+    """Block non-invited signups when seats are already reserved for invited users.
+
+    No-op for multi-tenant and for users already on the invite list.
+    """
+    if MULTI_TENANT:
+        return
+
+    invited_users = {email.lower() for email in get_invited_users()}
+    if signup_email.lower() in invited_users:
+        return
+
+    reserved_invite_seats = _count_reserved_invite_seats(db_session)
+    if reserved_invite_seats == 0:
+        return
+
+    result = fetch_ee_implementation_or_noop(
+        "onyx.db.license", "check_seat_availability", None
+    )(db_session, seats_needed=reserved_invite_seats + 1)
+
+    if result is not None and not result.available:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "code": REGISTER_SEAT_EXPECTATION_EXCEEDED_CODE,
+                "reason": "This workspace has already allocated seats to current and invited users. "
+                "Please contact your admin to review seats in Plans & Billing.",
+            },
+        )
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -424,6 +497,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     existing = get_user_by_email(user_create.email, sync_db)
                     if existing is None:
                         enforce_seat_limit(sync_db)
+                        enforce_invite_reservation_seat_limit(
+                            sync_db, user_create.email
+                        )
 
                 user_created = False
                 try:
@@ -637,6 +713,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Check seat availability before creating (single-tenant only)
                     with get_session_with_current_tenant() as sync_db:
                         enforce_seat_limit(sync_db)
+                        enforce_invite_reservation_seat_limit(sync_db, account_email)
 
                     password = self.password_helper.generate()
                     user_dict = {
@@ -1801,6 +1878,14 @@ def get_oauth_router(
                 associate_by_email=associate_by_email,
                 is_verified_by_default=is_verified_by_default,
             )
+        except HTTPException as e:
+            if (
+                e.status_code == 402
+                and isinstance(e.detail, dict)
+                and e.detail.get("code") == REGISTER_SEAT_EXPECTATION_EXCEEDED_CODE
+            ):
+                return RedirectResponse("/auth/signup-blocked", status_code=302)
+            raise
         except UserAlreadyExists:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

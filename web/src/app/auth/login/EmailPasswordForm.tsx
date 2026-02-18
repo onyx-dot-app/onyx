@@ -108,6 +108,13 @@ export default function EmailPasswordForm({
 
               const errorDetail: any = (await response.json()).detail;
               let errorMsg: string = "Unknown error";
+              if (
+                typeof errorDetail === "object" &&
+                errorDetail.code === "REGISTER_SEAT_EXPECTATION_EXCEEDED"
+              ) {
+                window.location.href = "/auth/signup-blocked";
+                return;
+              }
               if (typeof errorDetail === "object" && errorDetail.reason) {
                 errorMsg = errorDetail.reason;
               } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
