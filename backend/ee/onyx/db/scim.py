@@ -8,11 +8,11 @@ Usage from FastAPI::
     def get_scim_dal(db_session: Session = Depends(get_session)) -> ScimDAL:
         return ScimDAL(db_session)
 
-    @router.get("/tokens")
-    def list_tokens(dal: ScimDAL = Depends(get_scim_dal)) -> ...:
-        tokens = dal.list_tokens()
+    @router.post("/tokens")
+    def create_token(dal: ScimDAL = Depends(get_scim_dal)) -> ...:
+        token = dal.create_token(name=..., hashed_token=..., ...)
         dal.commit()
-        return tokens
+        return token
 
 Usage from background tasks::
 
@@ -62,7 +62,20 @@ class ScimDAL(DAL):
         token_display: str,
         created_by_id: UUID,
     ) -> ScimToken:
-        """Create a new SCIM bearer token."""
+        """Create a new SCIM bearer token.
+
+        Only one token is active at a time — this method automatically revokes
+        all existing active tokens before creating the new one.
+        """
+        # Revoke any currently active tokens
+        active_tokens = list(
+            self._session.scalars(
+                select(ScimToken).where(ScimToken.is_active.is_(True))
+            ).all()
+        )
+        for t in active_tokens:
+            t.is_active = False
+
         token = ScimToken(
             name=name,
             hashed_token=hashed_token,
@@ -73,18 +86,16 @@ class ScimDAL(DAL):
         self._session.flush()
         return token
 
+    def get_active_token(self) -> ScimToken | None:
+        """Return the single currently active token, or None."""
+        return self._session.scalar(
+            select(ScimToken).where(ScimToken.is_active.is_(True))
+        )
+
     def get_token_by_hash(self, hashed_token: str) -> ScimToken | None:
         """Look up a token by its SHA-256 hash."""
         return self._session.scalar(
             select(ScimToken).where(ScimToken.hashed_token == hashed_token)
-        )
-
-    def list_tokens(self) -> list[ScimToken]:
-        """List all SCIM tokens, ordered by creation date descending."""
-        return list(
-            self._session.scalars(
-                select(ScimToken).order_by(ScimToken.created_at.desc())
-            ).all()
         )
 
     def revoke_token(self, token_id: int) -> None:
