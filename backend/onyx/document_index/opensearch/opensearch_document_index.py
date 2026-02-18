@@ -842,6 +842,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             body=query_body,
             search_pipeline_id=ZSCORE_NORMALIZATION_PIPELINE_NAME,
         )
+
+        # Good place for a breakpoint to inspect the search hits if you have "explain" enabled.
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
             _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights

@@ -243,6 +243,9 @@ class DocumentQuery:
         Returns:
             A dictionary representing the final hybrid search query.
         """
+        # WARNING: Profiling does not work with hybrid search; do not add it at
+        # this level. See https://github.com/opensearch-project/neural-search/issues/1255
+
         if num_hits > DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
             raise ValueError(
                 f"Bug: num_hits ({num_hits}) is greater than the current maximum allowed "
@@ -299,8 +302,8 @@ class DocumentQuery:
             "highlight": match_highlights_configuration,
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
         }
-        # WARNING: Profiling does not work with hybrid search; do not add it at
-        # this level. See https://github.com/opensearch-project/neural-search/issues/1255
+
+        # Explain is for scoring breakdowns.
         if OPENSEARCH_EXPLAIN_ENABLED:
             final_hybrid_search_body["explain"] = True
 
@@ -381,9 +384,8 @@ class DocumentQuery:
 
         Matches:
           - Title vector
-          - Title keyword
           - Content vector
-          - Content keyword + phrase
+          - Keyword (title + content, match and phrase)
 
         Normalization is not performed here.
         The weights of each of these subqueries should be configured in a search
@@ -404,9 +406,9 @@ class DocumentQuery:
         NOTE: Options considered and rejected:
         - minimum_should_match: Since it's hybrid search and users often provide semantic queries, there is often a lot of terms,
           and very low number of meaningful keywords (and a low ratio of keywords).
-        - fuzziness AUTO: typo tolerance (0/1/2 edit distance by term length). This is reasonable but in reality seeing the
-          user usage patterns, this is not very common and people tend to not be confused when a miss happens for this reason.
-          In testing datasets, this makes recall slightly worse.
+        - fuzziness AUTO: typo tolerance (0/1/2 edit distance by term length). It's mostly for typos as the analyzer ("english by
+          default") already does some stemming and tokenization. In testing datasets, this makes recall slightly worse. It also is
+          less performant so not really any reason to do it.
 
         Args:
             query_text: The text of the query to search for.
@@ -415,8 +417,7 @@ class DocumentQuery:
                 similarity search.
         """
         # Build sub-queries for hybrid search. Order must match normalization
-        # pipeline weights: title vector, title keyword, content vector,
-        # content keyword.
+        # pipeline weights: title vector, content vector, keyword (title + content).
         hybrid_search_queries: list[dict[str, Any]] = [
             # 1. Title vector search
             {
@@ -427,34 +428,7 @@ class DocumentQuery:
                     }
                 }
             },
-            # 2. Title keyword + phrase search.
-            {
-                "bool": {
-                    "should": [
-                        {
-                            "match": {
-                                TITLE_FIELD_NAME: {
-                                    "query": query_text,
-                                    # operator "or" = match doc if any query term matches (default, explicit for clarity).
-                                    "operator": "or",
-                                }
-                            }
-                        },
-                        {
-                            "match_phrase": {
-                                TITLE_FIELD_NAME: {
-                                    "query": query_text,
-                                    # Slop = 1 allows one extra word or transposition in phrase match.
-                                    "slop": 1,
-                                    # Boost phrase over bag-of-words; exact phrase is a stronger signal.
-                                    "boost": 1.5,
-                                }
-                            }
-                        },
-                    ]
-                }
-            },
-            # 3. Content vector search
+            # 2. Content vector search
             {
                 "knn": {
                     CONTENT_VECTOR_FIELD_NAME: {
@@ -463,16 +437,36 @@ class DocumentQuery:
                     }
                 }
             },
-            # 4. Content keyword + phrase search.
+            # 3. Keyword (title + content) match and phrase search.
             {
                 "bool": {
                     "should": [
                         {
                             "match": {
+                                TITLE_FIELD_NAME: {
+                                    "query": query_text,
+                                    "operator": "or",
+                                    # The title fields are strongly discounted as they are included in the content.
+                                    # It just acts as a minor boost
+                                    "boost": 0.1,
+                                }
+                            }
+                        },
+                        {
+                            "match_phrase": {
+                                TITLE_FIELD_NAME: {
+                                    "query": query_text,
+                                    "slop": 1,
+                                    "boost": 0.2,
+                                }
+                            }
+                        },
+                        {
+                            "match": {
                                 CONTENT_FIELD_NAME: {
                                     "query": query_text,
-                                    # operator "or" = match doc if any query term matches (default, explicit for clarity).
                                     "operator": "or",
+                                    "boost": 1.0,
                                 }
                             }
                         },
@@ -480,9 +474,7 @@ class DocumentQuery:
                             "match_phrase": {
                                 CONTENT_FIELD_NAME: {
                                     "query": query_text,
-                                    # Slop = 1 allows one extra word or transposition in phrase match.
                                     "slop": 1,
-                                    # Boost phrase over bag-of-words; exact phrase is a stronger signal.
                                     "boost": 1.5,
                                 }
                             }
