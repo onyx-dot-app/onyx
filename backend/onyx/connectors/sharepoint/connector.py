@@ -1329,11 +1329,10 @@ class SharepointConnector(
         EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
         use_timestamp_token = start is not None and start > EPOCH
 
+        initial_url = f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta"
         if use_timestamp_token:
             token = quote(start.strftime("%Y-%m-%dT%H:%M:%SZ"))
-            initial_url = f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta?token={token}"
-        else:
-            initial_url = f"{GRAPH_API_BASE}/drives/{drive_id}/root/delta"
+            initial_url += f"?token={token}"
 
         yield from self._iter_delta_pages(
             initial_url=initial_url,
