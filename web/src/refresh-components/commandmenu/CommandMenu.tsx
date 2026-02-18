@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
+import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@/lib/utils";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -366,10 +367,11 @@ const CommandMenuContent = React.forwardRef<
   CommandMenuContentProps
 >(({ children }, ref) => {
   const { handleKeyDown } = useCommandMenuContext();
+  const { centerX, hasContainerCenter } = useContainerCenter();
 
   return (
     <DialogPrimitive.Portal>
-      {/* Overlay - hidden from assistive technology */}
+      {/* Overlay - fixed to full viewport, hidden from assistive technology */}
       <DialogPrimitive.Overlay
         aria-hidden="true"
         className={cn(
@@ -378,12 +380,23 @@ const CommandMenuContent = React.forwardRef<
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0"
         )}
       />
-      {/* Content */}
+      {/* Content - centered within the main container when available,
+          otherwise falls back to viewport centering */}
       <DialogPrimitive.Content
         ref={ref}
         onKeyDown={handleKeyDown}
+        style={
+          hasContainerCenter
+            ? ({
+                left: centerX,
+                "--tw-enter-translate-x": "-50%",
+                "--tw-exit-translate-x": "-50%",
+              } as React.CSSProperties)
+            : undefined
+        }
         className={cn(
-          "fixed inset-x-0 top-[72px] mx-auto",
+          "fixed top-[72px]",
+          hasContainerCenter ? "-translate-x-1/2" : "inset-x-0 mx-auto",
           "z-modal",
           "bg-background-tint-00 border rounded-16 shadow-2xl outline-none",
           "flex flex-col overflow-hidden",

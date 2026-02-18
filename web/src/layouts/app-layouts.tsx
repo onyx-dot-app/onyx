@@ -510,8 +510,12 @@ function Root({ children, enableBackground }: AppRootProps) {
   return (
     /* NOTE: Some elements, markdown tables in particular, refer to this `@container` in order to
       breakout of their immediate containers using cqw units.
+      The `data-main-container` attribute is used by portaled elements (e.g. CommandMenu) to
+      render inside this container so they can be centered relative to the main content area
+      rather than the full viewport (which would include the sidebar).
     */
     <div
+      data-main-container
       className={cn(
         "@container flex flex-col h-full w-full relative overflow-hidden",
         showBackground && "bg-cover bg-center bg-fixed"
