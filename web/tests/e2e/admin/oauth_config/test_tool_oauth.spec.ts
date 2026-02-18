@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { Page, Browser } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
-import { OnyxApiClient } from "../../utils/onyxApiClient";
+import { loginAs } from "@tests/e2e/utils/auth";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 // --- Locator Helper Functions ---
 const getAuthorizationUrlInput = (page: Page) =>

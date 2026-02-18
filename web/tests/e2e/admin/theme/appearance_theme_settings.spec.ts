@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { loginAs } from "../../utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 
 test.describe("Appearance Theme Settings @exclusive", () => {
   const TEST_VALUES = {
