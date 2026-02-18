@@ -1,0 +1,98 @@
+/* ---------------------------------------------------------------------------
+   ContentContainer.Heading
+
+   Two icon placement modes:
+     left : flex-row  — icon beside content
+     top  : flex-col  — icon above content
+
+   Typography uses existing utility classes:
+     title       → font-heading-h2 (24px / 600 / 36px / -0.24px)
+     description → font-secondary-body (12px / 400 / 16px)
+   --------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+   Layout — icon placement
+   --------------------------------------------------------------------------- */
+
+.opal-cc-heading {
+  @apply flex items-start;
+}
+
+.opal-cc-heading[data-icon-placement="left"] {
+  @apply flex-row;
+  gap: 4px;
+}
+
+.opal-cc-heading[data-icon-placement="top"] {
+  @apply flex-col;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon
+   --------------------------------------------------------------------------- */
+
+.opal-cc-heading-icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opal-cc-heading-icon {
+  color: var(--text-04);
+}
+
+/* ---------------------------------------------------------------------------
+   Content column
+   --------------------------------------------------------------------------- */
+
+.opal-cc-heading-content {
+  @apply flex flex-1 flex-col items-start;
+  min-width: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+   Title row — title (or input) + edit button
+   --------------------------------------------------------------------------- */
+
+.opal-cc-heading-title-row {
+  @apply flex items-center w-full;
+  gap: 4px;
+}
+
+.opal-cc-heading-title {
+  @apply text-left overflow-hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  padding: 0 2px;
+  min-width: 1px;
+  min-height: 36px;
+}
+
+.opal-cc-heading-input {
+  @apply flex-1 bg-transparent outline-none border-none;
+  padding: 0 2px;
+  min-width: 1px;
+  min-height: 36px;
+}
+
+/* ---------------------------------------------------------------------------
+   Edit button — visible only on hover of the outer container
+   --------------------------------------------------------------------------- */
+
+.opal-cc-heading-edit-button {
+  @apply opacity-0 transition-opacity shrink-0;
+}
+
+.opal-cc-heading:hover .opal-cc-heading-edit-button {
+  @apply opacity-100;
+}
+
+/* ---------------------------------------------------------------------------
+   Description
+   --------------------------------------------------------------------------- */
+
+.opal-cc-heading-description {
+  @apply text-left w-full;
+  padding: 0 2px;
+}
