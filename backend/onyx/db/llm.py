@@ -443,6 +443,8 @@ def fetch_existing_llm_providers(
         exclude_image_generation_providers: If True, exclude providers that are
             used for image generation configs
     """
+    stmt = select(LLMProviderModel)
+
     if flow_type_filter:
         providers_with_flows = (
             select(ModelConfiguration.llm_provider_id)
@@ -450,21 +452,13 @@ def fetch_existing_llm_providers(
             .where(LLMModelFlow.llm_model_flow_type.in_(flow_type_filter))
             .distinct()
         )
-    else:
-        providers_with_flows = select(LLMProviderModel.id)
+        stmt = stmt.where(LLMProviderModel.id.in_(providers_with_flows))
 
     if exclude_image_generation_providers:
-        stmt = select(LLMProviderModel).where(
-            LLMProviderModel.id.in_(providers_with_flows)
-        )
-    else:
         image_gen_provider_ids = select(ModelConfiguration.llm_provider_id).join(
             ImageGenerationConfig
         )
-        stmt = select(LLMProviderModel).where(
-            LLMProviderModel.id.in_(providers_with_flows)
-            | LLMProviderModel.id.in_(image_gen_provider_ids)
-        )
+        stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
 
     stmt = stmt.options(
         selectinload(LLMProviderModel.model_configurations),
@@ -800,15 +794,13 @@ def sync_auto_mode_models(
                 changes += 1
         else:
             # Add new model - all models from GitHub config are visible
-            insert_new_model_configuration__no_commit(
-                db_session=db_session,
+            new_model = ModelConfiguration(
                 llm_provider_id=provider.id,
-                model_name=model_config.name,
-                supported_flows=[LLMModelFlowType.CHAT],
-                is_visible=True,
-                max_input_tokens=None,
+                name=model_config.name,
                 display_name=model_config.display_name,
+                is_visible=True,
             )
+            db_session.add(new_model)
             changes += 1
 
     # In Auto mode, default model is always set from GitHub config
