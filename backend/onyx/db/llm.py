@@ -797,13 +797,15 @@ def sync_auto_mode_models(
                 changes += 1
         else:
             # Add new model - all models from GitHub config are visible
-            new_model = ModelConfiguration(
+            insert_new_model_configuration__no_commit(
+                db_session=db_session,
                 llm_provider_id=provider.id,
-                name=model_config.name,
-                display_name=model_config.display_name,
+                model_name=model_config.name,
+                supported_flows=[LLMModelFlowType.CHAT],
                 is_visible=True,
+                max_input_tokens=None,
+                display_name=model_config.display_name,
             )
-            db_session.add(new_model)
             changes += 1
 
     # In Auto mode, default model is always set from GitHub config
