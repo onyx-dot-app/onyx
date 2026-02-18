@@ -84,18 +84,20 @@ test.describe("Feature Name", () => {
 });
 ```
 
-**User isolation** — tests that modify visible app state (creating assistants, sending chat messages, pinning items) should use `loginAsRandomUser` to get a fresh user per test. This prevents side effects from leaking into other parallel tests' screenshots and assertions:
+**User isolation** — tests that modify visible app state (creating assistants, sending chat messages, pinning items) should run as the pre-provisioned `"user"` account and clean up resources in `afterAll`. This keeps usernames deterministic for screenshots and avoids cross-contamination with admin data from other parallel tests:
 
 ```typescript
-import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 
 test.beforeEach(async ({ page }) => {
   await page.context().clearCookies();
-  await loginAsRandomUser(page);
+  await loginAs(page, "user");
 });
 ```
 
-Switch to admin only when privileged setup is needed (creating providers, configuring tools), then back to the isolated user for the actual test. See `chat/default_assistant.spec.ts` for a full example.
+If the test requires admin privileges *and* modifies visible state, use `"admin2"` instead — it's a pre-provisioned admin account that keeps the primary `"admin"` clean for other parallel tests. Switch to `"admin"` only for privileged setup (creating providers, configuring tools), then back to `"user"` or `"admin2"` for the actual test. See `chat/default_assistant.spec.ts` for a full example.
+
+`loginAsRandomUser` exists for the rare case where the test requires a brand-new user (e.g. onboarding flows). Avoid it elsewhere — it produces non-deterministic usernames that complicate screenshots.
 
 **API resource setup** — only when tests need to create backend resources (image gen configs, web search providers, MCP servers). Use `beforeAll`/`afterAll` with `OnyxApiClient` to create and clean up. See `chat/default_assistant.spec.ts` or `mcp/mcp_oauth_flow.spec.ts` for examples. This is uncommon (~4 of 37 test files).
 
@@ -206,10 +208,10 @@ await page.waitForResponse(resp => resp.url().includes("/api/chat") && resp.stat
 
 1. **Descriptive test names** — clearly state expected behavior: `"should display greeting message when opening new chat"`
 2. **API-first setup** — use `OnyxApiClient` for backend state; reserve UI interactions for the behavior under test
-3. **User isolation** — tests that modify visible app state (sidebar, chat history) should use `loginAsRandomUser` for a fresh user per test, avoiding cross-test contamination. Always cleanup API-created resources in `afterAll`
+3. **User isolation** — tests that modify visible app state (sidebar, chat history) should run as `"user"` (not admin) and clean up resources in `afterAll`. This keeps usernames deterministic for screenshots. Reserve `loginAsRandomUser` for flows that require a brand-new user (e.g. onboarding)
 4. **DRY helpers** — extract reusable logic into `utils/` with JSDoc comments
 5. **No hardcoded waits** — use `waitFor`, `waitForLoadState`, or web-first assertions
-6. **Parallel-safe** — no shared mutable state between tests; use unique names with timestamps (`\`test-${Date.now()}\``)
+6. **Parallel-safe** — no shared mutable state between tests. Prefer static, human-readable names (e.g. `"E2E-CMD Chat 1"`) and clean up resources by ID in `afterAll`. This keeps screenshots deterministic and avoids needing to mask/hide dynamic text. Only fall back to timestamps (`\`test-${Date.now()}\``) when resources cannot be reliably cleaned up or when name collisions across parallel workers would cause functional failures
 7. **Error context** — catch and re-throw with useful debug info (page text, URL, etc.)
 8. **Tag slow tests** — mark serial/slow tests with `@exclusive` in the test title
 9. **Visual regression** — use `expectScreenshot()` for UI consistency checks
