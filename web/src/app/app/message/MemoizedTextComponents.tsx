@@ -194,7 +194,6 @@ export const MemoizedLink = memo(
       const filename = value?.toString() || "download";
       return (
         <a
-          type="button"
           onClick={() =>
             updatePresentingDocument({
               document_id: fileId,
