@@ -1,5 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { loginAs, loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   selectModelFromInputPopover,
   sendMessage,
@@ -30,12 +30,14 @@ async function openChat(page: Page): Promise<void> {
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
 }
 
-async function loginWithCleanCookies(
-  page: Page,
-  user: "admin" | "user"
-): Promise<void> {
+async function loginWithCleanCookies(page: Page): Promise<void> {
   await page.context().clearCookies();
-  await loginAs(page, user);
+  await loginAs(page, "admin");
+}
+
+async function loginAsRandomUserWithCleanCookies(page: Page): Promise<void> {
+  await page.context().clearCookies();
+  await loginAsRandomUser(page);
 }
 
 async function createLlmProvider(
@@ -164,11 +166,11 @@ test.describe("LLM Runtime Selection", () => {
   test.beforeEach(async ({ page }) => {
     providersToCleanup = [];
     groupsToCleanup = [];
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
   });
 
   test.afterEach(async ({ page }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const client = new OnyxApiClient(page.request);
     const providerIds = Array.from(new Set(providersToCleanup));
@@ -196,7 +198,7 @@ test.describe("LLM Runtime Selection", () => {
   test("model selection persists across refresh and subsequent messages in the same chat", async ({
     page,
   }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
     const persistenceModelName = `persist-runtime-model-${Date.now()}`;
@@ -211,7 +213,7 @@ test.describe("LLM Runtime Selection", () => {
       persistenceProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
     await openChat(page);
 
     let turn = 0;
@@ -375,7 +377,7 @@ test.describe("LLM Runtime Selection", () => {
   test("same model name across providers resolves to provider-specific runtime payloads", async ({
     page,
   }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const sharedModelName = `shared-runtime-model-${Date.now()}`;
     const openAiProviderName = uniqueName("PW Runtime OpenAI");
@@ -401,7 +403,7 @@ test.describe("LLM Runtime Selection", () => {
       anthropicProviderName,
     ]);
 
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
 
     const capturedPayloads: SendChatMessagePayload[] = [];
     let turn = 0;
@@ -497,7 +499,7 @@ test.describe("LLM Runtime Selection", () => {
   test("restricted provider model is unavailable to unauthorized runtime user selection", async ({
     page,
   }) => {
-    await loginWithCleanCookies(page, "admin");
+    await loginWithCleanCookies(page);
 
     const client = new OnyxApiClient(page.request);
     const restrictedGroupName = uniqueName("PW Runtime Restricted Group");
@@ -529,7 +531,7 @@ test.describe("LLM Runtime Selection", () => {
     });
     providersToCleanup.push(restrictedProviderId);
 
-    await loginWithCleanCookies(page, "user");
+    await loginAsRandomUserWithCleanCookies(page);
     await openChat(page);
 
     await page.getByTestId("AppInputBar/llm-popover-trigger").click();
