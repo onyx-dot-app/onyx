@@ -38,7 +38,6 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.prompts.chat_prompts import FILE_REMINDER
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
@@ -699,15 +698,9 @@ def run_llm_loop(
                     ),
                     include_citation_reminder=should_cite_documents
                     or always_cite_documents,
+                    include_file_reminder=code_interpreter_file_generated,
                     is_last_cycle=out_of_cycles,
                 )
-
-            # If code interpreter generated files, remind the LLM to link them on the last cycle
-            if code_interpreter_file_generated:
-                if reminder_message_text:
-                    reminder_message_text += "\n\n" + FILE_REMINDER.strip()
-                else:
-                    reminder_message_text = FILE_REMINDER.strip()
 
             reminder_msg = (
                 ChatMessageSimple(
