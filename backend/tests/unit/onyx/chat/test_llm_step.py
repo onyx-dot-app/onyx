@@ -367,7 +367,7 @@ class TestXmlToolCallContentFilter:
 
 
 class TestIncrementTurns:
-    """Tests for the _increment_turns helper."""
+    """Tests for the _increment_turns helper used by _close_reasoning_if_active."""
 
     def test_increments_turn_index_when_no_sub_turn(self) -> None:
         turn, sub = _increment_turns(0, None)
