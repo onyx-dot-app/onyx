@@ -564,7 +564,9 @@ def assert_hierarchy_nodes_match_expected(
 
     # Verify display names for all nodes that have a known expected name
     for node in retrieved_nodes:
-        assert node.raw_node_id in ALL_EXPECTED_SHARED_DRIVE_NODES
+        assert (
+            node.raw_node_id in ALL_EXPECTED_SHARED_DRIVE_NODES
+        ), f"Node {node.raw_node_id} not found in ALL_EXPECTED_SHARED_DRIVE_NODES"
         expected_node = ALL_EXPECTED_SHARED_DRIVE_NODES[node.raw_node_id]
         expected_name = expected_node.display_name
         assert node.display_name == expected_name, (
