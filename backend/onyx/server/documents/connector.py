@@ -1831,7 +1831,7 @@ def get_connector_by_id(
 @router.post("/connector-request")
 def submit_connector_request(
     request_data: ConnectorRequestSubmission,
-    user: User | None = Depends(current_user),
+    user: User = Depends(current_user),
 ) -> StatusResponse:
     """
     Submit a connector request for Cloud deployments.
@@ -1844,7 +1844,7 @@ def submit_connector_request(
         raise HTTPException(status_code=400, detail="Connector name cannot be empty")
 
     # Get user identifier for telemetry
-    user_email = user.email if user else None
+    user_email = user.email
     distinct_id = user_email or tenant_id
 
     # Track connector request via PostHog telemetry (Cloud only)
