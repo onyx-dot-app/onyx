@@ -46,6 +46,7 @@ from onyx.connectors.google_drive.file_retrieval import get_external_access_for_
 from onyx.connectors.google_drive.file_retrieval import get_files_in_shared_drive
 from onyx.connectors.google_drive.file_retrieval import get_folder_metadata
 from onyx.connectors.google_drive.file_retrieval import get_root_folder_id
+from onyx.connectors.google_drive.file_retrieval import get_shared_drive_name
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
@@ -156,10 +157,7 @@ def _is_shared_drive_root(folder: GoogleDriveFileType) -> bool:
         return False
 
     # For shared drive content, the root has id == driveId
-    if drive_id and folder_id == drive_id:
-        return True
-
-    return False
+    return bool(drive_id and folder_id == drive_id)
 
 
 def _public_access() -> ExternalAccess:
@@ -616,6 +614,12 @@ class GoogleDriveConnector(
                 # empty parents due to permission limitations)
                 # Check shared drive root first (simple ID comparison)
                 if _is_shared_drive_root(folder):
+                    # files().get() returns 'Drive' for shared drive roots;
+                    # fetch the real name via drives().get()
+                    drive_name = get_shared_drive_name(service, current_id)
+                    if drive_name:
+                        node.display_name = drive_name
+                    node.node_type = HierarchyNodeType.SHARED_DRIVE
                     reached_terminal = True
                     break
 
