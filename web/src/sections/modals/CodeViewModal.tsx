@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import "@/app/app/message/custom-code-styles.css";
-import Modal from "@/refresh-components/Modal";
+import Button from "@/refresh-components/buttons/Button";
+import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { SvgFileText } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
@@ -22,6 +23,7 @@ export default function CodeViewModal({
   onClose,
 }: CodeViewProps) {
   const [fileContent, setFileContent] = useState("");
+  const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -55,6 +57,14 @@ export default function CodeViewModal({
         }
 
         const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        setFileUrl((prev) => {
+          if (prev) {
+            window.URL.revokeObjectURL(prev);
+          }
+          return url;
+        });
+
         const originalFileName =
           presentingDocument.semantic_identifier || "document";
         setFileName(originalFileName);
@@ -82,6 +92,23 @@ export default function CodeViewModal({
       controller.abort();
     };
   }, [fetchFile]);
+
+  useEffect(() => {
+    return () => {
+      if (fileUrl) {
+        window.URL.revokeObjectURL(fileUrl);
+      }
+    };
+  }, [fileUrl]);
+
+  const handleDownload = () => {
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.download = fileName || presentingDocument.document_id;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <Modal
@@ -129,6 +156,12 @@ export default function CodeViewModal({
             )}
           </Section>
         </Modal.Body>
+
+        <Modal.Footer>
+          <BasicModalFooter
+            submit={<Button onClick={handleDownload}>Download File</Button>}
+          />
+        </Modal.Footer>
       </Modal.Content>
     </Modal>
   );
