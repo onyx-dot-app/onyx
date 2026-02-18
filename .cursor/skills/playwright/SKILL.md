@@ -128,6 +128,30 @@ Backend API client for test setup/teardown. Key methods:
 - `expectElementScreenshot(locator, { name, mask?, hide? })`
 - Controlled by `VISUAL_REGRESSION=true` env var
 
+### `theme` (`@tests/e2e/utils/theme`)
+
+- `THEMES` — `["light", "dark"] as const` array for iterating over both themes
+- `setThemeBeforeNavigation(page, theme)` — sets `next-themes` theme via `localStorage` before navigation
+
+When tests need light/dark screenshots, loop over `THEMES` at the `test.describe` level and call `setThemeBeforeNavigation` in `beforeEach` **before** any `page.goto()`. Include the theme in screenshot names. See `admin/admin_pages.spec.ts` or `chat/chat_message_rendering.spec.ts` for examples:
+
+```typescript
+import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
+
+for (const theme of THEMES) {
+  test.describe(`Feature (${theme} mode)`, () => {
+    test.beforeEach(async ({ page }) => {
+      await setThemeBeforeNavigation(page, theme);
+    });
+
+    test("renders correctly", async ({ page }) => {
+      await page.goto("/app");
+      await expectScreenshot(page, { name: `feature-${theme}` });
+    });
+  });
+}
+```
+
 ### `tools` (`@tests/e2e/utils/tools`)
 
 - `TOOL_IDS` — centralized `data-testid` selectors for tool options
