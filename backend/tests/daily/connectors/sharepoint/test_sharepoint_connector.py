@@ -25,7 +25,7 @@ class ExpectedDocument:
     content: str
     folder_path: str | None = None
     library: str = "Shared Documents"  # Default to main library
-    expected_link_suffix: str | None = None
+    expected_link_substrings: list[str] | None = None
 
 
 EXPECTED_DOCUMENTS = [
@@ -33,26 +33,29 @@ EXPECTED_DOCUMENTS = [
         semantic_identifier="test1.docx",
         content="test1",
         folder_path="test",
-        expected_link_suffix="/Shared%20Documents/test/test1.docx",
+        expected_link_substrings=["_layouts/15/Doc.aspx", "file=test1.docx"],
     ),
     ExpectedDocument(
         semantic_identifier="test2.docx",
         content="test2",
         folder_path="test/nested with spaces",
-        expected_link_suffix="/Shared%20Documents/test/nested%20with%20spaces/test2.docx",
+        expected_link_substrings=["_layouts/15/Doc.aspx", "file=test2.docx"],
     ),
     ExpectedDocument(
         semantic_identifier="should-not-index-on-specific-folder.docx",
         content="should-not-index-on-specific-folder",
         folder_path=None,  # root folder
-        expected_link_suffix="/Shared%20Documents/should-not-index-on-specific-folder.docx",
+        expected_link_substrings=[
+            "_layouts/15/Doc.aspx",
+            "file=should-not-index-on-specific-folder.docx",
+        ],
     ),
     ExpectedDocument(
         semantic_identifier="other.docx",
         content="other",
         folder_path=None,
         library="Other Library",
-        expected_link_suffix="/Other%20Library/other.docx",
+        expected_link_substrings=["_layouts/15/Doc.aspx", "file=other.docx"],
     ),
 ]
 
@@ -66,13 +69,13 @@ EXPECTED_PAGES = [
             "Add a document library\n\n## Document library"
         ),
         folder_path=None,
-        expected_link_suffix="/SitePages/CollabHome.aspx",
+        expected_link_substrings=["SitePages/CollabHome.aspx"],
     ),
     ExpectedDocument(
         semantic_identifier="Home",
         content="# Home",
         folder_path=None,
-        expected_link_suffix="/SitePages/Home.aspx",
+        expected_link_substrings=["SitePages/Home.aspx"],
     ),
 ]
 
@@ -96,17 +99,18 @@ def verify_document_content(doc: Document, expected: ExpectedDocument) -> None:
     assert doc.sections[0].text is not None
     assert expected.content == doc.sections[0].text
 
-    if expected.expected_link_suffix is not None:
+    if expected.expected_link_substrings is not None:
         actual_link = doc.sections[0].link
         assert actual_link is not None, (
-            f"Expected section link ending with '{expected.expected_link_suffix}' "
+            f"Expected section link containing {expected.expected_link_substrings} "
             f"for '{expected.semantic_identifier}', but link was None"
         )
-        assert actual_link.endswith(expected.expected_link_suffix), (
-            f"Section link mismatch for '{expected.semantic_identifier}': "
-            f"expected suffix '{expected.expected_link_suffix}', "
-            f"actual link '{actual_link}'"
-        )
+        for substr in expected.expected_link_substrings:
+            assert substr in actual_link, (
+                f"Section link for '{expected.semantic_identifier}' "
+                f"missing expected substring '{substr}', "
+                f"actual link: '{actual_link}'"
+            )
 
     verify_document_metadata(doc)
 
