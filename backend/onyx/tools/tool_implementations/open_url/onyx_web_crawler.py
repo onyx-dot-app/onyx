@@ -79,10 +79,9 @@ class OnyxWebCrawler(WebContentProvider):
             return self._fetch_url(url)
         except Exception as exc:
             logger.warning(
-                "Onyx crawler unexpected error for %s (%s): %s",
+                "Onyx crawler unexpected error for %s (%s)",
                 url,
                 exc.__class__.__name__,
-                str(exc),
             )
             return _failed_result(url)
 
@@ -95,9 +94,9 @@ class OnyxWebCrawler(WebContentProvider):
             )
         except SSRFException as exc:
             logger.error(
-                "SSRF protection blocked request to %s: %s",
+                "SSRF protection blocked request to %s (%s)",
                 url,
-                str(exc),
+                exc.__class__.__name__,
             )
             return _failed_result(url)
         except Exception as exc:
