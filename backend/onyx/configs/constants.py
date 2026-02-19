@@ -414,6 +414,7 @@ class OnyxRedisLocks:
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
     CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK = "da_lock:check_index_attempt_cleanup_beat"
+    INDEX_ATTEMPT_CLEANUP_TASK_LOCK = "da_lock:index_attempt_cleanup_task"
     CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_doc_permissions_sync_beat"
     )

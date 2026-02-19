@@ -124,7 +124,8 @@ DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
-INDEX_ATTEMPT_BATCH_SIZE = 500
+INDEX_ATTEMPT_BATCH_SIZE = 100
+INDEX_ATTEMPT_CLEANUP_TASK_LOCK_TIMEOUT = 30 * 60
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -1114,32 +1115,31 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
 
     try:
         locked = True
-        batch_size = INDEX_ATTEMPT_BATCH_SIZE
         with get_session_with_current_tenant() as db_session:
-            old_attempts = get_old_index_attempts(db_session)
-            # We need to batch this because during the initial run, the system might have a large number
-            # of index attempts since they were never deleted. After that, the number will be
-            # significantly lower.
+            old_attempts = get_old_index_attempts(
+                db_session,
+                limit=INDEX_ATTEMPT_BATCH_SIZE,
+            )
             if len(old_attempts) == 0:
                 task_logger.info(
                     "check_for_index_attempt_cleanup - No index attempts to cleanup"
                 )
                 return
 
-            for i in range(0, len(old_attempts), batch_size):
-                batch = old_attempts[i : i + batch_size]
-                task_logger.info(
-                    f"check_for_index_attempt_cleanup - Cleaning up index attempts {len(batch)}"
-                )
-                self.app.send_task(
-                    OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
-                    kwargs={
-                        "index_attempt_ids": [attempt.id for attempt in batch],
-                        "tenant_id": tenant_id,
-                    },
-                    queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
-                    priority=OnyxCeleryPriority.MEDIUM,
-                )
+            batch_ids = [attempt.id for attempt in old_attempts]
+            task_logger.info(
+                "check_for_index_attempt_cleanup - Queueing cleanup "
+                f"for {len(batch_ids)} index attempts"
+            )
+            self.app.send_task(
+                OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
+                kwargs={
+                    "index_attempt_ids": batch_ids,
+                    "tenant_id": tenant_id,
+                },
+                queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
+                priority=OnyxCeleryPriority.MEDIUM,
+            )
     except Exception:
         task_logger.exception("Unexpected exception during index attempt cleanup check")
         return None
@@ -1164,12 +1164,36 @@ def cleanup_index_attempt_task(
 ) -> None:
     """Clean up an index attempt"""
     start = time.monotonic()
+    cleanup_task_lock: RedisLock | None = None
+    cleanup_lock_acquired = False
 
     try:
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        cleanup_task_lock = redis_client.lock(
+            OnyxRedisLocks.INDEX_ATTEMPT_CLEANUP_TASK_LOCK,
+            timeout=INDEX_ATTEMPT_CLEANUP_TASK_LOCK_TIMEOUT,
+        )
+        cleanup_lock_acquired = cleanup_task_lock.acquire(blocking=False)
+        if not cleanup_lock_acquired:
+            task_logger.info(
+                "cleanup_index_attempt_task - Skipping because cleanup lock is held: "
+                f"tenant_id={tenant_id} index_attempt_count={len(index_attempt_ids)}"
+            )
+            return
+
         with get_session_with_current_tenant() as db_session:
             cleanup_index_attempts(db_session, index_attempt_ids)
 
     finally:
+        if cleanup_task_lock and cleanup_lock_acquired:
+            if cleanup_task_lock.owned():
+                cleanup_task_lock.release()
+            else:
+                task_logger.error(
+                    "cleanup_index_attempt_task - Lock not owned on completion: "
+                    f"tenant_id={tenant_id}"
+                )
+
         elapsed = time.monotonic() - start
 
         task_logger.info(
