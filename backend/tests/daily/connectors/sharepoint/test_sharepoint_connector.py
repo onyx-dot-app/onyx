@@ -25,6 +25,7 @@ class ExpectedDocument:
     content: str
     folder_path: str | None = None
     library: str = "Shared Documents"  # Default to main library
+    expected_link_suffix: str | None = None
 
 
 EXPECTED_DOCUMENTS = [
@@ -32,22 +33,26 @@ EXPECTED_DOCUMENTS = [
         semantic_identifier="test1.docx",
         content="test1",
         folder_path="test",
+        expected_link_suffix="/Shared%20Documents/test/test1.docx",
     ),
     ExpectedDocument(
         semantic_identifier="test2.docx",
         content="test2",
         folder_path="test/nested with spaces",
+        expected_link_suffix="/Shared%20Documents/test/nested%20with%20spaces/test2.docx",
     ),
     ExpectedDocument(
         semantic_identifier="should-not-index-on-specific-folder.docx",
         content="should-not-index-on-specific-folder",
         folder_path=None,  # root folder
+        expected_link_suffix="/Shared%20Documents/should-not-index-on-specific-folder.docx",
     ),
     ExpectedDocument(
         semantic_identifier="other.docx",
         content="other",
         folder_path=None,
         library="Other Library",
+        expected_link_suffix="/Other%20Library/other.docx",
     ),
 ]
 
@@ -61,11 +66,13 @@ EXPECTED_PAGES = [
             "Add a document library\n\n## Document library"
         ),
         folder_path=None,
+        expected_link_suffix="/SitePages/CollabHome.aspx",
     ),
     ExpectedDocument(
         semantic_identifier="Home",
         content="# Home",
         folder_path=None,
+        expected_link_suffix="/SitePages/Home.aspx",
     ),
 ]
 
@@ -88,6 +95,19 @@ def verify_document_content(doc: Document, expected: ExpectedDocument) -> None:
     assert len(doc.sections) == 1
     assert doc.sections[0].text is not None
     assert expected.content == doc.sections[0].text
+
+    if expected.expected_link_suffix is not None:
+        actual_link = doc.sections[0].link
+        assert actual_link is not None, (
+            f"Expected section link ending with '{expected.expected_link_suffix}' "
+            f"for '{expected.semantic_identifier}', but link was None"
+        )
+        assert actual_link.endswith(expected.expected_link_suffix), (
+            f"Section link mismatch for '{expected.semantic_identifier}': "
+            f"expected suffix '{expected.expected_link_suffix}', "
+            f"actual link '{actual_link}'"
+        )
+
     verify_document_metadata(doc)
 
 

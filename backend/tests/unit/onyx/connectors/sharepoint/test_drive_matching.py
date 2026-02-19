@@ -144,15 +144,14 @@ def test_get_drive_items_for_drive_name_matches_map(
         _fake_iter_drive_items_paged,
     )
 
-    items_iter, drive_web_url = connector._get_drive_items_for_drive_name(
+    items_iter = connector._get_drive_items_for_drive_id(
         site_descriptor=site_descriptor,
-        drive_name=requested_drive_name,
+        drive_id="fake-drive-id",
     )
 
     results = list(items_iter)
     assert len(results) == 1
     assert results[0].id == _SAMPLE_ITEM.id
-    assert drive_web_url is not None
 
 
 def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -121,7 +121,7 @@ class DriveItemData(BaseModel):
             web_url=item.get("webUrl", ""),
             size=item.get("size"),
             mime_type=item.get("file", {}).get("mimeType"),
-            download_url=item.get("@microsoft.graph.downloadUrl"),
+            download_url=_get_download_url(item),
             last_modified_datetime=last_mod,
             last_modified_by_display_name=last_modified_by.get("displayName"),
             last_modified_by_email=(
@@ -272,6 +272,39 @@ def acquire_token_for_rest(
     return TokenResponse.from_json(token)
 
 
+def _create_document_failure(
+    driveitem: DriveItemData,
+    error_message: str,
+    exception: Exception | None = None,
+) -> ConnectorFailure:
+    """Helper method to create a ConnectorFailure for document processing errors."""
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=driveitem.id or "unknown",
+            document_link=driveitem.web_url,
+        ),
+        failure_message=f"SharePoint document '{driveitem.name or 'unknown'}': {error_message}",
+        exception=exception,
+    )
+
+
+def _create_entity_failure(
+    entity_id: str,
+    error_message: str,
+    time_range: tuple[datetime, datetime] | None = None,
+    exception: Exception | None = None,
+) -> ConnectorFailure:
+    """Helper method to create a ConnectorFailure for entity-level errors."""
+    return ConnectorFailure(
+        failed_entity=EntityFailure(
+            entity_id=entity_id,
+            missed_time_range=time_range,
+        ),
+        failure_message=f"SharePoint entity '{entity_id}': {error_message}",
+        exception=exception,
+    )
+
+
 def _get_download_url(driveitem: DriveItem | DriveItemData) -> str | None:
     """Best-effort retrieval of the Microsoft Graph download URL."""
     if isinstance(driveitem, DriveItemData):
@@ -283,16 +316,16 @@ def _get_download_url(driveitem: DriveItem | DriveItemData) -> str | None:
             url = additional_data.get("@microsoft.graph.downloadUrl")
             if isinstance(url, str) and url:
                 return url
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to get download url from additional data: {e}")
 
     try:
         driveitem_json = driveitem.to_json()
         url = driveitem_json.get("@microsoft.graph.downloadUrl")
         if isinstance(url, str) and url:
             return url
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to get download url from driveitem json: {e}")
     return None
 
 
@@ -368,27 +401,6 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
         return buf.getvalue()
 
 
-def _download_via_sdk_with_cap(
-    driveitem: DriveItem, bytes_allowed: int, chunk_size: int = 64 * 1024
-) -> bytes:
-    """Use the Office365 SDK streaming download with a hard byte cap.
-
-    Raises SizeCapExceeded("during_sdk_download") if the cap would be exceeded.
-    """
-    buf = io.BytesIO()
-
-    def on_chunk(bytes_read: int) -> None:
-        # bytes_read is total bytes seen so far per SDK contract
-        if bytes_read > bytes_allowed:
-            raise SizeCapExceeded("during_sdk_download")
-
-    # modifies the driveitem to change its download behavior
-    driveitem.download_session(buf, chunk_downloaded=on_chunk, chunk_size=chunk_size)
-    # Execute the configured request with retries using existing helper
-    sleep_and_retry(driveitem.context, "download_session")
-    return buf.getvalue()
-
-
 def _download_via_graph_api(
     access_token: str,
     drive_id: str,
@@ -423,7 +435,7 @@ def _convert_driveitem_to_document_with_permissions(
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
     access_token: str | None = None,
-) -> Document | None:
+) -> Document | ConnectorFailure | None:
 
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
@@ -482,6 +494,13 @@ def _convert_driveitem_to_document_with_permissions(
                 f"Skipping '{driveitem.name}' exceeded size cap during Graph API download."
             )
             return None
+        except Exception as e:
+            logger.warning(
+                f"Failed to download via Graph API for '{driveitem.name}': {e}"
+            )
+            return _create_document_failure(
+                driveitem, f"Failed to download via graph api: {e}", e
+            )
 
     sections: list[TextSection | ImageSection] = []
     file_ext = get_file_ext(driveitem.name)
@@ -971,13 +990,13 @@ class SharepointConnector(
         logger.info(f"Found drive: {drive.name} (web_url: {drive_web_url})")
         return cast(str, drive.id), drive_web_url
 
-    def _get_drive_items_for_drive_name(
+    def _get_drive_items_for_drive_id(
         self,
         site_descriptor: SiteDescriptor,
-        drive_name: str,
+        drive_id: str,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> tuple[Iterable[DriveItemData], str | None]:
+    ) -> Generator[DriveItemData, None, None]:
         """Yield drive items lazily for a given drive name.
 
         Returns:
@@ -986,19 +1005,13 @@ class SharepointConnector(
             all held in memory at once.
         """
         try:
-            result = self._resolve_drive(site_descriptor, drive_name)
-            if result is None:
-                return iter(()), None
 
-            drive_id, drive_web_url = result
-
-            items = self._iter_drive_items_paged(
+            yield from self._iter_drive_items_paged(
                 drive_id=drive_id,
                 folder_path=site_descriptor.folder_path,
                 start=start,
                 end=end,
             )
-            return items, drive_web_url
 
         except Exception as e:
             err_str = str(e)
@@ -1010,7 +1023,6 @@ class SharepointConnector(
                 raise e
 
             logger.warning(f"Failed to process site: {site_descriptor.url} - {err_str}")
-            return iter(()), None
 
     def _fetch_driveitems(
         self,
@@ -1453,39 +1465,6 @@ class SharepointConnector(
             self.sp_tenant_domain = sp_tenant_domain.split(".")[0]
         return None
 
-    def _create_document_failure(
-        self,
-        driveitem: DriveItemData,
-        error_message: str,
-        exception: Exception | None = None,
-    ) -> ConnectorFailure:
-        """Helper method to create a ConnectorFailure for document processing errors."""
-        return ConnectorFailure(
-            failed_document=DocumentFailure(
-                document_id=driveitem.id or "unknown",
-                document_link=driveitem.web_url,
-            ),
-            failure_message=f"SharePoint document '{driveitem.name or 'unknown'}': {error_message}",
-            exception=exception,
-        )
-
-    def _create_entity_failure(
-        self,
-        entity_id: str,
-        error_message: str,
-        time_range: tuple[datetime, datetime] | None = None,
-        exception: Exception | None = None,
-    ) -> ConnectorFailure:
-        """Helper method to create a ConnectorFailure for entity-level errors."""
-        return ConnectorFailure(
-            failed_entity=EntityFailure(
-                entity_id=entity_id,
-                missed_time_range=time_range,
-            ),
-            failure_message=f"SharePoint entity '{entity_id}': {error_message}",
-            exception=exception,
-        )
-
     def _get_drive_names_for_site(self, site_url: str) -> list[str]:
         """Return all library/drive names for a given SharePoint site."""
         try:
@@ -1751,7 +1730,7 @@ class SharepointConnector(
                 # Yield a ConnectorFailure for site-level access failures
                 start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
                 end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-                yield self._create_entity_failure(
+                yield _create_entity_failure(
                     checkpoint.current_site_descriptor.url,
                     f"Failed to access site: {str(e)}",
                     (start_dt, end_dt),
@@ -1799,19 +1778,24 @@ class SharepointConnector(
                 logger.warning("Current drive name is None, skipping")
                 return checkpoint
 
+            driveitems: Iterable[DriveItemData] = iter(())
+            drive_web_url: str | None = None
             try:
                 logger.info(
                     f"Fetching drive items for drive name: {current_drive_name}"
                 )
-                driveitems, drive_web_url = self._get_drive_items_for_drive_name(
-                    site_descriptor, current_drive_name, start_dt, end_dt
-                )
-                checkpoint.current_drive_web_url = drive_web_url
+                result = self._resolve_drive(site_descriptor, current_drive_name)
+                if result is not None:
+                    drive_id, drive_web_url = result
+                    driveitems = self._get_drive_items_for_drive_id(
+                        site_descriptor, drive_id, start_dt, end_dt
+                    )
+                    checkpoint.current_drive_web_url = drive_web_url
             except Exception as e:
                 logger.error(
                     f"Failed to retrieve items from drive '{current_drive_name}' in site: {site_descriptor.url}: {e}"
                 )
-                yield self._create_entity_failure(
+                yield _create_entity_failure(
                     f"{site_descriptor.url}|{current_drive_name}",
                     f"Failed to access drive '{current_drive_name}' in site '{site_descriptor.url}': {str(e)}",
                     (start_dt, end_dt),
@@ -1878,7 +1862,7 @@ class SharepointConnector(
                     # Re-acquire token in case it expired during a long traversal
                     # MSAL has a cache that returns the same token while still valid.
                     access_token = self._get_graph_access_token()
-                    doc = _convert_driveitem_to_document_with_permissions(
+                    doc_or_failure = _convert_driveitem_to_document_with_permissions(
                         driveitem,
                         current_drive_name,
                         ctx,
@@ -1888,23 +1872,25 @@ class SharepointConnector(
                         access_token=access_token,
                     )
 
-                    if doc:
-                        if doc.sections:
-                            yield doc
+                    if isinstance(doc_or_failure, Document):
+                        if doc_or_failure.sections:
+                            yield doc_or_failure
                         elif should_yield_if_empty:
-                            doc.sections = [
+                            doc_or_failure.sections = [
                                 TextSection(link=driveitem.web_url, text="")
                             ]
-                            yield doc
+                            yield doc_or_failure
                         else:
                             logger.warning(
                                 f"Skipping {driveitem.web_url} as it is empty and not a PDF or image"
                             )
+                    elif isinstance(doc_or_failure, ConnectorFailure):
+                        yield doc_or_failure
                 except Exception as e:
                     logger.warning(
                         f"Failed to process driveitem {driveitem.web_url}: {e}"
                     )
-                    yield self._create_document_failure(
+                    yield _create_document_failure(
                         driveitem, f"Failed to process: {str(e)}", e
                     )
 
@@ -2075,8 +2061,8 @@ if __name__ == "__main__":
         ):
             if doc_batch:
                 print(f"Retrieved batch of {len(doc_batch)} documents")
-                for doc in doc_batch:
-                    print(f"Document: {doc.semantic_identifier}")
+                for test_doc in doc_batch:
+                    print(f"Document: {test_doc.semantic_identifier}")
             if failure:
                 print(f"Failure: {failure.failure_message}")
             if next_checkpoint:
