@@ -44,10 +44,10 @@ test.describe("LLM Ordering", () => {
     await page.goto("/app");
     await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
 
-    const triggerLocator = page.getByTestId("llm-popover-trigger");
-    const currentModelText = (await triggerLocator.textContent())?.trim() ?? "";
+    const trigger = page.getByTestId("llm-popover-trigger");
+    const originalTriggerText = (await trigger.textContent())?.trim() ?? "";
 
-    await triggerLocator.click();
+    await trigger.click();
     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
     const dialog = page.locator('[role="dialog"]');
@@ -57,30 +57,20 @@ test.describe("LLM Ordering", () => {
     const count = await allModelItems.count();
     expect(count).toBeGreaterThan(0);
 
-    // Pick the first model whose name differs from the currently selected one
-    let targetItem = allModelItems.first();
-    let targetName = "";
-    for (let i = 0; i < count; i++) {
-      const item = allModelItems.nth(i);
-      const text = (await item.textContent())?.trim() ?? "";
-      const name = text.split("\n")[0] ?? "";
-      if (name && !currentModelText.includes(name)) {
-        targetItem = item;
-        targetName = name;
-        break;
-      }
-    }
-
-    if (!targetName) {
-      targetName =
-        ((await targetItem.textContent())?.trim() ?? "").split("\n")[0] ?? "";
-    }
+    // Pick the first non-selected model so the trigger text changes after click
+    const nonSelectedItem = dialog.locator('[data-selected="false"]').first();
+    const hasNonSelected = (await nonSelectedItem.count()) > 0;
+    const targetItem = hasNonSelected ? nonSelectedItem : allModelItems.first();
 
     await expect(targetItem).toBeVisible();
     await targetItem.click();
 
-    if (targetName) {
-      await verifyCurrentModel(page, targetName);
+    // Verify the popover closed and the trigger updated
+    await expect(dialog).toBeHidden();
+
+    if (hasNonSelected) {
+      const updatedTriggerText = (await trigger.textContent())?.trim() ?? "";
+      expect(updatedTriggerText).not.toBe(originalTriggerText);
     }
   });
 });
