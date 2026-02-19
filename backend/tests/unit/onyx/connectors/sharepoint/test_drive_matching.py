@@ -4,11 +4,13 @@ from collections import deque
 from collections.abc import Generator
 from collections.abc import Sequence
 from datetime import datetime
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentSource
+from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector import DriveItemData
 from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP
 from onyx.connectors.sharepoint.connector import SharepointConnector
@@ -196,9 +198,15 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
         include_permissions: bool,  # noqa: ARG001
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
         access_token: str | None = None,  # noqa: ARG001
-    ) -> SimpleNamespace:
+    ) -> Document:
         captured_drive_names.append(drive_name)
-        return SimpleNamespace(sections=["content"])
+        return Document(
+            id="doc-1",
+            source=DocumentSource.SHAREPOINT,
+            semantic_identifier="sample.pdf",
+            metadata={},
+            sections=[TextSection(link="https://example.com", text="content")],
+        )
 
     def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
         return "fake-access-token"
