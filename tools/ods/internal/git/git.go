@@ -1,9 +1,11 @@
 package git
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -175,4 +177,122 @@ func IsCherryPickInProgress() bool {
 func HasStagedChanges() bool {
 	cmd := exec.Command("git", "diff", "--quiet", "--cached")
 	return cmd.Run() != nil
+}
+
+// GetGitDir returns the worktree-aware .git directory
+func GetGitDir() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--git-dir")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse --git-dir failed: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// IsCommitAppliedOnBranch checks if a commit (or its cherry-picked equivalent) exists on a branch.
+// First tries exact SHA match, then falls back to matching by commit subject line.
+func IsCommitAppliedOnBranch(commitSHA, branchName string) bool {
+	// Try exact SHA match first
+	if CommitExistsOnBranch(commitSHA, branchName) {
+		return true
+	}
+
+	// Fall back to subject-line matching for cherry-picks (different SHA, same content)
+	subject, err := GetCommitMessage(commitSHA)
+	if err != nil || subject == "" {
+		return false
+	}
+
+	cmd := exec.Command("git", "log", "--grep", subject, "--fixed-strings", "--format=%H", branchName)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(output)) != ""
+}
+
+// RunCherryPickContinue runs git cherry-pick --continue --no-edit
+func RunCherryPickContinue() error {
+	return RunCommandVerboseOnError("cherry-pick", "--continue", "--no-edit")
+}
+
+// CherryPickState holds the state needed to resume a cherry-pick operation
+type CherryPickState struct {
+	OriginalBranch string   `json:"original_branch"`
+	CommitSHAs     []string `json:"commit_shas"`
+	CommitMessages []string `json:"commit_messages"`
+	Releases       []string `json:"releases"`
+	Stashed        bool     `json:"stashed"`
+	NoVerify       bool     `json:"no_verify"`
+	DryRun         bool     `json:"dry_run"`
+	BranchSuffix   string   `json:"branch_suffix"`
+	PRTitle        string   `json:"pr_title"`
+}
+
+const cherryPickStateFile = "ods-cherry-pick-state"
+
+func stateFilePath() (string, error) {
+	gitDir, err := GetGitDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(gitDir, cherryPickStateFile), nil
+}
+
+// SaveCherryPickState writes state to .git/ods-cherry-pick-state
+func SaveCherryPickState(state *CherryPickState) error {
+	path, err := stateFilePath()
+	if err != nil {
+		return fmt.Errorf("failed to determine state file path: %w", err)
+	}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write state file: %w", err)
+	}
+
+	log.Debugf("Saved cherry-pick state to %s", path)
+	return nil
+}
+
+// LoadCherryPickState reads state from .git/ods-cherry-pick-state
+func LoadCherryPickState() (*CherryPickState, error) {
+	path, err := stateFilePath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine state file path: %w", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("no cherry-pick state file found at %s — did you start a cherry-pick with ods?", path)
+		}
+		return nil, fmt.Errorf("failed to read state file: %w", err)
+	}
+
+	var state CherryPickState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("failed to parse state file: %w", err)
+	}
+
+	log.Debugf("Loaded cherry-pick state from %s", path)
+	return &state, nil
+}
+
+// CleanCherryPickState removes the state file
+func CleanCherryPickState() {
+	path, err := stateFilePath()
+	if err != nil {
+		log.Debugf("Failed to determine state file path for cleanup: %v", err)
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.Warnf("Failed to remove state file %s: %v", path, err)
+	} else {
+		log.Debugf("Cleaned up cherry-pick state file")
+	}
 }
