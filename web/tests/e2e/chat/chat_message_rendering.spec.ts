@@ -258,21 +258,24 @@ async function mockChatEndpointSequence(
   });
 }
 
+async function scrollChatTo(
+  page: Page,
+  position: "top" | "bottom"
+): Promise<void> {
+  const scrollContainer = page.getByTestId("chat-scroll-container");
+  await scrollContainer.evaluate(async (el, pos) => {
+    el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  }, position);
+}
+
 async function screenshotChatContainer(
   page: Page,
   name: string
 ): Promise<void> {
   const container = page.locator("[data-main-container]");
   await expect(container).toBeVisible();
-
-  // Normalize scroll to the top so the screenshot is deterministic regardless
-  // of where auto-scroll left the viewport after message streaming.
-  const scrollContainer = page.getByTestId("chat-scroll-container");
-  await scrollContainer.evaluate(async (el) => {
-    el.scrollTo({ top: 0 });
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-  });
-
+  await scrollChatTo(page, "bottom");
   await expectElementScreenshot(container, { name });
 }
 
@@ -288,18 +291,11 @@ async function screenshotChatContainerTopAndBottom(
 ): Promise<void> {
   const container = page.locator("[data-main-container]");
   await expect(container).toBeVisible();
-  const scrollContainer = page.getByTestId("chat-scroll-container");
 
-  await scrollContainer.evaluate(async (el) => {
-    el.scrollTo({ top: 0 });
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-  });
+  await scrollChatTo(page, "top");
   await expectElementScreenshot(container, { name: `${name}-top` });
 
-  await scrollContainer.evaluate(async (el) => {
-    el.scrollTo({ top: el.scrollHeight });
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-  });
+  await scrollChatTo(page, "bottom");
   await expectElementScreenshot(container, { name: `${name}-bottom` });
 }
 
@@ -494,8 +490,6 @@ for (const theme of THEMES) {
         const toolbar = aiMessage.getByTestId("AgentMessage/toolbar");
         await expect(toolbar).toBeVisible({ timeout: 10000 });
 
-        // Scroll the toolbar into view so hover screenshots are stable
-        // regardless of where auto-scroll left the viewport.
         await toolbar.scrollIntoViewIfNeeded();
         await page.evaluate(
           () => new Promise<void>((r) => requestAnimationFrame(() => r()))
