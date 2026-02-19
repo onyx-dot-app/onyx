@@ -185,6 +185,7 @@ inferenceCapability:
   #     maxSurge: 0
   #     maxUnavailable: 1
 
+
 indexCapability:
   service:
     portName: modelserver
@@ -856,7 +857,7 @@ mcpServer:
   tolerations: []
   affinity: {}
 
-celery_worker_docfetching:
+celery_worker`_docfetching:
   replicaCount: 1
   logLevel: INFO
   autoscaling:

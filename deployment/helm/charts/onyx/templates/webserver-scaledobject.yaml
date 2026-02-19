@@ -17,9 +17,11 @@ spec:
   {{- if hasKey .Values.webserver.autoscaling "idleReplicaCount" }}
   idleReplicaCount: {{ .Values.webserver.autoscaling.idleReplicaCount }}
   {{- end }}
+  {{- if .Values.webserver.autoscaling.customTriggers }}
   fallback:
     failureThreshold: {{ .Values.webserver.autoscaling.failureThreshold | default 3 }}
     replicas: {{ .Values.webserver.autoscaling.fallbackReplicas | default 1 }}
+  {{- end }}
   triggers:
     {{- if .Values.webserver.autoscaling.targetCPUUtilizationPercentage }}
     - type: cpu
