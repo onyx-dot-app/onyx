@@ -207,12 +207,22 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		log.Warnf("Failed to save cherry-pick state (--continue won't work): %v", err)
 	}
 
-	// Process each release
+	finishCherryPick(commitSHAs, commitMessages, branchSuffix, releases, prTitle,
+		opts.DryRun, opts.NoVerify, originalBranch, stashResult)
+}
+
+// finishCherryPick processes each release (cherry-pick remaining commits, push, create PR),
+// then switches back to the original branch and cleans up. Shared by both the normal
+// flow and --continue.
+func finishCherryPick(commitSHAs, commitMessages []string, branchSuffix string,
+	releases []string, prTitle string, dryRun, noVerify bool,
+	originalBranch string, stashResult *git.StashResult) {
+
 	prURLs := []string{}
 	for _, release := range releases {
 		log.Infof("Processing release %s", release)
 		prTitleWithRelease := fmt.Sprintf("%s to release %s", prTitle, release)
-		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, opts.DryRun, opts.NoVerify)
+		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, dryRun, noVerify)
 		if err != nil {
 			// Don't try to switch back if there's a merge conflict - git won't allow it
 			if strings.Contains(err.Error(), "merge conflict") {
@@ -251,7 +261,9 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	}
 }
 
-// runCherryPickContinue resumes a cherry-pick after manual conflict resolution
+// runCherryPickContinue resumes a cherry-pick after manual conflict resolution.
+// It finishes any in-progress git cherry-pick, then falls into the normal
+// cherryPickToRelease path which handles skip-applied-commits, push, and PR creation.
 func runCherryPickContinue() {
 	git.CheckGitHubCLI()
 
@@ -262,8 +274,6 @@ func runCherryPickContinue() {
 
 	log.Infof("Resuming cherry-pick (original branch: %s, releases: %v)", state.OriginalBranch, state.Releases)
 
-	stashResult := &git.StashResult{Stashed: state.Stashed}
-
 	// If git cherry-pick is still in progress (CHERRY_PICK_HEAD exists), continue it
 	if git.IsCherryPickInProgress() {
 		log.Info("Continuing in-progress cherry-pick...")
@@ -272,79 +282,12 @@ func runCherryPickContinue() {
 		}
 	}
 
-	// Now check which commits still need to be applied
-	currentBranch, err := git.GetCurrentBranch()
-	if err != nil {
-		log.Fatalf("Failed to get current branch: %v", err)
-	}
-
-	missing := []string{}
-	for _, sha := range state.CommitSHAs {
-		if !git.IsCommitAppliedOnBranch(sha, currentBranch) {
-			missing = append(missing, sha)
-		}
-	}
-
-	if len(missing) > 0 {
-		log.Infof("Cherry-picking %d remaining commit(s): %s", len(missing), strings.Join(missing, " "))
-		if err := performCherryPick(missing); err != nil {
-			log.Fatalf("Failed to cherry-pick remaining commits: %v", err)
-		}
-	}
-
-	// Process each release: push + create PR
-	prURLs := []string{}
-	for _, release := range state.Releases {
-		releaseBranch := fmt.Sprintf("release/%s", release)
-		hotfixBranch := fmt.Sprintf("hotfix/%s-%s", state.BranchSuffix, release)
-
-		// We should already be on the hotfix branch — verify
-		if currentBranch != hotfixBranch {
-			log.Debugf("Current branch %s differs from expected hotfix branch %s", currentBranch, hotfixBranch)
-		}
-
-		if state.DryRun {
-			log.Warnf("[DRY RUN] Would push hotfix branch: %s", hotfixBranch)
-			log.Warnf("[DRY RUN] Would create PR from %s to %s", hotfixBranch, releaseBranch)
-			continue
-		}
-
-		// Push
-		log.Infof("Pushing hotfix branch: %s", hotfixBranch)
-		pushArgs := []string{"push", "-u", "origin", hotfixBranch}
-		if state.NoVerify {
-			pushArgs = []string{"push", "--no-verify", "-u", "origin", hotfixBranch}
-		}
-		if err := git.RunCommandVerboseOnError(pushArgs...); err != nil {
-			log.Fatalf("Failed to push hotfix branch: %v", err)
-		}
-
-		// Create PR
-		log.Info("Creating PR...")
-		prTitleWithRelease := fmt.Sprintf("%s to release %s", state.PRTitle, release)
-		prURL, err := createCherryPickPR(hotfixBranch, releaseBranch, prTitleWithRelease, state.CommitSHAs, state.CommitMessages)
-		if err != nil {
-			log.Fatalf("Failed to create PR: %v", err)
-		}
-		log.Infof("PR created successfully: %s", prURL)
-		prURLs = append(prURLs, prURL)
-	}
-
-	// Switch back to original branch
-	log.Infof("Switching back to original branch: %s", state.OriginalBranch)
-	if err := git.RunCommand("switch", "--quiet", state.OriginalBranch); err != nil {
-		log.Warnf("Failed to switch back to original branch: %v", err)
-	}
-
-	// Restore stash
-	git.RestoreStash(stashResult)
-
-	// Clean up state file
-	git.CleanCherryPickState()
-
-	for i, prURL := range prURLs {
-		log.Infof("PR %d: %s", i+1, prURL)
-	}
+	// Re-use the normal per-release flow: cherryPickToRelease already handles
+	// "branch exists → skip applied commits → push → create PR"
+	stashResult := &git.StashResult{Stashed: state.Stashed}
+	finishCherryPick(state.CommitSHAs, state.CommitMessages, state.BranchSuffix,
+		state.Releases, state.PRTitle, state.DryRun, state.NoVerify,
+		state.OriginalBranch, stashResult)
 }
 
 // cherryPickToRelease cherry-picks one or more commits to a specific release branch
