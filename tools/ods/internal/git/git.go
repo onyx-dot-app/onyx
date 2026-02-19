@@ -223,15 +223,16 @@ func RunCherryPickContinue() error {
 
 // CherryPickState holds the state needed to resume a cherry-pick operation
 type CherryPickState struct {
-	OriginalBranch string   `json:"original_branch"`
-	CommitSHAs     []string `json:"commit_shas"`
-	CommitMessages []string `json:"commit_messages"`
-	Releases       []string `json:"releases"`
-	Stashed        bool     `json:"stashed"`
-	NoVerify       bool     `json:"no_verify"`
-	DryRun         bool     `json:"dry_run"`
-	BranchSuffix   string   `json:"branch_suffix"`
-	PRTitle        string   `json:"pr_title"`
+	OriginalBranch    string   `json:"original_branch"`
+	CommitSHAs        []string `json:"commit_shas"`
+	CommitMessages    []string `json:"commit_messages"`
+	Releases          []string `json:"releases"`
+	CompletedReleases []string `json:"completed_releases,omitempty"`
+	Stashed           bool     `json:"stashed"`
+	NoVerify          bool     `json:"no_verify"`
+	DryRun            bool     `json:"dry_run"`
+	BranchSuffix      string   `json:"branch_suffix"`
+	PRTitle           string   `json:"pr_title"`
 }
 
 const cherryPickStateFile = "ods-cherry-pick-state"

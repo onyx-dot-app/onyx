@@ -207,55 +207,61 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		log.Warnf("Failed to save cherry-pick state (--continue won't work): %v", err)
 	}
 
-	finishCherryPick(commitSHAs, commitMessages, branchSuffix, releases, prTitle,
-		opts.DryRun, opts.NoVerify, originalBranch, stashResult)
+	finishCherryPick(state, stashResult)
 }
 
 // finishCherryPick processes each release (cherry-pick remaining commits, push, create PR),
-// then switches back to the original branch and cleans up. Shared by both the normal
-// flow and --continue.
-func finishCherryPick(commitSHAs, commitMessages []string, branchSuffix string,
-	releases []string, prTitle string, dryRun, noVerify bool,
-	originalBranch string, stashResult *git.StashResult) {
+// then switches back to the original branch and cleans up.
+func finishCherryPick(state *git.CherryPickState, stashResult *git.StashResult) {
+	completed := make(map[string]bool, len(state.CompletedReleases))
+	for _, r := range state.CompletedReleases {
+		completed[r] = true
+	}
 
 	prURLs := []string{}
-	for _, release := range releases {
+	for _, release := range state.Releases {
+		if completed[release] {
+			log.Infof("Release %s already completed, skipping", release)
+			continue
+		}
+
 		log.Infof("Processing release %s", release)
-		prTitleWithRelease := fmt.Sprintf("%s to release %s", prTitle, release)
-		prURL, err := cherryPickToRelease(commitSHAs, commitMessages, branchSuffix, release, prTitleWithRelease, dryRun, noVerify)
+		prTitleWithRelease := fmt.Sprintf("%s to release %s", state.PRTitle, release)
+		prURL, err := cherryPickToRelease(state.CommitSHAs, state.CommitMessages, state.BranchSuffix, release, prTitleWithRelease, state.DryRun, state.NoVerify)
 		if err != nil {
-			// Don't try to switch back if there's a merge conflict - git won't allow it
 			if strings.Contains(err.Error(), "merge conflict") {
 				if stashResult.Stashed {
 					log.Warn("Your uncommitted changes are still stashed.")
-					log.Infof("After resolving the conflict and returning to %s, run: git stash pop", originalBranch)
+					log.Infof("After resolving the conflict and returning to %s, run: git stash pop", state.OriginalBranch)
 				}
 			} else {
-				if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
+				if switchErr := git.RunCommand("switch", "--quiet", state.OriginalBranch); switchErr != nil {
 					log.Warnf("Failed to switch back to original branch: %v", switchErr)
 				}
 				git.RestoreStash(stashResult)
 			}
 			log.Fatalf("Failed to cherry-pick to release %s: %v", release, err)
 		}
+
+		// Mark release as completed and persist so --continue skips it
+		state.CompletedReleases = append(state.CompletedReleases, release)
+		if saveErr := git.SaveCherryPickState(state); saveErr != nil {
+			log.Warnf("Failed to update state file: %v", saveErr)
+		}
+
 		if prURL != "" {
 			prURLs = append(prURLs, prURL)
 		}
 	}
 
-	// Switch back to the original branch
-	log.Infof("Switching back to original branch: %s", originalBranch)
-	if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
+	log.Infof("Switching back to original branch: %s", state.OriginalBranch)
+	if err := git.RunCommand("switch", "--quiet", state.OriginalBranch); err != nil {
 		log.Warnf("Failed to switch back to original branch: %v", err)
 	}
 
-	// Restore stashed changes now that we're back on the original branch
 	git.RestoreStash(stashResult)
-
-	// Clean up state file on success
 	git.CleanCherryPickState()
 
-	// Print all PR URLs
 	for i, prURL := range prURLs {
 		log.Infof("PR %d: %s", i+1, prURL)
 	}
@@ -285,9 +291,7 @@ func runCherryPickContinue() {
 	// Re-use the normal per-release flow: cherryPickToRelease already handles
 	// "branch exists → skip applied commits → push → create PR"
 	stashResult := &git.StashResult{Stashed: state.Stashed}
-	finishCherryPick(state.CommitSHAs, state.CommitMessages, state.BranchSuffix,
-		state.Releases, state.PRTitle, state.DryRun, state.NoVerify,
-		state.OriginalBranch, stashResult)
+	finishCherryPick(state, stashResult)
 }
 
 // cherryPickToRelease cherry-picks one or more commits to a specific release branch
