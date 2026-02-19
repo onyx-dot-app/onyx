@@ -1041,7 +1041,9 @@ class OpenSearchTenantMigrationRecord(Base):
         nullable=False,
     )
     # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started" or "visit completed".
+    # NULL means "not started".
+    # Otherwise contains a serialized mapping between slice ID and continuation
+    # token for that slice.
     vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )

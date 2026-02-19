@@ -652,9 +652,9 @@ class VespaDocumentIndex(DocumentIndex):
 
     def get_all_raw_document_chunks_paginated(
         self,
-        continuation_token: str | None,
+        continuation_token_map: dict[int, str | None],
         page_size: int,
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[dict[str, Any]], dict[int, str | None]]:
         """Gets all the chunks in Vespa, paginated.
 
         Used in the chunk-level Vespa-to-OpenSearch migration task.
@@ -662,21 +662,21 @@ class VespaDocumentIndex(DocumentIndex):
         Args:
             continuation_token: Token returned by Vespa representing a page
                 offset. None to start from the beginning. Defaults to None.
-            page_size: Best-effort batch size for the visit. Defaults to 1,000.
+            page_size: Best-effort batch size for the visit.
 
         Returns:
             Tuple of (list of chunk dicts, next continuation token or None). The
                 continuation token is None when the visit is complete.
         """
-        raw_chunks, next_continuation_token = get_all_chunks_paginated(
+        raw_chunks, next_continuation_token_map = get_all_chunks_paginated(
             index_name=self._index_name,
             tenant_state=TenantState(
                 tenant_id=self._tenant_id, multitenant=MULTI_TENANT
             ),
-            continuation_token=continuation_token,
+            continuation_token_map=continuation_token_map,
             page_size=page_size,
         )
-        return raw_chunks, next_continuation_token
+        return raw_chunks, next_continuation_token_map
 
     def index_raw_chunks(self, chunks: list[dict[str, Any]]) -> None:
         """Indexes raw document chunks into Vespa.

@@ -37,6 +37,35 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger(__name__)
 
 
+FIELDS_NEEDED_FOR_TRANSFORMATION: list[str] = [
+    DOCUMENT_ID,
+    CHUNK_ID,
+    TITLE,
+    TITLE_EMBEDDING,
+    CONTENT,
+    EMBEDDINGS,
+    SOURCE_TYPE,
+    METADATA_LIST,
+    DOC_UPDATED_AT,
+    HIDDEN,
+    BOOST,
+    SEMANTIC_IDENTIFIER,
+    IMAGE_FILE_NAME,
+    SOURCE_LINKS,
+    BLURB,
+    DOC_SUMMARY,
+    CHUNK_CONTEXT,
+    METADATA_SUFFIX,
+    DOCUMENT_SETS,
+    USER_PROJECT,
+    PRIMARY_OWNERS,
+    SECONDARY_OWNERS,
+    ACCESS_CONTROL_LIST,
+]
+if MULTI_TENANT:
+    FIELDS_NEEDED_FOR_TRANSFORMATION.append(TENANT_ID)
+
+
 def _extract_content_vector(embeddings: Any) -> list[float]:
     """Extracts the full chunk embedding vector from Vespa's embeddings tensor.
 
