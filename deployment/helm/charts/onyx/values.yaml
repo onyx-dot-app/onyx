@@ -185,6 +185,7 @@ inferenceCapability:
   #     maxSurge: 0
   #     maxUnavailable: 1
 
+
 indexCapability:
   service:
     portName: modelserver

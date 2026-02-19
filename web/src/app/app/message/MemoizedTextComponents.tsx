@@ -176,7 +176,7 @@ export const MemoizedLink = memo(
 
       return (
         <SourceTag
-          inlineCitation
+          variant="inlineCitation"
           displayName={displayName}
           sources={[sourceInfo]}
           onSourceClick={handleSourceClick}

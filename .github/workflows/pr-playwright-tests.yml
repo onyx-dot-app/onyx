@@ -593,7 +593,10 @@ jobs:
   # Post a single combined visual regression comment after all matrix jobs finish
   visual-regression-comment:
     needs: [playwright-tests]
-    if: always() && github.event_name == 'pull_request'
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.playwright-tests.result != 'cancelled'
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:

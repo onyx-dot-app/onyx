@@ -51,8 +51,9 @@ All tests use `admin_auth.json` storage state by default (pre-authenticated admi
 Global setup (`global-setup.ts`) runs automatically before all tests and handles:
 
 - Server readiness check (polls health endpoint, 60s timeout)
-- Provisioning test users: admin, user, admin2 (idempotent)
-- API login + saving storage states: `admin_auth.json`, `user_auth.json`, `admin2_auth.json`
+- Provisioning test users: admin, admin2, and a **pool of worker users** (`worker0@example.com` through `worker7@example.com`) (idempotent)
+- API login + saving storage states: `admin_auth.json`, `admin2_auth.json`, and `worker{N}_auth.json` for each worker user
+- Setting display name to `"worker"` for each worker user
 - Promoting admin2 to admin role
 - Ensuring a public LLM provider exists
 
@@ -64,8 +65,12 @@ When a test needs a different user, use API-based login — never drive the logi
 import { loginAs } from "@tests/e2e/utils/auth";
 
 await page.context().clearCookies();
-await loginAs(page, "user");
 await loginAs(page, "admin2");
+
+// Log in as the worker-specific user (preferred for test isolation):
+import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
+await page.context().clearCookies();
+await loginAsWorkerUser(page, testInfo.workerIndex);
 ```
 
 ## Test Structure
@@ -84,18 +89,21 @@ test.describe("Feature Name", () => {
 });
 ```
 
-**User isolation** — tests that modify visible app state (creating assistants, sending chat messages, pinning items) should use `loginAsRandomUser` to get a fresh user per test. This prevents side effects from leaking into other parallel tests' screenshots and assertions:
+**User isolation** — tests that modify visible app state (creating assistants, sending chat messages, pinning items) should run as a **worker-specific user** and clean up resources in `afterAll`. Global setup provisions a pool of worker users (`worker0@example.com` through `worker7@example.com`). `loginAsWorkerUser` maps `testInfo.workerIndex` to a pool slot via modulo, so retry workers (which get incrementing indices beyond the pool size) safely reuse existing users. This ensures parallel workers never share user state, keeps usernames deterministic for screenshots, and avoids cross-contamination:
 
 ```typescript
-import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { test } from "@playwright/test";
+import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await page.context().clearCookies();
-  await loginAsRandomUser(page);
+  await loginAsWorkerUser(page, testInfo.workerIndex);
 });
 ```
 
-Switch to admin only when privileged setup is needed (creating providers, configuring tools), then back to the isolated user for the actual test. See `chat/default_assistant.spec.ts` for a full example.
+If the test requires admin privileges *and* modifies visible state, use `"admin2"` instead — it's a pre-provisioned admin account that keeps the primary `"admin"` clean for other parallel tests. Switch to `"admin"` only for privileged setup (creating providers, configuring tools), then back to the worker user for the actual test. See `chat/default_assistant.spec.ts` for a full example.
+
+`loginAsRandomUser` exists for the rare case where the test requires a brand-new user (e.g. onboarding flows). Avoid it elsewhere — it produces non-deterministic usernames that complicate screenshots.
 
 **API resource setup** — only when tests need to create backend resources (image gen configs, web search providers, MCP servers). Use `beforeAll`/`afterAll` with `OnyxApiClient` to create and clean up. See `chat/default_assistant.spec.ts` or `mcp/mcp_oauth_flow.spec.ts` for examples. This is uncommon (~4 of 37 test files).
 
@@ -125,6 +133,30 @@ Backend API client for test setup/teardown. Key methods:
 - `expectScreenshot(page, { name, mask?, hide?, fullPage? })`
 - `expectElementScreenshot(locator, { name, mask?, hide? })`
 - Controlled by `VISUAL_REGRESSION=true` env var
+
+### `theme` (`@tests/e2e/utils/theme`)
+
+- `THEMES` — `["light", "dark"] as const` array for iterating over both themes
+- `setThemeBeforeNavigation(page, theme)` — sets `next-themes` theme via `localStorage` before navigation
+
+When tests need light/dark screenshots, loop over `THEMES` at the `test.describe` level and call `setThemeBeforeNavigation` in `beforeEach` **before** any `page.goto()`. Include the theme in screenshot names. See `admin/admin_pages.spec.ts` or `chat/chat_message_rendering.spec.ts` for examples:
+
+```typescript
+import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
+
+for (const theme of THEMES) {
+  test.describe(`Feature (${theme} mode)`, () => {
+    test.beforeEach(async ({ page }) => {
+      await setThemeBeforeNavigation(page, theme);
+    });
+
+    test("renders correctly", async ({ page }) => {
+      await page.goto("/app");
+      await expectScreenshot(page, { name: `feature-${theme}` });
+    });
+  });
+}
+```
 
 ### `tools` (`@tests/e2e/utils/tools`)
 
@@ -206,10 +238,10 @@ await page.waitForResponse(resp => resp.url().includes("/api/chat") && resp.stat
 
 1. **Descriptive test names** — clearly state expected behavior: `"should display greeting message when opening new chat"`
 2. **API-first setup** — use `OnyxApiClient` for backend state; reserve UI interactions for the behavior under test
-3. **User isolation** — tests that modify visible app state (sidebar, chat history) should use `loginAsRandomUser` for a fresh user per test, avoiding cross-test contamination. Always cleanup API-created resources in `afterAll`
+3. **User isolation** — tests that modify visible app state (sidebar, chat history) should run as the worker-specific user via `loginAsWorkerUser(page, testInfo.workerIndex)` (not admin) and clean up resources in `afterAll`. Each parallel worker gets its own user, preventing cross-contamination. Reserve `loginAsRandomUser` for flows that require a brand-new user (e.g. onboarding)
 4. **DRY helpers** — extract reusable logic into `utils/` with JSDoc comments
 5. **No hardcoded waits** — use `waitFor`, `waitForLoadState`, or web-first assertions
-6. **Parallel-safe** — no shared mutable state between tests; use unique names with timestamps (`\`test-${Date.now()}\``)
+6. **Parallel-safe** — no shared mutable state between tests. Prefer static, human-readable names (e.g. `"E2E-CMD Chat 1"`) and clean up resources by ID in `afterAll`. This keeps screenshots deterministic and avoids needing to mask/hide dynamic text. Only fall back to timestamps (`\`test-${Date.now()}\``) when resources cannot be reliably cleaned up or when name collisions across parallel workers would cause functional failures
 7. **Error context** — catch and re-throw with useful debug info (page text, URL, etc.)
 8. **Tag slow tests** — mark serial/slow tests with `@exclusive` in the test title
 9. **Visual regression** — use `expectScreenshot()` for UI consistency checks
