@@ -266,7 +266,7 @@ def get_vespa_visit_state(
         json_loaded_continuation_token_map = json.loads(
             record.vespa_visit_continuation_token
         )
-        continuation_token_map: dict[int, str | None] = {
+        continuation_token_map = {
             int(key): value for key, value in json_loaded_continuation_token_map.items()
         }
     return continuation_token_map, record.total_chunks_migrated
